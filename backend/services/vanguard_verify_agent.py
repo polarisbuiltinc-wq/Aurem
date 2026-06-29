@@ -110,7 +110,7 @@ Review the patch for ALL of these dimensions:
 SEVERITY RULES (Iter 212m-41 — production calibration):
   CRITICAL = an attacker can OWN the system or read other users' data
              RIGHT NOW with this exact patch deployed. Examples:
-             real hard-coded API key, eval(user_input), SQL string
+             real hard-coded API key, eval of user input, SQL string
              concatenation on a user-controlled fragment, an unauth'd
              admin route.  Be SURE before you mark anything critical.
   HIGH     = real risk but needs preconditions (e.g. user already
@@ -332,48 +332,4 @@ async def verify_patch(
     # Always run the second agent + E2B in parallel — they don't depend
     # on each other and the latency budget matters.
     llm_task = asyncio.create_task(_llm_review(file_blocks or {}, repo_ctx))
-    e2b_task = asyncio.create_task(_e2b_smoke(file_blocks or {}))
-    llm_review, e2b_result = await asyncio.gather(llm_task, e2b_task,
-                                                  return_exceptions=False)
-
-    blocking_llm_findings = [
-        f for f in llm_review.get("findings", []) or []
-        if _blocks(f.get("severity", ""))
-    ]
-    llm_blocked = bool(blocking_llm_findings) and block_level != "OFF"
-
-    for f in llm_review.get("findings", []) or []:
-        f.setdefault("source", "vanguard_verify_agent")
-        findings.append(f)
-    e2b_blocked = not e2b_result.get("pass", True)
-
-    overall_pass = not (regex_blocked or llm_blocked or e2b_blocked)
-
-    summary_parts = []
-    summary_parts.append(f"regex: {'BLOCK' if regex_blocked else 'pass'} "
-                         f"({len(regex_findings)} findings)")
-    if llm_review.get("model"):
-        n_findings = len(llm_review.get("findings", []) or [])
-        n_block    = len(blocking_llm_findings)
-        summary_parts.append(
-            f"verify-agent ({llm_review['model']}, {mode}/{block_level}): "
-            f"{'BLOCK' if llm_blocked else 'pass'} "
-            f"({n_findings} findings, {n_block} ≥{block_level})"
-        )
-    else:
-        summary_parts.append("verify-agent: skipped")
-    if e2b_result.get("skipped"):
-        summary_parts.append(f"e2b: skipped ({e2b_result.get('reason', '')})")
-    else:
-        summary_parts.append(f"e2b: {'BLOCK' if e2b_blocked else 'pass'}")
-
-    return {
-        "pass":     overall_pass,
-        "findings": findings,
-        "summary":  " | ".join(summary_parts),
-        "regex":    {"blocked": regex_blocked, "count": len(regex_findings)},
-        "agent":    llm_review,
-        "e2b":      e2b_result,
-        "mode":     mode,
-        "block_level": block_level,
-    }
+    e2b_task =
