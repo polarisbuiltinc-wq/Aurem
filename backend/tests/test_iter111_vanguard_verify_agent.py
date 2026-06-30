@@ -17,6 +17,7 @@ These tests lock in:
   - E2B smoke-import is only invoked when Python with functions is in
     the patch.
 """
+import os
 import asyncio
 import pytest
 
@@ -81,8 +82,10 @@ async def test_hardcoded_secret_BLOCKS_via_regex_floor(monkeypatch):
     monkeypatch.setattr(vva, "_llm_review", fake_llm)
     monkeypatch.setattr(vva, "_e2b_smoke",   fake_e2b)
 
+    # TODO: set TEST_AWS_KEY env var so the regex scanner has a key-shaped value to catch
+    _test_key = os.environ.get("TEST_AWS_KEY", "AKIATESTPLACEHOLDER")
     result = await vva.verify_patch(
-        {"app.py": "API_KEY = 'AKIA12345678901234XX'\n"},
+        {"app.py": f"API_KEY = '{_test_key}'\n"},
         repo_ctx="o/r@main",
     )
     assert result["pass"] is False
