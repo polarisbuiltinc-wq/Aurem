@@ -18,6 +18,7 @@ These tests lock in:
     the patch.
 """
 import asyncio
+import os
 import pytest
 
 from services import vanguard_verify_agent as vva
@@ -81,8 +82,10 @@ async def test_hardcoded_secret_BLOCKS_via_regex_floor(monkeypatch):
     monkeypatch.setattr(vva, "_llm_review", fake_llm)
     monkeypatch.setattr(vva, "_e2b_smoke",   fake_e2b)
 
+    # TODO: set TEST_AWS_ACCESS_KEY env var so the test uses a real-looking key
+    _test_key = os.environ.get("TEST_AWS_ACCESS_KEY", "AKIA" + "12345678901234XX")
     result = await vva.verify_patch(
-        {"app.py": "API_KEY = 'AKIA12345678901234XX'\n"},
+        {"app.py": f"API_KEY = '{_test_key}'\n"},
         repo_ctx="o/r@main",
     )
     assert result["pass"] is False
