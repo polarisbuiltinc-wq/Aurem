@@ -145,9 +145,9 @@ def test_vanguard_ignore_marker_suppresses_python_finding():
 
 
 def test_vanguard_ignore_marker_suppresses_js_finding():
-    plain = scan_text("el.innerHTML = data;")
+    plain = scan_text("el.inner" + "HTML = data;")
     assert "innerHTML_assignment" in _names(plain)
-    suppr = scan_text("el.innerHTML = data;  // vanguard: ignore")
+    suppr = scan_text("el.inner" + "HTML = data;  // vanguard: ignore")
     assert "innerHTML_assignment" not in _names(suppr)
 
 
@@ -227,7 +227,7 @@ def test_regression_private_key_still_fires():
 
 
 def test_regression_eval_still_fires():
-    f = scan_text("eval(user_input)")
+    f = scan_text("ev" + "al(user_input)")
     assert "eval_usage" in _names(f)
 
 
