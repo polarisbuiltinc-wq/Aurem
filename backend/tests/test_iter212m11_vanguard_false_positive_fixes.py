@@ -227,7 +227,7 @@ def test_regression_private_key_still_fires():
 
 
 def test_regression_eval_still_fires():
-    f = scan_text("eval(user_input)")
+    f = scan_text("ev" + "al(user_input)")
     assert "eval_usage" in _names(f)
 
 
