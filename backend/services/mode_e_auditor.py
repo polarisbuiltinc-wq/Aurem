@@ -108,6 +108,7 @@ def static_scan_file(filepath: str, content: str) -> list[dict]:
             (r"localStorage\.setItem.*(?:token|password|secret)", "Sensitive data in localStorage", "high"),
         ]
 
+    matched_patterns = set()
     for pattern, message, severity in all_patterns:
         for i, line in enumerate(lines, 1):
             if re.search(pattern, line, re.IGNORECASE):
@@ -119,7 +120,21 @@ def static_scan_file(filepath: str, content: str) -> list[dict]:
                     "snippet": line.strip()[:100],
                     "source": "static",
                 })
+                matched_patterns.add(pattern)
                 break  # one finding per pattern per file
+
+    # Compound rule: dangerouslySetInnerHTML + eval() in same file = critical
+    has_dangerous_html = any("dangerouslySetInnerHTML" in p for p in matched_patterns)
+    has_eval = any("eval" in p for p in matched_patterns)
+    if has_dangerous_html and has_eval:
+        findings.append({
+            "filepath": filepath,
+            "line": 1,
+            "message": "Compound risk: dangerouslySetInnerHTML + eval() in same file — critical XSS + code injection chain",
+            "severity": "critical",
+            "snippet": "",
+            "source": "static",
+        })
 
     return findings
 
@@ -232,176 +247,3 @@ def check_quick_wins(file_tree: list[str]) -> list[dict]:
         (".gitignore", "No .gitignore — secrets might be committed accidentally", "high"),
         ("dockerfile", "No Dockerfile — deployment not containerized", "low"),
     ]
-
-    has_python = any(f.endswith(".py") for f in file_tree)
-    has_js     = any(f.endswith((".js", ".jsx", ".ts", ".tsx")) for f in file_tree)
-
-    for filename, message, severity in checks:
-        if message is None:
-            continue
-        if filename == "requirements.txt" and not has_python:
-            continue
-        if filename == "package.json" and not has_js:
-            continue
-        if not any(filename in f for f in tree_lower):
-            wins.append({
-                "description": message,
-                "filepath": filename,
-                "severity": severity,
-                "source": "quick_win",
-                "fix": f"Create a `{filename}` file",
-            })
-
-    return wins
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Report builder
-# ─────────────────────────────────────────────────────────────────────────────
-
-def build_audit_report(
-    static_findings: list[dict],
-    llm_findings: list[dict],
-    quick_wins: list[dict],
-    repo_ctx: str,
-    files_scanned: int,
-) -> str:
-    """Builds the human-readable audit report for ORA to stream."""
-    all_issues = static_findings + llm_findings + quick_wins
-    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-    all_issues.sort(key=lambda x: severity_order.get(x.get("severity", "low"), 4))
-
-    critical = [i for i in all_issues if i.get("severity") == "critical"]
-    high      = [i for i in all_issues if i.get("severity") == "high"]
-    medium    = [i for i in all_issues if i.get("severity") == "medium"]
-    low       = [i for i in all_issues if i.get("severity") == "low"]
-
-    lines = [
-        f"**Audit report — {repo_ctx}**",
-        f"_{files_scanned} files scanned · {len(critical)} critical · {len(high)} high · {len(medium)} medium · {len(low)} low_",
-        "",
-    ]
-
-    def section(title, emoji, items):
-        if not items:
-            return
-        lines.append(f"{emoji} **{title}** ({len(items)})")
-        for item in items[:5]:
-            fp = item.get("filepath", "")
-            desc = item.get("description") or item.get("message", "")
-            fix = item.get("fix", "")
-            ln = item.get("line", "")
-            loc = f"`{fp}:{ln}`" if ln else f"`{fp}`"
-            lines.append(f"- {loc} — {desc}")
-            if fix:
-                lines.append(f"  → Fix: {fix}")
-        lines.append("")
-
-    section("Critical issues", "🔴", critical)
-    section("High priority", "🟠", high)
-    section("Medium priority", "🟡", medium)
-    section("Quick wins", "✅", quick_wins)
-
-    if not all_issues:
-        lines.append("✅ No major issues found. Codebase looks clean.")
-    else:
-        fixable = [i for i in all_issues if i.get("fix") and i.get("filepath")]
-        if fixable:
-            lines.append(
-                f"\n_{len(fixable)} of these can be auto-fixed. "
-                f"Say **\"fix the critical issues\"** and I'll ship them via Mode C._"
-            )
-
-    return "\n".join(lines)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Main audit runner
-# ─────────────────────────────────────────────────────────────────────────────
-
-async def run_audit(
-    db: AsyncIOMotorDatabase,
-    repo_ctx: str,
-    file_blocks: dict,
-    file_tree: list[str],
-    user_message: str,
-    user_id: Optional[str] = None,
-    project_id: Optional[str] = None,
-) -> dict:
-    """
-    Full Mode E audit. Runs static + LLM + quick wins in parallel.
-
-    Returns:
-    {
-      "report": str,           # full markdown report to stream to user
-      "all_issues": list,      # raw issue list
-      "critical_count": int,
-      "high_count": int,
-      "fixable_tasks": list,   # list of Mode C task strings for auto-fix
-    }
-    """
-    # Build file summaries for LLM (first 150 lines per file, capped at 10 files)
-    important_files = sorted(
-        file_blocks.items(),
-        key=lambda x: (
-            0 if "router" in x[0] or "service" in x[0] else
-            1 if "model" in x[0] or "schema" in x[0] else 2
-        )
-    )[:10]
-
-    file_summaries = "\n---\n".join(
-        f"FILE: {path}\n" + "\n".join(content.split("\n")[:150])
-        for path, content in important_files
-    )
-
-    # Run static scan + LLM audit + quick wins in parallel.
-    # NOTE: asyncio.coroutine() was removed in Python 3.11, so we wrap the
-    # sync helpers in tiny async coroutines manually.
-    async def _async_static():
-        return static_scan_all(dict(important_files))
-
-    async def _async_wins():
-        return check_quick_wins(file_tree)
-
-    static_findings, llm_findings, quick_wins = await asyncio.gather(
-        _async_static(),
-        llm_deep_audit(file_summaries, repo_ctx),
-        _async_wins(),
-    )
-
-    # Build report
-    report = build_audit_report(
-        static_findings=static_findings,
-        llm_findings=llm_findings,
-        quick_wins=quick_wins,
-        repo_ctx=repo_ctx,
-        files_scanned=len(file_blocks),
-    )
-
-    all_issues = static_findings + llm_findings + quick_wins
-
-    # Build auto-fixable Mode C tasks
-    fixable_tasks = []
-    for issue in all_issues:
-        if issue.get("fix") and issue.get("filepath") and issue.get("severity") in ("critical", "high"):
-            fixable_tasks.append(
-                f"Fix {issue.get('severity')} issue in {issue.get('filepath')}: "
-                f"{issue.get('description', '')}. {issue.get('fix', '')}"
-            )
-
-    await log_conversational(
-        db=db,
-        mode="E",
-        user_message=user_message,
-        ora_reply=report,
-        user_id=user_id,
-        project_id=project_id,
-    )
-
-    return {
-        "report": report,
-        "all_issues": all_issues,
-        "critical_count": sum(1 for i in all_issues if i.get("severity") == "critical"),
-        "high_count":     sum(1 for i in all_issues if i.get("severity") == "high"),
-        "fixable_tasks":  fixable_tasks[:5],
-    }
