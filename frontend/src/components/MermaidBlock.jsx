@@ -75,6 +75,15 @@ export default function MermaidBlock({ code, title }) {
     return () => { cancelled = true; };
   }, [code, id]);
 
+  // Inject the mermaid SVG via ref instead of dangerouslySetInnerHTML.
+  // `svg` is produced by `mermaid.render` which we initialised with
+  // securityLevel: 'strict' — it strips event handlers + arbitrary HTML.
+  useEffect(() => {
+    if (!wrapRef.current) return;
+    wrapRef.current.innerHTML = svg ||
+      "<div style='color:#9aa3b2; font-family:\"JetBrains Mono\", monospace; font-size:11px'>Rendering diagram…</div>";
+  }, [svg]);
+
   const onCopySvg = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(svg);
@@ -180,13 +189,6 @@ export default function MermaidBlock({ code, title }) {
             overflowX: "auto",
             display: "flex",
             justifyContent: "center",
-          }}
-          // Render mermaid SVG.  `svg` is produced by `mermaid.render`
-          // (which we initialised with securityLevel: 'strict' — it
-          // strips event handlers + arbitrary HTML).
-          dangerouslySetInnerHTML={{
-            __html: svg ||
-              "<div style='color:#9aa3b2; font-family:\"JetBrains Mono\", monospace; font-size:11px'>Rendering diagram…</div>",
           }}
         />
       )}
