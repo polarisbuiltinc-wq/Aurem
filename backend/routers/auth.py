@@ -33,6 +33,9 @@ _LOGIN_RATE_PER_MIN  = int(os.getenv("LOGIN_RATE_PER_MIN", "10"))
 _LOGIN_FAIL_LIMIT    = int(os.getenv("LOGIN_FAIL_LIMIT", "5"))
 _LOGIN_LOCKOUT_MIN   = int(os.getenv("LOGIN_LOCKOUT_MIN", "15"))
 
+# Body-size limit for /auth/signup to prevent large-payload DoS.
+_SIGNUP_BODY_MAX_BYTES = int(os.getenv("SIGNUP_BODY_MAX_BYTES", "16384"))
+
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -162,7 +165,11 @@ class TwoFAVerifyBody(BaseModel):
 
 
 @router.post("/signup")
-async def signup(body: SignupBody) -> dict:
+async def signup(body: SignupBody, request: Request) -> dict:
+    # Reject oversized bodies early to prevent large-payload DoS.
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > _SIGNUP_BODY_MAX_BYTES:
+        raise HTTPException(413, "Request body too large")
     db = get_db()
     if db is None:
         raise HTTPException(503, "Database not connected")
@@ -310,88 +317,3 @@ def _issue_session(user: dict, is_admin: bool, is_founder: bool) -> dict:
 @router.post("/login/2fa-verify")
 async def login_2fa_verify(body: TwoFAVerifyBody) -> dict:
     """Iter 212m-20 — second leg of the admin 2FA login flow. Trades a
-    `mfa_pending` token + 6-digit TOTP code (or a backup code) for the
-    real session JWT.
-
-    Idempotent on backup codes: a successfully consumed code is removed
-    from the user's `mfa_backup_codes` array so it can never be reused.
-    """
-    if not body.code and not body.backup_code:
-        raise HTTPException(400, "Provide either `code` or `backup_code`")
-    payload = consume_mfa_pending_token(body.mfa_token)
-    db = get_db()
-    if db is None:
-        raise HTTPException(503, "Database not connected")
-    user = await db.dev_users.find_one(
-        {"user_id": payload["user_id"]}, {"_id": 0},
-    )
-    if not user:
-        raise HTTPException(401, "User not found")
-    if not user.get("mfa_enabled") or not user.get("mfa_secret"):
-        # The user disabled 2FA between leg 1 and leg 2 — treat the
-        # mfa_token as a normal session promotion.
-        is_founder = is_founder_email(user["email"])
-        is_admin = bool(user.get("is_admin")) or is_founder
-        return _issue_session(user, is_admin, is_founder)
-
-    ok = False
-    if body.code:
-        ok = verify_code(user["mfa_secret"], body.code)
-    elif body.backup_code:
-        hashes = list(user.get("mfa_backup_codes") or [])
-        ok, remaining = consume_backup_code(body.backup_code, hashes)
-        if ok:
-            await db.dev_users.update_one(
-                {"user_id": user["user_id"]},
-                {"$set": {"mfa_backup_codes": remaining}},
-            )
-            user["mfa_backup_codes"] = remaining
-    if not ok:
-        raise HTTPException(401, "Invalid 2FA code")
-
-    is_founder = is_founder_email(user["email"])
-    is_admin = bool(user.get("is_admin")) or is_founder
-    return _issue_session(user, is_admin, is_founder)
-
-
-@router.get("/me")
-async def me(authorization: Optional[str] = Header(None)) -> dict:
-    payload = await current_dev(authorization)
-    db = get_db()
-    user = None
-    if db is not None:
-        user = await db.dev_users.find_one(
-            {"user_id": payload["user_id"]}, {"_id": 0, "password": 0}
-        )
-    # Iter 212m-30 — coerce datetime fields to ISO strings so the JSON
-    # serialiser doesn't reject the response. `created_at` is read by
-    # the frontend to compute the founder welcome tint. Some legacy
-    # rows have an epoch float instead of a datetime — we leave those
-    # numbers untouched; getChatBgTint() handles both shapes.
-    if user:
-        ts = user.get("created_at")
-        if isinstance(ts, datetime):
-            user["created_at"] = ts.isoformat()
-    # Iter 212m-48 — auto-refresh the session token on every /auth/me
-    # call. The frontend already hits this on app boot and on focus,
-    # so active users glide indefinitely while idle / leaked tokens
-    # die within the new 7-day window.
-    fresh_token = create_token(
-        payload["user_id"],
-        payload.get("email", (user or {}).get("email", "")),
-        is_admin=bool((user or {}).get("is_admin") or payload.get("is_admin")),
-    )
-    return {"ok": True, "user": user or payload, "token": fresh_token}
-
-
-@router.get("/tokens")
-async def get_tokens(authorization: Optional[str] = Header(None)) -> dict:
-    """Return the current wallet balance for the authenticated user."""
-    payload = await current_dev(authorization)
-    db = get_db()
-    if db is None:
-        return {"ok": True, "tokens_remaining": 0}
-    u = await db.dev_users.find_one(
-        {"user_id": payload["user_id"]}, {"_id": 0, "tokens_remaining": 1}
-    )
-    return {"ok": True, "tokens_remaining": int((u or {}).get("tokens_remaining", 0))}
