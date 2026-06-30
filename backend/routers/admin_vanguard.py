@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 
 from cto_services.auth import current_dev
@@ -25,10 +25,18 @@ from services.vanguard_config import get_config, save_config
 
 router = APIRouter(prefix="/admin/vanguard", tags=["Admin / Vanguard"])
 
+MAX_BODY_BYTES = 10_000  # 10 KB — config payloads are tiny
+
 
 def _require_admin(me: dict) -> None:
     if not (me.get("is_admin") or me.get("tier") == "founder"):
         raise HTTPException(403, "Admin access required")
+
+
+async def _limit_body_size(request: Request) -> None:
+    cl = request.headers.get("content-length")
+    if cl and int(cl) > MAX_BODY_BYTES:
+        raise HTTPException(413, "Request body too large")
 
 
 @router.get("/config")
@@ -50,7 +58,7 @@ class _ConfigBody(BaseModel):
     levels:  dict  # {swift|pro|maxx: OFF|CRITICAL|HIGH}
 
 
-@router.post("/config")
+@router.post("/config", dependencies=[Depends(_limit_body_size)])
 async def write_vanguard_config(
     body: _ConfigBody,
     authorization: Optional[str] = Header(None),
