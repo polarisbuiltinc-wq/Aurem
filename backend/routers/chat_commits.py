@@ -17,6 +17,8 @@ from cto_services.db import require_db
 
 router = APIRouter(prefix="/chat-commits", tags=["AUREM CTO Chat Commits"])
 
+MAX_BODY_BYTES = 16 * 1024
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -30,6 +32,7 @@ class LinkBody(BaseModel):
 
 @router.post("/link")
 async def link_commit(body: LinkBody,
+                      content_length: int = Header(0, le=MAX_BODY_BYTES),
                       authorization: str = Header(None)) -> dict[str, Any]:
     """Called by the chat backend whenever a message triggers a code change."""
     me = await current_dev(authorization)
@@ -69,6 +72,7 @@ class RollbackBody(BaseModel):
 
 @router.post("/rollback")
 async def rollback(body: RollbackBody,
+                    content_length: int = Header(0, le=MAX_BODY_BYTES),
                     authorization: str = Header(None)) -> dict[str, Any]:
     """Mark the rollback as initiated; the deploy router actually runs git revert."""
     me = await current_dev(authorization)
