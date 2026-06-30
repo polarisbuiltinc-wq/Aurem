@@ -12,14 +12,47 @@
  *   <RobotGuide message="<strong>Welcome!</strong> Click <strong>Continue with GitHub</strong> <span class='ora-arrow'>👇</span>" />
  *
  * Props:
- *   - message  : HTML string (rendered via dangerouslySetInnerHTML). Use
+ *   - message  : HTML string (sanitized and rendered as React elements).
  *                `<strong>`, `<em>`, and `<span class="ora-arrow">…</span>`
- *                for the bouncing emoji arrow.
+ *                are the only supported tags.
  *   - kind     : "info" (default amber) | "error" (red "HEADS UP")
  *                | "success" (green "ALL SET")
  *   - testid   : optional override for the root data-testid.
  */
 import React from "react";
+
+const ALLOWED_TAGS = new Set(["strong", "em"]);
+
+function toReactNode(node, key) {
+  if (node.nodeType === 3) return String(node.textContent);
+  if (node.nodeType === 1) {
+    const tag = node.tagName.toLowerCase();
+    const children = Array.from(node.childNodes).map((n, i) =>
+      toReactNode(n, `${key}-${i}`)
+    );
+    if (ALLOWED_TAGS.has(tag)) {
+      return React.createElement(tag, { key }, ...children);
+    }
+    if (tag === "span" && node.getAttribute("class") === "ora-arrow") {
+      return React.createElement(
+        "span",
+        { key, className: "ora-arrow" },
+        ...children
+      );
+    }
+    // Unknown tag: render children only, dropping the wrapper element.
+    return React.createElement(React.Fragment, { key }, ...children);
+  }
+  return null;
+}
+
+function renderSafeMessage(html) {
+  if (typeof window === "undefined") return html;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return Array.from(doc.body.childNodes).map((node, i) =>
+    toReactNode(node, String(i))
+  );
+}
 
 export default function RobotGuide({ message, kind = "info", testid = "robot-guide" }) {
   const palette = paletteFor(kind);
@@ -57,9 +90,9 @@ export default function RobotGuide({ message, kind = "info", testid = "robot-gui
           {palette.labelText}
         </div>
         <div data-testid={`${testid}-msg`}
-             style={{ fontSize: 13, color: "#f8fafc", lineHeight: 1.55 }}
-             // eslint-disable-next-line react/no-danger
-             dangerouslySetInnerHTML={{ __html: message }} />
+             style={{ fontSize: 13, color: "#f8fafc", lineHeight: 1.55 }}>
+          {renderSafeMessage(message)}
+        </div>
       </div>
     </div>
   );
