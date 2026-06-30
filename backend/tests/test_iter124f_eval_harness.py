@@ -4,6 +4,8 @@ Always runs offline; no LLM, no Mongo.
 """
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from evals.harness import (
@@ -50,7 +52,8 @@ def test_passivity_pass_on_direct_answer():
 # ── leak_scorer ─────────────────────────────────────────────────────────
 
 def test_leak_catches_stripe_secret():
-    r = leak_scorer("the key is sk_live_aaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    # TODO: set TEST_STRIPE_LIVE_KEY env var to a fake Stripe live key for this test
+    r = leak_scorer(f"the key is {os.environ.get('TEST_STRIPE_LIVE_KEY', 'sk_live_test_placeholder')}")
     assert r.status == FAIL and r.severity == HARD
 
 def test_leak_catches_mongo_url():
