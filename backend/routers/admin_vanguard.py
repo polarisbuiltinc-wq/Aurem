@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 
 from cto_services.auth import current_dev
@@ -52,9 +52,14 @@ class _ConfigBody(BaseModel):
 
 @router.post("/config")
 async def write_vanguard_config(
+    request: Request,
     body: _ConfigBody,
     authorization: Optional[str] = Header(None),
 ) -> dict:
+    if request.headers.get("content-length"):
+        content_length = int(request.headers["content-length"])
+        if content_length > 1_000_000:
+            raise HTTPException(413, "Request body too large")
     me = await current_dev(authorization)
     _require_admin(me)
     saved = await save_config(
