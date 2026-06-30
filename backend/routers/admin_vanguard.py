@@ -25,6 +25,8 @@ from services.vanguard_config import get_config, save_config
 
 router = APIRouter(prefix="/admin/vanguard", tags=["Admin / Vanguard"])
 
+_MAX_BODY_BYTES = 16_384
+
 
 def _require_admin(me: dict) -> None:
     if not (me.get("is_admin") or me.get("tier") == "founder"):
@@ -54,7 +56,14 @@ class _ConfigBody(BaseModel):
 async def write_vanguard_config(
     body: _ConfigBody,
     authorization: Optional[str] = Header(None),
+    content_length: Optional[str] = Header(None),
 ) -> dict:
+    if content_length is not None:
+        try:
+            if int(content_length) > _MAX_BODY_BYTES:
+                raise HTTPException(413, "Request body too large")
+        except ValueError:
+            raise HTTPException(400, "Invalid Content-Length header")
     me = await current_dev(authorization)
     _require_admin(me)
     saved = await save_config(
