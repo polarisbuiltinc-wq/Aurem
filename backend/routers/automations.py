@@ -32,6 +32,8 @@ router = APIRouter(prefix="/automations", tags=["Automations"])
 
 GITHUB_WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET", "")
 
+MAX_WEBHOOK_BODY_BYTES = 1 * 1024 * 1024  # 1 MiB
+
 
 @router.post("/webhook/github")
 async def github_webhook(
@@ -42,7 +44,12 @@ async def github_webhook(
 ) -> dict:
     """GitHub posts push events here.  Each push triggers any matching
     automations whose `repo_full_name` + `branch_filter` match."""
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_WEBHOOK_BODY_BYTES:
+        raise HTTPException(413, "Payload too large")
     payload = await request.body()
+    if len(payload) > MAX_WEBHOOK_BODY_BYTES:
+        raise HTTPException(413, "Payload too large")
 
     if GITHUB_WEBHOOK_SECRET:
         expected = "sha256=" + hmac.new(
