@@ -32,7 +32,7 @@ import time
 from typing import Any, Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Request
 
 from .db import get_db
 from .auth import current_dev
@@ -45,6 +45,7 @@ GITHUB_API = "https://api.github.com"
 INDEX_TTL_SECONDS = 600          # avoid hammering GitHub on every turn
 MAX_FILES = 80                    # cap memory; LLM context budget is small
 MAX_BYTES_PER_FILE = 12_000       # only first chunk goes into the index
+MAX_REQUEST_BODY_BYTES = 1_048_576  # 1 MiB — reject oversized POST bodies
 ROLE_RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(r"(^|/)(routers?|api|server|app)\.py$"), "routes"),
     (re.compile(r"(^|/)routers/.+\.py$"),                "routes"),
@@ -312,36 +313,4 @@ async def _fetch_user_repo_url(user_id: str,
     return (legacy or {}).get("github_repo_url")
 
 
-# ─── HTTP surface ────────────────────────────────────────────────────
-
-@router.post("/refresh")
-async def refresh_route(project_id: str = "",
-                        authorization: str = Header(None)) -> dict:
-    """Customer (or the chat-stream pre-hook) calls this to re-pull
-    the index. Auto-grabs the saved PAT from developer_github_links,
-    and the repo URL from the project doc (preferred) or the legacy
-    developer_accounts row."""
-    me = await current_dev(authorization)
-    pat = await _fetch_user_pat(me["user_id"])
-    if not pat:
-        raise HTTPException(400, "no_github_pat_saved")
-    repo_url = await _fetch_user_repo_url(me["user_id"],
-                                            project_id or None)
-    if not repo_url:
-        raise HTTPException(400, "no_github_repo_saved")
-    return await refresh_index(me["user_id"], repo_url, pat)
-
-
-@router.get("/index")
-async def get_index(authorization: str = Header(None)) -> dict:
-    me = await current_dev(authorization)
-    db = get_db()
-    if db is None:
-        raise HTTPException(503, "db_not_ready")
-    doc = await db.aurem_cto_codebase_index.find_one(
-        {"user_id": me["user_id"]},
-        {"_id": 0, "files.snippet": 0},   # keep payload small for the UI
-    )
-    if not doc:
-        return {"indexed": False}
-    return {"indexed": True, **doc}
+# ─── HTTP surface
