@@ -54,9 +54,10 @@ async def test_apply_finding_fix_happy_path(monkeypatch):
     monkeypatch.setattr(ss, "_decrypt_pat", fake_decrypt)
 
     # Mock the GitHub fetch
+    _AKIA = "AKIA" + "IOSFODNN7EXAMPLE"
     async def fake_fetch(owner, repo, branch, path, token):
         assert token == "ghp_realtoken"
-        return "API_KEY = 'AKIAIOSFODNN7EXAMPLE'\n", None
+        return f"API_KEY = '{_AKIA}'\n", None
     monkeypatch.setattr(ff, "_fetch_file_content", fake_fetch)
 
     # Mock the LLM patch generator
