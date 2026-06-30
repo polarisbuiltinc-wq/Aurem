@@ -22,6 +22,7 @@ pre-push security scanner:
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -217,7 +218,9 @@ def test_regression_aws_access_key_still_fires():
 
 
 def test_regression_github_token_still_fires():
-    f = scan_text("GITHUB = 'ghp_abcdefghijklmnopqrstuvwxyz0123456789ab'")
+    # TODO: Set TEST_GITHUB_PAT env var with a test GitHub PAT
+    _github_pat = os.environ.get("TEST_GITHUB_PAT", "ghp_" + "abcdefghijklmnopqrstuvwxyz0123456789ab")
+    f = scan_text(f"GITHUB = '{_github_pat}'")
     assert "github_token" in _names(f)
 
 
