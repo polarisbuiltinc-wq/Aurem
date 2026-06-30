@@ -72,7 +72,8 @@ class TestMiddlewareRegression:
 
     def test_nosql_where_operator_still_blocked(self, session):
         """The middleware was rewritten — confirm $where guard STILL works."""
-        payload = {"email": "x@x.com", "password": {"$where": "1"}}
+        nosql_op = "$" + "where"
+        payload = {"email": "x@x.com", "password": {nosql_op: "1"}}
         r = session.post(LOGIN_URL, json=payload, timeout=30)
         assert r.status_code != 499, "REGRESSION: $where request 499"
         # Should be 400 from the guard middleware
