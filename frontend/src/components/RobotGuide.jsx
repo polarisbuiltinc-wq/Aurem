@@ -12,17 +12,19 @@
  *   <RobotGuide message="<strong>Welcome!</strong> Click <strong>Continue with GitHub</strong> <span class='ora-arrow'>👇</span>" />
  *
  * Props:
- *   - message  : HTML string (rendered via dangerouslySetInnerHTML). Use
+ *   - message  : HTML string (sanitized with DOMPurify before rendering). Use
  *                `<strong>`, `<em>`, and `<span class="ora-arrow">…</span>`
  *                for the bouncing emoji arrow.
  *   - kind     : "info" (default amber) | "error" (red "HEADS UP")
  *                | "success" (green "ALL SET")
  *   - testid   : optional override for the root data-testid.
  */
+import DOMPurify from "dompurify";
 import React from "react";
 
 export default function RobotGuide({ message, kind = "info", testid = "robot-guide" }) {
   const palette = paletteFor(kind);
+  const sanitized = DOMPurify.sanitize(message, { ALLOWED_TAGS: ["strong", "em", "span"], ALLOWED_ATTR: ["class"] });
   return (
     <div data-testid={testid} style={{
       background: palette.bg,
@@ -59,7 +61,7 @@ export default function RobotGuide({ message, kind = "info", testid = "robot-gui
         <div data-testid={`${testid}-msg`}
              style={{ fontSize: 13, color: "#f8fafc", lineHeight: 1.55 }}
              // eslint-disable-next-line react/no-danger
-             dangerouslySetInnerHTML={{ __html: message }} />
+             dangerouslySetInnerHTML={{ __html: sanitized }} />
       </div>
     </div>
   );
