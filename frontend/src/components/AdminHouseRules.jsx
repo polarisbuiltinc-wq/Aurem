@@ -19,6 +19,7 @@ import {
   ShieldCheck, Save, Loader2, AlertCircle, CheckCircle2, MessageSquare,
 } from "lucide-react";
 import { api } from "../lib/api";
+import { cleanErr } from "../lib/cleanErr";
 import { toast } from "./Toast";
 
 const MAX_LEN = 8000;
@@ -97,20 +98,8 @@ export default function AdminHouseRules() {
     updated_by: null,
   });
 
-  // Iter 352 — never leak raw infra error bodies (Cloudflare HTML,
-  // proxy pages) into the founder UI. Keep only short clean strings.
-  function cleanErr(e, fallback) {
-    let msg = e?.response?.data?.detail || e?.message || fallback;
-    if (typeof msg !== "string") {
-      try { msg = JSON.stringify(msg); } catch { msg = String(msg); }
-    }
-    const looksLikeInfra = /<\s*(html|!doctype)|cloudflare|could not parse/i.test(msg);
-    if (looksLikeInfra || msg.length > 220) {
-      const code = e?.response?.status;
-      return `Server error${code ? ` (HTTP ${code})` : ""} — the backend returned an unreadable response. Refresh to retry; if it persists, check /admin/system-health.`;
-    }
-    return msg;
-  }
+  // Iter 353 — sanitizer moved to shared ../lib/cleanErr (also used by
+  // Financials + API Keys pages after the same leak appeared there).
 
   const load = useCallback(async () => {
     setLoading(true);

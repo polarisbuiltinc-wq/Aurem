@@ -12,6 +12,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, getToken } from "../lib/api";
+import { cleanErr } from "../lib/cleanErr";
 
 const TIER_TINT = {
   free:    "#888d99",
@@ -159,8 +160,7 @@ export default function AdminFinancials() {
       setData(r.data);
       setDraft(r.data.settings);
     } catch (e) {
-      const detail = (e && e.response && e.response.data && e.response.data.detail) || "";
-      setErr(detail || (e && e.message) || "Failed to load.");
+      setErr(cleanErr(e, "Failed to load."));
     }
   }, []);
 
@@ -173,8 +173,7 @@ export default function AdminFinancials() {
       setData(r.data);
       setDraft(r.data.settings);
     } catch (e) {
-      const detail = (e && e.response && e.response.data && e.response.data.detail) || "";
-      setErr(detail || (e && e.message) || "Save failed.");
+      setErr(cleanErr(e, "Save failed."));
     } finally {
       setSaving(false);
     }
@@ -185,7 +184,21 @@ export default function AdminFinancials() {
   if (!data) {
     return (
       <div data-testid="loading" style={{ padding: 40, color: "var(--text-dim)" }}>
-        {err || "Loading financials…"}
+        <div>{err || "Loading financials…"}</div>
+        {err && (
+          <button
+            data-testid="financials-retry-btn"
+            onClick={load}
+            style={{
+              marginTop: 14, padding: "8px 18px", borderRadius: 8,
+              border: "1px solid var(--border, rgba(148,163,184,0.35))",
+              background: "transparent", color: "var(--text)",
+              cursor: "pointer", fontSize: 13,
+            }}
+          >
+            Retry
+          </button>
+        )}
       </div>
     );
   }

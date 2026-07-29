@@ -14,11 +14,13 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, getToken } from "../lib/api";
+import { cleanErr } from "../lib/cleanErr";
 import { toast } from "../components/Toast";
 
 function timeSince(epoch) {
-  if (!epoch) return "never used";
-  const s = Math.max(1, Math.round(Date.now() / 1000 - epoch));
+  // Iter 353 — non-numeric epochs rendered "NaNd ago" (founder audit).
+  if (!epoch || !Number.isFinite(Number(epoch))) return "never used";
+  const s = Math.max(1, Math.round(Date.now() / 1000 - Number(epoch)));
   if (s < 60)    return `${s}s ago`;
   if (s < 3600)  return `${Math.round(s / 60)}m ago`;
   if (s < 86400) return `${Math.round(s / 3600)}h ago`;
@@ -43,7 +45,7 @@ export default function AdminApiKeys() {
       });
       setKeys(r.data?.keys || []);
     } catch (e) {
-      const detail = e?.response?.data?.detail || e?.message || "Failed to load keys.";
+      const detail = cleanErr(e, "Failed to load keys.");
       setErr(detail);
       if (e?.response?.status === 401) {
         nav("/login?next=/admin/api-keys", { replace: true });
@@ -65,7 +67,7 @@ export default function AdminApiKeys() {
       setNewKey(r.data?.key || "");
       await load();
     } catch (e) {
-      const detail = e?.response?.data?.detail || e?.message || "Failed to generate key.";
+      const detail = cleanErr(e, "Failed to generate key.");
       setErr(detail);
       toast({ message: detail, kind: "error", duration: 3500 });
     } finally {
@@ -92,7 +94,7 @@ export default function AdminApiKeys() {
       });
       await load();
     } catch (e) {
-      const detail = e?.response?.data?.detail || e?.message || "Revoke failed.";
+      const detail = cleanErr(e, "Revoke failed.");
       toast({ message: detail, kind: "error", duration: 3500 });
     }
   };

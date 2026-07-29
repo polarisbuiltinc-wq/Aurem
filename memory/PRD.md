@@ -16,6 +16,24 @@ Language: **Hinglish** — main agent responds in Hinglish.
 
 ## What's implemented (chronological, most recent first)
 
+### Iter 353 · Audit round 3 (2026-06) — deploying
+- **Financials/API-Keys "Cloudflare error" RCA**: NOT the scope-drift files — those two
+  routers (`admin_financials_router.py`, `aurem_llm_proxy_router.py`) NEVER existed in the
+  repo/git; the Iter-288 scope-drift guard PAUSED those 2026-07-26 loops before generation,
+  so nothing was written. Errors were transient origin 520s (deploy-rollout windows, prod
+  uptime now stable 1630s+; /admin/financials 200-OK on preview, /mcp/keys 200-OK ON PROD).
+- **MCP connector proof (prod)**: minted sk-aurem key via POST /mcp/keys on PROD, key
+  authenticated MCP initialize (200) — connector chain works; founder's issue was simply
+  "no key ever generated". Test key revoked after.
+- **Scope-drift invariant answer**: Iter 311 `candidates ⊆ planner_set` only stops
+  file_selector expansion; 07-26 extras were PLANNER-side bloat (planner itself proposed new
+  out-of-scope files) — the guard detected + paused, which is the designed behavior.
+- **Ship "slow" RCA**: ship avg 120.77s was PAUSED_FOR_USER confirm-wait counted as runtime
+  (manual-ship policy). Speed diagnostic now subtracts pause windows.
+- **Fixes**: shared `lib/cleanErr.js` (Financials/ApiKeys/HouseRules, + Retry button),
+  "NaNd ago" fix. Locks: `test_iter353_audit_round3.py` (4). Gate 3692+236 all green.
+- OPEN: "health badge wrong data" suggestion — founder will paste full text next message.
+
 ### Iter 352 · Payments pipeline truth + audit fixes (2026-06) — deploying
 - **RCA — 22 stuck "pending" transactions**: (a) completed-webhook updated dev_users tier but
   NEVER the cto_payments ledger row; (b) checkout.session.expired unhandled → abandoned

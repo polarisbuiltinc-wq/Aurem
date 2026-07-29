@@ -45,9 +45,11 @@ def test_reconcile_endpoint_is_admin_gated():
 
 
 def test_house_rules_never_leaks_infra_errors():
+    # Iter 353 — sanitizer lives in shared lib, imported by House Rules,
+    # Financials and API Keys pages.
+    lib = open("/app/frontend/src/lib/cleanErr.js").read()
+    assert "cloudflare|could not parse" in lib
     assert "cleanErr" in _HR_SRC
-    assert "cloudflare|could not parse" in _HR_SRC
-    # both catch paths routed through the sanitizer
     assert _HR_SRC.count("cleanErr(e") >= 2
 
 

@@ -128,9 +128,35 @@ async def _phase_durations_from_events(
                 continue
         if not isinstance(ts, datetime):
             continue
-        events.append({"phase": (ev.get("phase") or "").lower(), "ts": ts})
+        events.append({"phase": (ev.get("phase") or "").lower(),
+                       "state": str(ev.get("state") or "").lower(),
+                       "ts": ts})
     if not events:
         return {}
+    # ── Iter 353 — pause-aware durations ──────────────────────────
+    # Ship (and scope-drift/execute) PAUSES for explicit user
+    # confirmation (manual-ship policy). The old math counted that
+    # human wait as phase runtime — founder audit read "ship avg
+    # 120.77s, max 474.87s" and flagged ship as slow, but the engine
+    # was idle waiting for the confirm click. Build [pause_start,
+    # pause_end) windows from paused_for_user events (resume = next
+    # event) and subtract the overlap from every phase interval.
+    pauses: list[tuple[datetime, datetime]] = []
+    for i, ev in enumerate(events):
+        if "paused" in ev["state"]:
+            p_start = ev["ts"]
+            p_end = events[i + 1]["ts"] if i + 1 < len(events) else events[-1]["ts"]
+            if p_end > p_start:
+                pauses.append((p_start, p_end))
+
+    def _paused_overlap(start: datetime, end: datetime) -> float:
+        total = 0.0
+        for ps, pe in pauses:
+            lo, hi = max(start, ps), min(end, pe)
+            if hi > lo:
+                total += (hi - lo).total_seconds()
+        return total
+
     # Merge state transitions into 5 canonical phases.
     def _canonical(p: str) -> str:
         if p in ("planning", "plan"):        return "plan"
@@ -162,7 +188,8 @@ async def _phase_durations_from_events(
                 break
         if end_ts is None:
             end_ts = events[-1]["ts"]
-        durations[ph] = (end_ts - first_ts[ph]).total_seconds()
+        raw = (end_ts - first_ts[ph]).total_seconds()
+        durations[ph] = max(0.0, raw - _paused_overlap(first_ts[ph], end_ts))
     return durations
 
 
