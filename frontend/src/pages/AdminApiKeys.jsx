@@ -183,7 +183,10 @@ export default function AdminApiKeys() {
       )}
 
       {/* Existing keys table */}
-      <h3 style={sectionLabel}>Active keys ({keys.length})</h3>
+      {/* Iter 354 — when the fetch failed, keys.length is a stale []
+          — showing "(0)" falsely claimed an empty account (founder's
+          3 real keys were masked during the origin 520 window). */}
+      <h3 style={sectionLabel}>Active keys ({err ? "?" : keys.length})</h3>
       {loading && keys.length === 0 ? (
         <div style={emptyState}>Loading…</div>
       ) : keys.length === 0 ? (

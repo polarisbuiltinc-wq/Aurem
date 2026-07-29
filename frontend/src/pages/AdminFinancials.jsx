@@ -23,8 +23,12 @@ const TIER_TINT = {
 
 function dollars(n, sign = false) {
   if (n === null || n === undefined) return "—";
-  const s = sign && n > 0 ? "+" : "";
-  return `${s}$${Math.round(Math.abs(n) * 100) / 100}`.replace("$-", "-$");
+  // Iter 354 — Math.abs() was stripping the minus sign, so a $-223.77
+  // net LOSS rendered as "$223.77" while the CAD line correctly showed
+  // "C$-316" (founder audit: contradictory signs on the same card).
+  const v = Math.round(Math.abs(n) * 100) / 100;
+  if (n < 0) return `-$${v}`;
+  return `${sign && n > 0 ? "+" : ""}$${v}`;
 }
 function k(n) { return n >= 1000 ? `$${Math.round(n/100)/10}k` : `$${Math.round(n)}`; }
 

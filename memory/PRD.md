@@ -16,6 +16,17 @@ Language: **Hinglish** — main agent responds in Hinglish.
 
 ## What's implemented (chronological, most recent first)
 
+### Iter 354 · Round-4 audit fixes (2026-06) — deploying
+- **Net Profit sign bug**: `dollars()` used Math.abs → net LOSS rendered "$223.77" while CAD
+  showed "-316". FIXED (screenshot: "-$3241.04" red + "C$-4571" consistent on preview).
+  Identical Net-Profit/Total-Burn magnitudes were CORRECT math (MRR=0 → |mrr-burn| == burn).
+- **API Keys root-cause CORRECTION (honest)**: my "key never existed" claim was wrong — I had
+  checked the QA bot account (keys are per-user); founder's 3 keys (42d/41d/28d) existed and
+  were masked by the silent error state. Fixed the mask: header shows "(?)" not "(0)" on
+  fetch error. Audit trail: `last_used_at` touch live since 2026-06-17 (commit f32ce7c) —
+  founder's LAST USED column is the definitive record of prior successful MCP auths.
+- Locks added to test_iter353 file (7 total). Gate 3695 + 236 all green.
+
 ### Iter 353 · Audit round 3 (2026-06) — deploying
 - **Financials/API-Keys "Cloudflare error" RCA**: NOT the scope-drift files — those two
   routers (`admin_financials_router.py`, `aurem_llm_proxy_router.py`) NEVER existed in the

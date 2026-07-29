@@ -95,3 +95,23 @@ def test_clean_err_wired_into_admin_pages():
 def test_financials_error_state_has_retry():
     src = open("/app/frontend/src/pages/AdminFinancials.jsx").read()
     assert 'data-testid="financials-retry-btn"' in src
+
+
+# ── Iter 354 — round-4 audit locks ───────────────────────────────────
+def test_dollars_preserves_negative_sign():
+    src = open("/app/frontend/src/pages/AdminFinancials.jsx").read()
+    assert "return `-$${v}`" in src, (
+        "dollars() must render negative values with a minus sign "
+        "(net LOSS was showing as positive $223.77)")
+    assert '.replace("$-"' not in src
+
+
+def test_api_keys_count_not_zero_on_fetch_error():
+    src = open("/app/frontend/src/pages/AdminApiKeys.jsx").read()
+    assert 'err ? "?" : keys.length' in src, (
+        "fetch-error state must not claim 'Active keys (0)'")
+
+
+def test_net_profit_formula_is_mrr_minus_burn():
+    src = open("/app/backend/services/financials.py").read()
+    assert "net_profit = mrr - total_burn" in src
