@@ -166,6 +166,9 @@ def test_topbar_renders_skeleton_when_loading():
     text = src.read_text()
     assert "HealthRingSkeleton" in text
     assert "topbar-health-ring-skeleton" in text
-    # Colour bands by score (green/orange/red).
-    assert "score >= 80" in text
+    # Iter 355 — colour bands now mirror the backend _category_label
+    # cutoffs (<20 / <50 / <=80 / >80) instead of the old 80/50 pair
+    # (see test_iter355_health_badge_bands.py).
+    assert "score > 80" in text
     assert "score >= 50" in text
+    assert "score >= 20" in text

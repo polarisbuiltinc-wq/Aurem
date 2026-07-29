@@ -20,19 +20,27 @@ function HealthRing({ score = 87 }) {
   const r = 13;
   const c = 2 * Math.PI * r;
   const offset = c * (1 - score / 100);
-  // Iter 212m-147 — Colour the ring by score band (was always orange).
-  //   80-100 → green (healthy)
-  //   50-79  → orange (needs attention)
-  //   0-49   → red (critical)
+  // Iter 355 — colors must mirror the backend `_category_label` bands
+  // (codebase_health.py): <20 CRITICAL, 20-49 NEEDS ATTENTION,
+  // 50-80 GOOD, >80 HEALTHY. The old 80/50 cutoffs disagreed with the
+  // Health page (score 44 → page amber "NEEDS ATTENTION" but ring RED;
+  // score 80 → page "GOOD" but ring GREEN) — the founder's
+  // "health badge showing wrong data" suggestion (2026-07-12).
   const ringColor =
-    score >= 80 ? "#22c55e"
-    : score >= 50 ? "#FF6608"
+    score > 80 ? "#22c55e"
+    : score >= 50 ? "#38bdf8"
+    : score >= 20 ? "#f59e0b"
     : "#ef4444";
+  const ringLabel =
+    score > 80 ? "HEALTHY"
+    : score >= 50 ? "GOOD"
+    : score >= 20 ? "NEEDS ATTENTION"
+    : "CRITICAL RISK";
   return (
     <div className="flex items-center gap-1.5"
          data-testid="topbar-health-ring"
          data-health-score={score}
-         title={`Codebase health · ${score}/100`}>
+         title={`Codebase health · ${score}/100 · ${ringLabel}`}>
       <div className="relative size-9 shrink-0">
         <svg viewBox="0 0 36 36" className="size-9 -rotate-90">
           <circle cx="18" cy="18" r={r} fill="none" stroke="#222222" strokeWidth="3" />

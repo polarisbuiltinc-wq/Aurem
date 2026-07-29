@@ -16,6 +16,15 @@ Language: **Hinglish** — main agent responds in Hinglish.
 
 ## What's implemented (chronological, most recent first)
 
+### Iter 355 · Health badge band mismatch fix (2026-06) — founder suggestion Jul 12
+- RCA: Dashboard HealthRing used 80/50 cutoffs; backend `_category_label` bands are
+  <20/<50/<=80/>80. Score 44 → page amber "NEEDS ATTENTION" but ring RED; score 78 → page
+  "GOOD" blue but ring ORANGE; score 80 → page "GOOD" but ring GREEN.
+- Fix: ring colors + tooltip label mirror backend bands exactly (TopBar.jsx). Lock test
+  asserts full 0-100 agreement between badge and page labels.
+- Founder action: mark the Jul-12 suggestion Approved+Resolved on prod /admin/suggestions
+  (founder-only; agent has no prod admin access).
+
 ### Iter 354 · Round-4 audit fixes (2026-06) — deploying
 - **Net Profit sign bug**: `dollars()` used Math.abs → net LOSS rendered "$223.77" while CAD
   showed "-316". FIXED (screenshot: "-$3241.04" red + "C$-4571" consistent on preview).
