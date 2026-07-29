@@ -1342,6 +1342,7 @@ function Architecture() {
     <div style={{ padding: 24 }}>
       <PersonaQualityTile />
       <LearningHealthTile />
+      <IntentGateTile />
       <h3 style={{ fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase",
                     color: "var(--text-faint)", margin: "0 0 8px" }}>External services</h3>
       <div style={{
@@ -1392,6 +1393,61 @@ function Architecture() {
         Code surface · routers · services · pages
       </h3>
       <CodeSurfaceLive />
+    </div>
+  );
+}
+
+// Iter 350 — Loop intent-gate observability tile. Exported for tests.
+export function IntentGateTile() {
+  const [d, setD] = useState(null);
+  useEffect(() => {
+    api.get("/loop/intent-stats?hours=24").then((r) => setD(r.data)).catch(() => {});
+  }, []);
+  if (!d) return null;
+  const t = d.totals || {};
+  const maxBar = Math.max(1, ...(d.hourly || []).map(
+    (h) => (h.chat_redirect || 0) + (h.loop_triggered || 0)));
+  return (
+    <div data-testid="intent-gate-tile" style={{ marginBottom: 18 }}>
+      <h3 style={{ fontSize: 12, letterSpacing: "0.1em",
+        textTransform: "uppercase", color: "var(--text-faint)",
+        margin: "0 0 8px" }}>Loop Intent Gate · last 24h</h3>
+      <Card style={{ padding: 16 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
+          <div data-testid="intent-gate-redirect-rate"
+            style={{ fontSize: 26, fontWeight: 700,
+                     color: "var(--ok)",
+                     fontFamily: "'JetBrains Mono', monospace" }}>
+            {d.redirect_rate == null ? "—" : `${Math.round(d.redirect_rate * 100)}%`}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-faint)", lineHeight: 1.8 }}>
+            <span data-testid="intent-gate-totals">
+              chat redirects {t.chat_redirect ?? 0} · loops triggered {t.loop_triggered ?? 0}
+              {" · "}
+              <span style={{ color: (t.timeout_failed || 0) > 0 ? "var(--danger)" : "inherit" }}>
+                plan timeouts {t.timeout_failed ?? 0}
+              </span>
+            </span>
+          </div>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 2, alignItems: "flex-end", height: 22 }}>
+            {(d.hourly || []).map((h, i) => {
+              const total = (h.chat_redirect || 0) + (h.loop_triggered || 0);
+              return (
+                <div key={i}
+                  title={`${h.hour_key}Z — chat ${h.chat_redirect || 0} · loop ${h.loop_triggered || 0} · timeout ${h.timeout_failed || 0}`}
+                  style={{
+                    width: 5,
+                    height: Math.max(2, Math.round((total / maxBar) * 22)),
+                    background: (h.timeout_failed || 0) > 0 ? "var(--danger)"
+                              : total === 0 ? "var(--text-faint)"
+                              : "var(--ok)",
+                    opacity: total === 0 ? 0.25 : 0.9,
+                  }} />
+              );
+            })}
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }

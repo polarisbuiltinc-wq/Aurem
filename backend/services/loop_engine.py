@@ -483,6 +483,7 @@ class LoopEngine:
                     timeout=PHASE_TIMEOUTS_S["plan"],
                 )
         except asyncio.TimeoutError:
+            await self._record_timeout_stat()
             await self._fail(
                 "plan",
                 f"Plan generation exceeded the {PHASE_TIMEOUTS_S['plan']}s "
@@ -493,6 +494,8 @@ class LoopEngine:
             # Iter 349 — RuntimeError carries a user-facing message
             # (e.g. the 30s plan-LLM timeout); show it clean, not repr.
             _msg = str(e) if isinstance(e, RuntimeError) else f"{e!r}"
+            if "timed out" in _msg:
+                await self._record_timeout_stat()
             await self._fail("plan", f"Plan generation failed: {_msg}")
         # The plan phase ends in AWAITING_CONFIRMATION; the router waits
         # for the user to POST /confirm.  Yield buffered events here.
@@ -3344,6 +3347,14 @@ class LoopEngine:
         if extra:
             out.update(extra)
         return out
+
+    async def _record_timeout_stat(self) -> None:
+        # Iter 350 — intent-gate observability (best-effort).
+        try:
+            from services.loop_intent_stats import record_intent_stat
+            await record_intent_stat(self.db, "timeout_failed")
+        except Exception:                               # noqa: BLE001
+            pass
 
     async def _fail(self, phase: str, reason: str) -> None:
         self.state = LoopState.FAILED

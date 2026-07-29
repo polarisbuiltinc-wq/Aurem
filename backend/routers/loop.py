@@ -130,6 +130,8 @@ async def start_loop(body: StartBody,
                 "(reason=%s, user=%s): %.120s",
                 _intent_reason, user["user_id"], body.user_message,
             )
+            from services.loop_intent_stats import record_intent_stat
+            await record_intent_stat(db, "chat_redirect")
             return {
                 "loop_id":          None,
                 "redirect_to_chat": True,
@@ -174,6 +176,11 @@ async def start_loop(body: StartBody,
             "message":          "Another loop is already running for this "
                                 "project. Wait for it to finish or cancel it.",
         })
+
+    # Iter 350 — intent-gate observability: count every REAL engine
+    # start (gate passed + lock acquired). Best-effort.
+    from services.loop_intent_stats import record_intent_stat
+    await record_intent_stat(db, "loop_triggered")
 
     # Iter 212m-169/170 — Build ORAContext ONCE at loop start.
     from services.ora_context import build_ora_context
@@ -269,6 +276,29 @@ async def _start_loop_sync_legacy(loop_id: str, engine):
         "plan":         engine.context.get("plan"),
         "requires_user_action": engine.state.value == "awaiting_confirmation",
     }
+
+
+@router.get("/intent-stats")
+async def loop_intent_stats(hours: int = 24,
+                            authorization: Optional[str] = Header(None)) -> dict:
+    """Iter 350 — founder-only intent-gate observability.
+
+    Hourly buckets (last `hours`, max 168): chat_redirect vs
+    loop_triggered vs timeout_failed + overall redirect_rate. Traffic
+    patterns are sensitive → same founder 403 as /loop/start.
+    """
+    user = await current_dev(authorization)
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "DB unavailable")
+    is_founder = bool(
+        user.get("is_admin") or user.get("is_unlimited")
+        or (user.get("tier") == "founder")
+    )
+    if not is_founder:
+        raise HTTPException(403, {"error": "founder_only"})
+    from services.loop_intent_stats import get_intent_stats
+    return await get_intent_stats(db, hours=max(1, min(hours, 168)))
 
 
 @router.get("/active")

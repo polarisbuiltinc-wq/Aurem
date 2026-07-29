@@ -16,6 +16,15 @@ Language: **Hinglish** — main agent responds in Hinglish.
 
 ## What's implemented (chronological, most recent first)
 
+### Iter 350 · Intent-gate observability + fail-message polish (2026-06)
+- **`services/loop_intent_stats.py`**: hourly Mongo buckets (`loop_intent_stats`) — 3 counters:
+  `chat_redirect`, `loop_triggered`, `timeout_failed`. Best-effort writes (never break hot path).
+- **GET `/loop/intent-stats?hours=N`** (founder-only 403, max 168h): totals + redirect_rate +
+  hourly rows. **IntentGateTile** on /admin → Architecture (redirect % + sparkline, timeouts red).
+- **Polish**: plan-phase failure message no longer repr()-wrapped (clean user-facing text).
+- Locks: `test_iter350_intent_stats.py` (10 tests). E2E: redirect counted via curl, tile
+  screenshot-verified, free-tier 403 verified.
+
 ### Iter 349 · Loop intent gate + plan LLM hard timeout (2026-06) — PROD P0 fix
 - **Read-only intent gate**: `services/loop_intent.py` — conservative regex heuristic in
   `/loop/start` (before lock/session/LLM). Read-only queries ("what is the current CI status
