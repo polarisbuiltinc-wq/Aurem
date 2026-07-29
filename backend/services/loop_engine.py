@@ -490,7 +490,10 @@ class LoopEngine:
                 "shorter, more specific request.",
             )
         except Exception as e:                          # noqa: BLE001
-            await self._fail("plan", f"Plan generation failed: {e!r}")
+            # Iter 349 — RuntimeError carries a user-facing message
+            # (e.g. the 30s plan-LLM timeout); show it clean, not repr.
+            _msg = str(e) if isinstance(e, RuntimeError) else f"{e!r}"
+            await self._fail("plan", f"Plan generation failed: {_msg}")
         # The plan phase ends in AWAITING_CONFIRMATION; the router waits
         # for the user to POST /confirm.  Yield buffered events here.
         while not self.queue.empty():
