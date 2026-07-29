@@ -30,7 +30,7 @@ export const PRICING_TIERS = [
       "F12 error debugger",
       "Community support",
     ],
-    cta: "Current — get started",
+    cta: "Get started",
     paid: false,
   },
   {
@@ -272,9 +272,26 @@ export default function PricingCards({ currentTier = "free", compact = false }) 
         gridTemplateColumns:
           "repeat(auto-fit, minmax(220px, 1fr))",
       }}>
+      {currentTier === "founder" && (
+        <div data-testid="pricing-founder-badge" style={{
+          gridColumn: "1 / -1",
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "10px 14px", borderRadius: 8,
+          background: "rgba(255,138,42,0.08)",
+          border: "1px solid rgba(255,138,42,0.35)",
+          color: "var(--accent, #ff8a2a)",
+          fontSize: 12, fontWeight: 700, letterSpacing: ".06em",
+          textTransform: "uppercase",
+        }}>
+          Founder account — unlimited access, no plan required
+        </div>
+      )}
       {PRICING_TIERS.map((t) => {
-        const isCurrent = (t.id === currentTier)
-          || (currentTier === "founder" && t.id === "pro");
+        // Iter 356 — ONLY the card matching the account's real tier is
+        // "current". The old `founder → pro` fallback made PRO show a
+        // CURRENT badge for founder accounts while the FREE card's
+        // static CTA also read "Current" — two currents at once.
+        const isCurrent = t.id === currentTier;
         const Icon = t.icon;
         return (
           <div

@@ -8,6 +8,7 @@
 import React, { useEffect, useState } from "react";
 import { Plus, Trash2, Zap, Copy, Check, GitBranch, Play } from "lucide-react";
 import Shell, { PageHeader } from "../components/Shell";
+import RailShell from "../components/nav/RailShell";
 import { api, API_BASE } from "../lib/api";
 
 const WEBHOOK_PATH = "/automations/webhook/github";
@@ -72,7 +73,8 @@ export default function Automations() {
   }
 
   return (
-    <Shell requireAuth>
+    <Shell requireAuth chromeless>
+      <RailShell>
       <PageHeader
         eyebrow="automations"
         title="Auto-trigger tasks from GitHub pushes"
@@ -198,6 +200,7 @@ export default function Automations() {
           )}
         </section>
       </div>
+    </RailShell>
     </Shell>
   );
 }

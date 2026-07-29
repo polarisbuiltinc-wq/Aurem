@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from "react";
 import { Globe, ShieldCheck } from "lucide-react";
 import Shell, { PageHeader } from "../components/Shell";
+import RailShell from "../components/nav/RailShell";
 import { api } from "../lib/api";
 
 export default function Domain() {
@@ -48,7 +49,8 @@ export default function Domain() {
   }
 
   return (
-    <Shell requireAuth>
+    <Shell requireAuth chromeless>
+      <RailShell>
       <PageHeader
         eyebrow="custom domain"
         title="Domain"
@@ -99,6 +101,7 @@ export default function Domain() {
           <p data-testid="domain-verify-result" style={{ fontSize: 12, color: "var(--text-dim)" }}>Checking DNS…</p>
         )}
       </form>
+    </RailShell>
     </Shell>
   );
 }

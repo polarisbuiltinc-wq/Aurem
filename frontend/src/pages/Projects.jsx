@@ -15,6 +15,7 @@ import {
   Check, Lock, Key, ArrowRight,
 } from "lucide-react";
 import Shell, { PageHeader } from "../components/Shell";
+import RailShell from "../components/nav/RailShell";
 import { api } from "../lib/api";
 import { toast } from "../components/Toast";
 import RobotGuide, { RobotGuideKeyframes, escapeHtml, oraPulseRingStyle } from "../components/RobotGuide";
@@ -24,7 +25,8 @@ import FounderOfferPill from "../components/FounderOfferPill";
 
 export default function Projects() {
   return (
-    <Shell requireAuth>
+    <Shell requireAuth chromeless>
+      <RailShell>
       <PageHeader
         eyebrow="multi-project"
         title="Client Projects"
@@ -32,6 +34,7 @@ export default function Projects() {
         right={<FounderOfferPill />}
       />
       <Body />
+    </RailShell>
     </Shell>
   );
 }

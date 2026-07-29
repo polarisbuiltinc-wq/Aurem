@@ -18,6 +18,7 @@
 import React, { useEffect, useState } from "react";
 import { Rocket, GitBranch, Server, History, KeyRound, Settings2, Cloud } from "lucide-react";
 import Shell, { PageHeader } from "../components/Shell";
+import RailShell from "../components/nav/RailShell";
 import HostedDeployWidget from "../components/HostedDeployWidget";
 import { api } from "../lib/api";
 
@@ -144,7 +145,8 @@ export default function Deploy() {
   const canDeploy = Boolean(savedKey) && Boolean(cfg.host) && Boolean(cfg.repo_path);
 
   return (
-    <Shell requireAuth>
+    <Shell requireAuth chromeless>
+      <RailShell>
       <PageHeader
         eyebrow="ship"
         title="Deploy"
@@ -317,6 +319,7 @@ export default function Deploy() {
           </>
         )}
       </div>
+    </RailShell>
     </Shell>
   );
 }

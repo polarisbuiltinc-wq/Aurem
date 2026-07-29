@@ -278,6 +278,7 @@ function CursorTab({ data, onCopy }) {
           → MCP Servers:
         </p>
         <ConfigBlock json={data.config_json} onCopy={onCopy}
+          apiKey={data.api_key}
           testid="cursor-config-json" />
       </Step>
     </div>
@@ -317,6 +318,7 @@ function VSCodeTab({ data, onCopy }) {
           <code>&nbsp;"mcp.servers"</code>:
         </p>
         <ConfigBlock json={data.config_json} onCopy={onCopy}
+          apiKey={data.api_key}
           testid="vscode-config-json" />
       </Step>
     </div>
@@ -343,6 +345,7 @@ function ClaudeDesktopTab({ data, onCopy }) {
       </Step>
       <Step n={2} title="Paste this config">
         <ConfigBlock json={data.config_json} onCopy={onCopy}
+          apiKey={data.api_key}
           testid="claude-desktop-config-json" />
         <button data-testid="claude-desktop-copy-config"
           onClick={() => onCopy(configStr, "Claude Desktop config")}
@@ -399,18 +402,38 @@ function Step({ n, title, children }) {
   );
 }
 
-function ConfigBlock({ json, onCopy, testid }) {
+function ConfigBlock({ json, onCopy, testid, apiKey }) {
+  // Iter 356 SECURITY — never render the raw API key permanently.
+  // The key is masked in the displayed snippet (matching the admin
+  // page's masking pattern); "Reveal" needs explicit re-confirmation.
+  // Copy still copies the REAL config so the paste-into-IDE flow works.
+  const [reveal, setReveal] = useState(false);
   const str = JSON.stringify(json, null, 2);
+  const masked = apiKey ? `${apiKey.slice(0, 14)}…${apiKey.slice(-4)}` : "";
+  const display = (!apiKey || reveal) ? str : str.split(apiKey).join(masked);
+  const toggleReveal = () => {
+    if (!reveal && !window.confirm(
+      "Reveal your full API key on screen? Anyone looking at your screen will be able to copy it.")) return;
+    setReveal((v) => !v);
+  };
   return (
     <div style={{ position: "relative" }}>
       <pre data-testid={testid} style={styles.configPre}>
-        <code>{str}</code>
+        <code>{display}</code>
       </pre>
-      <button
-        onClick={() => onCopy(str, "Config JSON")}
-        style={{ ...styles.miniBtn, position: "absolute", top: 8, right: 8 }}>
-        Copy
-      </button>
+      <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 6 }}>
+        {apiKey && (
+          <button data-testid={`${testid}-reveal`} onClick={toggleReveal}
+            style={styles.miniBtn}>
+            {reveal ? "Hide key" : "Reveal key"}
+          </button>
+        )}
+        <button
+          onClick={() => onCopy(str, "Config JSON")}
+          style={styles.miniBtn}>
+          Copy
+        </button>
+      </div>
     </div>
   );
 }

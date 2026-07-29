@@ -14,6 +14,7 @@ import {
   Activity, RefreshCw, AlertCircle
 } from "lucide-react";
 import Shell, { PageHeader } from "../components/Shell";
+import RailShell from "../components/nav/RailShell";
 import { api } from "../lib/api";
 
 const MODE_COLORS = {
@@ -50,7 +51,8 @@ export default function Analytics() {
   }
 
   return (
-    <Shell requireAuth>
+    <Shell requireAuth chromeless>
+      <RailShell>
       <PageHeader
         eyebrow="product analytics"
         title="Analytics"
@@ -353,6 +355,7 @@ export default function Analytics() {
           </div>
         </>
       )}
+    </RailShell>
     </Shell>
   );
 }

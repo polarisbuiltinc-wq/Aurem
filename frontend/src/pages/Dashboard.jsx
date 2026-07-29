@@ -59,6 +59,7 @@ import { TopBar }       from "../components/dashboard/v2/TopBar";
 import TopBarStatusSlot from "../components/TopBarStatusSlot";
 import { Menu as MenuIcon } from "lucide-react";
 import SidebarV2Bound   from "../components/dashboard/v2/SidebarBound";
+import RailShell        from "../components/nav/RailShell";
 import AskAdvisorReal   from "../components/dashboard/v2/AskAdvisorReal";
 
 const SHARE_MILESTONES = [10, 25, 50, 100, 250];
@@ -530,124 +531,18 @@ function DashboardV2Body() {
       `}</style>
       <div style={{ display: "flex", height: "100%", width: "100%" }}>
 
-        {/* Iter 212m-156 — Mobile hamburger.  Only visible on phones
-            (<=900 px) when the drawer is closed.  Tapping it opens
-            the sidebar drawer over the chat.  The fixed positioning
-            keeps it above the persistent fix bar + chat composer so
-            it's always reachable. */}
-        {isMobile && !mobileSidebarOpen && (
-          <button
-            type="button"
-            data-testid="mobile-sidebar-toggle"
-            aria-label="Open menu"
-            onClick={() => setMobileSidebarOpen(true)}
-            style={{
-              position: "fixed", top: 12, left: 12, zIndex: 1500,
-              width: 40, height: 40, borderRadius: 10,
-              background: "rgba(13,16,24,0.92)",
-              border: "1px solid rgba(125,211,252,0.28)",
-              color: "var(--accent-2, #7dd3fc)",
-              boxShadow: "0 6px 18px rgba(0,0,0,0.55)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 18, fontWeight: 600,
-              cursor: "pointer",
-              backdropFilter: "blur(8px)",
-              WebkitBackdropFilter: "blur(8px)",
-            }}
-          >
-            ☰
-          </button>
-        )}
-
-        {/* Iter 339i — Bottom-left "MENU" tab (desktop). EXACT mirror
-            of the Advisor tab (same classes, orange icon, fixed 96px
-            height on both so neither looks bigger). Click opens the
-            sidebar; moving the cursor off the sidebar hides it. */}
-        {!isMobile && sidebarFullyHidden && (
-          <button
-            type="button"
-            data-testid="sidebar-open-tab"
-            aria-label="Open sidebar"
-            onClick={() => setSidebarManualOpen(true)}
-            className="fixed bottom-6 left-0 z-[1500] flex h-[96px] w-[26px] flex-col items-center justify-center gap-1.5 rounded-r-lg border border-l-0 border-border bg-card px-1.5 py-3 shadow-lg transition-all duration-200 ease-in-out hover:bg-secondary"
-          >
-            <MenuIcon className="size-3 text-primary" strokeWidth={2.5} />
-            <span
-              className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground"
-              style={{ writingMode: "vertical-rl" }}
-            >
-              Menu
-            </span>
-          </button>
-        )}
-
-        {/* Iter 212m-156 — Mobile backdrop.  Tapping anywhere outside
-            the drawer closes it.  Only renders when the drawer is
-            open on a mobile viewport. */}
-        {isMobile && mobileSidebarOpen && (
-          <div
-            data-testid="mobile-sidebar-backdrop"
-            onClick={closeMobileSidebar}
-            style={{
-              position: "fixed", inset: 0, zIndex: 1400,
-              background: "rgba(0,0,0,0.55)",
-              backdropFilter: "blur(2px)",
-              WebkitBackdropFilter: "blur(2px)",
-              animation: "ds2-fade-in 180ms ease-out",
-            }}
-          />
-        )}
-
-        {/* Sidebar — v2 chrome wired to real /cto/projects/list.
-            Iter 212m-124: when sidebarFullyHidden, the wrapper slides
-            the panel off-screen with translateX AND collapses its
-            layout slot so the chat pane reclaims the width. */}
-        <div
-          data-testid="ds2-sidebar-wrap"
-          onMouseEnter={() => !isMobile && sidebarCollapsed && setSidebarHovered(true)}
-          onMouseLeave={() => !isMobile && setSidebarHovered(false)}
-          style={isMobile ? {
-            // Iter 212m-156 — mobile drawer mode: float over the
-            // chat surface with translateX, keep full width-280 so
-            // the repo list + tool icons are readable on phones.
-            position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 1450,
-            width: 280,
-            transform: mobileSidebarOpen ? "translateX(0)" : "translateX(-100%)",
-            transition: "transform 240ms cubic-bezier(.4,0,.2,1)",
-            boxShadow: mobileSidebarOpen ? "8px 0 32px rgba(0,0,0,0.6)" : "none",
-          } : {
-            flexShrink: 0,
-            transform: sidebarFullyHidden ? "translateX(-100%)" : "translateX(0)",
-            width: sidebarFullyHidden ? 0 : "auto",
-            overflow: "hidden",
-            transition: "transform 220ms ease-in-out, width 220ms ease-in-out",
-          }}
-        >
-          <SidebarReal
-            collapsed={sidebarCollapsed}
-            pinned={sidebarPinned}
-            onPinChange={setSidebarPinned}
-            repos={repoEntries}
-            onSelectRepo={(...args) => {
-              handleSelectRepo(...args);
-              // Iter 212m-156 — auto-close the mobile drawer the
-              // moment the user picks a repo, otherwise the panel
-              // sits over the chat and feels broken.
-              if (isMobile) closeMobileSidebar();
-            }}
-            onAddRepo={(...args) => {
-              handleAddRepo(...args);
-              if (isMobile) closeMobileSidebar();
-            }}
-            user={user}
-            // Iter 212m-172 — pass isMobile through so the UserDropdown
-            // renders the bottom-sheet variant.
-            isMobile={isMobile}
-            // Iter 212m-156 — every nav action (Tool click, Settings,
-            // Logout, Tokens) also auto-closes the mobile drawer.
-            onAfterAction={isMobile ? closeMobileSidebar : undefined}
-          />
-        </div>
+        {/* Iter 356 — Unified rail shell replaces the hover-expand
+            sidebar, the mobile hamburger/drawer and the bottom-left
+            MENU tab. The rail (56px) is always visible on every
+            viewport; the Chat flyout carries the repo switcher +
+            recent chats that used to live in the old sidebar. Old
+            components stay in the tree unused until Phase 4 cleanup. */}
+        <RailShell
+          railOnly
+          repos={repoEntries}
+          onSelectRepo={handleSelectRepo}
+          onAddRepo={handleAddRepo}
+        />
 
         {/* Main column */}
         <div style={{ display: "flex", flexDirection: "column",

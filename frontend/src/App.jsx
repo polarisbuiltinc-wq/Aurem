@@ -218,6 +218,8 @@ export default function App() {
           <Route path="/analytics"       element={<Analytics />} />
           <Route path="/projects"        element={<Projects />} />
           <Route path="/admin"           element={<Admin />} />
+          <Route path="/admin/users"       element={<Admin initialTab="users" />} />
+          <Route path="/admin/suggestions" element={<Admin initialTab="suggestions" />} />
           <Route path="/admin/overview"  element={<AdminOverview />} />
           <Route path="/admin/integrations" element={<AdminIntegrations />} />
           <Route path="/admin/financials"   element={<AdminFinancials />} />

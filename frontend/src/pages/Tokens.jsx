@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from "react";
 import { Coins } from "lucide-react";
 import Shell, { PageHeader } from "../components/Shell";
+import RailShell from "../components/nav/RailShell";
 import { api, getUser, setUser } from "../lib/api";
 
 export default function Tokens() {
@@ -21,7 +22,8 @@ export default function Tokens() {
   }, []);
 
   return (
-    <Shell requireAuth>
+    <Shell requireAuth chromeless>
+      <RailShell>
       <PageHeader
         eyebrow="balance"
         title="Tokens"
@@ -43,6 +45,7 @@ export default function Tokens() {
         <Stat icon={Coins} label="tier" value={me?.tier || "free"} testid="tokens-tier" />
         <Stat icon={Coins} label="streak (days)" value={streak?.streak_days ?? 0} testid="tokens-streak" />
       </div>
+    </RailShell>
     </Shell>
   );
 }
