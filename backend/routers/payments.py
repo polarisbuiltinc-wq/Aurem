@@ -489,6 +489,26 @@ async def stripe_webhook(request: Request) -> dict:
         plan     = (obj.get("metadata") or {}).get("plan")
         sub_id   = obj.get("subscription")
         cust_id  = obj.get("customer")
+        # Iter 352 — the webhook NEVER updated the cto_payments ledger
+        # row (only /payments/status did, and only when the user's
+        # browser survived to the success-redirect poll). Result: paid
+        # sessions could sit "pending" forever in the admin ledger.
+        # The webhook is the source of truth — sync the row here.
+        try:
+            await db.cto_payments.update_one(
+                {"session_id": obj.get("id")},
+                {"$set": {
+                    "payment_status": "paid",
+                    "status":         "complete",
+                    "amount":         round((obj.get("amount_total") or 0) / 100, 2),
+                    "subscription":   sub_id,
+                    "paid_at":        time.time(),
+                    "updated_at":     time.time(),
+                    "updated_via":    "webhook",
+                }},
+            )
+        except Exception as e:                              # noqa: BLE001
+            logger.warning("[webhook] cto_payments sync failed: %r", e)
         if user_id and plan:
             await db.dev_users.update_one(
                 {"user_id": user_id},
@@ -508,6 +528,23 @@ async def stripe_webhook(request: Request) -> dict:
                     logger.info(f"[webhook] referral reward granted to {grant.get('referrer')}")
             except Exception as e:
                 logger.warning(f"[webhook] referral reward failed: {e!r}")
+    elif etype == "checkout.session.expired":
+        # Iter 352 — abandoned checkouts previously stayed "pending"
+        # forever (founder audit: 22 stuck rows, some 35 days old).
+        # Stripe fires this ~24h after an un-paid session is created.
+        obj = event["data"]["object"]
+        try:
+            await db.cto_payments.update_one(
+                {"session_id": obj.get("id")},
+                {"$set": {
+                    "payment_status": "expired",
+                    "status":         "expired",
+                    "updated_at":     time.time(),
+                    "updated_via":    "webhook",
+                }},
+            )
+        except Exception as e:                              # noqa: BLE001
+            logger.warning("[webhook] expired-session sync failed: %r", e)
     elif etype in ("customer.subscription.deleted", "customer.subscription.paused"):
         sub_id = event["data"]["object"]["id"]
         # Find the user first so we know whose Supabase projects to downgrade.

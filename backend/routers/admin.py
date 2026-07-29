@@ -936,6 +936,78 @@ async def list_payments(authorization: Optional[str] = Header(None)):
     }
 
 
+@router.post("/payments/reconcile")
+async def reconcile_pending_payments(authorization: Optional[str] = Header(None)):
+    """Iter 352 — founder-only. Pull every non-paid cto_payments row,
+    retrieve its Checkout Session from Stripe and sync the REAL status
+    (paid / expired / open) + amount into Mongo. Returns a full
+    per-row evidence report so the founder can audit the 22 stuck
+    'pending' rows: what they were, when created, what Stripe says."""
+    await _require_admin(authorization)
+    db = require_db()
+    import asyncio as _aio
+
+    import stripe as _stripe
+    _stripe.api_key = (os.environ.get("STRIPE_SECRET_KEY")
+                       or os.environ.get("STRIPE_API_KEY") or "")
+    if not _stripe.api_key:
+        raise HTTPException(503, "Stripe key not configured")
+
+    rows = await db.cto_payments.find(
+        {"payment_status": {"$ne": "paid"}}, {"_id": 0},
+    ).sort("created_at", -1).limit(100).to_list(100)
+
+    report, counts = [], {"paid": 0, "expired": 0, "open": 0, "error": 0}
+    now = time.time()
+    for p in rows:
+        sid = p.get("session_id") or ""
+        entry = {
+            "session_id": (sid[-8:] and f"…{sid[-8:]}"),
+            "plan":       p.get("plan"),
+            "price_id":   (p.get("price_id") or "")[-8:] and f"…{(p.get('price_id') or '')[-8:]}",
+            "user_email": p.get("user_email"),
+            "created_at": p.get("created_at"),
+            "old_status": p.get("payment_status"),
+        }
+        try:
+            sess = await _aio.to_thread(
+                _stripe.checkout.Session.retrieve, sid)
+            pay_status = sess.get("payment_status") or "unknown"
+            sess_status = sess.get("status") or "unknown"
+            new_pay = ("paid" if pay_status == "paid"
+                       else "expired" if sess_status == "expired"
+                       else "pending")
+            update = {
+                "payment_status": new_pay,
+                "status":         sess_status,
+                "amount":         round((sess.get("amount_total") or 0) / 100, 2),
+                "updated_at":     now,
+                "updated_via":    "reconcile",
+            }
+            if new_pay == "paid" and p.get("payment_status") != "paid":
+                update["paid_at"] = now
+            await db.cto_payments.update_one(
+                {"session_id": sid}, {"$set": update})
+            entry["new_status"] = new_pay
+            entry["stripe_session_status"] = sess_status
+            entry["amount"] = update["amount"]
+            counts["paid" if new_pay == "paid"
+                   else "expired" if new_pay == "expired" else "open"] += 1
+        except Exception as e:                              # noqa: BLE001
+            entry["new_status"] = "error"
+            entry["error"] = str(e)[:120]
+            counts["error"] += 1
+        report.append(entry)
+
+    return {
+        "ok": True,
+        "scanned": len(rows),
+        "counts": counts,
+        "rows": report,
+        "reconciled_at": now,
+    }
+
+
 @router.get("/support")
 async def list_support_tickets(
     status: str = "",

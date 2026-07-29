@@ -1132,11 +1132,31 @@ function PaymentsPage() {
   const [d, setD] = useState(null);
   const [m, setM] = useState(null);
   const [pnl, setPnl] = useState(null);
-  useEffect(() => {
+  const [reconciling, setReconciling] = useState(false);
+  const [reconcileResult, setReconcileResult] = useState(null);
+  const loadPayments = useCallback(() => {
     api.get("/admin/payments").then((r) => setD(r.data)).catch(() => setD({ payments: [], total_revenue: 0, count: 0 }));
+  }, []);
+  useEffect(() => {
+    loadPayments();
     api.get("/admin/overview-metrics").then((r) => setM(r.data)).catch(() => setM({}));
     api.get("/admin/token-pnl").then((r) => setPnl(r.data)).catch(() => setPnl({}));
-  }, []);
+  }, [loadPayments]);
+  // Iter 352 — reconcile stuck "pending" rows against Stripe truth.
+  async function reconcile() {
+    setReconciling(true);
+    try {
+      const r = await api.post("/admin/payments/reconcile");
+      setReconcileResult(r.data);
+      const c = r.data?.counts || {};
+      toast({ message: `Reconciled ${r.data?.scanned ?? 0} rows — paid ${c.paid ?? 0} · expired ${c.expired ?? 0} · still open ${c.open ?? 0} · errors ${c.error ?? 0}`, kind: "success" });
+      loadPayments();
+    } catch (e) {
+      toast({ message: e?.response?.data?.detail || e.message || "Reconcile failed", kind: "error" });
+    } finally {
+      setReconciling(false);
+    }
+  }
   if (!d || !m || !pnl) return <div style={{ padding: 24, color: "var(--text-faint)" }}>Loading…</div>;
   const pending = (d.payments || []).filter((p) => p.payment_status !== "paid").length;
   return (
@@ -1167,6 +1187,31 @@ function PaymentsPage() {
         <MCard label="Transactions" value={d.count} />
         <MCard label="Pending" value={pending} />
       </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <button
+          data-testid="reconcile-pending-btn"
+          onClick={reconcile}
+          disabled={reconciling}
+          className="btn-primary"
+          style={{ fontSize: 12, opacity: reconciling ? 0.6 : 1 }}
+        >
+          {reconciling ? "Reconciling…" : "Reconcile pending with Stripe"}
+        </button>
+        <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
+          Pulls each non-paid session from Stripe and syncs the real status
+          (paid / expired / open) + amount.
+        </span>
+      </div>
+      {reconcileResult && (
+        <Card style={{ padding: 12, marginBottom: 14 }}>
+          <div data-testid="reconcile-summary" style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "var(--text-dim)" }}>
+            scanned {reconcileResult.scanned} · paid {reconcileResult.counts?.paid ?? 0} ·
+            expired {reconcileResult.counts?.expired ?? 0} ·
+            still open {reconcileResult.counts?.open ?? 0} ·
+            errors {reconcileResult.counts?.error ?? 0}
+          </div>
+        </Card>
+      )}
       <Card>
         <Table
           cols={["Tier", "User", "Amount", "Status", "When"]}

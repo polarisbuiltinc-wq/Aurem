@@ -16,6 +16,42 @@ Language: **Hinglish** — main agent responds in Hinglish.
 
 ## What's implemented (chronological, most recent first)
 
+### Iter 352 · Payments pipeline truth + audit fixes (2026-06) — deploying
+- **RCA — 22 stuck "pending" transactions**: (a) completed-webhook updated dev_users tier but
+  NEVER the cto_payments ledger row; (b) checkout.session.expired unhandled → abandoned
+  checkouts pending forever; (c) amount never stored → $0.00. Preview evidence: 14 stuck rows
+  reconciled — 12 Stripe-confirmed EXPIRED (abandoned), 0 paid → no lost revenue.
+- **Fixes**: webhook syncs ledger (paid+amount+paid_at), handles expired; new founder-only
+  `POST /admin/payments/reconcile` + "Reconcile pending with Stripe" button on Payments page.
+- **E2E proof**: signed-webhook simulation on preview flipped pending→paid ($9.00, timestamp)
+  and pending→expired in cto_payments.
+- **House Rules raw-error leak**: cleanErr() sanitizer — Cloudflare/HTML infra bodies never
+  render in founder UI (both load + save paths).
+- Locks: `test_iter352_payments_truth.py` (5). Gate 3687 green.
+- OPEN: "health badge wrong data" suggestion (Jul 12) needs full suggestion text from prod
+  Suggestions page to identify the exact badge bug. Flaky suite `test_iter212m22_*` should be
+  tagged llm_judge/flaky (3 different tests flaked across 3 gate runs, all pass isolated).
+
+### Iter 351 · Founder admin-audit fixes (2026-06) — DEPLOYED to prod
+- **Stripe verdict (evidence)**: prod checkout NOT broken — all 3 monthly plans create live
+  sessions; checkout.stripe.com page screenshot-verified rendering "$9 Starter + card form"
+  (Iter 335 self-heal covers stale env IDs). Probe now reports "warn/self-heals" not "broken".
+  FOUNDER ACTION remains: rotate STRIPE_STARTER/PRO/TEAM_PRICE_ID env vars.
+- **Stuck-alert fix**: healthy probe now resolves active alerts from ANY day (old day_key
+  scoping left yesterday's Firecrawl alert stuck).
+- **QA "0 files" fix**: build-time `backend/qa_manifest.json` fallback (gate regenerates it);
+  prod shows real 3653 backend tests / 421 files. New light `GET /admin/qa/counts`.
+- **"Invalid Date" ×2 fixed**: version.py built_at "+00:00Z" normalization + Council A
+  last_probe dict handling.
+- **Orphan mystery SOLVED**: loop-metrics owner classification looked up dev_users by `_id`
+  (ObjectId) but sessions store the `user_id` FIELD → every failed session mislabeled
+  "orphan". Fixed; phase + error_short now populate (was "phase=?").
+- **Stale content removed**: hardcoded "Next actions (Iter-123)" checklist + "700+ passing"
+  claim → live QaCountsStrip.
+- **Sidebar audit**: all 20 admin tabs content-check verified OK (client-side tab switch,
+  URL doesn't change — not a bug).
+- Locks: `test_iter351_admin_audit_fixes.py` (9), `test_iter123d` modernized. Gate 3682 green.
+
 ### Iter 350 · Intent-gate observability + fail-message polish (2026-06)
 - **`services/loop_intent_stats.py`**: hourly Mongo buckets (`loop_intent_stats`) — 3 counters:
   `chat_redirect`, `loop_triggered`, `timeout_failed`. Best-effort writes (never break hot path).
