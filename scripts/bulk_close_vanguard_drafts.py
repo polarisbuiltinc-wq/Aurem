@@ -65,7 +65,10 @@ def main():
         r.raise_for_status()
         prs = r.json()
         for pr in prs:
-            if pr.get("draft") and _auto_generated(pr):
+            # Iter 349 — draft flag dropped from the filter: #130/#161
+            # are the same auto-generated aurem/fix-* PRs but were
+            # non-draft. Branch prefix is the authoritative signal.
+            if _auto_generated(pr):
                 targets.append(pr)
         if len(prs) < 100:
             break
