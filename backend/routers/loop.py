@@ -110,6 +110,33 @@ async def start_loop(body: StartBody,
                        "It will unlock for all developers shortly."),
             "coming_soon": True,
         })
+    # ── Iter 349 · Read-only intent gate ──────────────────────────────
+    # PROD P0: a simple read-only question ("what is the current CI
+    # status on main") triggered the full Loop pipeline and hung at
+    # "Generating plan…" 90+ s. Cheap regex heuristic intercepts such
+    # queries BEFORE any lock/session/LLM work and tells the frontend
+    # to answer via the fast chat stream instead. Action verbs always
+    # win ("why is login failing AND fix it" still runs the loop).
+    # Env-gated (LOOP_INTENT_GATE, default on) for one-flip rollback.
+    _intent_gate = os.environ.get(
+        "LOOP_INTENT_GATE", "true").lower() in ("1", "true", "yes", "on")
+    if _intent_gate:
+        from services.loop_intent import detect_read_only_intent
+        _is_read_only, _intent_reason = detect_read_only_intent(
+            body.user_message)
+        if _is_read_only:
+            logging.getLogger("aurem.loop").info(
+                "[loop intent-gate] read-only query redirected to chat "
+                "(reason=%s, user=%s): %.120s",
+                _intent_reason, user["user_id"], body.user_message,
+            )
+            return {
+                "loop_id":          None,
+                "redirect_to_chat": True,
+                "intent":           "read_only",
+                "reason":           _intent_reason,
+            }
+
     # Iter 212m-115 safety #4 — Circuit breaker: refuse new starts if
     # this {project_id, user_id} has hit 3+ failures in the last 15 min.
     # Founders bypass (so we never block our own debugging).

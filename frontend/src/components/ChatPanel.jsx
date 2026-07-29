@@ -1427,7 +1427,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     // The legacy `LOOP_PHASE:execute` continuation through send() is
     // gone — handleApprovePlan calls confirmLoop directly.
     // ──────────────────────────────────────────────────────────────
-    if (execMode === EXEC_MODES.LOOP && !opts.loopPhase) {
+    if (execMode === EXEC_MODES.LOOP && !opts.loopPhase && !opts.forceChat) {
       await runLoopPlan(text, readyAttachments, opts);
       return;
     }
@@ -1466,7 +1466,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     // hint to decide whether the model should respond plan-only or
     // proceed with execution. First-turn loop sends get `:plan`; the
     // PlanApprovalCard approval path passes `loopPhase: "execute"`.
-    const inLoop = execMode === EXEC_MODES.LOOP;
+    const inLoop = execMode === EXEC_MODES.LOOP && !opts.forceChat;
     const resolvedPhase = inLoop
       ? (loopPhaseHint || "plan")
       : null;
@@ -2291,6 +2291,33 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         sessionId,
       });
       const lid  = resp?.loop_id;
+
+      // ── Iter 349 · Read-only intent gate (backend redirect) ─────
+      // /loop/start detected a read-only query and refused to spin up
+      // the engine. Answer it through the fast chat stream instead —
+      // seamless, no extra click. A small note is appended after the
+      // answer so the user can force Loop with "run this as a loop"
+      // if the classification was wrong.
+      if (resp?.redirect_to_chat === true) {
+        setMessages((m) =>
+          m.filter((row) => !(row.role === "assistant" && row.loopPending)));
+        setBusy(false);
+        setLoopPhase("idle");
+        setLoopId(null);
+        await send(null, {
+          promptOverride: userText,
+          forceChat: true,
+          skipUserBubble: true,
+        });
+        setMessages((m) => m.concat([{
+          role: "assistant",
+          streaming: false,
+          intentRedirect: true,
+          content: "_⚡ Ye simple/read-only query lagi, isliye seedha jawab de diya (Loop Mode skip — koi credits burn nahi). Agar full Loop (plan → execute → verify → ship) chahiye tha, bolo **\"run this as a loop\"**._",
+        }]));
+        return;
+      }
+
       setLoopId(lid);
 
       // ── Iter 312 · Class 1 companion (frontend) ─────────────────

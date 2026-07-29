@@ -16,6 +16,18 @@ Language: **Hinglish** — main agent responds in Hinglish.
 
 ## What's implemented (chronological, most recent first)
 
+### Iter 349 · Loop intent gate + plan LLM hard timeout (2026-06) — PROD P0 fix
+- **Read-only intent gate**: `services/loop_intent.py` — conservative regex heuristic in
+  `/loop/start` (before lock/session/LLM). Read-only queries ("what is the current CI status
+  on main") return `{redirect_to_chat: true}`; frontend (`runLoopPlan`) answers via fast chat
+  stream with a "Loop Mode skip" note + "run this as a loop" escape hatch. Action verbs ALWAYS
+  win ("why is login failing AND fix it" → still Loop). Env flag `LOOP_INTENT_GATE` (default on).
+- **Plan LLM 30s hard timeout**: `PLAN_LLM_TIMEOUT_S=30` wraps `call_llm_with_meta` in
+  `_generate_plan` — hung provider fails fast with a clear message instead of eating the 120s
+  phase budget. Stale "60s budget" fail message also fixed.
+- Locks: `test_iter349_loop_intent.py` (23 tests green). E2E: curl redirect verified on preview,
+  action-verb pass-through verified, screenshot e2e confirmed no "Generating plan…" hang.
+
 ### Iter 331-D · DELETE GATE (2026-07-28) — 3-layer file-deletion safety
 - **Layer 1**: `scripts/check-safe-to-delete.sh` — catches lazy/dynamic imports + string-keyed
   routing refs (the exact class missed 3× with tool_executor.py). Verified: all 4 previously

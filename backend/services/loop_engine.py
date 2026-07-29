@@ -76,6 +76,13 @@ PHASE_TIMEOUTS_S: dict[str, int] = {
 # scratch with the same context every restart). Cutting to 1 restart
 # bounds the worst case at 2×budget.
 MAX_PHASE_RESTARTS = 1
+# Iter 349 — Hard timeout on the plan-phase LLM call itself. The 120s
+# phase budget covers graph refresh + repo map + LLM, but a hung LLM
+# call was eating the whole budget and the user stared at
+# "Generating plan…" for 90+ s (PROD P0). 30s is generous for a
+# plan-only JSON response; on breach we fail FAST with a clear message
+# instead of silently burning the full phase budget.
+PLAN_LLM_TIMEOUT_S = int(os.environ.get("PLAN_LLM_TIMEOUT_S", "30"))
 # A session whose Mongo doc hasn't been updated in this long while in
 # EXECUTING/VERIFYING is treated as orphaned by resume_stale().
 # Iter 308 — MUST be strictly greater than any phase's own timeout,
@@ -476,7 +483,12 @@ class LoopEngine:
                     timeout=PHASE_TIMEOUTS_S["plan"],
                 )
         except asyncio.TimeoutError:
-            await self._fail("plan", "Plan generation exceeded 60s budget.")
+            await self._fail(
+                "plan",
+                f"Plan generation exceeded the {PHASE_TIMEOUTS_S['plan']}s "
+                "budget and was stopped. Try again — or rephrase with a "
+                "shorter, more specific request.",
+            )
         except Exception as e:                          # noqa: BLE001
             await self._fail("plan", f"Plan generation failed: {e!r}")
         # The plan phase ends in AWAITING_CONFIRMATION; the router waits
@@ -3486,9 +3498,22 @@ async def _generate_plan(user_id: str, project_id: Optional[str],
         "Return ONLY the JSON object — no markdown, no commentary."
         + repo_map_block
     )
-    meta = await call_llm_with_meta(sys_msg, user_message,
-                                    review_mode="pro",
-                                    mode="loop_plan")
+    # Iter 349 — hard 30s cap on the LLM call itself so a hung provider
+    # fails fast with a clear message instead of eating the 120s phase
+    # budget while the user watches "Generating plan…" (PROD P0).
+    try:
+        meta = await asyncio.wait_for(
+            call_llm_with_meta(sys_msg, user_message,
+                               review_mode="pro",
+                               mode="loop_plan"),
+            timeout=PLAN_LLM_TIMEOUT_S,
+        )
+    except asyncio.TimeoutError:
+        raise RuntimeError(
+            f"Plan LLM call timed out after {PLAN_LLM_TIMEOUT_S}s — the "
+            "model didn't respond in time. Try again, or rephrase with a "
+            "shorter request."
+        )
     _profile["llm_call_s"] = round(
         _time.monotonic() - _t0 - _profile["graph_refresh_s"]
         - _profile["repo_map_read_s"], 3,
