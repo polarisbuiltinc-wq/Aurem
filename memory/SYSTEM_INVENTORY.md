@@ -642,3 +642,9 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `QA_API_BASE` — auto-detected in backend/services/qa_matrix.py (verify) (default: unset) [Iter 0, 2026-07-28T21:25:14.787237Z] <!-- inv:envvar:QA_API_BASE -->
 - `QA_SCAN_EMAIL` — auto-detected in backend/services/qa_matrix.py (verify) (default: unset) [Iter 0, 2026-07-28T21:25:14.787271Z] <!-- inv:envvar:QA_SCAN_EMAIL -->
 - `QA_SCAN_PASSWORD` — auto-detected in backend/services/qa_matrix.py (verify) (default: unset) [Iter 0, 2026-07-28T21:25:14.787292Z] <!-- inv:envvar:QA_SCAN_PASSWORD -->
+
+### Iter 0 · 2026-07-29
+
+- `LOOP_INTENT_GATE` — auto-detected in backend/routers/loop.py (verify) (default: unset) [Iter 0, 2026-07-29T18:55:35.591804Z] <!-- inv:envvar:LOOP_INTENT_GATE -->
+- `PLAN_LLM_TIMEOUT_S` — auto-detected in backend/services/loop_engine.py (verify) (default: unset) [Iter 0, 2026-07-29T18:55:35.591832Z] <!-- inv:envvar:PLAN_LLM_TIMEOUT_S -->
+- `services/loop_intent.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-29T18:55:35.591845Z] <!-- inv:service:services/loop_intent.py -->

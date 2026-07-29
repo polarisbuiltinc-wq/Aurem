@@ -199,12 +199,22 @@ def test_regression_a_start_response_shape_preserved():
     src = m.group(0)
 
     # Look for a return statement including loop_id, state, phase
-    # (the minimum contract).
-    return_block = re.search(
+    # (the minimum contract). Iter 349 — the read-only intent-gate
+    # branch returns a different (intentional) shape with
+    # `redirect_to_chat`; skip it and assert the contract against the
+    # normal loop-start return.
+    return_blocks = re.findall(
         r"return\s*\{[^}]*\}", src, re.DOTALL,
     )
-    assert return_block, "start_loop must return a dict"
-    rb = return_block.group(0)
+    assert return_blocks, "start_loop must return a dict"
+    normal_returns = [
+        rb for rb in return_blocks if '"redirect_to_chat"' not in rb
+    ]
+    assert normal_returns, (
+        "start_loop must keep a non-redirect return dict "
+        "(the normal loop-start contract)."
+    )
+    rb = normal_returns[0]
     for required_key in ('"loop_id"', '"state"', '"phase"'):
         assert required_key in rb, (
             f"Regression (a): start_loop return dict is missing "
