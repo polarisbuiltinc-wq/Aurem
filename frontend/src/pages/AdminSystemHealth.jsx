@@ -78,6 +78,7 @@ export default function AdminSystemHealth() {
   const [previewVer, setPreviewVer] = useState(null);
   const [prodVer, setProdVer]       = useState(null);
   const [council, setCouncil]       = useState(null);
+  const [failedOpen, setFailedOpen] = useState(false);   // Iter 351 — expand feedback
   const [learning, setLearning]     = useState(null);
   const [loopMetrics, setLoopMetrics] = useState(null);
   const [tokenMetrics, setTokenMetrics] = useState(null);
@@ -297,7 +298,14 @@ export default function AdminSystemHealth() {
               <Row label="Primary intended" value={council.primary_intended || "—"} />
               <Row label="Primary actual"   value={council.primary_actual || "—"} />
               <Row label="Live"             value={council.live ? "YES" : "NO"} color={council.live ? C.green : C.red} />
-              <Row label="Last probe"       value={council.last_probe ? new Date(council.last_probe).toLocaleString() : "—"} />
+              <Row label="Last probe"       value={(() => {
+                // Iter 351 — last_probe is the whole probe snapshot
+                // DICT ({checked_at: epoch_s, ...}), not a timestamp.
+                // new Date(dict) rendered "Invalid Date" (founder audit).
+                const lp = council.last_probe;
+                const ts = (lp && typeof lp === "object") ? lp.checked_at : lp;
+                return ts ? new Date(ts * 1000).toLocaleString() : "—";
+              })()} />
             </>
           ) : <div style={{ fontSize: 12, color: C.faint }}>loading…</div>}
         </Card>
@@ -486,12 +494,13 @@ export default function AdminSystemHealth() {
                   Full email deliberately never shown to keep
                   screenshots PII-safe. */}
               {loopMetrics.failed_sample && loopMetrics.failed_sample.length > 0 && (
-                <details style={{ marginTop: 10 }}>
+                <details style={{ marginTop: 10 }}
+                  onToggle={(e) => setFailedOpen(e.currentTarget.open)}>
                   <summary style={{
                     cursor: "pointer", fontSize: 10, color: C.amber,
                     fontFamily: C.mono, letterSpacing: "0.08em",
                   }} data-testid="failed-sample-expand">
-                    ▶ {loopMetrics.failed_sample.length} failed sessions — expand
+                    {failedOpen ? "▼" : "▶"} {loopMetrics.failed_sample.length} failed sessions — {failedOpen ? "collapse" : "expand"}
                   </summary>
                   <div style={{ marginTop: 6, maxHeight: 200, overflowY: "auto" }}>
                     {loopMetrics.failed_sample.map((s) => (

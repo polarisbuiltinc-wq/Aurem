@@ -32,4 +32,7 @@ echo "── Lane 3/3: regression library locks ──"
     --files "predeploy" \
     --sha "$(git rev-parse --short HEAD 2>/dev/null || echo predeploy)")
 
+echo "── Post-lane: regenerate backend/qa_manifest.json (Iter 351) ──"
+(cd backend && python scripts/gen_qa_manifest.py)
+
 echo "══════════ GATE PASSED — safe to deploy ══════════"

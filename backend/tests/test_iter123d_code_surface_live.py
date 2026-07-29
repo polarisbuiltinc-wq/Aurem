@@ -89,8 +89,10 @@ def test_admin_overview_iter_range_bumped():
 
 
 def test_admin_overview_next_actions_refreshed():
-    """Stale 'redeploy iter 53-60' action MUST be replaced with current
-    launch-blocker actions."""
+    """Iter 351 — the hardcoded 'Next actions' checklist was removed
+    entirely (it drifted 200+ iterations stale, e.g. 'Iter 123 →
+    June 15 launch'). Roadmap lives in /app/memory/PRD.md now. This
+    lock keeps stale hardcoded roadmap content OUT of the page."""
     with open("/app/frontend/src/pages/AdminOverview.jsx") as f:
         src = f.read()
     # Old stale content must be GONE
@@ -98,7 +100,12 @@ def test_admin_overview_next_actions_refreshed():
         "stale 'Iter 53-60 redeploy' action still in AdminOverview"
     assert "Create GitHub OAuth App" not in src, \
         "stale GitHub OAuth setup action still in AdminOverview"
-    # New launch-focused actions present
-    assert "Tier upgrade" in src
-    assert "LIVE ORA chain test" in src
-    assert "PH Hunter" in src
+    # Iter 351 — the whole hardcoded checklist is gone too
+    assert "June 15 launch" not in src, \
+        "stale Iter-123 launch checklist must stay removed"
+    assert "PH Hunter" not in src
+    assert "700+ passing" not in src, \
+        "hardcoded test-count claim must stay removed (QaCountsStrip is live)"
+    # Live replacement present
+    assert "QaCountsStrip" in src
+    assert "/admin/qa/counts" in src

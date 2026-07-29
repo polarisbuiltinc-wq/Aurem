@@ -108,7 +108,7 @@ def _harvest_counts() -> dict:
     )
     reasoning_total = _count_matches(reasoning, _TEST_FN_RE_PY)
 
-    return {
+    out = {
         "backend_pytest": {
             "files": backend_pytest_files,
             "tests": backend_pytest_total,
@@ -129,7 +129,30 @@ def _harvest_counts() -> dict:
         "grand_total_tests": (
             backend_pytest_total + frontend_vitest_total + playwright_total
         ),
+        "source": "live_fs",
     }
+    # ── Iter 351 — build-manifest fallback ────────────────────────
+    # Prod pods ship WITHOUT backend/tests (build strips them), so the
+    # live glob honestly returns 0 files and the admin tile contradicts
+    # the Overview claim. predeploy_gate.sh regenerates
+    # backend/qa_manifest.json from the live counts before every
+    # deploy; fall back to it per-suite when the live count is 0.
+    if backend_pytest_files == 0:
+        try:
+            mpath = _APP_ROOT / "backend" / "qa_manifest.json"
+            m = json.loads(mpath.read_text())
+            mc = m.get("test_counts") or {}
+            for suite in ("backend_pytest", "frontend_vitest",
+                          "playwright", "reasoning_evals"):
+                if (out.get(suite) or {}).get("files") == 0 and mc.get(suite):
+                    out[suite] = mc[suite]
+            out["grand_total_tests"] = m.get(
+                "grand_total_tests", out["grand_total_tests"])
+            out["source"] = "build_manifest"
+            out["manifest_generated_at"] = m.get("generated_at")
+        except Exception:                                 # noqa: BLE001
+            pass
+    return out
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -326,6 +349,14 @@ async def get_latest_qa_report(authorization: Optional[str] = Header(None)):
         return {"error": "No report yet — auto-qa-agent job has not run"}
     with open(path, "r", encoding="utf-8") as f:
         return {"content": f.read(), "modified_at": os.path.getmtime(path)}
+
+
+@router.get("/counts")
+async def qa_counts(authorization: Optional[str] = Header(None)):
+    """Iter 351 — lightweight test-count payload (no style/a11y/CI
+    harvest) for the Overview strip. Admin/founder only."""
+    await _require_admin(authorization)
+    return _harvest_counts()
 
 
 @router.get("/status")

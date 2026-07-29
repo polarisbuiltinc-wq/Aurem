@@ -526,16 +526,7 @@ export default function AdminOverview() {
           <FeatureRow name="ora_skill_usage analytics" status="live"  note="fire-and-forget telemetry → /admin/skills-usage (Iter 123b)" />
           <FeatureRow name="OOM blocker resolved"    status="live"    note="tier_0 (512MB) → tier_1 (2GB) + ENABLE_HEALTH_CHECK (Iter 123c)" />
         </div>
-        <div style={{
-          marginTop: 14, fontSize: 11, color: "var(--text-dim)",
-          padding: "8px 12px",
-          background: "rgba(109,212,161,0.06)",
-          border: "1px solid rgba(109,212,161,0.22)",
-          borderRadius: 5,
-        }}>
-          Backend test suite: <strong style={{ color: "var(--ok, #6dd4a1)" }}>700+ passing</strong>
-          {" "}/ 0 failures / 9 skips (iter 123 + 123b adds 42 tests). Build hash above ↑.
-        </div>
+        <QaCountsStrip />
       </Section>
 
       {/* ── ORA Council stats ───────────────────────────────── */}
@@ -692,42 +683,10 @@ export default function AdminOverview() {
         <FunnelCard data={funnel} />
       )}
 
-      {/* ── Next actions ────────────────────────────────────── */}
-      <Section title="Next actions — pending on you (Iter 123 → June 15 launch)">
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <ActionRow
-            urgent
-            title="🔴 Tier upgrade + redeploy production"
-            detail="Emergent Deploy Panel → tier_0 → tier_1 (2GB RAM) + env var ENABLE_HEALTH_CHECK=true → redeploy. Logs should show 'indexed=15' (was 14) and 'deploy recorded: <sha> main' on boot."
-          />
-          <ActionRow
-            urgent
-            title="🔴 LIVE ORA chain test post-deploy"
-            detail="Chat mein type karo: 'Find all places where verify_exp is used and check if any imports are missing'. ORA should auto-pick find_usages → read_repo_files → validate_syntax in one response. Live popup mein 3 tool invocations visible."
-          />
-          <ActionRow
-            urgent
-            title="🟡 PH Hunter DM (June 13 deadline — 3 din!)"
-            detail="Product Hunt hunter ko DM karke June 15 launch ki schedule lock karo. Wait for confirmation before going live."
-          />
-          <ActionRow
-            title="📊 Wait 2 weeks → prune ORA skills via /admin/skills-usage"
-            detail="Industry ceiling 18 hai, hum 22 pe hain. After 2 weeks of live traffic, query GET /admin/skills-usage?days=14 — dead_weight=true rows hain prune candidates. Drop bottom 4 to hit optimal catalog size."
-          />
-          <ActionRow
-            title="🎯 Citation chip live e2e test"
-            detail="Send a query that requires Tavily (e.g. 'latest FastAPI version'). Verify 🌐 chip appears in MessageBubble with real source URL."
-          />
-          <ActionRow
-            title="🛠 CODE_SURFACE auto-sync (done — verified)"
-            detail="Architecture tab now reads /admin/code-surface live. Static fallback array deleted. Drift-proof for future iters."
-          />
-          <ActionRow
-            title="🎨 Optional: skills-usage dashboard card"
-            detail="80 lines React + Recharts (already in package.json) — horizontal bar chart with dead_weight skills in red. Founder ko visual prune candidates."
-          />
-        </div>
-      </Section>
+      {/* ── Next actions section removed (Iter 351) ─────────────
+          The hardcoded Iter-123-era launch checklist was 200+
+          iterations stale and actively misleading. Current priorities
+          live in /app/memory/PRD.md + ROADMAP — not hardcoded JSX. */}
 
     </div>
   );
@@ -735,6 +694,37 @@ export default function AdminOverview() {
 
 
 /* ── Sub-components ──────────────────────────────────────────── */
+
+// Iter 351 — live test-suite counts strip. Replaces the hardcoded
+// stale iter-123-era test-count claim with real numbers.
+// Reads /admin/qa/counts (live FS on preview, build-manifest on prod).
+export function QaCountsStrip() {
+  const [d, setD] = useState(null);
+  useEffect(() => {
+    api.get("/admin/qa/counts").then((r) => setD(r.data)).catch(() => {});
+  }, []);
+  if (!d) return null;
+  const be = d.backend_pytest || {};
+  const fe = d.frontend_vitest || {};
+  return (
+    <div data-testid="qa-counts-strip" style={{
+      marginTop: 14, fontSize: 11, color: "var(--text-dim)",
+      padding: "8px 12px",
+      background: "rgba(109,212,161,0.06)",
+      border: "1px solid rgba(109,212,161,0.22)",
+      borderRadius: 5,
+    }}>
+      Test suite (live): <strong style={{ color: "var(--ok, #6dd4a1)" }}>
+        {be.tests ?? 0} backend
+      </strong>{" "}
+      across {be.files ?? 0} files · {fe.tests ?? 0} frontend ·
+      grand total {d.grand_total_tests ?? 0}
+      {d.source === "build_manifest" && (
+        <span style={{ opacity: 0.7 }}> · from build manifest</span>
+      )}
+    </div>
+  );
+}
 
 function TopupAlertsBanner({ alerts, refreshing, onRefresh, onDismiss }) {
   const active = (alerts?.alerts || []).filter((a) => a.status === "active");

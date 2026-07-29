@@ -4209,7 +4209,8 @@ async def loop_metrics(
         {"state": "failed", "created_at": {"$gte": cur_start, "$lt": now}},
         {
             "_id": 1, "user_id": 1, "created_at": 1, "updated_at": 1,
-            "current_phase": 1, "phase_history": 1, "error_summary": 1,
+            "phase": 1, "current_phase": 1, "phase_history": 1,
+            "error_summary": 1, "last_event": 1,
             "prompt_summary": 1,
         },
     ).sort("created_at", -1).limit(50)
@@ -4219,6 +4220,21 @@ async def loop_metrics(
         uid = doc.get("user_id")
         user_doc = None
         if uid:
+            # Iter 351 — the canonical dev_users key is the `user_id`
+            # FIELD (e.g. "test_admin_001"), which is exactly what
+            # loop_sessions stores. The old lookup went straight to
+            # `_id` (ObjectId) — ObjectId("test_admin_001") raises →
+            # bare string `_id` never matches → email empty → EVERY
+            # failed session classified "orphan" (founder audit:
+            # 11/11 orphans were real users mislabeled). Look up by
+            # `user_id` first; keep the ObjectId path as fallback for
+            # genuinely legacy rows.
+            try:
+                user_doc = await db.dev_users.find_one(
+                    {"user_id": uid}, {"email": 1, "role": 1, "is_admin": 1})
+            except Exception:
+                user_doc = None
+        if uid and not user_doc:
             try:
                 # user_id might be stored as ObjectId or string
                 from bson import ObjectId  # type: ignore
@@ -4248,17 +4264,28 @@ async def loop_metrics(
         # Last phase attempted before failure — useful for the
         # founder to see if all 7 failed on the same phase (points
         # at a single root cause) or scattered.
-        phase = doc.get("current_phase") or ""
+        # Iter 351 — sessions persist the phase under `phase` (see
+        # LoopEngine._doc); the old `current_phase`-only read rendered
+        # "phase=?" on every row.
+        phase = doc.get("phase") or doc.get("current_phase") or ""
         history = doc.get("phase_history") or []
         if not phase and history:
             phase = history[-1].get("phase", "") if isinstance(history[-1], dict) else ""
+
+        # Iter 351 — error_summary isn't a session field; fall back to
+        # the last SSE event message so the expand rows show WHY.
+        _err = doc.get("error_summary") or ""
+        if not _err:
+            _le = doc.get("last_event") or {}
+            if isinstance(_le, dict):
+                _err = _le.get("message") or ""
 
         failed_sample.append({
             "session_id":     str(doc.get("_id")),
             "user_hint":      _email_hint(email),
             "classification": classification,
             "last_phase":     phase or "?",
-            "error_short":    (doc.get("error_summary") or "")[:140],
+            "error_short":    _err[:140],
             "created_at":     doc.get("created_at").isoformat()
                                 if hasattr(doc.get("created_at"), "isoformat")
                                 else str(doc.get("created_at") or ""),

@@ -648,3 +648,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `LOOP_INTENT_GATE` — auto-detected in backend/routers/loop.py (verify) (default: unset) [Iter 0, 2026-07-29T18:55:35.591804Z] <!-- inv:envvar:LOOP_INTENT_GATE -->
 - `PLAN_LLM_TIMEOUT_S` — auto-detected in backend/services/loop_engine.py (verify) (default: unset) [Iter 0, 2026-07-29T18:55:35.591832Z] <!-- inv:envvar:PLAN_LLM_TIMEOUT_S -->
 - `services/loop_intent.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-29T18:55:35.591845Z] <!-- inv:service:services/loop_intent.py -->
+- `services/loop_intent_stats.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-29T19:43:36.635184Z] <!-- inv:service:services/loop_intent_stats.py -->

@@ -1,0 +1,23 @@
+{
+  "generated_at": 1785354235.8612962,
+  "test_counts": {
+    "backend_pytest": {
+      "files": 420,
+      "tests": 3647
+    },
+    "frontend_vitest": {
+      "files": 38,
+      "tests": 218
+    },
+    "playwright": {
+      "files": 5,
+      "tests": 14
+    },
+    "reasoning_evals": {
+      "files": 4,
+      "tests": 18,
+      "note": "subset of backend_pytest (Track 3 v1)"
+    }
+  },
+  "grand_total_tests": 3879
+}

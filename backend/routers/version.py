@@ -44,6 +44,7 @@ Iter 309-b (2026-07-26) — deployment-config gap fix
 from __future__ import annotations
 import json
 import os
+import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -184,7 +185,16 @@ def _read_built_at() -> str:
                 data = json.loads(raw)
                 ts = str(data.get("created_at") or "")
                 if ts:
-                    return ts.rstrip("Z") + "+00:00" if ts.endswith("Z") and "+" not in ts else ts
+                    # Iter 351 — emergent.yml can carry BOTH an offset
+                    # and a trailing Z ("…+00:00Z"), which JS parses as
+                    # Invalid Date. Normalise: drop trailing Z, then add
+                    # +00:00 only when no offset remains.
+                    ts = ts.strip()
+                    if ts.endswith("Z"):
+                        ts = ts[:-1]
+                    if "+" not in ts and not re.search(r"-\d{2}:\d{2}$", ts):
+                        ts += "+00:00"
+                    return ts
         except Exception:
             continue
     return datetime.now(timezone.utc).isoformat()

@@ -135,13 +135,18 @@ async def upsert_alerts_from_snapshot(db, snap: dict) -> list[dict]:
     now = time.time()
     for r, severity, key in classified:
         if not severity:
+            # Iter 351 — resolve ALL active alerts for a now-healthy
+            # integration, not just today's. The old `day_key: day`
+            # filter left yesterday's alerts stuck "active" forever
+            # (founder repro: Firecrawl probe LIVE but a stale timeout
+            # alert stayed in the banner until manual dismiss).
             ops.append(UpdateMany(
                 {
                     "integration_id": r.get("id"),
-                    "day_key":        day,
                     "status":         "active",
                 },
-                {"$set": {"status": "resolved", "resolved_at": now}},
+                {"$set": {"status": "resolved", "resolved_at": now,
+                          "resolved_by": "auto_probe"}},
             ))
             continue
         if key in existing_keys:

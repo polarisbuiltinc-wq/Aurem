@@ -180,10 +180,56 @@ async def _probe_stripe() -> dict:
             except stripe.error.StripeError as se:
                 retrieval_errors.append(f"{env_name}={pid} ({getattr(se, 'user_message', None) or str(se)[:60]})")
         if retrieval_errors:
+            # Iter 351 — self-heal awareness. Checkout (Iter 335)
+            # auto-discovers the live price when an env ID is stale,
+            # so a rejected env ID is only revenue-blocking when
+            # auto-discovery ALSO can't find an unambiguous match.
+            # Verified live on prod: all 3 monthly plans checkout OK
+            # via heal while the raw env IDs 404. Report honestly.
+            _env_to_plan = {
+                "STRIPE_STARTER_PRICE_ID":        "starter",
+                "STRIPE_PRO_PRICE_ID":            "pro",
+                "STRIPE_TEAM_PRICE_ID":           "team",
+                "STRIPE_STARTER_ANNUAL_PRICE_ID": "starter_annual",
+                "STRIPE_PRO_ANNUAL_PRICE_ID":     "pro_annual",
+                "STRIPE_TEAM_ANNUAL_PRICE_ID":    "team_annual",
+            }
+            unhealed: list[str] = []
+            healed_envs: list[str] = []
+            try:
+                from routers.payments import _match_discovered_price
+                _all = stripe.Price.list(active=True, limit=100,
+                                         expand=["data.product"])
+                _data = [dict(p) for p in (_all.data or [])]
+                for err in retrieval_errors:
+                    env_name = err.split("=", 1)[0]
+                    plan = _env_to_plan.get(env_name)
+                    if plan and _match_discovered_price(_data, plan):
+                        healed_envs.append(env_name)
+                    else:
+                        unhealed.append(err)
+            except Exception:                           # noqa: BLE001
+                unhealed = retrieval_errors
+            if not unhealed:
+                return _result(
+                    "stripe", "Stripe", "warn",
+                    summary=summary + f" — {len(healed_envs)}/6 env price "
+                            "IDs stale (checkout SELF-HEALS via "
+                            "auto-discovery)",
+                    detail="Stale env price IDs: " + ", ".join(healed_envs)
+                           + ". Checkout works — Iter 335 auto-discovery "
+                           "resolves the live price at runtime. Rotate the "
+                           "env vars to remove the dependency on the heal.",
+                    fix_hint="Stripe dashboard → Products → copy the live "
+                             "monthly price IDs → update the stale "
+                             "STRIPE_*_PRICE_ID env vars in the Emergent "
+                             "deploy panel",
+                )
             return _result("stripe", "Stripe", "broken",
                            summary=summary,
-                           detail=f"Stripe rejected {len(retrieval_errors)}/6 price IDs: "
-                                  + " | ".join(retrieval_errors),
+                           detail=f"Stripe rejected {len(retrieval_errors)}/6 price IDs "
+                                  f"({len(unhealed)} NOT covered by checkout self-heal): "
+                                  + " | ".join(unhealed),
                            fix_hint="Rotate the failing STRIPE_*_PRICE_ID env vars")
         if one_time_offenders:
             return _result("stripe", "Stripe", "warn",
