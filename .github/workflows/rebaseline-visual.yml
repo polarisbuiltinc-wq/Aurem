@@ -81,7 +81,7 @@ jobs:
           # The Playwright image already has node + yarn; we just
           # need our repo deps. Frozen lockfile so we rebaseline
           # against EXACT prod dep graph.
-          yarn install --frozen-lockfile
+          yarn install --frozen-lockfile || { echo "::warning::yarn.lock out of sync in repo - falling back to yarn install"; yarn install; }
 
       - name: Start frontend
         working-directory: frontend

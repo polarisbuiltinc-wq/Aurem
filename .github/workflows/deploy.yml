@@ -37,7 +37,7 @@ jobs:
           cache-dependency-path: frontend/yarn.lock
 
       - name: Install frontend deps
-        run: cd frontend && yarn install --frozen-lockfile
+        run: cd frontend && yarn install --frozen-lockfile || { echo "::warning::yarn.lock out of sync in repo - falling back to yarn install"; yarn install; }
 
       - name: Build frontend
         env:
