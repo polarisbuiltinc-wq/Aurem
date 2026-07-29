@@ -423,6 +423,7 @@ async def run_security_scan(
             raise HTTPException(502, f"GitHub tree read failed: {e!r}")
 
         # 2. Filter to scannable files.
+        from services.scanner_utils import is_scanner_rule_file
         candidates: list[dict] = []
         for b in blobs:
             path = b.get("path", "")
@@ -430,6 +431,20 @@ async def run_security_scan(
                 continue
             parts = path.split("/")
             if any(p in _SKIP_DIRS for p in parts):
+                continue
+            # Iter 348 — SELF-SCAN exclusion (founder-reported via PR
+            # #173: +1/-397 gutting bug_hunt_rules.py). The rule
+            # regexes for eval_usage/exec_usage/secrets literally
+            # appear inside their own definition files; scanning them
+            # floods exec/eval findings and the /fix LLM "resolves"
+            # them by deleting the rule table. The shared
+            # is_scanner_rule_file() helper already existed
+            # (scanner_utils.py) but this route never wired it.
+            if is_scanner_rule_file(path):
+                continue
+            # Vanguard's own marker/report files are scan output,
+            # never scan input.
+            if path.startswith(".vanguard/"):
                 continue
             lower = path.lower()
             if not any(lower.endswith(ext) for ext in _SCAN_EXTS):
@@ -1096,6 +1111,19 @@ async def apply_security_fix(
 
     if not (project_id and finding and finding.get("file")):
         raise HTTPException(400, "project_id + finding.file required")
+
+    # Iter 348 — belt & braces vs PR #173 class: NEVER LLM-"fix" a
+    # scanner-rule-definition file. The patch validator ("original
+    # rule_id must no longer fire") passes trivially when the rule
+    # table itself gets deleted — a perfect self-cannibalism loop.
+    from services.scanner_utils import is_scanner_rule_file
+    if is_scanner_rule_file(finding.get("file") or ""):
+        raise HTTPException(
+            400,
+            "Refusing to auto-fix a scanner rule-definition file "
+            f"({finding.get('file')}) — findings there are self-scan "
+            "false positives (the rule regexes match their own source).",
+        )
 
     db = get_db()
     if db is None:

@@ -365,3 +365,16 @@ Language: **Hinglish** — main agent responds in Hinglish.
 - Quality Gate invariants FAIL root causes: (1) job env pointed MONGO_URL at localhost:27017 but NO mongo service container existed — added mongo:7 service (timeout 6→15min). (2) m190 import-time seed did unguarded pymongo ops → 30s timeout collection error on CI. Fix: 3s timeout best-effort + module-level skip if preview API unreachable. (3) live-server fixtures (m55/iter340/aurem_rollback) now skip cleanly on ConnectionError. (4) m190 TestPreview = preview-only (seeds local Mongo + reads via remote API — cross-env on CI): CI skipif.
 - VERIFIED: CI simulation (CI=true + unreachable Mongo) → invariants subset 448 passed/0 failed; locks-only qa_matrix PASS; preview lanes unaffected (34 passed).
 - Founder must re-push (Save to Github → main) for CI to go green.
+
+## Iter 348 · 2026-07-29 — PR #173 self-scan incident: Vanguard scanning its OWN rule file
+- CONFIRMED: bug_hunt_rules.py (581 lines of regex rule definitions) self-flagged for exec/eval/secret patterns; /fix endpoint ("REAL Fix", Iter 212m-114) LLM-gutted 397 lines; validator ("rule must no longer fire") passed trivially → self-cannibalism loop.
+- 3 PR classes exist: (a) vanguard/auto-fix-* = marker-only report drafts; (b) /fix endpoint = REAL LLM patches on draft branches (PR #173 class); (c) aurem/fix-* push_fix = real single-file changes. "All marker-only" was WRONG.
+- Exclusion infra existed (scanner_utils.is_scanner_rule_file — used by codebase_health/bug_hunt/fix_triage) but security_scan route + /fix endpoint never wired it. FIXED: candidate filter skips rule files + .vanguard/; /fix hard-rejects rule-file findings with 400. Locks: test_iter348_self_scan_exclusion.py 3/3; security suites 39 passed.
+- PENDING: per-category sample-diff audit of 168 PRs needs founder PAT (or founder classifies by diff: single .vanguard/*.md = marker; source-file changes = /fix or push_fix class).
+
+## Iter 348b · 2026-07-29 — SECOND self-cannibalism case (PR #9: 564 lines gutted from routers/codebase_health.py)
+- Note: codebase_health.py WAS in the original exclusion list, but PR #9 predates today's wiring (route never called is_scanner_rule_file before Iter 348).
+- _SCANNER_RULE_FILES expanded from 9 → 35 entries: ENTIRE scan/fix pipeline (routers: security_scan, codebase_health, fix_pipeline, admin_vanguard, vanguard_ci; services: all scan/fix/triage/heal/audit files incl. finding_fix_applier, fix_triage, full_scan_orchestrator, repo_heal, loop_safety, scanner_utils itself; frontend scan UI pages). All existing callers (scan route, /fix guard, codebase_health, bug_hunt, fix_triage) inherit automatically.
+- Locks: test_iter348 expanded (PR#9 + PR#173 classes + 9 pipeline files) 4/4 PASS; scanner-related suites 254 passed.
+- NEW scripts/classify_open_prs.py — produces founder's eyeball table (PR#, created, category, files, +/-, draft, POISON/marker-only/REVIEW verdict + totals). Requires GITHUB_PAT + REPO env. Founder to run or supply PAT.
+- RULE: no merge proposals until founder reviews the table.
