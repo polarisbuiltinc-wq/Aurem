@@ -670,3 +670,23 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `LOOP_TOTAL_BUDGET_S` — auto-detected in backend/services/loop_engine.py (verify) (default: unset) [Iter 0, 2026-07-30T22:16:30.721546Z] <!-- inv:envvar:LOOP_TOTAL_BUDGET_S -->
 - `DB_NAME` — auto-detected in backend/tests/test_iter364_loop_beta_rollout.py (verify) (default: unset) [Iter 0, 2026-07-30T22:16:30.721558Z] <!-- inv:envvar:DB_NAME -->
 - `services/signup_guards.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T23:05:51.430879Z] <!-- inv:service:services/signup_guards.py -->
+- `loop_run_log kind='g1_route_sweep'` — auto-detected in backend/routers/admin_qa.py (verify) [Iter 0, 2026-07-30T23:45:42.843329Z] <!-- inv:loop_run_log_kind:g1_route_sweep -->
+- `loop_run_log kind='g15_dep_scan'` — auto-detected in backend/routers/admin_qa.py (verify) [Iter 0, 2026-07-30T23:45:42.843355Z] <!-- inv:loop_run_log_kind:g15_dep_scan -->
+- `G1_AUTH_JWT` — auto-detected in backend/scripts/g1_route_smoke_sweep.py (verify) (default: unset) [Iter 0, 2026-07-30T23:45:42.843370Z] <!-- inv:envvar:G1_AUTH_JWT -->
+- `G1_BASE_URL` — auto-detected in backend/scripts/g1_route_smoke_sweep.py (verify) (default: unset) [Iter 0, 2026-07-30T23:45:42.843384Z] <!-- inv:envvar:G1_BASE_URL -->
+- `G4_BASE_URL` — auto-detected in backend/scripts/g4_secret_scanner.py (verify) (default: unset) [Iter 0, 2026-07-30T23:45:42.843397Z] <!-- inv:envvar:G4_BASE_URL -->
+- `services/db_indexes.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T23:45:42.843411Z] <!-- inv:service:services/db_indexes.py -->
+- `services/founder_alerts.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T23:45:42.843425Z] <!-- inv:service:services/founder_alerts.py -->
+- `FOUNDER_ALERT_DEDUP_HOURS` — auto-detected in backend/services/founder_alerts.py (verify) (default: unset) [Iter 0, 2026-07-30T23:45:42.843444Z] <!-- inv:envvar:FOUNDER_ALERT_DEDUP_HOURS -->
+- `RESEND_API_KEY` — auto-detected in backend/services/founder_alerts.py (verify) (default: unset) [Iter 0, 2026-07-30T23:45:42.843457Z] <!-- inv:envvar:RESEND_API_KEY -->
+- `FOUNDER_ALERT_EMAIL` — auto-detected in backend/services/founder_alerts.py (verify) (default: unset) [Iter 0, 2026-07-30T23:45:42.843469Z] <!-- inv:envvar:FOUNDER_ALERT_EMAIL -->
+- `FOUNDER_ALERT_FROM` — auto-detected in backend/services/founder_alerts.py (verify) (default: unset) [Iter 0, 2026-07-30T23:45:42.843480Z] <!-- inv:envvar:FOUNDER_ALERT_FROM -->
+- `services/llm_cost_breaker.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T23:45:42.843491Z] <!-- inv:service:services/llm_cost_breaker.py -->
+- `services/payment_reconciliation.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T23:45:42.843503Z] <!-- inv:service:services/payment_reconciliation.py -->
+- `RECONCILE_LOOKBACK_HOURS` — auto-detected in backend/services/payment_reconciliation.py (verify) (default: unset) [Iter 0, 2026-07-30T23:45:42.843515Z] <!-- inv:envvar:RECONCILE_LOOKBACK_HOURS -->
+- `loop_run_log kind='local_pending_stuck'` — auto-detected in backend/services/payment_reconciliation.py (verify) [Iter 0, 2026-07-30T23:45:42.843536Z] <!-- inv:loop_run_log_kind:local_pending_stuck -->
+- `loop_run_log kind='stripe_paid_missing_locally'` — auto-detected in backend/services/payment_reconciliation.py (verify) [Iter 0, 2026-07-30T23:45:42.843548Z] <!-- inv:loop_run_log_kind:stripe_paid_missing_locally -->
+- `loop_run_log kind='local_status_mismatch'` — auto-detected in backend/services/payment_reconciliation.py (verify) [Iter 0, 2026-07-30T23:45:42.843560Z] <!-- inv:loop_run_log_kind:local_status_mismatch -->
+- `loop_run_log kind='stripe_active_local_canceled'` — auto-detected in backend/services/payment_reconciliation.py (verify) [Iter 0, 2026-07-30T23:45:42.843571Z] <!-- inv:loop_run_log_kind:stripe_active_local_canceled -->
+- `services/rollback_manager.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T23:45:42.843582Z] <!-- inv:service:services/rollback_manager.py -->
+- `services/scope_drift_guard.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T23:45:42.843593Z] <!-- inv:service:services/scope_drift_guard.py -->

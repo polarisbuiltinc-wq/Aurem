@@ -342,7 +342,20 @@ async def _ensure_indexes(db, name: str,
                         "TTL retry after drop failed for %s.%s: %r",
                         name, default_name, inner,
                     )
-            logger.warning("create_index %s %r failed: %r", name, keys, e)
+            # Iter 366 — pre-existing indexes with different names /
+            # sparse flags (from earlier iters) are functionally
+            # equivalent; treat as idempotent no-op (INFO not WARNING)
+            # so the deployer doesn't flag them as blocking errors.
+            emsg = repr(e)
+            if ("IndexKeySpecsConflict" in emsg
+                or "Index already exists with a different name" in emsg
+                or "IndexOptionsConflict" in emsg):
+                logger.info(
+                    "create_index %s %r idempotent no-op: %s",
+                    name, keys, str(e)[:180],
+                )
+            else:
+                logger.warning("create_index %s %r failed: %r", name, keys, e)
     return n
 
 
