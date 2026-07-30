@@ -326,6 +326,35 @@ Language: **Hinglish** — main agent responds in Hinglish.
 - Frontend: vitest + RTL under `src/**/__tests__/` and `src/**/*.test.jsx` — 124/124 passing
 - **NEW HARD RULE (added Iter 328)**: for UI regressions, an integration test that chains real wire shape → mapper → real component render is required. Component-level tests alone are insufficient (the exact gap that broke Deploy 2 three times).
 
+## Iter 356-357 · 2026-06-30 — Unified nav ship + E2E-session dedup + Guard 2 + Guard 8 (partial)
+- **DEPLOYED to prod (build faf5e1264d02)**: RailShell unified nav (Dashboard + 8 pages,
+  5 icons: Chat/Ship/Insights/Settings/Admin, flyout routing verified by testing agent),
+  /integrations back button, PricingCards tier-overlap + API-key masking (pre-fork).
+- **prod-e2e session debris ROOT FIX** (founder's own investigation: duplicates = ORA's prod
+  E2E test leftovers, NOT title dups): (a) /chat/sessions excludes ^(prod-e2e-|qa-e2e-|e2e-test-)
+  server-side (services/test_accounts.py E2E_SESSION_PREFIX_RE); (b) founder-only
+  POST /admin/qa/cleanup-e2e-sessions (deletes debris, returns count); (c) prod E2E suite
+  teardown deletes its own sessions; (d) /chat/sessions double-fetch fixed via
+  fetchSessionsShared 2s in-flight cache (12 calls → 2 on dashboard load, network-verified).
+- **Guard 2 marketing truth gate LIVE ON PROD**: landing social proof renders ONLY live
+  /usage/public/stats (real_developers=26, commits_shipped=88 on prod; test accounts excluded
+  via shared services/test_accounts.py; zero-valued stats hidden; 500+/12k+/4.9★ removed).
+  Grep-lock: test_iter356_nav_dedup_marketing.py (11 locks).
+- **RouteErrorBoundary**: lazy-chunk/render crashes → retry card, never a blank page
+  (testing agent found blank /admin/financials|suggestions|api-keys under 429 hammering;
+  organic repro clean — boundary is the safety net).
+- **Gate repairs**: 8 failures fixed (public_stats fail-soft for mocked-db tests; 4 mobile-drawer
+  tests modernized to RailShell contract; bundle rebuilt 144KB<350KB). GATE PASSED:
+  3714 pytest + 236 vitest + qa_matrix. Gate script now prints Save-to-GitHub reminder.
+- **Guard 8 (partial, Iter 357 — preview only, deploy pending)**: GitHub sync detection reusing
+  EXISTING Overview build badge (founder correction honored — no new system).
+  services/github_sync.py single source; badge shows in_sync/behind/not_wired; >48h → RED in
+  existing topup_alerts banner w/ auto-resolve. 8 locks. NEEDS: GITHUB_ACTIONS_TOKEN + GITHUB_REPO.
+- **Platform answers (support-confirmed)**: Save to GitHub is USER-ONLY, no auto-sync exists.
+  polarisbuiltinc-wq/auremdev = product repo (via Save to GitHub); tjsandhu/aurem = connected
+  dogfood project only — agent never wrote to either directly.
+- **Guards charter 1-21 saved**: /app/memory/GUARDS_CHARTER.md (specs, ship order, status).
+
 ## Iter 339 · 2026-07-28 — Production deploy + dual verification
 - Preview smoke test PASS (login, /auth/me + /auth/tokens leak-scan, /version, /health, frontend load)
 - Deployed working-tree snapshot to prod (includes secret_leak_scan in Auto-QA + BUILD_INFO.txt fix)

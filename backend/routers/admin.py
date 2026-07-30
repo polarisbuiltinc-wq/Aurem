@@ -68,6 +68,18 @@ async def admin_me(authorization: Optional[str] = Header(None)):
             "is_admin": True}
 
 
+# ── Iter 357 · Guard 8 (partial) — GitHub sync detection ───────────────
+# ONE check (services/github_sync.py), surfaced next to the existing
+# build badge on Overview; >48h gap escalates into the topup_alerts
+# banner. The /admin/qa guards row will read this same endpoint.
+@router.get("/github-sync")
+async def github_sync_status(authorization: Optional[str] = Header(None)):
+    await _require_admin(authorization)
+    from routers.version import _COMMIT_SHA, _BUILT_AT
+    from services.github_sync import get_github_sync
+    return await get_github_sync(_COMMIT_SHA, _BUILT_AT, db=get_db())
+
+
 # ── Iter 356 — one-time cleanup of E2E test-run chat sessions ──────────
 # Our own prod smoke tests (test_iter212m_prod_e2e_founder.py) created
 # sessions with the "prod-e2e-" prefix under the founder's account and

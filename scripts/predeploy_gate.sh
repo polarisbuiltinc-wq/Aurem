@@ -36,3 +36,5 @@ echo "── Post-lane: regenerate backend/qa_manifest.json (Iter 351) ──"
 (cd backend && python scripts/gen_qa_manifest.py)
 
 echo "══════════ GATE PASSED — safe to deploy ══════════"
+echo "⚠️  REMINDER (Iter 356): deploy ke BAAD founder se 'Save to GitHub' click"
+echo "    karwana mat bhoolna — warna polarisbuiltinc-wq/auremdev outdated rahega."

@@ -25,7 +25,17 @@ Wave 3 (17-21): 18 → 17 → 21 → 19 → 20
   commits_shipped (test-account excluded via services/test_accounts.py),
   Landing renders live-only (zero stats hidden), grep-lock in
   tests/test_iter356_nav_dedup_marketing.py. QA page row PENDING (ships last).
-- Guards 1, 3-21: NOT STARTED.
+  PROD PROOF: real_developers=26, commits_shipped=88 live on auremcto.com.
+- Guard 8 (partial): ✅ BUILT (Iter 357, preview — deploy pending): GitHub
+  sync detection per founder correction — reuses EXISTING build badge on
+  Admin Overview (services/github_sync.py = single check/data source;
+  GET /admin/github-sync founder-gated; states not_wired/in_sync/behind/
+  error; >48h gap → CRITICAL row in EXISTING topup_alerts banner,
+  auto-resolves on sync; 10-min cache; commits-behind via local git on
+  preview, hours-gap fallback on prod). Locks: test_iter357_github_sync.py
+  (8). AWAITING FOUNDER: GITHUB_ACTIONS_TOKEN + GITHUB_REPO env vars
+  (currently shows "not wired"). Full Guard 8 (CI wiring) still pending.
+- Guards 1, 3-7, 9-21: NOT STARTED.
 
 ## GUARD SPECS
 

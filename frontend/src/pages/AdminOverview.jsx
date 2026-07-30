@@ -23,6 +23,7 @@ export default function AdminOverview() {
   const [patterns, setPatterns] = useState(null);     // iter 212m — user patterns insights
   const [funnel,  setFunnel]  = useState(null);       // iter 212m-3 — activation funnel
   const [alerts,  setAlerts]  = useState(null);       // iter 212m-17 — top-up alerts
+  const [ghSync,  setGhSync]  = useState(null);       // iter 357 — Guard 8 GitHub sync
   const [councilHealth, setCouncilHealth] = useState(null); // iter 212m-192 — Council A live status
   const [refreshingHealth, setRefreshingHealth] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -31,7 +32,7 @@ export default function AdminOverview() {
     const h = { Authorization: `Bearer ${getToken()}` };
     const HEALTH_URL = `${process.env.REACT_APP_BACKEND_URL}/api/health`;
     try {
-      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes] =
+      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes] =
         await Promise.allSettled([
           fetch(HEALTH_URL).then((r) => r.json()),
           api.get("/usage/public/stats"),
@@ -44,6 +45,7 @@ export default function AdminOverview() {
           api.get("/admin/insights/activation-funnel", { headers: h }),
           api.get("/admin/alerts", { headers: h }),
           api.get("/admin/council/health", { headers: h }),  // Iter 212m-192
+          api.get("/admin/github-sync", { headers: h }),     // Iter 357 — Guard 8
         ]);
       if (healthRes.status   === "fulfilled") setHealth(healthRes.value);
       if (statsRes.status    === "fulfilled") setStats(statsRes.value.data);
@@ -56,6 +58,7 @@ export default function AdminOverview() {
       if (funnelRes.status   === "fulfilled") setFunnel(funnelRes.value.data);
       if (alertsRes.status   === "fulfilled") setAlerts(alertsRes.value.data);
       if (councilHealthRes.status === "fulfilled") setCouncilHealth(councilHealthRes.value.data);
+      if (ghSyncRes.status === "fulfilled") setGhSync(ghSyncRes.value.data);
     } catch { /* silent */ }
     finally { setLoading(false); }
   }, []);
@@ -165,6 +168,27 @@ export default function AdminOverview() {
           </span>
           {health.env && <> · <span>{health.env}</span></>}
           {uptimeMin > 0 && <> · uptime {uptimeMin}m</>}
+          {/* Iter 357 · Guard 8 — GitHub sync state, same data source
+              as the future /admin/qa guards row. */}
+          {ghSync && ghSync.status === "in_sync" && (
+            <> · <span data-testid="github-sync-badge" style={{ color: "#4ade80" }}>
+              GitHub ✓ in sync
+            </span></>
+          )}
+          {ghSync && ghSync.status === "behind" && (
+            <> · <span data-testid="github-sync-badge" style={{
+              color: ghSync.critical ? "#f87171" : "#fbbf24", fontWeight: 700,
+            }}>
+              GitHub sync: {ghSync.commits_behind != null
+                ? `${ghSync.commits_behind} commits behind`
+                : `${ghSync.gap_hours ?? "?"}h behind`}
+            </span></>
+          )}
+          {ghSync && ghSync.status === "not_wired" && (
+            <> · <span data-testid="github-sync-badge" style={{ opacity: 0.55 }}>
+              GitHub sync: not wired
+            </span></>
+          )}
         </div>
       )}
 
