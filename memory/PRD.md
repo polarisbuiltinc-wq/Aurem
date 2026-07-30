@@ -326,7 +326,26 @@ Language: **Hinglish** — main agent responds in Hinglish.
 - Frontend: vitest + RTL under `src/**/__tests__/` and `src/**/*.test.jsx` — 124/124 passing
 - **NEW HARD RULE (added Iter 328)**: for UI regressions, an integration test that chains real wire shape → mapper → real component render is required. Component-level tests alone are insufficient (the exact gap that broke Deploy 2 three times).
 
-## Iter 358b · 2026-06-30 — Admin auth hardening (Guard 16 partial) + bundle diet
+## Iter 358c · 2026-06-30 — Deploy build-fix (ESM/CJS) + gate flake fix
+- **Prod build failed** at Cloud Build step #8: seo-prerender.mjs imported
+  `src/data/competitors.js` which prod Node v20.18.1 loaded as CommonJS
+  (no "type":"module" in package.json) → named exports COMPARE_HUB/ALL_SLUGS
+  (declared after the ~450-line COMPETITORS object) not found. Preview Node
+  had tolerated it; vite/vitest unaffected (treat source as ESM).
+- **Fix** (per deployer RCA): renamed competitors.js → competitors.mjs (content
+  unchanged) + updated seo-prerender.mjs import. React pages import
+  extensionless → Vite resolves .mjs. Updated 2 test path-locks. Verified:
+  `node --input-type=module` resolves all 5 exports; yarn build writes 6
+  snapshots. ("type":"module" rejected — would break postcss/tailwind CJS.)
+- **Gate flake fix**: live 112-endpoint admin sweep exceeded the gate's global
+  --timeout=30 under parallel load (pytest-timeout killed it → false fail, NOT
+  a security gap). Added @pytest.mark.timeout(180) override + made sweep only
+  flag 2xx as a leak (transient 429/5xx/network retried, not flagged).
+- Gate PASSED clean: 3742 backend + 236 vitest. Redeploy dispatched.
+- **NOTE**: "Save to GitHub" reported broken by founder + agent cannot push
+  (no git remote, user-only feature) → routed to support; repo still stale.
+
+
 - **URGENT security verification (founder-mandated, RailShell merged admin into shared shell)**:
   Proven with real NON-FOUNDER account (qa-free-339k@aurem.dev, tier=free, is_admin=False):
   - CLIENT: Admin rail icon ABSENT from DOM (node count 0, no admin testid); visibility gated

@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 FRONTEND = ROOT / "frontend"
-COMPETITORS = FRONTEND / "src" / "data" / "competitors.js"
+COMPETITORS = FRONTEND / "src" / "data" / "competitors.mjs"
 LLMS = FRONTEND / "public" / "llms.txt"
 LLMS_FULL = FRONTEND / "public" / "llms-full.txt"
 
@@ -59,7 +59,7 @@ def test_build_runs_seo_prerender():
 
 def test_prerender_script_uses_single_content_source():
     src = (FRONTEND / "scripts" / "seo-prerender.mjs").read_text()
-    assert "src/data/competitors.js" in src
+    assert "src/data/competitors.mjs" in src
     assert "FAQPage" in src
     assert 'id="root"' in src  # content injected INSIDE the SPA root
 

@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-COMPETITORS = ROOT / "frontend" / "src" / "data" / "competitors.js"
+COMPETITORS = ROOT / "frontend" / "src" / "data" / "competitors.mjs"
 VS_PAGE = ROOT / "frontend" / "src" / "pages" / "VsPage.jsx"
 VS_DEVIN = ROOT / "frontend" / "src" / "pages" / "VsDevin.jsx"
 APP_JSX = ROOT / "frontend" / "src" / "App.jsx"
