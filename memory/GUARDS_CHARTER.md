@@ -39,7 +39,25 @@ Wave 3 (17-21): 18 → 17 → 21 → 19 → 20
   (require_admin_dep) + live non-founder 112-endpoint 403 sweep lock
   (Iter 358b, deployed with SEO/chip). Remaining: revoked-key/
   expired-token/auth-endpoint-rate-limiter tests.
-- Guards 1, 3-7, 9-15, 17, 19-21: NOT STARTED.
+- Guards 1, 3-7, 9-15, 19-21: NOT STARTED.
+- Guard 17: ✅ SHIPPED (Iter 360, 2026-07-30): services/retry_guard.py =
+  THE central retry utility — CircuitBreaker (closed/open/half_open,
+  threshold 5, cooldown 60s, single half-open probe w/ 30s stale expiry),
+  call_with_retry (full-jitter exponential backoff), transition ring +
+  best-effort Mongo breaker_events persist, trip_counts_7d. Deps
+  pre-registered: openrouter/deepseek_direct/groq/github/stripe/tavily/
+  firecrawl/vercel/resend/supabase. MIGRATED: llm.py _call_deepseek
+  (openrouter breaker — open ⇒ skip chain, straight to groq/deepseek
+  fallbacks), loop_safety.github_request_with_retry (fast-fail + 5xx/
+  network recording; rate limits NOT counted), repo_heal._try_with_retries
+  (→ call_with_retry), web_skills web_search+fetch_url (tavily, graceful
+  "circuit open" tool errors). services/llm_circuit_breaker.py shim now
+  real (admin_bin Bin panel reads central state). Endpoint: GET
+  /admin/qa/guard17-breakers (founder-gated). UI: DEPENDENCIES strip on
+  Admin Overview (green/amber/red dots, data-testid dependency-breaker-
+  strip). NOTE: shared/resilience/* = pre-existing DEAD code (0 callers,
+  other-product copy) — delete in Phase 4 dead-code removal. Locks:
+  test_iter360_guard17_retry_breaker.py (17). QA page row ships last.
 - Guard 18: ✅ SHIPPED (Iter 359, 2026-07-30): scripts/timeout_audit.py —
   static audit (Python AST: httpx/requests/aiohttp/urlopen need timeout=;
   JS regex: fetch needs signal/timeout, axios.create + direct axios.* need

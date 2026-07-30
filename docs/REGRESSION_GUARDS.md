@@ -24,7 +24,7 @@ system. STALE = no run within 2× expected interval.
 | 14 | Signup/free-tier abuse | Disposable-email + IP farming | planned |
 | 15 | Dependency vuln scanning | Known-CVE deps shipping | planned |
 | 16 | Auth/session hardening tests | Admin endpoints reachable by non-founder; stale keys | partial ✅ — router-level admin gate on all 4 admin routers + live non-founder 112-endpoint sweep lock (test_iter358_admin_auth_hardening.py); revoked-key/expired-token/rate-limiter locks pending |
-| 17 | Retry & circuit breakers | Hammering dead providers, cascade failures | planned |
+| 17 | Retry & circuit breakers | Hammering dead providers, cascade failures | ✅ SHIPPED (Iter 360) — services/retry_guard.py central utility (backoff+jitter+per-dep breaker, 10 deps); migrated llm.py/loop_safety/repo_heal/web_skills; GET /admin/qa/guard17-breakers; DEPENDENCIES strip on Admin Overview; locks test_iter360 (17) |
 | 18 | Universal timeout budget | Infinite-wait outbound calls / hangs | ✅ SHIPPED (Iter 359) — scripts/timeout_audit.py (AST py + regex js) 179/179 sites covered; CI step + predeploy Lane 4; GET /admin/qa/guard18-timeout-audit; locks test_iter359 (11) |
 | 19 | Process auto-recovery | Crash loops hiding real bugs | planned |
 | 20 | Automated postmortem log | Incidents without history/patterns | planned (ships last) |

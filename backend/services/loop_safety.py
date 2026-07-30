@@ -80,13 +80,24 @@ async def github_request_with_retry(
     responds with 403 + x-ratelimit-remaining=0, we sleep until the
     `x-ratelimit-reset` epoch (capped at 30 s) and try once more. On
     a 5xx we exponential-backoff 2 s then 4 s."""
+    # Iter 360 · Guard 17 — GitHub breaker: fast-fail when OPEN, record
+    # 5xx/network outcomes (rate limits are NOT dependency failures).
+    from services.retry_guard import get_breaker, BreakerOpenError
+    br = get_breaker("github")
+    if not br.allow():
+        raise BreakerOpenError("github", br.retry_after_s())
     last_resp: Optional[httpx.Response] = None
     for attempt in range(max_retries + 1):
-        async with httpx.AsyncClient(timeout=timeout) as cx:
-            r = await cx.request(method, url, headers=headers,
-                                 json=json, params=params)
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as cx:
+                r = await cx.request(method, url, headers=headers,
+                                     json=json, params=params)
+        except (httpx.TimeoutException, httpx.NetworkError) as e:
+            br.record_failure(repr(e))
+            raise
         last_resp = r
         if r.status_code < 400:
+            br.record_success()
             return r
         # Rate limit handling.
         if r.status_code == 403 and r.headers.get("x-ratelimit-remaining") == "0":
@@ -118,7 +129,11 @@ async def github_request_with_retry(
             await asyncio.sleep(backoff)
             continue
         # Non-retryable.
+        if r.status_code >= 500:
+            br.record_failure(f"github_status_{r.status_code}")
         return r
+    if last_resp is not None and last_resp.status_code >= 500:
+        br.record_failure(f"github_status_{last_resp.status_code}")
     return last_resp  # type: ignore[return-value]
 
 

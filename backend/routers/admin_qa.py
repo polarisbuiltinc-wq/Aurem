@@ -380,6 +380,28 @@ async def qa_status(authorization: Optional[str] = Header(None)):
     }
 
 
+@router.get("/guard17-breakers")
+async def guard17_breakers(authorization: Optional[str] = Header(None)):
+    """Guard 17 — per-dependency circuit-breaker state, trip counts
+    (7d, from breaker_events) and recent transitions."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services.retry_guard import recent_transitions, snapshot_all, trip_counts_7d
+    trips_7d: dict = {}
+    db = get_db()
+    if db is not None:
+        trips_7d = await trip_counts_7d(db)
+    snap = snapshot_all()
+    return {
+        "guard": "G17",
+        "generated_at": time.time(),
+        "breakers": snap,
+        "open_deps": [d for d, s in snap.items() if s["state"] == "open"],
+        "trips_7d": trips_7d,
+        "recent_transitions": recent_transitions(30),
+    }
+
+
 @router.get("/guard18-timeout-audit")
 async def guard18_timeout_audit(authorization: Optional[str] = Header(None)):
     """Guard 18 — universal timeout budget. Runs the static audit

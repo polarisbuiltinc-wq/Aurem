@@ -693,6 +693,20 @@ async def _call_deepseek(messages: list, system: str = "",
     for fm in _free_fallback_models():
         candidates.append((fm, False))
 
+    # Iter 360 · Guard 17 — central breaker for the OpenRouter chain.
+    # When OPEN we skip the whole candidates walk (no hammering) and
+    # drop straight into the vendor-independent fallbacks below.
+    from services.retry_guard import get_breaker as _rg_breaker
+    _or_br = _rg_breaker("openrouter")
+    _or_attempted = _or_br.allow()
+    if not _or_attempted:
+        logger.warning(
+            "[G17] openrouter breaker OPEN (retry in ~%.0fs) — skipping "
+            "OpenRouter chain, going straight to fallbacks",
+            _or_br.retry_after_s(),
+        )
+        candidates = []
+
     last_exc: Exception | None = None
     data: dict | None = None
     served_by: str | None = None
@@ -804,6 +818,9 @@ async def _call_deepseek(messages: list, system: str = "",
             continue
 
     if data is None:
+        # Iter 360 · Guard 17 — whole OpenRouter chain exhausted.
+        if _or_attempted:
+            _or_br.record_failure(repr(last_exc))
         # All OpenRouter candidates exhausted — try the Groq emergency
         # net as the absolute final link. This is the vendor-
         # independent safety hop (different infra, different account).
@@ -846,6 +863,8 @@ async def _call_deepseek(messages: list, system: str = "",
     # Stash the served-by model in a logger context line; the data dict
     # itself is returned through legacy code paths so we don't change
     # the call contract — provenance is in the logs.
+    if _or_attempted:
+        _or_br.record_success()
     if served_by:
         logger.info("DeepSeek call served by model=%s", served_by)
         _set_last_provider("openrouter", served_by)

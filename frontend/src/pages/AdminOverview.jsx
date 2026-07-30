@@ -24,6 +24,7 @@ export default function AdminOverview() {
   const [funnel,  setFunnel]  = useState(null);       // iter 212m-3 — activation funnel
   const [alerts,  setAlerts]  = useState(null);       // iter 212m-17 — top-up alerts
   const [ghSync,  setGhSync]  = useState(null);       // iter 357 — Guard 8 GitHub sync
+  const [breakers, setBreakers] = useState(null);     // iter 360 — Guard 17 dependency breakers
   const [councilHealth, setCouncilHealth] = useState(null); // iter 212m-192 — Council A live status
   const [refreshingHealth, setRefreshingHealth] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -32,7 +33,7 @@ export default function AdminOverview() {
     const h = { Authorization: `Bearer ${getToken()}` };
     const HEALTH_URL = `${process.env.REACT_APP_BACKEND_URL}/api/health`;
     try {
-      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes] =
+      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes] =
         await Promise.allSettled([
           fetch(HEALTH_URL, { signal: AbortSignal.timeout(10000) }).then((r) => r.json()),
           api.get("/usage/public/stats"),
@@ -46,6 +47,7 @@ export default function AdminOverview() {
           api.get("/admin/alerts", { headers: h }),
           api.get("/admin/council/health", { headers: h }),  // Iter 212m-192
           api.get("/admin/github-sync", { headers: h }),     // Iter 357 — Guard 8
+          api.get("/admin/qa/guard17-breakers", { headers: h }), // Iter 360 — Guard 17
         ]);
       if (healthRes.status   === "fulfilled") setHealth(healthRes.value);
       if (statsRes.status    === "fulfilled") setStats(statsRes.value.data);
@@ -59,6 +61,7 @@ export default function AdminOverview() {
       if (alertsRes.status   === "fulfilled") setAlerts(alertsRes.value.data);
       if (councilHealthRes.status === "fulfilled") setCouncilHealth(councilHealthRes.value.data);
       if (ghSyncRes.status === "fulfilled") setGhSync(ghSyncRes.value.data);
+      if (breakersRes.status === "fulfilled") setBreakers(breakersRes.value.data);
     } catch { /* silent */ }
     finally { setLoading(false); }
   }, []);
@@ -115,6 +118,36 @@ export default function AdminOverview() {
 
   return (
     <div style={{ padding: "24px 20px", maxWidth: 900 }}>
+
+      {/* Iter 360 · Guard 17 — DEPENDENCIES strip: live circuit-breaker
+          state per outbound provider. Green=closed, red=open (blocked),
+          amber=half-open (probing recovery). */}
+      {breakers?.breakers && (
+        <div data-testid="dependency-breaker-strip" style={{
+          display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14,
+          padding: "8px 14px", marginBottom: 12,
+          background: "rgba(148, 163, 184, 0.05)",
+          border: "1px solid rgba(148, 163, 184, 0.15)",
+          borderRadius: 6, fontSize: 11,
+          fontFamily: "'JetBrains Mono', monospace", letterSpacing: 0.3,
+        }}>
+          <span style={{ color: "#64748b", fontWeight: 600 }}>DEPENDENCIES</span>
+          {Object.values(breakers.breakers).map((b) => (
+            <span key={b.dep} data-testid={`breaker-dot-${b.dep}`}
+              title={`${b.dep}: ${b.state}${b.last_error ? ` — ${b.last_error}` : ""} · trips(7d): ${breakers.trips_7d?.[b.dep] || 0}`}
+              style={{ display: "inline-flex", alignItems: "center", gap: 5,
+                       color: b.state === "open" ? "#f87171"
+                            : b.state === "half_open" ? "#fbbf24" : "#94a3b8" }}>
+              <span aria-hidden="true" style={{
+                width: 7, height: 7, borderRadius: "50%",
+                background: b.state === "open" ? "#ef4444"
+                          : b.state === "half_open" ? "#f59e0b" : "#22c55e",
+              }} />
+              {b.dep}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Iter 212m-192 — Council A degradation banner.
           Fires when LongCat (primary) is unreachable and traffic is

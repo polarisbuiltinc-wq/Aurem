@@ -97,18 +97,28 @@ async def web_search(ctx: dict, args: dict) -> dict:
         "Content-Type": "application/json",
     }
     try:
+        from services.retry_guard import get_breaker
+        _br = get_breaker("tavily")
+        if not _br.allow():
+            return {"ok": False, "error": "Web search temporarily unavailable "
+                    f"(tavily circuit open — retry in ~{_br.retry_after_s():.0f}s)"}
         async with httpx.AsyncClient(timeout=TAVILY_TIMEOUT) as c:
             r = await c.post(f"{TAVILY_BASE}/search", json=payload, headers=headers)
     except httpx.TimeoutException:
+        _br.record_failure("timeout")
         return {"ok": False, "error": "Tavily search timed out after 15s"}
     except httpx.RequestError as e:
+        _br.record_failure(repr(e))
         return {"ok": False, "error": f"Tavily search network error: {e}"}
 
     if r.status_code == 429:
         return {"ok": False, "error": "Tavily rate-limited (429)",
                 "retry_after": r.headers.get("retry-after")}
     if r.status_code >= 400:
+        if r.status_code >= 500:
+            _br.record_failure(f"tavily_status_{r.status_code}")
         return {"ok": False, "error": f"Tavily {r.status_code}: {r.text[:300]}"}
+    _br.record_success()
 
     data = r.json() or {}
     results = []
@@ -162,17 +172,27 @@ async def fetch_url(ctx: dict, args: dict) -> dict:
         "Content-Type": "application/json",
     }
     try:
+        from services.retry_guard import get_breaker
+        _br = get_breaker("tavily")
+        if not _br.allow():
+            return {"ok": False, "error": "URL fetch temporarily unavailable "
+                    f"(tavily circuit open — retry in ~{_br.retry_after_s():.0f}s)"}
         async with httpx.AsyncClient(timeout=TAVILY_TIMEOUT) as c:
             r = await c.post(f"{TAVILY_BASE}/extract", json=payload, headers=headers)
     except httpx.TimeoutException:
+        _br.record_failure("timeout")
         return {"ok": False, "error": "Tavily extract timed out after 15s"}
     except httpx.RequestError as e:
+        _br.record_failure(repr(e))
         return {"ok": False, "error": f"Tavily extract network error: {e}"}
 
     if r.status_code == 429:
         return {"ok": False, "error": "Tavily rate-limited (429)"}
     if r.status_code >= 400:
+        if r.status_code >= 500:
+            _br.record_failure(f"tavily_status_{r.status_code}")
         return {"ok": False, "error": f"Tavily {r.status_code}: {r.text[:300]}"}
+    _br.record_success()
 
     data = r.json() or {}
     out = []

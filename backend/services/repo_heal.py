@@ -139,20 +139,22 @@ async def _gh_get(client: httpx.AsyncClient, url: str, token: str) -> httpx.Resp
 async def _try_with_retries(
     fn, *, tries: tuple[float, ...] = _RETRY_BACKOFFS,
 ) -> tuple[bool, Optional[httpx.Response], Optional[str]]:
-    """Run `fn()` (returns httpx.Response) with exponential-backoff
-    retries on Timeout/NetworkError.  Returns (ok, response, error)."""
-    last_err = None
-    for i, backoff in enumerate((0.0, *tries)):
-        if backoff:
-            await asyncio.sleep(backoff)
-        try:
-            r = await fn()
-            return True, r, None
-        except (httpx.TimeoutException, httpx.NetworkError) as e:
-            last_err = f"{type(e).__name__}: {e}"
-            logger.debug("repo_heal retry %d/%d failed: %s",
-                         i + 1, len(tries) + 1, last_err)
-    return False, None, last_err
+    """Run `fn()` (returns httpx.Response) with retries on Timeout/
+    NetworkError. Iter 360 · Guard 17 — migrated to the central
+    retry_guard utility (github breaker + jittered backoff)."""
+    from services.retry_guard import BreakerOpenError, call_with_retry
+    try:
+        r = await call_with_retry(
+            "github", fn,
+            max_retries=len(tries),
+            base_delay=tries[0] if tries else 0.5,
+            retry_on=(httpx.TimeoutException, httpx.NetworkError),
+        )
+        return True, r, None
+    except BreakerOpenError as e:
+        return False, None, str(e)
+    except (httpx.TimeoutException, httpx.NetworkError) as e:
+        return False, None, f"{type(e).__name__}: {e}"
 
 
 async def heal_project(*, db, user_id: str, project_id: str,
