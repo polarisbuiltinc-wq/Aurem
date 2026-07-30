@@ -98,7 +98,12 @@ def test_admin_users_handles_empty_result(client):
 
 
 def test_healthz_no_db_dependency(client):
-    """K8s probe path — must answer 200 even if DB is wonky."""
+    """K8s probe path — must answer 200 even if DB is wonky.
+    Iter 362 · Guard 19 — now also surfaces the app heartbeat, but the
+    probe must still never touch the DB."""
     r = client.get("/api/healthz")
     assert r.status_code == 200
-    assert r.json() == {"ok": True}
+    body = r.json()
+    assert body["ok"] is True
+    assert "last_cron_heartbeat" in body
+    assert "heartbeat_age_s" in body

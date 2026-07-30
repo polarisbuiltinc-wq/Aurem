@@ -585,3 +585,10 @@ Language: **Hinglish** — main agent responds in Hinglish.
 - WIRED: ci.yml backend step + predeploy_gate.sh Lane 5 (build-fail on finding). Founder-gated GET /admin/qa/guard21-security-scan (live).
 - VERIFIED: locks 23/23; FULL blocking lane 3793 passed / 0 failed / 62 skipped; vitest 236; live curl guard21 endpoint pass:true (0 misconfig, 0 unpinned), unauth 401. Guard 18 audit 179/179 still green.
 - NEXT (charter wave 3): G19 process auto-recovery → G20 postmortem log (last).
+
+## Iter 362 · 2026-07-30 — GUARD 19 SHIPPED: Process auto-recovery (wave 3)
+- OS half: supervisor autorestart=true (pod conf READ-ONLY, verified by lock). App half: services/process_recovery.py — record_boot() on lifespan startup → process_boots; restart-loop detection (>=3 boots in 600s, env RECOVERY_LOOP_THRESHOLD/WINDOW_S) → CRITICAL row in EXISTING topup_alerts banner (integration_id=process_recovery, deduped to 1 active) + process_loop_trips row + ERROR log; resolve_if_stable() auto-resolves once boots settle (runs in 60s housekeeping tick, also bumps heartbeat).
+- /api/healthz now returns last_cron_heartbeat + heartbeat_age_s (G9 external-monitor hook). Fixed test_iter120 healthz-exact-dict assertion. Founder-gated GET /admin/qa/guard19-recovery (restarts_7d, boots_in_window, last_boot, loop_trips_7d, loop_active, heartbeat). All Mongo writes best-effort so recovery telemetry can't crash the boot it records.
+- LIVE PROOF (preview): 3 dev hot-reloads tripped the loop detector + raised the critical alert exactly as designed (log + endpoint loop_active:true, loop_trips_7d:1); auto-resolves after 10min stable. Prod uvicorn has NO --reload so boots = real restarts only.
+- VERIFIED: locks test_iter362_guard19_recovery.py 10/10; FULL blocking lane 3803 passed / 0 failed (after healthz test fix); vitest 236; live healthz + guard19 endpoint confirmed.
+- WAVE 3 STATUS: 18✅ 17✅ 21✅ 19✅. NEXT + LAST: G20 postmortem/incident log (auto-creates entry from any RED/critical alert across guards 1-19; /admin/qa Incident-log sub-tab; MTTR).

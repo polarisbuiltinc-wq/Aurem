@@ -365,9 +365,33 @@ async def lifespan(app: FastAPI):
                     logger.warning("sse_replay_buffer eviction failed: %r", _e)
             except _asyncio.CancelledError:
                 break
+            # Iter 362 · Guard 19 — heartbeat bump + auto-resolve a
+            # restart-loop alert once boots settle. Piggybacks the 60s
+            # housekeeping tick (no extra task).
+            try:
+                from services.process_recovery import beat as _g19_beat, \
+                    resolve_if_stable as _g19_resolve
+                _g19_beat()
+                if not _first_run:
+                    await _g19_resolve(app.state.db)
+            except _asyncio.CancelledError:
+                raise
+            except Exception as _e:                          # noqa: BLE001
+                logger.warning("G19 heartbeat/resolve failed: %r", _e)
             _first_run = False
             await _asyncio.sleep(60)
     app.state.loop_housekeeping_task = _asyncio.create_task(_loop_housekeeping())
+
+    # Iter 362 · Guard 19 — record this boot + detect restart loops.
+    try:
+        from services.process_recovery import record_boot as _g19_record
+        _g19_boot = await _g19_record(app.state.db)
+        if _g19_boot.get("loop_detected"):
+            logger.error("[G19] boot recorded INSIDE a restart loop: %s", _g19_boot)
+        else:
+            logger.info("[G19] boot recorded: %s", _g19_boot)
+    except Exception as _e:                                  # noqa: BLE001
+        logger.warning("[G19] record_boot failed: %r", _e)
 
     # Iter 212m-115 safety — Create the unique index for the
     # concurrent-loop lock collection so we can never have two active
@@ -1654,7 +1678,12 @@ async def health():
 # pod. Production probes should be configured to hit /api/healthz.
 @app.get("/api/healthz")
 async def healthz():
-    return {"ok": True}
+    # Iter 362 · Guard 19 — expose the app heartbeat so an external
+    # monitor (G9) can distinguish "process up but event loop wedged".
+    from services.process_recovery import heartbeat_age_s, last_heartbeat_iso
+    return {"ok": True,
+            "last_cron_heartbeat": last_heartbeat_iso(),
+            "heartbeat_age_s": heartbeat_age_s()}
 
 
 # Iter 212m-147 — ORA stack health probe. Makes a SHORT real LLM call

@@ -39,7 +39,24 @@ Wave 3 (17-21): 18 → 17 → 21 → 19 → 20
   (require_admin_dep) + live non-founder 112-endpoint 403 sweep lock
   (Iter 358b, deployed with SEO/chip). Remaining: revoked-key/
   expired-token/auth-endpoint-rate-limiter tests.
-- Guards 1, 3-7, 9-15, 19, 20: NOT STARTED.
+- Guards 1, 3-7, 9-15, 20: NOT STARTED.
+- Guard 19: ✅ SHIPPED (Iter 362, 2026-07-30): OS half = supervisor
+  autorestart=true (pod conf READ-ONLY, verified by lock). App half =
+  services/process_recovery.py: record_boot() on lifespan startup →
+  process_boots collection; restart-loop detection (>=3 boots in 600s,
+  env RECOVERY_LOOP_THRESHOLD/WINDOW_S) → CRITICAL row in EXISTING
+  topup_alerts banner (integration_id=process_recovery, deduped to 1
+  active) + process_loop_trips row + ERROR log; resolve_if_stable()
+  auto-resolves once boots settle (runs in the 60s housekeeping tick,
+  which also bumps the heartbeat). /api/healthz now returns
+  last_cron_heartbeat + heartbeat_age_s (G9 external-monitor hook).
+  Endpoint GET /admin/qa/guard19-recovery (founder-gated): restarts_7d,
+  boots_in_window, last_boot, loop_trips_7d, loop_active, heartbeat.
+  All Mongo writes best-effort (recovery telemetry can't crash boot).
+  LIVE PROOF (preview): 3 dev hot-reloads tripped the loop detector +
+  raised the critical alert as designed; auto-resolves after 10min
+  stable. NOTE: prod uvicorn has no --reload so boots = real restarts.
+  Locks: test_iter362_guard19_recovery.py (10). QA row ships last.
 - Guard 21: ✅ SHIPPED (Iter 361, 2026-07-30): scripts/g21_security_scan.py
   — supply-chain (requirements.txt all pinned == : 0 unpinned; yarn.lock
   committed) + misconfig (no FastAPI/uvicorn debug=True; no default-cred

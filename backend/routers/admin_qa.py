@@ -429,3 +429,13 @@ async def guard21_security_scan(authorization: Optional[str] = Header(None)):
     result = run_scan()
     return {"guard": "G21", "generated_at": time.time(),
             "took_ms": int((time.time() - t0) * 1000), **result}
+
+
+@router.get("/guard19-recovery")
+async def guard19_recovery(authorization: Optional[str] = Header(None)):
+    """Guard 19 — process auto-recovery status: restarts (7d), last
+    boot reason, loop trips, heartbeat age, current window boots."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services.process_recovery import recovery_status
+    return await recovery_status(get_db())
