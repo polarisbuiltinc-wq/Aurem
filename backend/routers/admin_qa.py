@@ -439,3 +439,20 @@ async def guard19_recovery(authorization: Optional[str] = Header(None)):
     from cto_services.db import get_db
     from services.process_recovery import recovery_status
     return await recovery_status(get_db())
+
+
+@router.get("/guard20-incidents")
+async def guard20_incidents(status: str = "all",
+                            authorization: Optional[str] = Header(None)):
+    """Guard 20 — automated postmortem/incident log. Chronological,
+    filterable (all/open/resolved), with open count + MTTR (30d)."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services.incident_log import incident_stats, list_incidents
+    db = get_db()
+    return {
+        "guard": "G20",
+        "generated_at": time.time(),
+        "stats": await incident_stats(db),
+        "incidents": await list_incidents(db, status=status, limit=100),
+    }

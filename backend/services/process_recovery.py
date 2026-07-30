@@ -112,6 +112,21 @@ async def _trip_loop(db, boots: int, sha: str) -> None:
         "hard crash. Investigate before it burns the pod.",
         boots, LOOP_WINDOW_S, sha)
 
+    # Iter 363 · Guard 20 — auto-create a postmortem incident (its own
+    # dedup). Done BEFORE the banner-alert dedup below so a repeated
+    # trip (banner already active) still guarantees the incident exists.
+    try:
+        from services.incident_log import open_incident
+        await open_incident(
+            db, guard="G19", source_key="process_recovery",
+            title=f"Restart loop: {boots} boots in {LOOP_WINDOW_S // 60}min",
+            detail=(f"Backend restarted {boots} times inside {LOOP_WINDOW_S}s "
+                    f"(sha={sha}). Supervisor keeps restarting a crashing "
+                    f"process — hard boot failure masked."),
+            follow_up="Check backend.err.log; fix boot crash; confirm stable.")
+    except Exception as e:                                    # noqa: BLE001
+        logger.warning("[G20] incident hook (loop) failure: %r", e)
+
     # Surface in the EXISTING critical-alerts banner. Dedup: skip if an
     # active loop alert already exists (auto-resolves via QA/cron only
     # when boots settle — see resolve_if_stable).
@@ -165,6 +180,17 @@ async def resolve_if_stable(db) -> bool:
                 {"integration_id": "process_recovery", "status": "active"},
                 {"$set": {"status": "resolved", "resolved_at": time.time(),
                           "resolved_by": "auto_recovery_stable"}})
+            if res.modified_count:
+                try:
+                    from services.incident_log import resolve_incident
+                    await resolve_incident(
+                        db, source_key="process_recovery",
+                        resolution="Boots settled below loop threshold; "
+                                   "process stable again.",
+                        root_cause="Transient restart burst (deploy/hot-reload "
+                                   "or recovered crash).")
+                except Exception:
+                    pass
             return bool(res.modified_count)
     except Exception as e:                                    # noqa: BLE001
         logger.warning("[G19] resolve_if_stable failure: %r", e)

@@ -308,6 +308,9 @@ export default function AdminQADashboard() {
 
       {/* Iter 334 — Auto-QA agent latest report */}
       <LatestAutoQASection />
+
+      {/* Iter 363 · Guard 20 — automated postmortem / incident log */}
+      <IncidentLogSection />
     </div>
   );
 }
@@ -352,6 +355,108 @@ function LatestAutoQASection() {
             {report.error || "No report yet — auto-qa-agent job has not run"}
           </div>
         )}
+      </Card>
+    </div>
+  );
+}
+
+
+// Iter 363 · Guard 20 — Incident log: every RED/critical alert from any
+// guard auto-creates a postmortem entry. Chronological, filter open vs
+// resolved, shows MTTR (30d).
+function IncidentLogSection() {
+  const [data,   setData]   = useState(null);
+  const [status, setStatus] = useState("all");
+  useEffect(() => {
+    const tok = localStorage.getItem("aurem_admin_token")
+      || localStorage.getItem("aurem_token");
+    axios.get(`${API}/api/aurem-dev/admin/qa/guard20-incidents?status=${status}`,
+      { headers: { Authorization: `Bearer ${tok || ""}` }, timeout: 20000 })
+      .then((r) => setData(r.data))
+      .catch((e) => setData({ error: e?.response?.data?.detail || e.message }));
+  }, [status]);
+
+  const fmtMttr = (s) => {
+    if (s == null) return "—";
+    if (s < 60) return `${Math.round(s)}s`;
+    if (s < 3600) return `${Math.round(s / 60)}m`;
+    return `${(s / 3600).toFixed(1)}h`;
+  };
+
+  return (
+    <div style={{ maxWidth: 1100, marginTop: 20 }}>
+      <Card testid="admin-qa-incident-log"
+            title="Incident Log (Guard 20)"
+            sub={data?.stats
+              ? `${data.stats.open} open · ${data.stats.resolved_30d} resolved (30d) · MTTR ${fmtMttr(data.stats.mttr_30d_s)}`
+              : "auto-created from any guard's RED/critical alert"}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {["all", "open", "resolved"].map((s) => (
+            <button key={s} data-testid={`incident-filter-${s}`}
+              onClick={() => setStatus(s)}
+              style={{ padding: "4px 12px", fontSize: 11, borderRadius: 5,
+                       cursor: "pointer", textTransform: "capitalize",
+                       fontFamily: "'JetBrains Mono', monospace",
+                       border: "1px solid",
+                       borderColor: status === s ? "#f59e0b" : "rgba(148,163,184,0.25)",
+                       background: status === s ? "rgba(245,158,11,0.12)" : "transparent",
+                       color: status === s ? "#fbbf24" : "#94a3b8" }}>
+              {s}
+            </button>
+          ))}
+        </div>
+        {data?.error && (
+          <div data-testid="incident-log-error" style={{ fontSize: 12, color: "#f87171" }}>
+            {data.error}
+          </div>
+        )}
+        {data && !data.error && (data.incidents || []).length === 0 && (
+          <div data-testid="incident-log-empty" style={{ fontSize: 12, color: "#888" }}>
+            No incidents{status !== "all" ? ` (${status})` : ""} — nothing has gone RED.
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {(data?.incidents || []).map((inc) => (
+            <div key={inc.incident_id} data-testid={`incident-row-${inc.incident_id}`}
+              style={{ padding: "10px 12px", borderRadius: 6,
+                       border: "1px solid rgba(148,163,184,0.15)",
+                       background: "rgba(148,163,184,0.04)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px",
+                               borderRadius: 4, fontFamily: "'JetBrains Mono', monospace",
+                               color: inc.status === "open" ? "#f87171" : "#4ade80",
+                               background: inc.status === "open"
+                                 ? "rgba(239,68,68,0.12)" : "rgba(34,197,94,0.12)" }}>
+                  {inc.status.toUpperCase()}
+                </span>
+                <span style={{ fontSize: 10, color: "#64748b",
+                               fontFamily: "'JetBrains Mono', monospace" }}>
+                  {inc.guard}
+                </span>
+                <span style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 500 }}>
+                  {inc.title}
+                </span>
+                <span style={{ marginLeft: "auto", fontSize: 10, color: "#64748b" }}>
+                  {new Date(inc.detected_at * 1000).toLocaleString()}
+                </span>
+              </div>
+              <div style={{ fontSize: 11.5, color: "#94a3b8", lineHeight: 1.5 }}>
+                {inc.detail}
+              </div>
+              {inc.status === "resolved" && (
+                <div style={{ fontSize: 11, color: "#64748b", marginTop: 5 }}>
+                  ✔ {inc.resolution} · MTTR {fmtMttr(inc.mttr_s)}
+                  {inc.root_cause ? ` · cause: ${inc.root_cause}` : ""}
+                </div>
+              )}
+              {inc.follow_up && inc.status === "open" && (
+                <div style={{ fontSize: 11, color: "#fbbf24", marginTop: 5 }}>
+                  → {inc.follow_up}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </Card>
     </div>
   );

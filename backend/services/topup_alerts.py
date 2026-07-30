@@ -187,6 +187,27 @@ async def upsert_alerts_from_snapshot(db, snap: dict) -> list[dict]:
         except Exception as e:
             logger.warning(f"topup_alerts bulk_write: {e!r}")
             new_alerts = []   # don't claim new alerts we failed to persist
+
+    # Iter 363 · Guard 20 — funnel every critical integration alert into
+    # the postmortem incident log, and auto-resolve linked incidents for
+    # integrations that recovered this cycle.
+    try:
+        from services.incident_log import open_incident, resolve_incident
+        healthy_ids = {r.get("id") for r, sev, _ in classified if not sev}
+        for hid in healthy_ids:
+            await resolve_incident(
+                db, source_key=f"integration:{hid}",
+                resolution="Integration probe healthy again (auto-resolved).")
+        for a in new_alerts:
+            if a.get("severity") == "critical":
+                await open_incident(
+                    db, guard="integration_health",
+                    source_key=f"integration:{a.get('integration_id')}",
+                    title=f"{a.get('integration_name')}: {a.get('summary')}"[:180],
+                    detail=a.get("detail", ""),
+                    follow_up=a.get("fix_hint", ""))
+    except Exception as e:                                    # noqa: BLE001
+        logger.warning("[G20] integration incident hook failure: %r", e)
     return new_alerts
 
 

@@ -39,7 +39,28 @@ Wave 3 (17-21): 18 → 17 → 21 → 19 → 20
   (require_admin_dep) + live non-founder 112-endpoint 403 sweep lock
   (Iter 358b, deployed with SEO/chip). Remaining: revoked-key/
   expired-token/auth-endpoint-rate-limiter tests.
-- Guards 1, 3-7, 9-15, 20: NOT STARTED.
+- Guards 1, 3-7, 9-15: NOT STARTED. **WAVE 3 COMPLETE (17,18,19,20,21).**
+- Guard 20: ✅ SHIPPED (Iter 363, 2026-07-30, ships LAST per charter):
+  services/incident_log.py = central postmortem funnel. open_incident
+  (db, guard, title, detail, source_key, follow_up) — deduped by
+  (source_key, status=open), records detected_at + guard linkage;
+  resolve_incident(db, source_key, resolution, root_cause) — fills
+  resolution + computes MTTR on clear; list_incidents (all/open/
+  resolved); incident_stats (open, resolved_30d, mttr_30d mean).
+  HOOKS: process_recovery._trip_loop → open_incident(G19,
+  source_key=process_recovery) placed BEFORE the banner-dedup early
+  return so repeat trips still guarantee the incident; resolve_if_stable
+  → resolve_incident. topup_alerts.upsert_alerts_from_snapshot → NEW
+  critical alert opens incident(guard=integration_health,
+  source_key=integration:<id>), recovered integration resolves it. UI:
+  /admin/qa "Incident Log (Guard 20)" section (AdminQADashboard
+  IncidentLogSection — filter all/open/resolved chips, per-row
+  OPEN/RESOLVED badge + guard + MTTR + root cause + follow-up,
+  data-testid admin-qa-incident-log / incident-row-<id>). Endpoint GET
+  /admin/qa/guard20-incidents (founder-gated). LIVE PROOF: forced 3
+  backend restarts → G19 loop trip → incident inc_b0ca861b76 auto-opened
+  (guard=G19, "Restart loop: 16 boots in 10min"), rendered in UI +
+  endpoint stats open:1. Locks: test_iter363_guard20_incident_log.py (8).
 - Guard 19: ✅ SHIPPED (Iter 362, 2026-07-30): OS half = supervisor
   autorestart=true (pod conf READ-ONLY, verified by lock). App half =
   services/process_recovery.py: record_boot() on lifespan startup →

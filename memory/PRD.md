@@ -592,3 +592,11 @@ Language: **Hinglish** — main agent responds in Hinglish.
 - LIVE PROOF (preview): 3 dev hot-reloads tripped the loop detector + raised the critical alert exactly as designed (log + endpoint loop_active:true, loop_trips_7d:1); auto-resolves after 10min stable. Prod uvicorn has NO --reload so boots = real restarts only.
 - VERIFIED: locks test_iter362_guard19_recovery.py 10/10; FULL blocking lane 3803 passed / 0 failed (after healthz test fix); vitest 236; live healthz + guard19 endpoint confirmed.
 - WAVE 3 STATUS: 18✅ 17✅ 21✅ 19✅. NEXT + LAST: G20 postmortem/incident log (auto-creates entry from any RED/critical alert across guards 1-19; /admin/qa Incident-log sub-tab; MTTR).
+
+## Iter 363 · 2026-07-30 — GUARD 20 SHIPPED: Automated postmortem/incident log — WAVE 3 COMPLETE
+- NEW services/incident_log.py = central postmortem funnel: open_incident (deduped by source_key+open, records guard linkage + detected_at), resolve_incident (fills resolution + MTTR on clear), list_incidents (all/open/resolved), incident_stats (open, resolved_30d, mttr_30d mean).
+- HOOKS: process_recovery._trip_loop → open_incident(G19, source_key=process_recovery) placed BEFORE banner-dedup early-return (so repeat trips still guarantee incident) + resolve_if_stable → resolve_incident. topup_alerts.upsert_alerts_from_snapshot → new critical opens incident(integration_health, integration:<id>), recovered integration resolves it.
+- UI: /admin/qa "Incident Log (Guard 20)" section (AdminQADashboard IncidentLogSection) — filter chips all/open/resolved, per-row OPEN/RESOLVED badge + guard + MTTR + root cause + follow-up. data-testid admin-qa-incident-log / incident-row-<id> / incident-filter-*. Founder-gated GET /admin/qa/guard20-incidents.
+- LIVE PROOF: forced 3 backend restarts → G19 loop trip → incident inc_b0ca861b76 auto-opened (guard=G19, "Restart loop: 16 boots in 10min"), rendered in UI (screenshot) + endpoint stats open:1.
+- VERIFIED: locks test_iter363 8/8; FULL blocking lane 3810 passed / 1 known LLM-SSE flake (rerun-green); vitest 236.
+- **WAVE 3 (17,18,19,20,21) COMPLETE.** Remaining guards: 1, 3-7, 9-16 (partial), 15. Next per founder priority TBD.

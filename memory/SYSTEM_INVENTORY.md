@@ -663,3 +663,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 | `routers/admin_public.py` | `/admin` | 1 | auto-detected new router (verify) (Iter 0, 2026-07-30T02:29:44.632700Z) | <!-- inv:router:routers/admin_public.py -->
 - `services/llm_circuit_breaker.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T04:24:03.331626Z] <!-- inv:service:services/llm_circuit_breaker.py -->
 - `services/retry_guard.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T04:24:03.331649Z] <!-- inv:service:services/retry_guard.py -->
+- `services/process_recovery.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T05:12:03.767054Z] <!-- inv:service:services/process_recovery.py -->
