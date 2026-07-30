@@ -1,0 +1,175 @@
+# REGRESSION GUARDS CHARTER (founder-mandated, 2026-06-30)
+
+**ARCHITECTURE RULE**: Sab guards EXISTING QA system ke andar integrate honge —
+pre-deploy gate, /admin/qa page, qa_matrix, auto-qa-agent. Koi naya parallel
+"guards" system NAHI. QA Health = single source of truth.
+- Har guard = ek QA check registered in existing QA framework.
+- /admin/qa page pe naya section: "REGRESSION GUARDS" — har guard ek row.
+- Row: guard name · GREEN/RED/STALE · last run · next expected · one-line last
+  result · click-through to run history.
+- STALE = expected interval ke 2x tak koi run nahi. RED/STALE → existing
+  critical-alerts banner on Overview.
+- "GUARDS: X/N green" summary next to TEST COUNTS strip.
+- Data from real backing collections (synthetic_checks, reconciliation log,
+  integrity log, CI API). Dashboard READS, never fabricates.
+- Lock tests: no-runs-in-2x-interval → STALE; failing-last-run → RED.
+- No mocks, no TODOs, E2E tested, raw proofs after each deploy.
+
+## SHIP ORDER (combined)
+Wave 1: Guard 2 (DONE 2026-06-30) → 4 → 3 → 1,5,6,7 → 8 → QA page integration last
+Wave 2 (9-16): 13 → 10 → 9 → 14 → 16 → 11 → 12 → 15
+Wave 3 (17-21): 18 → 17 → 21 → 19 → 20
+
+## STATUS
+- Guard 2: ✅ SHIPPED (Iter 356): /usage/public/stats real_developers +
+  commits_shipped (test-account excluded via services/test_accounts.py),
+  Landing renders live-only (zero stats hidden), grep-lock in
+  tests/test_iter356_nav_dedup_marketing.py. QA page row PENDING (ships last).
+- Guards 1, 3-21: NOT STARTED.
+
+## GUARD SPECS
+
+### G1 — Route smoke sweep
+Playwright authenticated sweep of EVERY route (/admin/*, /dashboard, /settings
+all tabs, /integrations, /projects, /deploy, /domain, /tokens, /analytics,
+/automations, /wrapped, /wall, landing, /signup, /login). Fail per page:
+non-200, "Cloudflare could not parse"/"Invalid Date"/"NaN"/"undefined"/raw
+stack trace in text, or empty main content. Runs: pre-deploy gate + prod cron
+30min. Results → synthetic_checks collection → QA row.
+
+### G2 — Marketing truth gate ✅
+Landing stats ONLY from /api public stats (real DB, test accounts excluded).
+Lock: grep /\d{3,}\+/ near users/commits/developers in public pages → fail.
+QA row: last grep-lock result + stats endpoint freshness.
+
+### G3 — Scope-drift hard block
+loop_integrity_guard: extras beyond frozen set = write BLOCKED + loop failed
+(not just log). PROTECTED_PATHS (routers/admin*, payments.py, auth.py, mcp.py,
+vault*, stripe_client.py, .github/workflows/*): loop writes only when task spec
+explicitly names file AND trust >= L2 manual ship gate. Attempts logged.
+Locks: out-of-scope reject; unnamed protected-path reject. QA row: blocked
+writes this week + last attempt log.
+
+### G4 — Rendered-page secret scanner
+In G1 sweep + CI step: rendered HTML scan for sk-aurem-[A-Za-z0-9_-]{20,},
+ghp_...{20,}, eyJ JWT — outside masked contexts. Full secret = fail/alert.
+QA row: last scan pages count + findings.
+
+### G5 — Data invariant tests
+Financials: net_profit == mrr - total_burn exact; USD/CAD sign consistency;
+no NaN/Invalid. Plans: exactly ONE "Current" tier == dev_users.tier. Date
+helpers unit-tested vs dict/null/malformed. Runs in pre-deploy gate; QA page
+"invariants" sub-count.
+
+### G6 — DB dedup constraints
+Chat sessions true dup key → MongoDB unique index → one-time cleanup migration
+(report count) → graceful DuplicateKeyError. Same for duplicate
+integration-alert rows (Stripe/Tavily). QA row: index present + dup count == 0.
+NOTE: prod-e2e-* session debris already fixed (Iter 356) — filter + teardown +
+cleanup endpoint POST /admin/qa/cleanup-e2e-sessions.
+
+### G7 — Payment reconciliation cron
+Hourly Stripe API vs local payments diff. Local pending >24h OR
+Stripe-paid-missing-locally → critical alert + reconciliation log. Lock:
+mocked stuck-pending fires alert. First run: classify existing 22 pendings.
+QA row: last run, stuck count, reconciled count.
+
+### G8 — External CI (GitHub Actions)
+ci.yml push to main → pytest + vitest + G4 scan + G5 invariants. Founder gives
+GITHUB_ACTIONS_TOKEN + GITHUB_REPO later — wire QA Health "CI STATUS" panel.
+workflows/ dir in G3 PROTECTED_PATHS.
+
+### G9 — External uptime monitor (dead man's switch)
+UptimeRobot/BetterStack free tier pings /api/healthz 1-5min FROM OUTSIDE.
+Founder banayega account — agent deta hai setup steps + exact config.
+/api/healthz response mein last-cron-heartbeat field add karo. QA row:
+external monitor last-seen heartbeat, STALE if >10min.
+
+### G10 — Founder alert channel (email via Resend)
+Har CRITICAL alert (banner + guards RED/STALE) → founder email via Resend.
+Dedup: same alert max 1 email/6h. Daily digest option. Lock: forced critical
+alert → email send call fires. QA row: last alert-email + delivery status.
+PROOF: real received email screenshot (founder inbox).
+
+### G11 — DB backup + restore verification
+Daily MongoDB backup (Atlas steps if managed, ya mongodump→object storage).
+WEEKLY automated restore-test into throwaway DB: collection counts + sample
+integrity assert. Restore-test fail = RED. QA row: last backup time, size,
+last restore-test result. PROOF: restore-test output with counts.
+
+### G12 — One-click rollback
+Admin founder-gated "Rollback to previous build": previous known-good SHA se
+revert deploy trigger (deploy_logger events se SHA). Test: preview rollback
+execute — build hash flip proof. QA row: last rollback test date + current vs
+previous SHA.
+
+### G13 — LLM cost circuit breaker
+Hourly + daily spend caps (env: e.g. $2/hr, $10/day all providers). Cap hit →
+new LLM calls blocked with clear user message + founder alert (G10). Loop
+level: single loop > $X (default $0.50) → auto-kill + log. Lock: mocked
+overspend → blocked + alert. QA row: current hour/day spend vs caps, live.
+PROOF: blocked-call log with mocked overspend.
+
+### G14 — Signup & free-tier abuse protection
+Disposable-email domain blocklist (maintained package, not hardcoded). Per-IP
+signup limit (3/day). Free-tier task rate limit per account + per IP.
+Violations logged. Locks: disposable rejected; 4th same-IP signup rejected;
+free burst throttled. QA row: blocked signups (7d) + throttle events.
+
+### G15 — Dependency vulnerability scanning
+CI (G8 workflow): pip-audit + npm audit --audit-level=high. HIGH/CRITICAL = CI
+fail (allowlist with expiry dates — permanent ignores banned). QA row: last
+scan + open high/critical count (must be 0).
+
+### G16 — Auth & session hardening tests
+Automated: (a) revoked sk-aurem key rejects on next request, (b) expired
+session token rejects, (c) EVERY /admin/* endpoint 403 for non-founder
+SERVER-SIDE (auto-enumerate routes from router), (d) rate limiter fires on
+auth endpoints. QA row: last run + endpoints covered. PROOF: full endpoint
+enumeration report.
+
+### G17 — Retry & cascade protection
+Central retry utility (all outbound: OpenRouter/LLM, Stripe, GitHub, Tavily,
+Firecrawl, Vercel MCP): exponential backoff + jitter, max retries, circuit
+breaker per dependency (open after N consecutive fails, half-open probe after
+cooldown). No caller retries outside this utility — audit + migrate existing
+direct-retry code. Lock: mocked failing dep → breaker opens, stops hammering,
+half-opens on schedule. QA row: per-dependency breaker state + trip count (7d).
+PROOF: breaker-state transition log from forced-failure test.
+
+### G18 — Universal timeout budget
+Every outbound network call has explicit timeout (no infinite waits). Audit +
+fix missing. On timeout: graceful degraded response (cached/stale + "degraded"
+flag, or clear "temporarily unavailable" — never hang/raw 504). Lock: static
+grep/analysis in CI flags fetch/axios/httpx without timeout → build fail.
+QA row: calls covered vs total outbound found. PROOF: CI timeout-audit output.
+
+### G19 — Process-level auto-recovery (always active)
+Supervisor auto-restart on crash/OOM (check Emergent platform capability).
+/api/healthz gates traffic. Restart-loop detection: 3+ restarts in 10min →
+STOP auto-restarting + founder alert (G10). Lock: forced crash → restart
+confirmed + loop threshold trips alert. QA row: restarts (7d), last reason,
+loop trips. PROOF: forced-crash-to-restart log + loop-trip proof.
+
+### G20 — Automated postmortem log (always active, ships LAST in wave 3)
+Every RED/critical alert from ANY guard (1-19) auto-creates postmortem entry:
+what broke, when detected, which guard caught, root cause (filled on resolve),
+resolution, follow-up. New /admin/qa sub-tab "Incident log" — chronological,
+filterable, open vs resolved. Lock: forced alert → entry auto-created with
+guard linkage. QA row/tab: open incidents, MTTR (30d). PROOF: screenshot of
+Incident log with real auto-created entry.
+
+### G21 — Broader OWASP/CWE coverage
+Injection fuzz suite: SQL/XSS/command-injection payloads against every input
+field/API param, assert safe handling. Misconfiguration check in CI: no
+unauthed debug/admin routes, no default creds, no stack-trace leaks in prod
+mode. Supply-chain: lockfiles committed + verified in CI, no unpinned deps.
+Locks: bad payload rejected; missing-auth route fails scan; unpinned dep fails
+CI. QA row: fuzz pass rate, misconfig findings, unpinned deps (must be 0).
+PROOF: fuzz report + misconfig scan output.
+
+## FOUNDER-SIDE ACTIONS NEEDED (batao exactly kab)
+- G9: UptimeRobot account creation (agent gives config)
+- G13: spend-cap env values confirm
+- G11: Atlas backup settings (agar dashboard access chahiye)
+- G8: GITHUB_ACTIONS_TOKEN + GITHUB_REPO env

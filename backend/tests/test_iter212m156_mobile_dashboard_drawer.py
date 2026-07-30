@@ -15,7 +15,13 @@ This iter adds a touch-friendly drawer:
 
 Tests below pin the contract so the mobile drawer can't silently
 regress.
+
+Iter 356 UPDATE — the hamburger/drawer pattern was replaced by the
+unified RailShell (rail visible on every viewport, flyout panels for
+sections). Tests that pinned the old drawer now pin the NEW contract;
+leftover drawer state in Dashboard.jsx awaits Phase 4 cleanup.
 """
+import re
 from pathlib import Path
 
 _FRONTEND = Path(__file__).resolve().parent.parent.parent / "frontend" / "src"
@@ -31,27 +37,30 @@ def test_dashboard_has_mobile_matchmedia_breakpoint():
 
 
 def test_dashboard_has_hamburger_button_with_testid():
+    """Iter 356 — the hamburger/drawer was REPLACED by the unified
+    RailShell (56px rail always visible on every viewport). The old
+    hamburger must NOT come back."""
     src = (_FRONTEND / "pages" / "Dashboard.jsx").read_text()
-    assert 'data-testid="mobile-sidebar-toggle"' in src
-    # Hamburger fires the drawer open.
-    assert "setMobileSidebarOpen(true)" in src
+    assert 'data-testid="mobile-sidebar-toggle"' not in src
+    assert "<RailShell" in src
 
 
 def test_dashboard_has_backdrop_with_testid_and_tap_to_close():
+    """Iter 356 — backdrop overlay replaced by the RailShell flyout
+    (closes on outside click / Escape / route change)."""
     src = (_FRONTEND / "pages" / "Dashboard.jsx").read_text()
-    assert 'data-testid="mobile-sidebar-backdrop"' in src
-    # Tapping the backdrop closes the drawer via the memoised cb.
-    assert "closeMobileSidebar" in src
+    assert 'data-testid="mobile-sidebar-backdrop"' not in src
+    rail = (_FRONTEND / "components" / "nav" / "RailShell.jsx").read_text()
+    assert 'data-testid="rail-flyout"' in rail
+    assert "Escape" in rail
 
 
 def test_dashboard_sidebar_wrap_has_mobile_branch():
+    """Iter 356 — no mobile branch needed: the rail renders identically
+    on all viewports via RailShell railOnly."""
     src = (_FRONTEND / "pages" / "Dashboard.jsx").read_text()
-    # The wrapper now branches on `isMobile` for its style.
-    assert "isMobile ? {" in src
-    # Mobile branch uses fixed positioning so the drawer floats.
-    assert 'position: "fixed"' in src
-    # And translates fully off-screen when closed.
-    assert 'translateX(-100%)' in src
+    assert "<RailShell" in src
+    assert "railOnly" in src
 
 
 def test_sidebar_real_supports_after_action_callback():
@@ -65,10 +74,12 @@ def test_sidebar_real_supports_after_action_callback():
 
 
 def test_repo_select_closes_mobile_drawer():
-    src = (_FRONTEND / "pages" / "Dashboard.jsx").read_text()
-    # The onSelectRepo wrapper closes the drawer on mobile.
-    assert "handleSelectRepo(...args)" in src
-    assert "if (isMobile) closeMobileSidebar()" in src
+    """Iter 356 — repo switching now lives in the RailShell chat
+    flyout; selecting a repo must close the flyout."""
+    src = (_FRONTEND / "components" / "nav" / "RailShell.jsx").read_text()
+    m = re.search(r"const selectRepo = useCallback\(.*?\n  \}, ", src, re.S)
+    assert m, "selectRepo not found in RailShell"
+    assert "setOpen(null)" in m.group(0)
 
 
 def test_sidebar_collapsed_is_disabled_on_mobile():

@@ -94,23 +94,33 @@ async def public_stats():
         tasks = await db.cto_tasks.count_documents({"status": "done"})
         # Iter 356 · Guard 2 (marketing truth gate) — REAL counts with
         # test/QA accounts excluded, same rules as the admin funnel.
-        from services.test_accounts import is_test_email
-        rows = await db.dev_users.find(
-            {}, {"_id": 0, "user_id": 1, "email": 1}).to_list(20000)
-        real_rows = [r for r in rows if not is_test_email(r.get("email"))]
-        real_ids = [r["user_id"] for r in real_rows if r.get("user_id")]
-        task_commits = await db.cto_tasks.count_documents(
-            {"commit_sha": {"$exists": True, "$ne": None},
-             "user_id": {"$in": real_ids}})
-        loop_commits = await db.loop_sessions.count_documents(
-            {"last_event.state": "completed",
-             "last_event.data.commit_sha": {"$exists": True, "$ne": None},
-             "user_id": {"$in": real_ids}})
+        # Fail-soft: these extra marketing fields must never take down
+        # the whole stats payload (mocked-db unit tests + partial
+        # outages degrade to 0s; Landing hides zero-valued stats).
+        real_developers = 0
+        commits_shipped = 0
+        try:
+            from services.test_accounts import is_test_email
+            rows = await db.dev_users.find(
+                {}, {"_id": 0, "user_id": 1, "email": 1}).to_list(20000)
+            real_rows = [r for r in rows if not is_test_email(r.get("email"))]
+            real_ids = [r["user_id"] for r in real_rows if r.get("user_id")]
+            task_commits = await db.cto_tasks.count_documents(
+                {"commit_sha": {"$exists": True, "$ne": None},
+                 "user_id": {"$in": real_ids}})
+            loop_commits = await db.loop_sessions.count_documents(
+                {"last_event.state": "completed",
+                 "last_event.data.commit_sha": {"$exists": True, "$ne": None},
+                 "user_id": {"$in": real_ids}})
+            real_developers = len(real_rows)
+            commits_shipped = task_commits + loop_commits
+        except Exception as e:
+            logger.warning("public stats real-count block failed: %r", e)
         data = {
             "available": True,
             "users": users,
-            "real_developers": len(real_rows),
-            "commits_shipped": task_commits + loop_commits,
+            "real_developers": real_developers,
+            "commits_shipped": commits_shipped,
             "tasks_shipped": tasks,
             "interactions": total,
             "code_tasks": code,

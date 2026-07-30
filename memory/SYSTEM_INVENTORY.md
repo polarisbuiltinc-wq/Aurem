@@ -651,3 +651,8 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `services/loop_intent_stats.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-29T19:43:36.635184Z] <!-- inv:service:services/loop_intent_stats.py -->
 - `STRIPE_SECRET_KEY` — auto-detected in backend/routers/admin.py (verify) (default: unset) [Iter 0, 2026-07-29T21:14:32.977070Z] <!-- inv:envvar:STRIPE_SECRET_KEY -->
 - `STRIPE_API_KEY` — auto-detected in backend/routers/admin.py (verify) (default: unset) [Iter 0, 2026-07-29T21:14:32.977093Z] <!-- inv:envvar:STRIPE_API_KEY -->
+
+### Iter 0 · 2026-07-30
+
+- `services/test_accounts.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T00:19:40.697252Z] <!-- inv:service:services/test_accounts.py -->
+- `REACT_APP_BACKEND_URL` — auto-detected in backend/tests/test_iter356_live_rail_backend.py (verify) (default: unset) [Iter 0, 2026-07-30T00:19:40.697282Z] <!-- inv:envvar:REACT_APP_BACKEND_URL -->

@@ -19,6 +19,7 @@
  */
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import useAutoClearConsole from "./lib/useAutoClearConsole";
+import RouteErrorBoundary from "./components/RouteErrorBoundary";
 import { useEffect, useRef, lazy, Suspense } from "react";
 import Toaster from "./components/Toast";
 import FixProgressDrawer from "./components/FixProgressDrawer";
@@ -188,6 +189,9 @@ export default function App() {
         <FixProgressDrawer />
         <PersistentFixBar />
       <Suspense fallback={<RouteLoader />}>
+        {/* Iter 356b — crashed lazy chunks / render errors show a retry
+            card instead of a silent blank page. */}
+        <RouteErrorBoundary>
         <Routes>
           <Route path="/"                element={<Landing />} />
           <Route path="/both"            element={<Both />} />
@@ -293,6 +297,7 @@ export default function App() {
           <Route path="/dashboard/*" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </RouteErrorBoundary>
       </Suspense>
       </FixJobProvider>
       <CookieConsentBanner />

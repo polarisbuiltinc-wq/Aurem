@@ -16,6 +16,23 @@ import {
 } from "lucide-react";
 import { api, getUser, getToken, logout, healthApi, newSessionId, setUser as saveUser } from "../lib/api";
 import { clearUICacheAndReload } from "../lib/cacheCleaner";
+
+// Iter 356b — shared, short-TTL in-flight cache for GET /chat/sessions.
+// Session-adopt (doAdoptOrMint) and the sidebar refresh both request
+// the same list at mount (and StrictMode double-fires effects in dev),
+// producing duplicate identical GETs. Collapse calls for the same
+// project made within 2s into ONE network request.
+const _sessionsFetchCache = new Map(); // pidKey -> { ts, promise }
+const SESSIONS_FETCH_TTL_MS = 2000;
+export function fetchSessionsShared(projectId, force = false) {
+  const key = projectId || "home";
+  const now = Date.now();
+  const hit = _sessionsFetchCache.get(key);
+  if (!force && hit && now - hit.ts < SESSIONS_FETCH_TTL_MS) return hit.promise;
+  const promise = api.get("/chat/sessions", { params: { project_id: key } });
+  _sessionsFetchCache.set(key, { ts: now, promise });
+  return promise;
+}
 import { toast } from "./Toast";
 import TokenBell from "./TokenBell";
 import PWAInstallPrompt from "./PWAInstallPrompt";
@@ -171,10 +188,7 @@ export default function Shell({ children, requireAuth, chromeless = false }) {
       let adopted = null;
       if (token) {
         try {
-          const params = activeProjectId
-            ? { project_id: activeProjectId }
-            : { project_id: "home" };
-          const r = await api.get("/chat/sessions", { params });
+          const r = await fetchSessionsShared(activeProjectId);
           const list = r.data?.sessions || [];
           if (list.length && list[0]?.session_id) {
             adopted = list[0].session_id;
@@ -349,13 +363,10 @@ export default function Shell({ children, requireAuth, chromeless = false }) {
     else localStorage.removeItem(key);
   }, [activeProjectId]);
 
-  const refreshSessions = useCallback(async () => {
+  const refreshSessions = useCallback(async (force = false) => {
     if (!token) return;
     try {
-      const params = activeProjectId
-        ? { project_id: activeProjectId }
-        : { project_id: "home" };
-      const r = await api.get("/chat/sessions", { params });
+      const r = await fetchSessionsShared(activeProjectId, force);
       setSessions(r.data?.sessions || []);
     } catch {
       /* ignore */
@@ -391,7 +402,7 @@ export default function Shell({ children, requireAuth, chromeless = false }) {
           const next = newSessionId();
           setSessionId(next);
         }
-        refreshSessions();
+        refreshSessions(true);
       } catch {
         /* ignore */
       }

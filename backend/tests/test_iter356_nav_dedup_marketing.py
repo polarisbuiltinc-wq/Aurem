@@ -89,6 +89,20 @@ def test_shell_single_sessions_refresh_effect():
         r"useEffect\(\(\) => \{\s*if \(token\) refreshSessions\(\);\s*\}", src)
     assert len(effects) == 1, \
         f"expected exactly 1 refreshSessions effect, found {len(effects)}"
+    # Iter 356b — both mount-time consumers (session-adopt + sidebar
+    # refresh) must go through the shared 2s in-flight cache so
+    # identical GETs collapse into one network request.
+    assert "fetchSessionsShared" in src
+    assert src.count('api.get("/chat/sessions"') == 1, \
+        "all Shell session fetches must route through fetchSessionsShared"
+
+
+def test_route_error_boundary_wired():
+    app = (FRONTEND / "App.jsx").read_text()
+    assert "RouteErrorBoundary" in app
+    comp = (FRONTEND / "components" / "RouteErrorBoundary.jsx").read_text()
+    assert "getDerivedStateFromError" in comp
+    assert "route-error-retry-btn" in comp
 
 
 def test_public_stats_has_real_fields():
