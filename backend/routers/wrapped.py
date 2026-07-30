@@ -25,8 +25,15 @@ router = APIRouter(prefix="/wrapped", tags=["ORA Wrapped"])
 
 
 def _date_range(period: str) -> tuple[float, float]:
-    """Returns (start_ts, end_ts) for 'this_month', 'last_month', or 'all'."""
+    """Returns (start_ts, end_ts) for 'this_week', 'this_month',
+    'last_month', or 'all'."""
     now = datetime.now(timezone.utc)
+    if period == "this_week":
+        # Iter 358 — rolling 7 days. The ShipStreakWidget chip has sent
+        # period=this_week since iter 212m-89, but this branch never
+        # existed: the request silently fell into ALL-TIME below, so the
+        # "ships this week" chip showed a lifetime count.
+        return (now - timedelta(days=7)).timestamp(), now.timestamp()
     if period == "last_month":
         first_this = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         last_month_end = first_this - timedelta(seconds=1)
@@ -62,7 +69,19 @@ async def my_wrapped(
         {"_id": 0},
     ).to_list(500)
 
-    if not tasks:
+    # Iter 358 — Loop Mode ships live in loop_sessions (NOT cto_tasks);
+    # without these the chip/wrapped ignored every modern ship.
+    loops = await db.loop_sessions.find(
+        {
+            "user_id": user_id,
+            "last_event.state": "completed",
+            "last_event.data.commit_sha": {"$exists": True, "$ne": None},
+            "updated_at": {"$gte": start_ts, "$lte": end_ts},
+        },
+        {"_id": 0, "updated_at": 1, "project_id": 1},
+    ).to_list(1000)
+
+    if not tasks and not loops:
         return {
             "ok": True, "period": period,
             "stats": _empty_stats(),
@@ -91,16 +110,32 @@ async def my_wrapped(
         for t in done
         if t.get("github_owner")
     }
+    # Loop ships know only their project_id — resolve to repo names.
+    loop_pids = {l["project_id"] for l in loops if l.get("project_id")}
+    if loop_pids:
+        async for p in db.cto_projects.find(
+                {"project_id": {"$in": list(loop_pids)}},
+                {"_id": 0, "github_owner": 1, "github_repo": 1}):
+            if p.get("github_owner"):
+                repos.add(f"{p['github_owner']}/{p.get('github_repo','')}")
+
+    total_shipped = len(done) + len(loops)
 
     # Estimate hours saved: each task = ~45 min of manual work
-    hours_saved = round(len(done) * 0.75, 1)
+    hours_saved = round(total_shipped * 0.75, 1)
 
     # Streak: consecutive days with at least one ship
-    ship_days = sorted({
-        datetime.fromtimestamp(t["completed_at"], tz=timezone.utc).date()
-        for t in done
-        if t.get("completed_at")
-    })
+    ship_days = sorted(
+        {
+            datetime.fromtimestamp(t["completed_at"], tz=timezone.utc).date()
+            for t in done
+            if t.get("completed_at")
+        } | {
+            datetime.fromtimestamp(l["updated_at"], tz=timezone.utc).date()
+            for l in loops
+            if l.get("updated_at")
+        }
+    )
     streak = _calc_streak(ship_days)
 
     # Claude corrections (Maxx mode catches)
@@ -114,7 +149,7 @@ async def my_wrapped(
     dev_name = user.get("name") or user.get("github_login") or "Developer"
 
     stats = {
-        "tasks_shipped":    len(done),
+        "tasks_shipped":    total_shipped,
         "tasks_failed":     len(failed),
         "repos_touched":    len(repos),
         "hours_saved":      hours_saved,
@@ -130,7 +165,7 @@ async def my_wrapped(
         "ok":      True,
         "period":  period,
         "stats":   stats,
-        "has_data": len(done) > 0,
+        "has_data": total_shipped > 0,
         "share_text": _share_text(stats),
     }
 
@@ -146,6 +181,8 @@ def _empty_stats() -> dict:
 
 def _period_label(period: str) -> str:
     now = datetime.now(timezone.utc)
+    if period == "this_week":
+        return "This week"
     if period == "last_month":
         first = now.replace(day=1) - timedelta(days=1)
         return first.strftime("%B %Y")

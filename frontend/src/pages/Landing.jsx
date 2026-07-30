@@ -1390,7 +1390,7 @@ export default function Landing() {
             <div className="footer-links" style={{ flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
               <Link to="/wall" data-testid="footer-wall">Ship Wall</Link>
               <Link to="/pricing" data-testid="footer-pricing">Pricing</Link>
-              <Link to="/vs/devin" data-testid="footer-vs">Compare</Link>
+              <Link to="/compare" data-testid="footer-vs">Compare</Link>
               <Link to="/login" data-testid="footer-signin">Sign in</Link>
             </div>
           </div>

@@ -5,7 +5,7 @@
   "scripts": {
     "start": "vite --port 3000 --host 0.0.0.0",
     "dev": "vite --port 3000 --host 0.0.0.0",
-    "build": "vite build",
+    "build": "vite build && node scripts/seo-prerender.mjs",
     "preview": "vite preview --port 3000 --host 0.0.0.0",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --update-snapshots",

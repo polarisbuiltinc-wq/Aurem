@@ -326,6 +326,30 @@ Language: **Hinglish** — main agent responds in Hinglish.
 - Frontend: vitest + RTL under `src/**/__tests__/` and `src/**/*.test.jsx` — 124/124 passing
 - **NEW HARD RULE (added Iter 328)**: for UI regressions, an integration test that chains real wire shape → mapper → real component render is required. Component-level tests alone are insufficient (the exact gap that broke Deploy 2 three times).
 
+## Iter 358 · 2026-06-30 — Ship-chip real data + SEO/GEO/AEO refresh + internal docs (preview, deploy pending)
+- **"ships this week" chip fixed at route level** (routers/wrapped.py): `this_week` period
+  never existed (fell to ALL-TIME) + Loop Mode ships (loop_sessions) were never counted —
+  both fixed; verified live (this_week=7 vs all=8 with seeded old ship). Locks:
+  test_iter358_ship_week_chip.py (5).
+- **SEO refresh**: real /vs/cursor, /vs/github-copilot, /vs/replit-agent, /vs/windsurf pages +
+  /compare hub via single data source src/data/competitors.js + generic VsPage.jsx (FAQPage
+  JSON-LD 1:1 by construction); /vs/cursor redirect stub removed; unknown slug → /compare.
+  Competitor pricing web-verified June 2026 (Cursor $20/60/200, Copilot Pro+ $39/1500 premium
+  reqs, Replit effort-based, Windsurf quota model Mar 2026). LAST_VERIFIED=June 30, 2026.
+- **Truth fixes (Guard 2 extension)**: llms.txt/llms-full.txt fake stats removed (500+ devs,
+  12k commits, 4.9/5, 498 spots) → point AI systems to live /usage/public/stats; pricing
+  aligned to subscription_tiers SSOT ($0/10, $9/50, $19/300, $49/400 — "unlimited tasks"
+  claim killed); sitemap + llms links updated.
+- **AEO prerendering**: `yarn build` now runs scripts/seo-prerender.mjs → static HTML
+  snapshots (dist/vs/*/index.html + dist/compare/index.html) with swapped meta + JSON-LD +
+  full semantic content inside #root (React replaces on mount). Verify on prod post-deploy:
+  `curl -s https://auremcto.com/vs/cursor | grep '<h1>'`.
+- **Internal docs**: /app/docs/{00_INDEX,PRD,TRD,APP_FLOW,UI_UX_BRIEF,SCHEMA,
+  IMPLEMENTATION_STATUS,REGRESSION_GUARDS}.md — living docs, all facts traced to code/DB;
+  gate script prints docs-update reminder.
+- Tests: 44 pytest locks green (iter124h modernized to competitors.js), vitest 237/237.
+
+
 ## Iter 356-357 · 2026-06-30 — Unified nav ship + E2E-session dedup + Guard 2 + Guard 8 (partial)
 - **DEPLOYED to prod (build faf5e1264d02)**: RailShell unified nav (Dashboard + 8 pages,
   5 icons: Chat/Ship/Insights/Settings/Admin, flyout routing verified by testing agent),

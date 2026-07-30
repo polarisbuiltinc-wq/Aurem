@@ -88,6 +88,8 @@ const OpsRecipes        = lazy(() => import("./pages/OpsRecipes"));
 const Automations       = lazy(() => import("./pages/Automations"));
 const OAuthFinish       = lazy(() => import("./pages/OAuthFinish"));
 const VsDevin           = lazy(() => import("./pages/VsDevin"));
+const VsPage            = lazy(() => import("./pages/VsPage"));      // Iter 358
+const CompareHub        = lazy(() => import("./pages/CompareHub"));  // Iter 358
 const Pricing          = lazy(() => import("./pages/Pricing"));
 const Demo             = lazy(() => import("./pages/Demo"));                  // Iter 212m-200
 // Iter 212m-235 — Personal Track (Phase 6). Warm cream/terracotta
@@ -284,10 +286,11 @@ export default function App() {
           <Route path="/oauth-finish" element={<OAuthFinish />} />
           <Route path="/vs/devin"  element={<VsDevin />} />
           <Route path="/pricing" element={<Pricing />} />
-          {/* Iter 124h — /vs/cursor was a dead link in Landing footer pre-fix;
-              keep the URL alive (incoming backlinks) by redirecting to /vs/devin
-              until a dedicated VsCursor page lands. */}
-          <Route path="/vs/cursor" element={<Navigate to="/vs/devin" replace />} />
+          {/* Iter 358 — real comparison pages for every competitor
+              (was: /vs/cursor redirect stub). Unknown slugs fall back
+              to /compare inside VsPage. */}
+          <Route path="/compare"  element={<CompareHub />} />
+          <Route path="/vs/:slug" element={<VsPage />} />
           {/* Iter 212m-57 — Any /dashboard/<anything> subroute (e.g. the
               "/dashboard/new" URL some new-project deep-links generated)
               must redirect to /dashboard rather than getting swept up by

@@ -656,3 +656,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 
 - `services/test_accounts.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T00:19:40.697252Z] <!-- inv:service:services/test_accounts.py -->
 - `REACT_APP_BACKEND_URL` — auto-detected in backend/tests/test_iter356_live_rail_backend.py (verify) (default: unset) [Iter 0, 2026-07-30T00:19:40.697282Z] <!-- inv:envvar:REACT_APP_BACKEND_URL -->
+- `services/github_sync.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T00:56:42.191763Z] <!-- inv:service:services/github_sync.py -->
+- `GITHUB_ACTIONS_TOKEN` — auto-detected in backend/services/github_sync.py (verify) (default: unset) [Iter 0, 2026-07-30T00:56:42.191788Z] <!-- inv:envvar:GITHUB_ACTIONS_TOKEN -->
+- `GITHUB_TOKEN` — auto-detected in backend/services/github_sync.py (verify) (default: unset) [Iter 0, 2026-07-30T00:56:42.191800Z] <!-- inv:envvar:GITHUB_TOKEN -->
+- `GITHUB_REPO` — auto-detected in backend/services/github_sync.py (verify) (default: unset) [Iter 0, 2026-07-30T00:56:42.191812Z] <!-- inv:envvar:GITHUB_REPO -->

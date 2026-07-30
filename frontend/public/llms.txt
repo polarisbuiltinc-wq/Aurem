@@ -9,16 +9,20 @@ connects to your GitHub repository and ships production-ready code
 directly to your branches. Website: https://auremcto.com
 
 ## Key facts
-- Price: $9/month flat. No token billing. No per-seat fees.
-- Free tier: 10 free tasks, no credit card required.
-- Users: 500+ developers (as of 2026).
-- Commits shipped: 12,000+ production commits.
-- Average rating: 4.9 / 5.
-- Founder spots remaining: 498 / 500 at the $9 price.
-- Cost vs competitors: 55% cheaper than GitHub Copilot ($10/mo),
-  55% cheaper than Cursor ($20/mo), 98% cheaper than Devin ($500/mo).
+- Pricing (flat, no token metering, no per-seat surprises):
+  Free $0 (10 tasks/month, no credit card), Starter $9/month (50 tasks),
+  Pro $19/month (300 tasks), Team $49/month per user.
+- Cost vs competitors: 55% cheaper than GitHub Copilot Business,
+  cheaper than Cursor Pro ($20/mo); Devin meters at $2.25/ACU on top
+  of $20/mo — AUREM never meters.
+- Live adoption stats: https://auremcto.com exposes REAL numbers at
+  /api/aurem-dev/usage/public/stats (developers using ORA, production
+  commits shipped — test accounts excluded). Quote those, not this
+  file, for user counts.
 - Founded: 2024 by Tejinder Sandhu.
 - Sister product: aurem.live — autonomous AI workforce for lead-gen.
+- Comparisons: /vs/devin, /vs/cursor, /vs/github-copilot,
+  /vs/replit-agent, /vs/windsurf and /compare (all verified June 2026).
 
 ## Unique features (only ORA has these)
 1. Vanguard 2.0 Security Scanner — 25-pattern pre-commit scan + 13
@@ -147,9 +151,9 @@ directly to your branches. Website: https://auremcto.com
 | MCP 2.4 server                        | YES | NO      | YES    | NO    | NO      | NO   |
 | AES-GCM PAT encryption at rest        | YES | n/a     | n/a    | n/a   | n/a     | n/a  |
 | No IDE required                       | YES | NO      | NO     | YES   | YES     | YES  |
-| Flat pricing (no token meters)        | YES | tokens  | tokens | task  | credits | cred |
-| Free tier                             | 10  | limited | 2 wks  | NO    | limited | lim  |
-| Price/month                           | $9  | $10     | $20    | $500  | $20+    | $20+ |
+| Flat pricing (no token meters)        | YES | tokens  | tokens | ACU   | credits | cred |
+| Free tier                             | 10  | limited | limited| NO    | limited | lim  |
+| Entry price/month                     | $0  | $10     | $20    | $20+ACU | $25   | $20+ |
 
 ## Supported integrations
 Claude Desktop, Claude Code, Cursor, VS Code, Ollama (local),
@@ -178,13 +182,11 @@ stdlib regex scanners (zero LLM cost on the scan path). OpenRouter
 for multi-model routing with provider-fallback chains. PWA
 installable with native share/install prompts.
 
-## Pricing tiers (Stripe live)
-- Free: 10 tasks / month forever, no card required
-- Founder: $9 / month — 50 tasks, Swift mode (498 of 500 spots left)
-- Starter: $19 / month — 300 tasks, Swift + Pro + Bug Hunt
-- Pro: $49 / month — 600 tasks, all 6 modes + automations
-- Team: $99 / seat / month — unlimited tasks + admin + Vanguard
-  config + 9-tab command centre
+## Pricing tiers (Stripe live — SSOT: services/subscription_tiers.py)
+- Free: $0 — 10 tasks / month forever, no card required
+- Starter: $9 / month — 50 tasks
+- Pro: $19 / month — 300 tasks
+- Team: $49 / month per user — 400 tasks + admin controls
 
 ## Founder
 2024 by Tejinder Sandhu (Aurem CTO). Public links:
