@@ -3016,6 +3016,11 @@ async def chat_sessions_list(
     if db is None:
         return {"ok": True, "sessions": []}
     q = {"user_id": user["user_id"]}
+    # Iter 356 — our own E2E test runs (prod smoke suite) create
+    # "prod-e2e-*" sessions that must never pollute the user-facing
+    # sidebar. Filter them out of every list response.
+    from services.test_accounts import E2E_SESSION_PREFIX_RE
+    q["session_id"] = {"$not": E2E_SESSION_PREFIX_RE}
     if project_id == "home":
         # Home tab shows un-pinned sessions PLUS legacy sessions that have
         # no project_id field at all (created before per-project chats).

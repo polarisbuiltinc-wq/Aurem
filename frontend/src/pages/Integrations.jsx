@@ -11,6 +11,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate }             from "react-router-dom";
+import { ArrowLeft }               from "lucide-react";
 import { api, getToken }           from "../lib/api";
 import { toast }                   from "../components/Toast";
 
@@ -127,6 +128,17 @@ export default function Integrations() {
 
   return (
     <div data-testid="integrations-page" style={styles.wrap}>
+      {/* Iter 356 — back navigation for this standalone page (reached
+          from the RailShell Settings flyout). */}
+      <button data-testid="integrations-back-btn"
+        onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/dashboard"))}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          background: "transparent", border: "none", cursor: "pointer",
+          color: "#94a3b8", fontSize: 13, padding: "0 0 14px",
+        }}>
+        <ArrowLeft size={14} /> Back
+      </button>
       <header style={styles.header}>
         <h1 style={styles.h1}>
           Connect ORA to your IDE

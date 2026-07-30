@@ -9,7 +9,7 @@
  *   3. Hero (side-by-side headline + sub-copy, "10 free tasks" pill,
  *      4 stat counters)
  *   4. Why-teams-ship-with-ORA marquee
- *   5. Social proof (500+ devs · 12k+ commits · 4.9★ · 55% cheaper)
+ *   5. Social proof (live DB stats via /usage/public/stats — Guard 2)
  *   6. Watch ORA ship (4 video cards incl. Run-local)
  *   7. How it works (4 steps)
  *   8. Three Windows workspace showcase (Code · Live Preview · Advisor)
@@ -28,6 +28,7 @@
  */
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { api } from "../lib/api";
 import FounderOfferPill from "../components/FounderOfferPill";
 import PricingCards from "../components/PricingCards";
 // Iter 212m-200 — Interactive animated walkthrough embed. Same
@@ -666,6 +667,17 @@ const FAQS = [
 export default function Landing() {
   const [tab, setTab] = useState(0);
   const [openFaq, setOpenFaq] = useState(null);
+  // Iter 356 · Guard 2 — social-proof numbers come ONLY from the live
+  // /usage/public/stats endpoint (real DB counts, test accounts
+  // excluded). No hardcoded marketing stats. Section hides if the
+  // endpoint is unavailable rather than showing fabricated numbers.
+  const [proof, setProof] = useState(null);
+
+  useEffect(() => {
+    api.get("/usage/public/stats")
+      .then((r) => { if (r.data?.available) setProof(r.data); })
+      .catch(() => {});
+  }, []);
 
   // SEO/AEO title + description sync (preserved from Iter 175).
   useEffect(() => {
@@ -878,17 +890,25 @@ export default function Landing() {
 
       </div>
 
-      {/* ─── Social proof (full-width) ─── */}
-      <section className="social-proof">
-        <div className="container">
-          <div className="proof-grid">
-            <div><div className="proof-num">500+</div><div className="proof-label">developers using ORA</div></div>
-            <div><div className="proof-num">12k+</div><div className="proof-label">production commits shipped</div></div>
-            <div><div className="proof-num">4.9★</div><div className="proof-label">avg rating</div></div>
-            <div><div className="proof-num">55%</div><div className="proof-label">cheaper than Copilot</div></div>
+      {/* ─── Social proof (full-width) — live DB numbers only ─── */}
+      {proof && (proof.real_developers > 0 || proof.commits_shipped > 0) && (
+        <section className="social-proof" data-testid="landing-social-proof">
+          <div className="container">
+            <div className="proof-grid">
+              {proof.real_developers > 0 && (
+                <div><div className="proof-num" data-testid="proof-developers">{proof.real_developers}</div><div className="proof-label">developers using ORA</div></div>
+              )}
+              {proof.commits_shipped > 0 && (
+                <div><div className="proof-num" data-testid="proof-commits">{proof.commits_shipped}</div><div className="proof-label">production commits shipped</div></div>
+              )}
+              {proof.correction_rate_pct > 0 && (
+                <div><div className="proof-num" data-testid="proof-corrections">{proof.correction_rate_pct}%</div><div className="proof-label">AI mistakes auto-caught</div></div>
+              )}
+              <div><div className="proof-num">55%</div><div className="proof-label">cheaper than Copilot</div></div>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       <div className="container">
 

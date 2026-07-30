@@ -1,0 +1,40 @@
+{
+  "summary": "Iter 356 rail-nav + marketing-truth + double-fetch review. Backend live locks (4/4) pass: /usage/public/stats returns real_developers=2 (test-account excluded from 300+ raw users) & commits_shipped as ints; /admin/qa/cleanup-e2e-sessions is admin-gated (401 unauth) and deletes seeded prod-e2e-* debris; GET /chat/sessions excludes seeded prod-e2e-* sessions server-side. Frontend rail flow verified end-to-end on preview: rail-shell + all 5 icons render on /dashboard, chat flyout opens with zero prod-e2e session leaks, Escape closes it, rail-new-chat present, Ship→Deploy nav preserves rail, Insights/Settings/Admin flyout links all present, /integrations page has integrations-back-btn which navigates back to /dashboard. Landing social-proof reads '2 developers using ORA / 55% cheaper than Copilot' with NO '500+' or '12k+' anywhere. TWO REGRESSIONS FOUND: (1) DOUBLE-FETCH FIX did NOT hold — /chat/sessions fires ~12 times on initial /dashboard load (4×project_id=home + 8×project_id=p_demo_a) instead of the expected ONE. (2) Admin sub-pages /admin/financials, /admin/suggestions, /admin/api-keys render blank (innerText length = 0) and trigger a cascade of HTTP 429 responses + a React 'Lazy → RenderedRoute' error boundary; /admin overview + /admin/users load fine.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdminPanel sub-routes", "issue": "/admin/financials, /admin/suggestions, /admin/api-keys render fully blank (innerText=0). React error boundary logged: 'The above error occurred in one of your React components: at Lazy at RenderedRoute'. Multiple 429s from admin API prior to render suggest rate-limit response is not being handled → lazy chunk / component crashes → blank screen.", "selector": "route:/admin/financials|/admin/suggestions|/admin/api-keys", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Initial /dashboard load — chat sessions fetch dedup (Iter 356 Bug #2)", "issue": "GET /chat/sessions fires ~12 times on initial dashboard load (4×project_id=home + 8×project_id=p_demo_a) instead of the promised single call. The static lock test_shell_single_sessions_refresh_effect only checks Shell.jsx for one useEffect literal — the actual duplication is coming from other components (project switcher / RailShell / chat provider) refetching per project change. The 'double-fetch fix' regression is worse than before.", "affected_selectors": ["/api/aurem-dev/chat/sessions?project_id=home", "/api/aurem-dev/chat/sessions?project_id=p_demo_a"], "priority": "HIGH"}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter356_live_rail_backend.py",
+    "/app/test_reports/pytest/iter356_live_rail.xml"
+  ],
+  "action_items": [
+    "Fix duplicate /chat/sessions fetches on /dashboard initial load. Static lock passes but live network shows 12 calls per load — investigate RailShell chat-flyout data fetch, Shell repo/project switching effect, and any provider-level useEffect that re-runs per project. Add a network-level lock test that asserts <=1 call within first 3s after login.",
+    "Fix blank admin sub-pages (/admin/financials, /admin/suggestions, /admin/api-keys). React lazy chunk is throwing; combined with 429 rate limit responses from admin APIs breaking the components. Add error-boundary fallback + retry/backoff on admin API calls, and investigate whether admin rate-limit is being applied too aggressively to founder token.",
+    "Consider raising or exempting founder/admin tokens from the endpoint rate-limit that produced the 429 cascade during normal admin panel navigation."
+  ],
+  "critical_code_review_comments": [
+    "test_shell_single_sessions_refresh_effect in test_iter356_nav_dedup_marketing.py is a false positive — greps a single Shell.jsx pattern but does not measure real network calls. Replace with browser/network assertion or count useEffect+useQuery re-triggers across all mounted components.",
+    "RailShell uses simple text-role link matching; ensure links carry data-testid (e.g., rail-link-deploy, rail-link-analytics) rather than relying on link text — improves testability and prevents flakes from label wording changes.",
+    "Public stats endpoint response is trusted client-side; consider caching the response on Landing to avoid re-hitting on every mount (currently uncached, but stats are stable)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter356_live_rail_backend.py (new — 4 live tests)"
+  ],
+  "success_rate": {"backend": "100% (4/4 live + 10/10 static)", "frontend": "80% (rail + chat + ship + insights + settings + integrations + landing pass; double-fetch + 3 admin sub-pages fail)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview only) — worked, no MFA prompt.",
+  "seed_data_creation": "Temporary Mongo seeds inserted+cleaned inside tests: prod-e2e-live-* + prod-e2e-cleanup-* under user_id=test_admin_001. All deleted in fixtures teardown.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend rail/marketing endpoints are solid — do not re-verify unless code changes. Focus retest on (a) actual network count of /chat/sessions on /dashboard initial load (must be <=1); (b) /admin/financials, /admin/suggestions, /admin/api-keys rendering non-empty content without 429 cascades. All Playwright selectors in the browser script used in this iteration are stable (data-testid='rail-shell', 'rail-icon-*', 'rail-flyout', 'rail-new-chat', 'landing-social-proof', 'integrations-back-btn'). Reuse them.",
+  "rca of the issue": "Double-fetch regression: Shell.jsx has exactly one refreshSessions useEffect (static lock passes), but the RailShell chat-flyout and the project switcher both mount and each triggers project-scoped fetches. When 'home' project loads then 'p_demo_a' becomes active, multiple listeners (RailShell chat group, Shell sidebar, chat provider hook) each fire a fetch, and each project change re-triggers. Result: 4× home + 8× p_demo_a. Fix: dedupe at the fetch layer (SWR/React Query with dedupe key = `sessions:${projectId}`) OR consolidate into a single provider that other components subscribe to. Admin blank pages: React.lazy chunk for the sub-routes throws an unhandled error (visible in console: 'The above error occurred in one of your React components: at Lazy'). Preceded by /api/aurem-dev/admin/... 429 responses, so likely the fetch throws on non-2xx and no error boundary catches → blank. Fix: (1) add ErrorBoundary around admin lazy routes with useful fallback; (2) handle 429 explicitly with retry-after; (3) verify founder/admin token bypasses admin-panel rate limiting."
+}

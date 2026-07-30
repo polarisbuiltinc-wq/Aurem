@@ -68,6 +68,23 @@ async def admin_me(authorization: Optional[str] = Header(None)):
             "is_admin": True}
 
 
+# ── Iter 356 — one-time cleanup of E2E test-run chat sessions ──────────
+# Our own prod smoke tests (test_iter212m_prod_e2e_founder.py) created
+# sessions with the "prod-e2e-" prefix under the founder's account and
+# never deleted them → they leaked into the real chat sidebar as
+# duplicate-looking debris. This founder-only endpoint removes them.
+@router.post("/qa/cleanup-e2e-sessions")
+async def cleanup_e2e_sessions(authorization: Optional[str] = Header(None)):
+    await _require_admin(authorization)
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "Database not connected")
+    from services.test_accounts import E2E_SESSION_PREFIX_RE
+    res = await db.chat_sessions.delete_many(
+        {"session_id": E2E_SESSION_PREFIX_RE})
+    return {"ok": True, "deleted": res.deleted_count}
+
+
 # ── Iter 210 — Audit feed (CitationGuard + ToolExecutor signals) ─────
 @router.get("/audit")
 async def audit_feed(
@@ -3333,33 +3350,9 @@ async def _compute_activation_funnel() -> dict:
 
     import re
 
-    # Email patterns that flag an account as test/automation. We use a
-    # mix of substring + prefix checks so `audit_…@aurem.dev_PREVIEW`
-    # and `auto_5fc97100fc@aurem.test` both get filtered out without
-    # also catching a real customer who happens to have "auto" in
-    # their handle.
-    test_patterns = (
-        "@aurem.test",  # anything on the synthetic domain
-        "@aurem.dev_",  # PREVIEW/AUDIT suffixed rows
-    )
-    test_prefixes = (
-        "test@", "test_", "qa-", "qa_",
-        "audit_", "e2e-", "e2e_", "auto_",
-        "oauth-", "oauth_", "mcp-", "mcp_",
-    )
-    test_prefix_regex = re.compile(r"^u_[a-f0-9]{6,16}@", re.I)
-
-    def is_test(email: str | None) -> bool:
-        e = (email or "").lower()
-        if not e:
-            return True  # blank email = synthetic
-        if any(p in e for p in test_patterns):
-            return True
-        if any(e.startswith(p) for p in test_prefixes):
-            return True
-        if test_prefix_regex.match(e):
-            return True
-        return False
+    # Iter 356 — exclusion rules extracted to services/test_accounts.py
+    # (shared with the public marketing stats). Same behaviour as before.
+    from services.test_accounts import is_test_email as is_test
 
     all_users = await db.dev_users.find(
         {}, {"_id": 0, "user_id": 1, "email": 1,

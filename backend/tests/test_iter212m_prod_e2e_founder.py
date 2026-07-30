@@ -82,6 +82,9 @@ def _stream_chat(prompt: str, *, mode: str = "swift", agent: str | None = None,
         "mode": mode,
         "session_id": f"prod-e2e-{uuid.uuid4().hex[:10]}",
     }
+    # Iter 356 — track for teardown so E2E sessions never pollute the
+    # founder's real chat sidebar (leaked "duplicate" sessions bug).
+    _session_state.setdefault("e2e_session_ids", []).append(payload["session_id"])
     if agent:
         payload["agent"] = agent
     if project_id:
@@ -132,6 +135,21 @@ def _stream_chat(prompt: str, *, mode: str = "swift", agent: str | None = None,
         "tool_invocations": tool_invocations,
         "elapsed": elapsed,
     }
+
+
+# Iter 356 — teardown: delete every session this run created on prod.
+@pytest.fixture(scope="module", autouse=True)
+def _cleanup_e2e_sessions():
+    yield
+    if "token" not in _session_state:
+        return
+    for sid in _session_state.get("e2e_session_ids") or []:
+        try:
+            requests.delete(
+                f"{BASE_URL}/api/aurem-dev/chat/sessions/{sid}",
+                headers=_auth_headers(), timeout=10)
+        except Exception:
+            pass
 
 
 # ============================================================

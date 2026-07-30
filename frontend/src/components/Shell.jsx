@@ -362,11 +362,8 @@ export default function Shell({ children, requireAuth, chromeless = false }) {
     }
   }, [token, activeProjectId]);
 
-  useEffect(() => {
-    if (token) refreshSessions();
-  }, [token, refreshSessions]);
-
-  // Re-fetch sidebar when project changes
+  // Iter 356 — single effect (mount + project change). Two separate
+  // effects fired two identical GET /chat/sessions on every page load.
   useEffect(() => {
     if (token) refreshSessions();
   }, [activeProjectId, token, refreshSessions]);

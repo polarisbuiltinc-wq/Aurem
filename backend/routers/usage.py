@@ -92,9 +92,25 @@ async def public_stats():
         corrections = await db.ora_council_logs.count_documents({"correction_applied": True})
         lint_blocks = await db.ora_council_logs.count_documents({"lint_blocked": True})
         tasks = await db.cto_tasks.count_documents({"status": "done"})
+        # Iter 356 · Guard 2 (marketing truth gate) — REAL counts with
+        # test/QA accounts excluded, same rules as the admin funnel.
+        from services.test_accounts import is_test_email
+        rows = await db.dev_users.find(
+            {}, {"_id": 0, "user_id": 1, "email": 1}).to_list(20000)
+        real_rows = [r for r in rows if not is_test_email(r.get("email"))]
+        real_ids = [r["user_id"] for r in real_rows if r.get("user_id")]
+        task_commits = await db.cto_tasks.count_documents(
+            {"commit_sha": {"$exists": True, "$ne": None},
+             "user_id": {"$in": real_ids}})
+        loop_commits = await db.loop_sessions.count_documents(
+            {"last_event.state": "completed",
+             "last_event.data.commit_sha": {"$exists": True, "$ne": None},
+             "user_id": {"$in": real_ids}})
         data = {
             "available": True,
             "users": users,
+            "real_developers": len(real_rows),
+            "commits_shipped": task_commits + loop_commits,
             "tasks_shipped": tasks,
             "interactions": total,
             "code_tasks": code,
