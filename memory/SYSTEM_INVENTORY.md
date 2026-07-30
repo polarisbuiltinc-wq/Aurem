@@ -661,3 +661,5 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `GITHUB_TOKEN` — auto-detected in backend/services/github_sync.py (verify) (default: unset) [Iter 0, 2026-07-30T00:56:42.191800Z] <!-- inv:envvar:GITHUB_TOKEN -->
 - `GITHUB_REPO` — auto-detected in backend/services/github_sync.py (verify) (default: unset) [Iter 0, 2026-07-30T00:56:42.191812Z] <!-- inv:envvar:GITHUB_REPO -->
 | `routers/admin_public.py` | `/admin` | 1 | auto-detected new router (verify) (Iter 0, 2026-07-30T02:29:44.632700Z) | <!-- inv:router:routers/admin_public.py -->
+- `services/llm_circuit_breaker.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T04:24:03.331626Z] <!-- inv:service:services/llm_circuit_breaker.py -->
+- `services/retry_guard.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T04:24:03.331649Z] <!-- inv:service:services/retry_guard.py -->

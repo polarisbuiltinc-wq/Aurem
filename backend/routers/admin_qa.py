@@ -417,3 +417,15 @@ async def guard18_timeout_audit(authorization: Optional[str] = Header(None)):
         "took_ms": int((time.time() - t0) * 1000),
         **result,
     }
+
+
+@router.get("/guard21-security-scan")
+async def guard21_security_scan(authorization: Optional[str] = Header(None)):
+    """Guard 21 — OWASP/CWE misconfig + supply-chain static scan,
+    computed live from disk (never cached)."""
+    await _require_admin(authorization)
+    from scripts.g21_security_scan import run_scan
+    t0 = time.time()
+    result = run_scan()
+    return {"guard": "G21", "generated_at": time.time(),
+            "took_ms": int((time.time() - t0) * 1000), **result}

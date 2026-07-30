@@ -28,7 +28,7 @@ system. STALE = no run within 2× expected interval.
 | 18 | Universal timeout budget | Infinite-wait outbound calls / hangs | ✅ SHIPPED (Iter 359) — scripts/timeout_audit.py (AST py + regex js) 179/179 sites covered; CI step + predeploy Lane 4; GET /admin/qa/guard18-timeout-audit; locks test_iter359 (11) |
 | 19 | Process auto-recovery | Crash loops hiding real bugs | planned |
 | 20 | Automated postmortem log | Incidents without history/patterns | planned (ships last) |
-| 21 | OWASP/CWE coverage | Injection, misconfig, supply chain | planned |
+| 21 | OWASP/CWE coverage | Injection, misconfig, supply chain | ✅ SHIPPED (Iter 361) — scripts/g21_security_scan.py (supply-chain: 0 unpinned deps + yarn.lock; misconfig: no debug mode/default creds, all admin routers gated, global exc handler) + injection fuzz (SQLi/NoSQL/XSS/cmdi) tests/test_iter361 (23); CI step + predeploy Lane 5; GET /admin/qa/guard21-security-scan |
 
 ## If a guard goes RED
 1. Read the row's one-line last result on /admin/qa (or the alert in

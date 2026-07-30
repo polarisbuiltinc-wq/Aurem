@@ -124,6 +124,10 @@ jobs:
         working-directory: backend
         run: python scripts/timeout_audit.py
 
+      - name: Guard 21 — OWASP/CWE misconfig + supply-chain scan (Iter 361)
+        working-directory: backend
+        run: python scripts/g21_security_scan.py
+
       - name: Run tests
         working-directory: backend
         run: |

@@ -39,7 +39,22 @@ Wave 3 (17-21): 18 → 17 → 21 → 19 → 20
   (require_admin_dep) + live non-founder 112-endpoint 403 sweep lock
   (Iter 358b, deployed with SEO/chip). Remaining: revoked-key/
   expired-token/auth-endpoint-rate-limiter tests.
-- Guards 1, 3-7, 9-15, 19-21: NOT STARTED.
+- Guards 1, 3-7, 9-15, 19, 20: NOT STARTED.
+- Guard 21: ✅ SHIPPED (Iter 361, 2026-07-30): scripts/g21_security_scan.py
+  — supply-chain (requirements.txt all pinned == : 0 unpinned; yarn.lock
+  committed) + misconfig (no FastAPI/uvicorn debug=True; no default-cred
+  patterns; every routers/admin*.py has router-level admin gate except
+  admin_public.py; @app.exception_handler(Exception) present so no raw
+  stack traces leak). Injection fuzz suite tests/test_iter361 (23): SQLi/
+  NoSQL($ne operator auth-bypass)/XSS/command-injection payloads vs live
+  signup + notify-interest + login — assert no 500, no stack-trace markers
+  leaked, XSS inert (JSON content-type not text/html), NoSQL operator
+  rejected. NOTE: login fuzz kept to 2 hits (NoSQL+nested) to avoid the
+  brute-force IP-lockout polluting shared preview. Wired: ci.yml backend
+  step + predeploy Lane 5 (build-fail on finding). Endpoint: GET
+  /admin/qa/guard21-security-scan (founder-gated, live). Locks: static
+  scan self-tests (detects unpinned dep + ungated router) + fuzz. QA row
+  ships last.
 - Guard 17: ✅ SHIPPED (Iter 360, 2026-07-30): services/retry_guard.py =
   THE central retry utility — CircuitBreaker (closed/open/half_open,
   threshold 5, cooldown 60s, single half-open probe w/ 30s stale expiry),

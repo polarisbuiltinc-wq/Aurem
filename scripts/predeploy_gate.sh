@@ -35,6 +35,9 @@ echo "── Lane 3/3: regression library locks ──"
 echo "── Lane 4: Guard 18 — universal timeout audit (Iter 359) ──"
 (cd backend && python scripts/timeout_audit.py)
 
+echo "── Lane 5: Guard 21 — OWASP/CWE misconfig + supply-chain scan (Iter 361) ──"
+(cd backend && python scripts/g21_security_scan.py)
+
 echo "── Post-lane: regenerate backend/qa_manifest.json (Iter 351) ──"
 (cd backend && python scripts/gen_qa_manifest.py)
 
