@@ -1940,6 +1940,9 @@ app.include_router(notify_interest_router, prefix="/api/aurem-dev")
 from routers.integrity_log import router as integrity_log_router
 app.include_router(integrity_log_router, prefix="/api/aurem-dev")
 app.include_router(loop_router,           prefix="/api/aurem-dev")  # Iter 212m-60 Loop Mode engine
+# Iter 366 — user-facing rollback (Pro/Team, non-admin)
+from routers.user_rollback import router as user_rollback_router
+app.include_router(user_rollback_router,  prefix="/api/aurem-dev")
 
 # ── Iter 309 · SSE 25-min reconnect validation harness ──────────────
 # TEST-ONLY router. Refuses all requests with 404 unless the server
