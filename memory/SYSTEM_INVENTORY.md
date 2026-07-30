@@ -664,3 +664,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `services/llm_circuit_breaker.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T04:24:03.331626Z] <!-- inv:service:services/llm_circuit_breaker.py -->
 - `services/retry_guard.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T04:24:03.331649Z] <!-- inv:service:services/retry_guard.py -->
 - `services/process_recovery.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T05:12:03.767054Z] <!-- inv:service:services/process_recovery.py -->
+- `services/incident_log.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T21:20:45.669223Z] <!-- inv:service:services/incident_log.py -->
