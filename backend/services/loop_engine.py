@@ -3326,6 +3326,27 @@ class LoopEngine:
             except Exception as _e:                     # noqa: BLE001
                 logger.debug("[loop %s] loop_execution_log write failed: %r",
                              self.loop_id, _e)
+            # Iter 365 · Phase 3 — funnel event: first_task_shipped
+            # (fires only on COMPLETED terminal, once per user).
+            try:
+                if state == LoopState.COMPLETED:
+                    from services.signup_guards import emit_funnel_event
+                    _stamped = await self.db.dev_users.find_one_and_update(
+                        {"user_id": self.user_id,
+                         "first_ship_at": {"$exists": False}},
+                        {"$set": {"first_ship_at": time.time()}},
+                        projection={"_id": 0, "user_id": 1},
+                    )
+                    if _stamped:
+                        await emit_funnel_event(
+                            self.db, user_id=self.user_id,
+                            event_type="first_task_shipped",
+                            metadata={"loop_id":  self.loop_id,
+                                      "used_maxx": self.used_maxx},
+                        )
+            except Exception as _fne:                   # noqa: BLE001
+                logger.debug("[loop %s] first_task_shipped emit failed: %r",
+                             self.loop_id, _fne)
         # ── Iter 315 · Fix 1 — persist phase-transition to loop_events ──
         # Diagnostic aggregator (`services/loop_speed_diagnostic.py::
         # _phase_durations_from_events`) reads `db.loop_events` grouped

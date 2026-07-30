@@ -665,3 +665,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `services/retry_guard.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T04:24:03.331649Z] <!-- inv:service:services/retry_guard.py -->
 - `services/process_recovery.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T05:12:03.767054Z] <!-- inv:service:services/process_recovery.py -->
 - `services/incident_log.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T21:20:45.669223Z] <!-- inv:service:services/incident_log.py -->
+- `LOOP_MODE_KILL_SWITCH` — auto-detected in backend/routers/admin.py (verify) (default: unset) [Iter 0, 2026-07-30T22:16:30.721505Z] <!-- inv:envvar:LOOP_MODE_KILL_SWITCH -->
+- `services/loop_beta.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T22:16:30.721530Z] <!-- inv:service:services/loop_beta.py -->
+- `LOOP_TOTAL_BUDGET_S` — auto-detected in backend/services/loop_engine.py (verify) (default: unset) [Iter 0, 2026-07-30T22:16:30.721546Z] <!-- inv:envvar:LOOP_TOTAL_BUDGET_S -->
+- `DB_NAME` — auto-detected in backend/tests/test_iter364_loop_beta_rollout.py (verify) (default: unset) [Iter 0, 2026-07-30T22:16:30.721558Z] <!-- inv:envvar:DB_NAME -->

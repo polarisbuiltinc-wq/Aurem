@@ -812,6 +812,121 @@ async def loop_beta_status(authorization: Optional[str] = Header(None)):
     }
 
 
+@router.get("/funnel")
+async def admin_funnel_dashboard(
+    days: int = 30,
+    authorization: Optional[str] = Header(None),
+):
+    """Iter 365 · Phase 3 — signup / activation / retention funnel.
+
+    Returns:
+      signups            : count of users who completed signup in the window
+      first_chat_pct     : % of those who ever sent a chat
+      first_ship_pct     : % who ever shipped a task (REAL activation KPI)
+      time_to_first_ship_median_h : median hours from signup to first ship
+      d7_retention_pct   : % who did anything on day 7+
+      d30_retention_pct  : % who did anything on day 30+
+      event_counts       : total funnel_events row count by type in the window
+    """
+    await _require_admin(authorization)
+    db = require_db()
+    days = max(1, min(int(days or 30), 365))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since_epoch = since.timestamp()
+
+    # Signup cohort in the window (from dev_users.created_at float epoch).
+    cohort_cursor = db.dev_users.find(
+        {"created_at": {"$gte": since_epoch}},
+        {"_id": 0, "user_id": 1, "email": 1, "created_at": 1,
+         "first_chat_at": 1, "first_loop_at": 1, "first_ship_at": 1,
+         "is_admin": 1, "is_unlimited": 1, "tier": 1},
+    )
+    cohort = []
+    async for u in cohort_cursor:
+        if u.get("is_admin") or u.get("is_unlimited") or u.get("tier") == "founder":
+            continue          # exclude internal accounts from funnel math
+        cohort.append(u)
+
+    n = len(cohort)
+    if n == 0:
+        return {
+            "window_days":                days,
+            "signups":                    0,
+            "first_chat_pct":             0.0,
+            "first_ship_pct":             0.0,
+            "time_to_first_ship_median_h": None,
+            "d7_retention_pct":           0.0,
+            "d30_retention_pct":          0.0,
+            "event_counts":               {},
+        }
+
+    n_chat = sum(1 for u in cohort if u.get("first_chat_at"))
+    n_ship = sum(1 for u in cohort if u.get("first_ship_at"))
+
+    # Median time-to-first-ship (in hours).
+    ttfs = sorted(
+        (u["first_ship_at"] - u["created_at"]) / 3600
+        for u in cohort
+        if u.get("first_ship_at") and u.get("created_at")
+    )
+    if ttfs:
+        mid = len(ttfs) // 2
+        median = ttfs[mid] if len(ttfs) % 2 else (ttfs[mid - 1] + ttfs[mid]) / 2
+    else:
+        median = None
+
+    # Retention — did the user have ANY funnel event or chat/loop
+    # activity ≥N days after signup.
+    now_epoch = time.time()
+    d7_hits  = 0
+    d30_hits = 0
+    for u in cohort:
+        signup_ts = u.get("created_at") or 0
+        marks = [
+            u.get("first_chat_at") or 0,
+            u.get("first_loop_at") or 0,
+            u.get("first_ship_at") or 0,
+        ]
+        # We use max(last activity marker) as a proxy for "still active".
+        latest = max(marks) if any(marks) else 0
+        age_days = (now_epoch - signup_ts) / 86400 if signup_ts else 0
+        if age_days >= 7 and latest and (latest - signup_ts) >= 7 * 86400:
+            d7_hits += 1
+        if age_days >= 30 and latest and (latest - signup_ts) >= 30 * 86400:
+            d30_hits += 1
+    # Denominators: only cohort users old enough to have crossed the mark.
+    n_eligible_7  = sum(1 for u in cohort
+                        if (now_epoch - (u.get("created_at") or 0)) / 86400 >= 7)
+    n_eligible_30 = sum(1 for u in cohort
+                        if (now_epoch - (u.get("created_at") or 0)) / 86400 >= 30)
+
+    # Event counts from funnel_events for extra observability.
+    ev_counts: dict[str, int] = {}
+    try:
+        pipeline = [
+            {"$match": {"created_at": {"$gte": since}}},
+            {"$group": {"_id": "$event_type", "n": {"$sum": 1}}},
+        ]
+        async for row in db.funnel_events.aggregate(pipeline):
+            ev_counts[row["_id"] or "?"] = int(row["n"])
+    except Exception:
+        pass
+
+    def _pct(hits: int, total: int) -> float:
+        return round((hits / total) * 100, 1) if total else 0.0
+
+    return {
+        "window_days":                days,
+        "signups":                    n,
+        "first_chat_pct":             _pct(n_chat, n),
+        "first_ship_pct":             _pct(n_ship, n),
+        "time_to_first_ship_median_h": round(median, 2) if median else None,
+        "d7_retention_pct":           _pct(d7_hits, n_eligible_7),
+        "d30_retention_pct":          _pct(d30_hits, n_eligible_30),
+        "event_counts":               ev_counts,
+    }
+
+
 @router.post("/users/{user_id}/suspend")
 async def toggle_suspend(
     user_id: str,

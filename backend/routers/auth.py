@@ -173,6 +173,12 @@ class SignupBody(BaseModel):
     email: str
     password: str
     name: Optional[str] = None
+    # Iter 365 · signup abuse guards — Phase 2.
+    # `honeypot` is a hidden field in the signup form; humans leave it
+    # blank, bots fill it. `form_age_ms` is how many ms elapsed
+    # between page-render and form-submit — scripts submit in <2s.
+    honeypot:    Optional[str] = None
+    form_age_ms: Optional[int] = None
 
 
 class LoginBody(BaseModel):
@@ -189,11 +195,24 @@ class TwoFAVerifyBody(BaseModel):
 
 
 @router.post("/signup")
-async def signup(body: SignupBody) -> dict:
+async def signup(body: SignupBody, request: Request) -> dict:
     db = get_db()
     if db is None:
         raise HTTPException(503, "Database not connected")
     email = body.email.strip().lower()
+    # Iter 365 · signup abuse guards (honeypot / timing / disposable /
+    # per-IP rate-limit). Founder emails bypass every guard. Raises
+    # HTTPException on any signal — we do NOT insert into dev_users
+    # if the request is refused.
+    from services.signup_guards import enforce_signup_guards, emit_funnel_event
+    client_ip = client_ip_from_request(request)
+    await enforce_signup_guards(
+        db,
+        email=email,
+        ip=client_ip,
+        honeypot=body.honeypot,
+        form_age_ms=body.form_age_ms,
+    )
     # Iter 212m-70 — projection: signup only needs the existence check
     # plus the email field for the duplicate-message logic.  No need
     # to pull password_hash / failed_logins / tokens_remaining etc.
@@ -233,7 +252,17 @@ async def signup(body: SignupBody) -> dict:
         # Iter 212m-222 — stored as float epoch (was datetime) so the
         # admin /users window filter matches this row.
         "created_at": created_at,
+        # Iter 365 — signup abuse audit trail. IP used by the per-IP
+        # rate-limiter on subsequent /signup calls.
+        "signup_ip":  client_ip,
     })
+    # Iter 365 · Phase 3 — funnel event so /admin/funnel can compute
+    # signup→first_chat and signup→first_ship conversion rates.
+    await emit_funnel_event(
+        db, user_id=user_id, event_type="signup_completed",
+        metadata={"tier": tier, "is_founder": is_founder,
+                  "signup_ip": client_ip},
+    )
     token = create_token(user_id, email, is_admin=is_founder)
     return {
         "ok": True,

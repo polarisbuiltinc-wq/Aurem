@@ -309,8 +309,114 @@ export default function AdminQADashboard() {
       {/* Iter 334 — Auto-QA agent latest report */}
       <LatestAutoQASection />
 
+      {/* Iter 364/365 — Loop-beta rollout kill-switch */}
+      <LoopKillSwitchSection />
+
       {/* Iter 363 · Guard 20 — automated postmortem / incident log */}
       <IncidentLogSection />
+    </div>
+  );
+}
+
+
+// Iter 365 · Phase 5 — one-click kill-switch for Loop Mode. Toggles
+// the DB `system_flags.loop_mode_kill_switch` row via the admin API
+// so the founder can flip Loop OFF for everyone (including beta) in
+// one click, without curl. Confirms twice on enable, once on disable.
+function LoopKillSwitchSection() {
+  const [status, setStatus] = useState(null);
+  const [busy,   setBusy]   = useState(false);
+
+  const load = () => {
+    const tok = localStorage.getItem("aurem_admin_token")
+      || localStorage.getItem("aurem_token");
+    axios.get(`${API}/api/aurem-dev/admin/loop-beta/status`,
+      { headers: { Authorization: `Bearer ${tok || ""}` }, timeout: 15000 })
+      .then((r) => setStatus(r.data))
+      .catch((e) => setStatus({ error: e?.response?.data?.detail || e.message }));
+  };
+  useEffect(load, []);
+
+  const flip = async (nextOn) => {
+    const confirmMsg = nextOn
+      ? "This will BLOCK every /loop/start call for every user, including beta users. Continue?"
+      : "Re-enable Loop Mode for all beta-flagged users?";
+    if (!window.confirm(confirmMsg)) return;
+    setBusy(true);
+    try {
+      const tok = localStorage.getItem("aurem_admin_token")
+        || localStorage.getItem("aurem_token");
+      await axios.post(`${API}/api/aurem-dev/admin/loop-beta/kill-switch`,
+        { enabled: nextOn, reason: nextOn ? "manual UI flip" : "manual UI un-flip" },
+        { headers: { Authorization: `Bearer ${tok || ""}` }, timeout: 15000 });
+      load();
+    } catch (e) {
+      alert("Kill-switch flip failed: " + (e?.response?.data?.detail || e.message));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!status) return null;
+  if (status.error) {
+    return (
+      <div style={{ maxWidth: 1100, marginTop: 20 }}>
+        <Card testid="admin-loop-killswitch"
+              title="Loop Mode Kill-Switch"
+              sub="Iter 364/365 — one-click Loop rollback">
+          <div style={{ fontSize: 12, color: "#f87171" }}>
+            {typeof status.error === "string" ? status.error : "Failed to load"}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+  const on = !!status.kill_switch_db;
+  return (
+    <div style={{ maxWidth: 1100, marginTop: 20 }}
+         data-testid="admin-loop-killswitch">
+      <Card testid="admin-loop-killswitch-card"
+            title="Loop Mode Kill-Switch"
+            sub={`${status.beta_users} beta users · ${status.active_loops} active loops · ${status.stuck_last_10min} stuck (10m)`}>
+        <div style={{ display: "flex", alignItems: "center",
+                       justifyContent: "space-between", gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600,
+                           color: on ? "#f87171" : "#4ade80" }}>
+              {on ? "🔴  KILL-SWITCH ON — all /loop/start calls blocked"
+                  : "🟢  Loop Mode enabled per tier gate"}
+            </div>
+            <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
+              {status.kill_switch_env
+                ? `Env override active: LOOP_MODE_KILL_SWITCH=${status.kill_switch_env}`
+                : "DB flag drives this — env override empty"}
+            </div>
+            {status.kill_switch_reason && (
+              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                Reason: {status.kill_switch_reason}
+              </div>
+            )}
+          </div>
+          <button
+            data-testid="loop-killswitch-toggle"
+            disabled={busy}
+            onClick={() => flip(!on)}
+            style={{
+              padding: "10px 20px",
+              background: on ? "#4ade80" : "#f87171",
+              color: "#0a0a0a",
+              border: "none",
+              borderRadius: 6,
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: busy ? "wait" : "pointer",
+              opacity: busy ? 0.6 : 1,
+            }}
+          >
+            {busy ? "…" : (on ? "Re-enable Loop" : "🚨 Kill Loop Mode")}
+          </button>
+        </div>
+      </Card>
     </div>
   );
 }

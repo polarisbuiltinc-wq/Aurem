@@ -840,6 +840,26 @@ async def chat_send(
             _maybe_set_title(user["user_id"], body.session_id, body.prompt)
         )
     tokens_remaining = await _deduct_tokens(user["user_id"], content)
+    # Iter 365 · Phase 3 — funnel event: first_chat_sent (idempotent
+    # via one-shot flag on dev_users). Best-effort, non-blocking.
+    try:
+        from cto_services.db import get_db as _fn_db
+        from services.signup_guards import emit_funnel_event
+        _fdb = _fn_db()
+        if _fdb is not None:
+            _stamped = await _fdb.dev_users.find_one_and_update(
+                {"user_id": user["user_id"], "first_chat_at": {"$exists": False}},
+                {"$set": {"first_chat_at": time.time()}},
+                projection={"_id": 0, "user_id": 1},
+            )
+            if _stamped:
+                await emit_funnel_event(
+                    _fdb, user_id=user["user_id"],
+                    event_type="first_chat_sent",
+                    metadata={"provider": provider, "mode": req_mode},
+                )
+    except Exception as _fne:
+        logger.debug("first_chat_sent funnel emit failed: %r", _fne)
     # Iter 212m-15 — stage timing instrumentation. Lets us spot whether
     # a slow turn was the LLM (normal — 5-15s on cold OpenRouter), or
     # one of the cheap pre-flight steps stalling (which would be a

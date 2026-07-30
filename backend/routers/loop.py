@@ -239,6 +239,22 @@ async def start_loop(body: StartBody,
         session_id=body.session_id,
     )
     eng.register(engine)
+    # Iter 365 · Phase 3 — funnel event: first_loop_started.
+    try:
+        from services.signup_guards import emit_funnel_event
+        _stamped = await db.dev_users.find_one_and_update(
+            {"user_id": user["user_id"], "first_loop_at": {"$exists": False}},
+            {"$set": {"first_loop_at": time.time()}},
+            projection={"_id": 0, "user_id": 1},
+        )
+        if _stamped:
+            await emit_funnel_event(
+                db, user_id=user["user_id"],
+                event_type="first_loop_started",
+                metadata={"loop_id": loop_id, "project_id": body.project_id},
+            )
+    except Exception as _fne:
+        logger.debug("first_loop_started emit failed: %r", _fne)
 
     # ── Iter 312 · Class 1 — Fire-and-forget plan phase ──────────────
     # Previously: `async for _ev in engine.start(): pass` synchronously

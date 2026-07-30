@@ -5032,3 +5032,70 @@ QA_BOT_SESSION_TOKEN secret + QA_REPORT_COMMIT_TOKEN PAT. Code is ready.
 - **Before**: 92 loop-related tests passing.
 - **After**: 137 tests passing across `test_iter364_*` + all pre-existing
   loop/guard suites. Zero regressions.
+
+## Iter 365 (2026-07-30) — Launch-readiness remediation
+
+### Phase 1 — Repo integrity (DEFERRED — needs founder action)
+- Cannot check github.com/polarisbuiltinc-wq/auremdev for rogue draft PRs
+  from pod: `GITHUB_TOKEN` + `GITHUB_ORG` are empty in backend `.env`.
+- Local head: `3c8a675` @ 2026-07-30 22:11 UTC. Founder must compare
+  against remote HEAD manually.
+
+### Phase 2 — Signup abuse protection ✅
+- `services/signup_guards.py` (new, 160 LOC) — enforce_signup_guards()
+  checks honeypot, form-timing (min 2s), disposable-email blocklist
+  (34 curated domains), per-IP rate-limit (default 3 signups/24h).
+- `routers/auth.py::signup` now takes `Request` + wires the guards
+  BEFORE the dev_users insert. IP stamped into `signup_ip` for future
+  rate-limit windows.
+- `SignupBody` gets optional `honeypot` + `form_age_ms` fields.
+- **E2E verified**: 20 rapid signups from same IP → 3 succeed, 17 blocked
+  with 429. Disposable email → 400. Honeypot → 400. Fast-form → 400.
+
+### Phase 3 — Funnel analytics ✅
+- New collection `funnel_events` — `{user_id, event_type, metadata,
+  created_at, ts_epoch}`.
+- `signup_guards.emit_funnel_event()` helper (best-effort, never
+  raises).
+- Events wired at: signup (auth.py), first_chat_sent (chat.py, once
+  per user via find_one_and_update), first_loop_started (loop.py),
+  first_task_shipped (loop_engine.py terminal COMPLETED emit).
+- `GET /admin/funnel?days=N` — signups, first_chat_pct, first_ship_pct,
+  time_to_first_ship_median_h, d7 + d30 retention, event_counts.
+- Excludes founder / admin / unlimited from denominator so numbers
+  reflect real users only.
+
+### Phase 4 — Beta rollout (DEFERRED — needs founder action + 48h wall-clock)
+- Endpoints ready:
+    POST /admin/users/{id}/enable-loop-beta {enabled: true}
+    GET  /admin/loop-beta/status
+- Runbook: whitelist 5-10 real Pro/Team users, monitor status endpoint
+  + `loop_execution_log` + `maxx_cost_log` for 48h.
+
+### Phase 5 — Kill-switch admin UI ✅
+- `AdminQADashboard.jsx::LoopKillSwitchSection` — red button + double-
+  confirm dialog. Calls `POST /admin/loop-beta/kill-switch`. Shows
+  current state (DB flag, env override, active loops, stuck count).
+
+### Phase 6 — Legacy test Bucket B cleanup ✅
+- Deleted 8 confirmed-dead test files (was 9 planned; consolidated one
+  match):
+  - test_iter212m9_deploy_http.py
+  - test_iter212m21_ask_advisor_glm.py
+  - test_iter212m212_advisor_screen_share.py
+  - test_iter130_layered_persona.py
+  - test_iter123g_seo_geo_consistency.py
+  - test_iter36_anti_hallucination.py
+  - test_iter107_ora_circuit_breaker.py
+  - test_iter118_route_cache.py
+- `tests/legacy_quarantine.txt`: 270 → 232 nodeids (-38).
+
+### Phase 7 — Stripe / MRR (DEFERRED — needs founder Stripe dashboard access)
+- Cannot query Stripe from pod without exposing keys to this session.
+- Founder: check dashboard.stripe.com/subscriptions for tier breakdown
+  and MRR. Backend enforcement of monthly caps is now live per Iter 364
+  so the numbers are trustworthy.
+
+### Tests
+- **152 pytest cases passing** across the Iter 364/365 stack + all
+  pre-existing loop/guard suites. Zero regressions.
