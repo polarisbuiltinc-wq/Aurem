@@ -393,6 +393,16 @@ async def lifespan(app: FastAPI):
     except Exception as _e:                                  # noqa: BLE001
         logger.warning("[G19] record_boot failed: %r", _e)
 
+    # G6 · Iter 366 — DB dedup unique indexes. Central + idempotent.
+    try:
+        from services.db_indexes import ensure_dedup_indexes
+        _g6_res = await ensure_dedup_indexes(app.state.db)
+        ok = sum(1 for r in _g6_res if r.get("ok"))
+        logger.info("[G6] dedup indexes ensured: %d ok / %d total",
+                    ok, len(_g6_res))
+    except Exception as _e:                                  # noqa: BLE001
+        logger.warning("[G6] ensure_dedup_indexes failed: %r", _e)
+
     # Iter 212m-115 safety — Create the unique index for the
     # concurrent-loop lock collection so we can never have two active
     # loops on the same {project_id, user_id}.

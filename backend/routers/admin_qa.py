@@ -33,6 +33,7 @@ from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Header, HTTPException, Depends
+from pydantic import BaseModel
 from cto_services.auth import require_admin_dep
 
 from routers.admin import _require_admin
@@ -456,3 +457,205 @@ async def guard20_incidents(status: str = "all",
         "stats": await incident_stats(db),
         "incidents": await list_incidents(db, status=status, limit=100),
     }
+
+
+
+# ── Iter 366 — Wave 1 + Wave 2 catch-up QA endpoints ──────────────
+
+@router.get("/guard1-route-sweep")
+async def guard1_route_sweep(authorization: Optional[str] = Header(None)):
+    """G1 — Playwright route smoke sweep last-run snapshot.
+    Result rows are written by scripts/g1_route_smoke_sweep.py."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    db = get_db()
+    if db is None:
+        return {"guard": "G1", "available": False}
+    try:
+        last = await db.synthetic_checks.find_one(
+            {"kind": "g1_route_sweep"},
+            sort=[("finished_at", -1)],
+        )
+        if not last:
+            return {"guard": "G1", "available": True,
+                    "state": "STALE", "reason": "no_runs_yet"}
+        failed = last.get("failed", 0)
+        return {
+            "guard": "G1",
+            "available": True,
+            "state": "GREEN" if failed == 0 else "RED",
+            "last_finished_at": last.get("finished_at"),
+            "total": last.get("total"),
+            "failed": failed,
+        }
+    except Exception as e:
+        return {"guard": "G1", "available": False, "error": str(e)[:200]}
+
+
+@router.get("/guard3-scope-drift")
+async def guard3_scope_drift(authorization: Optional[str] = Header(None)):
+    """G3 — scope-drift hard-block stats."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services.scope_drift_guard import get_scope_block_stats
+    return {"guard": "G3", **(await get_scope_block_stats(get_db()))}
+
+
+@router.get("/guard5-invariants")
+async def guard5_invariants(authorization: Optional[str] = Header(None)):
+    """G5 — data-invariant snapshot: live counts of dev_users w/ null
+    tier, negative tokens_granted, orphan loop_sessions state."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    db = get_db()
+    if db is None:
+        return {"guard": "G5", "available": False}
+    from services.loop_engine import LoopState
+    known = {s.value for s in LoopState}
+    payload = {"guard": "G5", "available": True, "checks": {}}
+    try:
+        payload["checks"]["null_tier_users"] = await db.dev_users.count_documents(
+            {"$or": [{"tier": {"$exists": False}}, {"tier": None}]}
+        )
+        payload["checks"]["negative_grants"] = await db.dev_users.count_documents(
+            {"tokens_granted": {"$lt": 0}}
+        )
+        payload["checks"]["orphan_loop_states"] = await db.loop_sessions.count_documents(
+            {"state": {"$nin": list(known)}}
+        )
+        payload["state"] = ("GREEN"
+                             if all(v == 0 for v in payload["checks"].values())
+                             else "RED")
+    except Exception as e:
+        payload["available"] = False; payload["error"] = str(e)[:200]
+    return payload
+
+
+@router.get("/guard6-dedup-indexes")
+async def guard6_dedup_indexes(authorization: Optional[str] = Header(None)):
+    """G6 — DB dedup unique-index report."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services.db_indexes import get_dedup_index_report
+    rep = await get_dedup_index_report(get_db())
+    rep["guard"] = "G6"
+    rep["state"] = "GREEN" if rep.get("all_present") else "RED"
+    return rep
+
+
+@router.get("/guard7-payment-recon")
+async def guard7_payment_recon(authorization: Optional[str] = Header(None)):
+    """G7 — hourly Stripe vs local payment reconciliation summary."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services.payment_reconciliation import get_recon_summary
+    summary = await get_recon_summary(get_db())
+    return {"guard": "G7", **summary}
+
+
+@router.get("/guard10-founder-alerts")
+async def guard10_founder_alerts(authorization: Optional[str] = Header(None)):
+    """G10 — founder alert email channel status."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services.founder_alerts import _resend_conf
+    conf = _resend_conf()
+    db = get_db()
+    if db is None:
+        return {"guard": "G10", "available": False, "enabled": conf["enabled"]}
+    last = None
+    try:
+        last = await db.founder_alert_sends.find_one({}, sort=[("sent_at", -1)])
+    except Exception:
+        pass
+    return {
+        "guard": "G10",
+        "available": True,
+        "enabled": conf["enabled"],
+        "state": "GREEN" if conf["enabled"] else "STALE",
+        "reason": None if conf["enabled"] else "RESEND_API_KEY_or_FOUNDER_ALERT_EMAIL_missing",
+        "last_send_at": last.get("sent_at").isoformat() if last and last.get("sent_at") else None,
+        "last_delivered": last.get("delivered") if last else None,
+    }
+
+
+@router.get("/guard12-rollback")
+async def guard12_rollback_status(authorization: Optional[str] = Header(None)):
+    """G12 — one-click rollback status + candidate list."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services.rollback_manager import rollback_status, get_rollback_candidates
+    db = get_db()
+    status = await rollback_status(db)
+    return {"guard": "G12", **status,
+            "candidates": await get_rollback_candidates(db, limit=10)}
+
+
+@router.get("/guard13-cost")
+async def guard13_cost(authorization: Optional[str] = Header(None)):
+    """G13 — LLM cost breaker current spend vs caps."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services.llm_cost_breaker import spend_summary
+    summary = await spend_summary(get_db())
+    return {"guard": "G13", **summary}
+
+
+@router.get("/guard14-signup-abuse")
+async def guard14_signup_abuse(authorization: Optional[str] = Header(None)):
+    """G14 — signup + task abuse counts (7d)."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services.signup_guards import get_signup_abuse_stats
+    stats = await get_signup_abuse_stats(get_db())
+    return {"guard": "G14", **stats,
+            "state": "GREEN" if stats.get("available") else "STALE"}
+
+
+@router.get("/guard15-deps")
+async def guard15_deps(authorization: Optional[str] = Header(None)):
+    """G15 — dependency vulnerability scan last-run snapshot."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    db = get_db()
+    if db is None:
+        return {"guard": "G15", "available": False}
+    try:
+        last = await db.synthetic_checks.find_one(
+            {"kind": "g15_dep_scan"}, sort=[("finished_at", -1)],
+        )
+        if not last:
+            return {"guard": "G15", "available": True, "state": "STALE",
+                    "reason": "no_runs_yet"}
+        return {"guard": "G15", "available": True,
+                "state": "GREEN" if last.get("high_critical", 0) == 0 else "RED",
+                "last_finished_at": last.get("finished_at"),
+                "high_critical": last.get("high_critical", 0),
+                "total_findings": last.get("total_findings", 0)}
+    except Exception as e:
+        return {"guard": "G15", "available": False, "error": str(e)[:200]}
+
+
+# ── Rollback trigger endpoint (G12 write) ─────────────────────────
+
+class RollbackBody(BaseModel):
+    target_sha: str
+    reason:     Optional[str] = ""
+
+
+@router.post("/guard12-rollback/trigger")
+async def guard12_trigger_rollback(
+    body: RollbackBody,
+    authorization: Optional[str] = Header(None),
+):
+    """Founder-gated. Stages a rollback intent in db.rollback_trigger
+    for the deployer daemon to pick up on the next tick."""
+    admin = await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services.rollback_manager import execute_rollback
+    return await execute_rollback(
+        get_db(),
+        target_sha=(body.target_sha or "").strip(),
+        triggered_by=admin.get("email") or admin.get("user_id") or "?",
+        reason=(body.reason or "").strip(),
+    )

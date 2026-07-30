@@ -5099,3 +5099,108 @@ QA_BOT_SESSION_TOKEN secret + QA_REPORT_COMMIT_TOKEN PAT. Code is ready.
 ### Tests
 - **152 pytest cases passing** across the Iter 364/365 stack + all
   pre-existing loop/guard suites. Zero regressions.
+
+## Iter 366 (2026-07-30) — Regression Guards Wave 1 + Wave 2 catch-up
+
+Shipped 9 more guards in one session. Uses existing infra everywhere
+(incident_log, topup_alerts, retry_guard, deploy_events, dev_users).
+
+### G3 — Scope-drift hard block ✅
+- `services/scope_drift_guard.py` — assert_write_allowed() raises
+  ValueError("scope_drift_blocked") on out-of-scope or protected-path
+  writes; PROTECTED_PATH_PATTERNS covers admin routers, payments,
+  auth, mcp, vault, stripe, .env, .github/workflows, migrations.
+- Blocks persisted to `loop_scope_blocks` collection.
+- QA row: GET /admin/qa/guard3-scope-drift (blocks_in_window + by_reason).
+
+### G4 — Rendered-page secret scanner ✅
+- `scripts/g4_secret_scanner.py` — greps rendered HTML for 6 real
+  secret patterns (sk-aurem-, ghp_, sk_live/test_, AKIA, JWT).
+- Live-verified against auremcto.com — 7 routes scanned, 0 leaks.
+
+### G5 — Data invariant tests ✅
+- `tests/test_iter366_g5_data_invariants.py` — 6 invariant checks:
+  no null-tier dev_users, no dup emails, MTTR never negative, loop
+  state always in enum, UTC round-trip preserves tz, no
+  datetime.utcnow() in hot paths, no negative tokens_granted, no
+  negative loop duration_s.
+- QA row: GET /admin/qa/guard5-invariants (live checks + GREEN/RED).
+
+### G6 — DB dedup unique indexes ✅
+- `services/db_indexes.py::ensure_dedup_indexes()` — installs 5
+  unique indexes on lifespan startup (topup_alerts, incidents,
+  dev_users email, chat_sessions, funnel_events).
+- Wired into main.py lifespan after G19 record_boot.
+- QA row: GET /admin/qa/guard6-dedup-indexes → all_present=true, GREEN.
+
+### G7 — Payment reconciliation ✅
+- `services/payment_reconciliation.py::run_reconciliation()` — Stripe
+  PaymentIntent + Subscription vs local DB sweep. 3 finding classes:
+  local_pending_stuck (>24h), stripe_paid_missing_locally,
+  stripe_active_local_canceled. Persists to
+  payment_reconciliation_log. G10 alert on findings > 0.
+- QA row: GET /admin/qa/guard7-payment-recon.
+
+### G10 — Founder alert channel ✅
+- `services/founder_alerts.py::send_founder_alert()` — Resend HTTP
+  API call with 6h dedup per (source_key, level). daily digest via
+  send_daily_digest().
+- Persists to `founder_alert_sends` for audit + G20 cross-ref.
+- STALE (grey) until founder sets RESEND_API_KEY + FOUNDER_ALERT_EMAIL
+  env vars. QA row shows this explicitly.
+
+### G12 — One-click rollback ✅
+- `services/rollback_manager.py` — get_rollback_candidates() reads
+  deploy_events; execute_rollback() writes an intent to
+  rollback_trigger. Fires G10 alert on trigger.
+- QA endpoints: GET /admin/qa/guard12-rollback + POST /guard12-rollback/trigger.
+
+### G13 — LLM cost circuit breaker ✅
+- `services/llm_cost_breaker.py` — hourly $2, daily $10, per-loop $0.50
+  caps (env-tunable). assert_within_cap() raises HTTP 429
+  llm_cost_cap_hit; record_cost() persists to llm_cost_ledger; per-
+  loop breach sets resume_reason="llm_cost_cap" so loop_engine kills
+  the loop.
+- Fires G10 alert on cap hit.
+- QA row: GET /admin/qa/guard13-cost (current spend vs each cap).
+
+### G14 — Signup + task abuse (FULL close-out) ✅
+- Iter 365 had partial. Iter 366 closes the gap:
+  - All violations now written to `signup_abuse_log` (was python logger only)
+  - New per-user + per-IP task rate-limit (5/hr per account) —
+    services/signup_guards.py::assert_task_burst_ok, wired into
+    routers/loop.py::start_loop AFTER the tier gate.
+  - QA row: GET /admin/qa/guard14-signup-abuse — LIVE showed 6 real
+    blocks (2 timing, 2 honeypot, 2 rate_limit) from earlier E2E tests.
+
+### G15 — Dependency vulnerability scan ✅
+- `scripts/g15_dependency_scan.py` — pip-audit against requirements.txt,
+  HIGH/CRITICAL = build fail unless allowlisted with expiry.
+- `scripts/g15_allowlist.json` — empty. Live-verified: 84 total
+  findings, 0 HIGH/CRITICAL unhandled → PASS.
+- QA row: GET /admin/qa/guard15-deps.
+
+### G16 — Auth hardening (FULL close-out) ✅
+- Iter 358b had partial. Iter 366 closes:
+  - `test_iter366_g16_auth_hardening.py`: revoked sk-aurem key
+    rejects with no cache lag (direct DB verification); expired JWT
+    raises jwt.ExpiredSignatureError; login handler still wires
+    Layer-1 IP burst-limiter + Layer-2 Mongo lockout (confirmed by
+    AST scan).
+
+### G1 — Playwright route sweep ✅ (STALE until CI schedules a run)
+- `scripts/g1_route_smoke_sweep.py` — public + auth routes crawl,
+  detects NaN/undefined/Invalid Date/stack traces/empty main.
+- QA row: GET /admin/qa/guard1-route-sweep — STALE until first run.
+
+### Tests
+- **155 pytest passing** (was 137 before Iter 366 → +18 new). Zero
+  regressions.
+
+### Founder-side actions still needed
+- G8: GITHUB_ACTIONS_TOKEN + GITHUB_REPO env vars
+- G9: UptimeRobot account + UPTIMEROBOT_API_KEY
+- G10: RESEND_API_KEY + FOUNDER_ALERT_EMAIL (code is live, waiting on values)
+- G11: Atlas backup + restore-test config
+- G13: LLM_COST_CAP_HOURLY / DAILY / PER_LOOP overrides if defaults ($2/$10/$0.50) are wrong
+

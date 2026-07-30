@@ -86,6 +86,7 @@ class SubmitFilesBody(BaseModel):
 
 @router.post("/start")
 async def start_loop(body: StartBody,
+                     request: Request,
                      authorization: Optional[str] = Header(None)) -> dict:
     user = await current_dev(authorization)
     db = get_db()
@@ -203,6 +204,17 @@ async def start_loop(body: StartBody,
                                 "to finish (or cancel it) before starting "
                                 "another."),
             })
+    # G14 · Per-account task burst limit (5/hr for free/starter). Pro/
+    # Team bypass. Founders bypass. Prevents rapid-fire farming that
+    # slips past the token-budget gate on chat/send.
+    from services.signup_guards import assert_task_burst_ok
+    await assert_task_burst_ok(
+        db,
+        user_id=user["user_id"],
+        ip=(request.client.host if request and request.client else "?"),
+        tier=(user.get("tier") or "free"),
+        is_founder=is_founder,
+    )
     # Iter 212m-115 safety #2 — Concurrent-loop lock. Refuses a 2nd
     # parallel loop on the same project for the same user.
     locked, existing = await acquire_loop_lock(

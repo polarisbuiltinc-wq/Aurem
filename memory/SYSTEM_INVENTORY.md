@@ -669,3 +669,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `services/loop_beta.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T22:16:30.721530Z] <!-- inv:service:services/loop_beta.py -->
 - `LOOP_TOTAL_BUDGET_S` — auto-detected in backend/services/loop_engine.py (verify) (default: unset) [Iter 0, 2026-07-30T22:16:30.721546Z] <!-- inv:envvar:LOOP_TOTAL_BUDGET_S -->
 - `DB_NAME` — auto-detected in backend/tests/test_iter364_loop_beta_rollout.py (verify) (default: unset) [Iter 0, 2026-07-30T22:16:30.721558Z] <!-- inv:envvar:DB_NAME -->
+- `services/signup_guards.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T23:05:51.430879Z] <!-- inv:service:services/signup_guards.py -->
