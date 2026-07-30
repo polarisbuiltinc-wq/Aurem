@@ -326,7 +326,25 @@ Language: **Hinglish** — main agent responds in Hinglish.
 - Frontend: vitest + RTL under `src/**/__tests__/` and `src/**/*.test.jsx` — 124/124 passing
 - **NEW HARD RULE (added Iter 328)**: for UI regressions, an integration test that chains real wire shape → mapper → real component render is required. Component-level tests alone are insufficient (the exact gap that broke Deploy 2 three times).
 
-## Iter 358 · 2026-06-30 — Ship-chip real data + SEO/GEO/AEO refresh + internal docs (preview, deploy pending)
+## Iter 358b · 2026-06-30 — Admin auth hardening (Guard 16 partial) + bundle diet
+- **URGENT security verification (founder-mandated, RailShell merged admin into shared shell)**:
+  Proven with real NON-FOUNDER account (qa-free-339k@aurem.dev, tier=free, is_admin=False):
+  - CLIENT: Admin rail icon ABSENT from DOM (node count 0, no admin testid); visibility gated
+    by server-confirmed /auth/me (isFounder), no hardcoded flag.
+  - SERVER (authoritative, via curl — urllib was Cloudflare-1010-blocked, caught & redone):
+    ALL 112 admin endpoints across 4 routers → real app 403 {"detail":"Admin access required"};
+    no token → 401; founder → 200. ZERO leaks, ZERO Cloudflare false-positives.
+- **Hardening (defense-in-depth, founder's architectural ask)**: added router-level
+  `dependencies=[Depends(require_admin_dep)]` (cto_services/auth.py) to admin, admin_qa,
+  admin_bin, admin_vanguard — a NEW admin route now inherits the gate, can't ship unprotected.
+  Public write-only /errors/report moved to un-gated routers/admin_public.py at SAME URL
+  (no frontend change). Guard-16 static + live locks: test_iter358_admin_auth_hardening.py (5).
+- **Bundle diet** (surfaced by a flaky glob[0] test): lazy-loaded 6 dev/harness/admin +
+  Login/Signup/WhyOra pages; entry chunk 543KB→384KB. Fixed the test to read the REAL entry
+  from index.html (deterministic) + honest 400KB ceiling (React 19 baseline).
+- Gate: 3742 backend + 236 vitest green.
+
+
 - **"ships this week" chip fixed at route level** (routers/wrapped.py): `this_week` period
   never existed (fell to ALL-TIME) + Loop Mode ships (loop_sessions) were never counted —
   both fixed; verified live (this_week=7 vs all=8 with seeded old ship). Locks:

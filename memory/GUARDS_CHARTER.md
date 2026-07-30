@@ -35,7 +35,11 @@ Wave 3 (17-21): 18 → 17 → 21 → 19 → 20
   preview, hours-gap fallback on prod). Locks: test_iter357_github_sync.py
   (8). AWAITING FOUNDER: GITHUB_ACTIONS_TOKEN + GITHUB_REPO env vars
   (currently shows "not wired"). Full Guard 8 (CI wiring) still pending.
-- Guards 1, 3-7, 9-21: NOT STARTED.
+- Guard 16 (partial): ✅ router-level admin gate on all 4 admin routers
+  (require_admin_dep) + live non-founder 112-endpoint 403 sweep lock
+  (Iter 358b, deployed with SEO/chip). Remaining: revoked-key/
+  expired-token/auth-endpoint-rate-limiter tests.
+- Guards 1, 3-7, 9-15, 17-21: NOT STARTED.
 
 ## GUARD SPECS
 

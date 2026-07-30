@@ -17,13 +17,15 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Depends
+from cto_services.auth import require_admin_dep
 from pydantic import BaseModel
 
 from cto_services.auth import current_dev
 from services.vanguard_config import get_config, save_config
 
-router = APIRouter(prefix="/admin/vanguard", tags=["Admin / Vanguard"])
+router = APIRouter(prefix="/admin/vanguard", tags=["Admin / Vanguard"],
+                   dependencies=[Depends(require_admin_dep)])  # Iter 358 router-level gate
 
 
 def _require_admin(me: dict) -> None:

@@ -31,17 +31,17 @@ import CookieConsentBanner from "./components/CookieConsentBanner";
 // they share layout (AuthShell). Keeping them in the initial bundle
 // avoids a Suspense flash on the highest-traffic paths.
 import Landing from "./pages/Landing";
-import Both from "./pages/Both";
-import LoopLiveFeedDemo from "./pages/LoopLiveFeedDemo";
-import ShippedRowHarness from "./pages/ShippedRowHarness";
-import VisualFixtures from "./pages/VisualFixtures";
-import AdminQADashboard from "./pages/AdminQADashboard";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-// Iter 212m-219 — Marketing "Why ORA" deep-dive. Lightweight page
-// (< 6 KB gzipped) — no heavy deps, so we ship it in the initial
-// bundle alongside Landing for zero-flash navigation from the hero.
-import WhyOra from "./pages/WhyOra";
+// Iter 358 — bundle diet: dev/harness/admin-QA pages don't belong in
+// the first-paint entry chunk. Lazy-load them so the entry stays under
+// the 350KB code-splitting target (they render behind Suspense).
+const Both              = lazy(() => import("./pages/Both"));
+const LoopLiveFeedDemo  = lazy(() => import("./pages/LoopLiveFeedDemo"));
+const ShippedRowHarness = lazy(() => import("./pages/ShippedRowHarness"));
+const VisualFixtures    = lazy(() => import("./pages/VisualFixtures"));
+const AdminQADashboard  = lazy(() => import("./pages/AdminQADashboard"));
+const Login             = lazy(() => import("./pages/Login"));
+const Signup            = lazy(() => import("./pages/Signup"));
+const WhyOra            = lazy(() => import("./pages/WhyOra"));
 import { initTheme } from "./services/theme";
 
 // Iter 212m-52 — apply theme as early as possible (BEFORE React

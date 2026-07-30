@@ -32,11 +32,13 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 import httpx
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Depends
+from cto_services.auth import require_admin_dep as _require_admin_dep
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/admin", tags=["Admin / Rebuild"])
+router = APIRouter(prefix="/admin", tags=["Admin / Rebuild"],
+                   dependencies=[Depends(_require_admin_dep)])  # Iter 358 router-level gate
 
 
 # ── Local admin guard (delegates to the shared one) ─────────────────

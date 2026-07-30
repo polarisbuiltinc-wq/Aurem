@@ -66,11 +66,16 @@ def test_orchestrator_verified_paths_includes_both_tools():
 # ── 3. Admin error endpoints ─────────────────────────────────────
 
 ADMIN = Path("/app/backend/routers/admin.py").read_text(encoding="utf-8")
+# Iter 358 — the public /errors/report sink moved to its own un-gated
+# router so the admin router could take a router-level admin gate.
+ADMIN_PUBLIC = Path("/app/backend/routers/admin_public.py").read_text(encoding="utf-8")
 
 
 def test_admin_error_endpoints_present():
-    assert "class ErrorReport(BaseModel)" in ADMIN
-    assert '@router.post("/errors/report")' in ADMIN
+    # Iter 358 — public sink + model now in admin_public.py
+    assert "class ErrorReport(BaseModel)" in ADMIN_PUBLIC
+    assert '@router.post("/errors/report")' in ADMIN_PUBLIC
+    # admin-gated read/autofix/resolve stay in admin.py
     assert '@router.get("/errors")'         in ADMIN
     assert '@router.post("/errors/{error_id}/autofix")' in ADMIN
     assert '@router.post("/errors/{error_id}/resolve")' in ADMIN
@@ -79,11 +84,15 @@ def test_admin_error_endpoints_present():
 def test_report_endpoint_is_unauthenticated():
     """The /errors/report endpoint must NOT call _require_admin or
     current_dev — frontend posts must work for any user (including
-    anonymous visitors hitting a console error on a public page)."""
-    # Carve out the function body for `report_error`.
-    start = ADMIN.index('async def report_error(')
-    next_def = ADMIN.index('@router.', start)
-    body = ADMIN[start:next_def]
+    anonymous visitors hitting a console error on a public page).
+    Iter 358 — it lives on admin_public.py, a router with NO
+    router-level admin dependency."""
+    assert "require_admin_dep" not in ADMIN_PUBLIC, (
+        "admin_public router must NOT carry the admin gate — it hosts "
+        "the public error sink."
+    )
+    start = ADMIN_PUBLIC.index('async def report_error(')
+    body = ADMIN_PUBLIC[start:]
     assert "_require_admin" not in body, (
         "/errors/report MUST NOT require admin — public endpoint."
     )
@@ -109,10 +118,9 @@ def test_admin_listing_requires_admin():
 
 def test_dedupe_uses_message_and_url_key():
     """Dedupe key is (message, url) — same message on different pages
-    must NOT collapse into one document (helps localise the bug)."""
-    start = ADMIN.index('async def report_error(')
-    end = ADMIN.index('@router.', start)
-    body = ADMIN[start:end]
+    must NOT collapse into one document. Iter 358 — now in admin_public."""
+    start = ADMIN_PUBLIC.index('async def report_error(')
+    body = ADMIN_PUBLIC[start:]
     assert "update_one(" in body
     assert '"message": msg' in body and '"url": url' in body
     assert "$inc" in body and '"count": 1' in body

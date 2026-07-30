@@ -18,10 +18,10 @@ import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request, Depends
 from pydantic import BaseModel
 
-from cto_services.auth import current_dev
+from cto_services.auth import current_dev, require_admin_dep
 from cto_services.db import get_db, require_db
 from services.usage import get_usage
 # Iter 212m-71 — 60 s TTL cache for the heavy admin aggregations
@@ -35,7 +35,16 @@ from services.admin_analytics_cache import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/admin", tags=["Admin"])
+# Iter 358 — router-level admin gate (defense-in-depth). EVERY route on
+# this router is denied to non-founders at the router boundary, so a new
+# endpoint added later is protected by default. Individual handlers keep
+# their inline `await _require_admin(...)` too (harmless redundancy).
+# The one intentionally-public sink (/admin/errors/report) lives on the
+# separate, un-gated routers/admin_public.py at the same URL.
+router = APIRouter(
+    prefix="/admin", tags=["Admin"],
+    dependencies=[Depends(require_admin_dep)],
+)
 
 
 async def _require_admin(authorization: Optional[str]) -> dict:
@@ -3612,62 +3621,15 @@ async def user_patterns_insights(
 # ─────────────────────────────────────────────────────────────────────
 # Iter 212h — Production Error Reporting
 #
-# Frontend silently posts every console.error / unhandledrejection to
-# /errors/report. Admins see them in a dedicated tab and can either
-# resolve manually or hand off to ORA for auto-fix via chat_with_tools.
-#
-# Dedupes by (message + url) so a console error firing 4000 times
-# doesn't bloat the collection — count is incremented in place.
+# Iter 358 — MOVED to routers/admin_public.py. The /errors/report sink
+# must stay UNAUTHENTICATED (logged-out users hit console errors too),
+# but this admin router is now gated at the router level
+# (dependencies=[Depends(require_admin_dep)]). Keeping the public
+# endpoint here would either break error reporting or punch a hole in
+# the router gate. It lives on a separate un-gated router at the SAME
+# URL (/admin/errors/report), so no frontend change was needed.
 # ─────────────────────────────────────────────────────────────────────
 from datetime import datetime, timezone
-
-
-class ErrorReport(BaseModel):
-    message:   str
-    stack:     str = ""
-    url:       str = ""
-    timestamp: str = ""
-    type:      str = "console_error"
-
-
-@router.post("/errors/report")
-async def report_error(body: ErrorReport, request: Request) -> dict:
-    """Public — no auth. Frontend posts every console.error here.
-    Dedupes by (message, url); increments `count` on repeat.
-    """
-    db = get_db()
-    if db is None:
-        return {"ok": False, "error": "db_unavailable"}
-    now = datetime.now(timezone.utc)
-    # Trim absurdly long stack traces so a single chatty bug can't blow
-    # up a document past Mongo's 16 MB cap.
-    msg   = (body.message or "")[:4_000]
-    stack = (body.stack   or "")[:16_000]
-    url   = (body.url     or "")[:1_000]
-    if not msg.strip():
-        return {"ok": False, "error": "empty_message"}
-    update = {
-        "$inc": {"count": 1},
-        "$set": {
-            "last_seen":  now.isoformat(),
-            "stack":      stack,
-            "type":       body.type or "console_error",
-            "user_agent": (request.headers.get("user-agent") or "")[:500],
-        },
-        "$setOnInsert": {
-            "message":    msg,
-            "url":        url,
-            "first_seen": now.isoformat(),
-            "resolved":   False,
-            "autofix_status": "idle",
-        },
-    }
-    await db.frontend_errors.update_one(
-        {"message": msg, "url": url},
-        update,
-        upsert=True,
-    )
-    return {"ok": True}
 
 
 @router.get("/errors")

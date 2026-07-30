@@ -5,7 +5,7 @@ JWT authentication for developer routes.
 import os
 import time
 import jwt
-from fastapi import HTTPException
+from fastapi import HTTPException, Header
 from typing import Optional
 
 JWT_SECRET = os.getenv("JWT_SECRET", "")
@@ -115,6 +115,19 @@ async def require_admin(authorization: Optional[str] = None) -> dict:
         # Swallow DB hiccups — fail closed below.
         pass
     raise HTTPException(403, "Admin access required")
+
+
+async def require_admin_dep(authorization: Optional[str] = Header(None)) -> dict:
+    """Iter 358 — router-level admin dependency (defense-in-depth).
+
+    Same rule as ``require_admin`` but shaped for FastAPI's
+    ``APIRouter(dependencies=[Depends(require_admin_dep)])`` so EVERY
+    route on an admin router is gated at the router boundary. A new
+    admin endpoint added later inherits the gate automatically — it
+    cannot accidentally ship unprotected even if the author forgets the
+    inline ``await _require_admin(...)`` call.
+    """
+    return await require_admin(authorization)
 
 
 def create_token(user_id: str, email: str, is_admin: bool = False) -> str:

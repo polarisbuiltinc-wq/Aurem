@@ -32,12 +32,14 @@ from pathlib import Path
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Depends
+from cto_services.auth import require_admin_dep
 
 from routers.admin import _require_admin
 
 
-router = APIRouter(prefix="/admin/qa", tags=["admin-qa"])
+router = APIRouter(prefix="/admin/qa", tags=["admin-qa"],
+                   dependencies=[Depends(require_admin_dep)])  # Iter 358 router-level gate
 
 
 # ═══════════════════════════════════════════════════════════════════

@@ -23,7 +23,7 @@ system. STALE = no run within 2× expected interval.
 | 13 | LLM cost circuit breaker | Runaway spend burning runway | planned (first in wave 2) |
 | 14 | Signup/free-tier abuse | Disposable-email + IP farming | planned |
 | 15 | Dependency vuln scanning | Known-CVE deps shipping | planned |
-| 16 | Auth/session hardening tests | Admin endpoints reachable by non-founder; stale keys | planned |
+| 16 | Auth/session hardening tests | Admin endpoints reachable by non-founder; stale keys | partial ✅ — router-level admin gate on all 4 admin routers + live non-founder 112-endpoint sweep lock (test_iter358_admin_auth_hardening.py); revoked-key/expired-token/rate-limiter locks pending |
 | 17 | Retry & circuit breakers | Hammering dead providers, cascade failures | planned |
 | 18 | Universal timeout budget | Infinite-wait outbound calls / hangs | planned (first in wave 3) |
 | 19 | Process auto-recovery | Crash loops hiding real bugs | planned |
