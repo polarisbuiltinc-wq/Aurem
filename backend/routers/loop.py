@@ -91,24 +91,45 @@ async def start_loop(body: StartBody,
     db = get_db()
     if db is None:
         raise HTTPException(503, "DB unavailable")
-    # Iter 212m-130 — Loop Mode is temporarily founder-only.  We've
-    # had real reports of executions getting stuck in the
-    # plan-confirm loop / verify retry storms and the founder needs
-    # space to fix the engine before exposing it to paying users
-    # again.  Non-founders see a friendly "Coming Soon" 403 — the
-    # frontend toggle is also locked client-side so this should
-    # only ever fire for someone hand-rolling a curl request.
+    # Iter 364 — Kill switch (env or DB flag) — hard-off for everyone
+    # including founders / betas. Instant rollback without a deploy.
+    from services import loop_beta as _lb
+    if await _lb.is_kill_switch_on_async(db):
+        raise HTTPException(403, {
+            "error":       "loop_mode_kill_switch",
+            "message":     ("Loop Mode is temporarily disabled while we "
+                            "investigate a stability issue. Try again "
+                            "shortly."),
+            "coming_soon": True,
+        })
+    # Iter 364 — Tiered gate. Founder/admin bypass; Pro/Team need
+    # loop_beta_enabled=True on their dev_users doc; Free/Starter
+    # locked (paid-tier differentiator + protects against the still-
+    # open free-tier abuse hole in /chat/send).
+    allowed, reject_reason = _lb.is_user_allowed(user)
     is_founder = bool(
         user.get("is_admin") or user.get("is_unlimited")
         or (user.get("tier") == "founder")
     )
-    if not is_founder:
+    if not allowed:
+        # Nice UX per rejection class.
+        if reject_reason == "beta_not_enabled":
+            raise HTTPException(403, {
+                "error":       "loop_beta_not_enabled",
+                "message":     ("Loop Mode is in phased beta rollout. "
+                                "Reply to your welcome email to request "
+                                "access — approvals happen within 1 "
+                                "business day."),
+                "coming_soon": True,
+                "tier":        user.get("tier"),
+            })
         raise HTTPException(403, {
-            "error":   "loop_mode_locked",
-            "message": ("Loop Mode is coming soon — we're polishing the "
-                       "Plan → Execute → Verify → Scan → Ship pipeline. "
-                       "It will unlock for all developers shortly."),
+            "error":       "loop_mode_locked",
+            "message":     ("Loop Mode is a Pro/Team feature — upgrade "
+                            "your plan to unlock GitHub commit flow."),
             "coming_soon": True,
+            "tier":        user.get("tier"),
+            "upgrade_url": "/pricing",
         })
     # ── Iter 349 · Read-only intent gate ──────────────────────────────
     # PROD P0: a simple read-only question ("what is the current CI
@@ -164,6 +185,24 @@ async def start_loop(body: StartBody,
             })
 
     loop_id = eng.new_loop_id()
+    # Iter 364 — Per-user in-flight concurrency cap (default 1).
+    # Founders bypass so we can debug multi-loop scenarios; everyone
+    # else can only have LOOP_MAX_CONCURRENT_PER_USER active loops at
+    # once. This is a coarse belt on top of the per-project loop_lock:
+    # a user with 3 projects could otherwise start 3 loops in parallel
+    # and blow up their Maxx cost budget in one minute.
+    if not is_founder:
+        n_active = await _lb.count_active_loops(db, user["user_id"])
+        if n_active >= _lb.LOOP_MAX_CONCURRENT_PER_USER:
+            raise HTTPException(409, {
+                "error":       "too_many_in_flight",
+                "in_flight":   n_active,
+                "max_allowed": _lb.LOOP_MAX_CONCURRENT_PER_USER,
+                "message":     (f"You already have {n_active} loop(s) "
+                                "in progress. Wait for the current run "
+                                "to finish (or cancel it) before starting "
+                                "another."),
+            })
     # Iter 212m-115 safety #2 — Concurrent-loop lock. Refuses a 2nd
     # parallel loop on the same project for the same user.
     locked, existing = await acquire_loop_lock(

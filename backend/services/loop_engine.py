@@ -76,6 +76,13 @@ PHASE_TIMEOUTS_S: dict[str, int] = {
 # scratch with the same context every restart). Cutting to 1 restart
 # bounds the worst case at 2×budget.
 MAX_PHASE_RESTARTS = 1
+# Iter 364 — Total wall-clock cap on the EXECUTE→VERIFY→SCAN→SHIP
+# pipeline. Belt-and-suspenders on top of per-phase budgets so a
+# pathological restart-chain (execute 420s × 2 + verify 360s × 2 …)
+# can never eat >30 min of wall-clock. On breach we _fail() the loop
+# with resume_reason="total_budget_exceeded" so the frontend + Guard
+# 19 stuck-detector can identify the class.
+LOOP_TOTAL_BUDGET_S = int(os.environ.get("LOOP_TOTAL_BUDGET_S", "1800"))
 # Iter 349 — Hard timeout on the plan-phase LLM call itself. The 120s
 # phase budget covers graph refresh + repo map + LLM, but a hung LLM
 # call was eating the whole budget and the user stared at
@@ -433,6 +440,15 @@ class LoopEngine:
             "commit":                None,
         }
         self._cancelled = False
+        # Iter 364 — wall-clock start marker for total-budget guard
+        # and Phase-3 loop_execution_log duration_s field.
+        self._started_at: float = time.time()
+        # Iter 364 — Maxx / parallel-agent flags. Set from the router
+        # when the request specifies them; logged into
+        # loop_execution_log on terminal.
+        self.used_maxx: bool = False
+        self.used_parallel_agents: bool = False
+        self.agent_count: int = 0
         # Iter 332 — stall detector ring: last N narration keys. If the
         # same 3-key sequence repeats twice back-to-back, auto-abort.
         self._narration_ring: list = []
@@ -773,7 +789,48 @@ class LoopEngine:
         propagate cleanly (no _fail() — cancel != failure) so the
         loop's terminal state reflects the user's intent (ABORTED,
         not FAILED). The user already saw the ABORTED event from
-        cancel() itself."""
+        cancel() itself.
+
+        Iter 364 — Wrapped in a total wall-clock guard
+        (LOOP_TOTAL_BUDGET_S, default 1800s) so a pathological
+        restart-chain across phases cannot exceed 30 min end-to-end.
+        On breach we mark FAILED with resume_reason="total_budget_
+        exceeded" so downstream (Guard 19 stuck-loop counter) can
+        pick it up."""
+        try:
+            await asyncio.wait_for(
+                self._run_pipeline_inner(),
+                timeout=LOOP_TOTAL_BUDGET_S,
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                "[loop %s] total wall-clock budget %ss exceeded — "
+                "failing loop",
+                self.loop_id, LOOP_TOTAL_BUDGET_S,
+            )
+            try:
+                await self.db.loop_sessions.update_one(
+                    {"loop_id": self.loop_id},
+                    {"$set": {"resume_reason": "total_budget_exceeded"}},
+                )
+            except Exception:
+                pass
+            await self._fail(
+                self.phase or "pipeline",
+                f"Loop exceeded total {LOOP_TOTAL_BUDGET_S}s wall-clock "
+                "budget and was auto-stopped. Break the task into a "
+                "smaller change and try again.",
+            )
+        except asyncio.CancelledError:
+            # Bubble up so the Task transitions to cancelled state.
+            # cancel() has already persisted ABORTED + emitted the
+            # event, so nothing more to do here.
+            logger.info("[loop %s] pipeline task cancelled cleanly", self.loop_id)
+            raise
+
+    async def _run_pipeline_inner(self) -> None:
+        """The original phase pipeline — extracted so `_run_pipeline`
+        can wrap it in the total-budget wait_for (Iter 364)."""
         try:
             await self._with_budget("execute", self._do_execute)
             if self._should_stop(): return
@@ -783,10 +840,6 @@ class LoopEngine:
             if self._should_stop(): return
             await self._with_budget("ship",    self._do_ship)
         except asyncio.CancelledError:
-            # Bubble up so the Task transitions to cancelled state.
-            # cancel() has already persisted ABORTED + emitted the
-            # event, so nothing more to do here.
-            logger.info("[loop %s] pipeline task cancelled cleanly", self.loop_id)
             raise
         except Exception as e:                           # noqa: BLE001
             # Iter 272 Feature 1.5 — no silent check skipping. Every
@@ -3231,6 +3284,48 @@ class LoopEngine:
         # chat_sessions ONCE so the run survives a page reload.
         if state in _TERMINAL:
             await self._persist_chat_turns(state, ev)
+            # Iter 364 — Phase-3 loop_execution_log row for every
+            # terminal state (completed / failed / aborted / expired).
+            try:
+                from services import loop_beta as _lb
+                # Resolve tier best-effort so we can slice adoption
+                # numbers by plan later.
+                tier = "unknown"
+                try:
+                    u = await self.db.dev_users.find_one(
+                        {"user_id": self.user_id},
+                        {"_id": 0, "tier": 1},
+                    )
+                    tier = (u or {}).get("tier") or "unknown"
+                except Exception:
+                    pass
+                # Resume reason (if set by _run_pipeline total-budget
+                # branch or resume_stale) doubles as stuck_reason.
+                stuck_reason = None
+                try:
+                    s = await self.db.loop_sessions.find_one(
+                        {"loop_id": self.loop_id},
+                        {"_id": 0, "resume_reason": 1},
+                    )
+                    stuck_reason = (s or {}).get("resume_reason")
+                except Exception:
+                    pass
+                await _lb.log_execution(
+                    self.db,
+                    user_id=self.user_id,
+                    loop_id=self.loop_id,
+                    tier=tier,
+                    status=state.value if hasattr(state, "value") else str(state),
+                    duration_s=max(0.0, time.time() - self._started_at),
+                    stuck_reason=stuck_reason,
+                    used_maxx=self.used_maxx,
+                    used_parallel_agents=self.used_parallel_agents,
+                    worker_tape_viewed=False,   # set by /stream endpoint hook
+                    agent_count=self.agent_count,
+                )
+            except Exception as _e:                     # noqa: BLE001
+                logger.debug("[loop %s] loop_execution_log write failed: %r",
+                             self.loop_id, _e)
         # ── Iter 315 · Fix 1 — persist phase-transition to loop_events ──
         # Diagnostic aggregator (`services/loop_speed_diagnostic.py::
         # _phase_durations_from_events`) reads `db.loop_events` grouped

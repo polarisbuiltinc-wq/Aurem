@@ -160,7 +160,13 @@ async def upload_convert(
     markdown body to the frontend so it can be appended to the chat
     prompt as clean LLM-readable text."""
     # Auth required so we don't expose this as an open conversion endpoint
-    await current_dev(authorization)
+    user = await current_dev(authorization)
+    # Iter 364 · Phase 3 — token hard-stop for image-branch (uses a
+    # vision LLM). Text/PDF conversions are stdlib-cheap so they
+    # aren't gated, but IMAGE_EXTS hits `_describe_image_via_vision`
+    # which is a real LLM call we need to protect.
+    from services.usage import assert_has_budget
+    await assert_has_budget(user["user_id"])
 
     raw = await file.read()
     size = len(raw)

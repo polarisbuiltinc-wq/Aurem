@@ -169,7 +169,20 @@ async def _trip_loop(db, boots: int, sha: str) -> None:
 
 async def resolve_if_stable(db) -> bool:
     """If no boots occurred in the last LOOP_WINDOW_S, auto-resolve any
-    active restart-loop alert. Returns True if it resolved one."""
+    active restart-loop alert. Returns True if it resolved one.
+
+    Iter 364 · Phase-3 — also runs the loop-beta stuck-loop detector
+    on every sweep. If >LOOP_STUCK_TRIP_THRESHOLD loops have stuck-
+    class terminal reasons in the last window, the DB kill switch
+    auto-flips ON and Guard 20 gets an incident row. Idempotent — a
+    manual flip-off won't get re-flipped by a stale signal."""
+    # Piggy-back on the existing 60s recovery sweep to keep the Guard
+    # 19 <-> loop_beta wiring in one place.
+    try:
+        from services import loop_beta as _lb
+        await _lb.auto_trip_kill_switch_if_stuck(db)
+    except Exception as _e:
+        logger.debug("[G19] loop stuck-sweep failed: %r", _e)
     if db is None:
         return False
     try:

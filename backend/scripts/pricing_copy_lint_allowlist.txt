@@ -1,0 +1,22 @@
+# pricing_copy_lint_allowlist.txt — Iter 364
+#
+# Lines listed here (exact substring match) are exempt from the
+# `pricing_copy_lint.py` "unlimited near pricing keyword" rule.
+# Add sparingly — the whole point of this lint is that "unlimited"
+# and pricing keywords should not co-occur.
+#
+# One rule per line. Blank lines and #-comments are ignored.
+
+# Founder / internal-tier row in the public README table — describes
+# the internal (never-billed) plan, not a public offer.
+Founder | $0 (internal) | unlimited | all 4 | ✓ | all
+
+# llms.txt fact — repos are not capped; only tasks are.
+ORA: Unlimited repos | Bolt/Lovable: Token / credit limits.
+
+# preview-landing.html static bullet — repos, not tasks.
+<li>Unlimited repos</li>
+
+# Refund policy generic placeholder text (not tied to a specific
+# tier's task/loop limit).
+- The free tier includes `[feature list, e.g. shared database, unlimited draft/preview, N app deployments]`.

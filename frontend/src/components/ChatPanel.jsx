@@ -771,7 +771,37 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { refreshUsage(); }, [refreshUsage]);
 
-  const exhausted = !!usage?.is_exhausted;
+  // Iter 364 · Phase 3 — Listen for the api.js 402 interceptor event
+  // so a rejected /chat/send call shows the correct upgrade toast
+  // instead of the generic "something went wrong" fallback, AND
+  // re-fetches /usage/me so the banner + composer disable state
+  // catch up server-authoritatively.
+  useEffect(() => {
+    const onTokenLimit = (e) => {
+      const d = e?.detail || {};
+      try {
+        toast({
+          message: d.message || "Token limit reached — upgrade to continue.",
+          kind:    "error",
+          action:  {
+            label: "Upgrade",
+            onClick: () => {
+              try { window.location.href = d.upgrade_url || "/pricing"; }
+              catch { /* ignore */ }
+            },
+          },
+        });
+      } catch { /* toast must never crash the app */ }
+      try { refreshUsage(); } catch { /* ignore */ }
+    };
+    window.addEventListener("aurem:token-limit-reached", onTokenLimit);
+    return () => window.removeEventListener("aurem:token-limit-reached", onTokenLimit);
+  }, [refreshUsage]);
+
+  // Iter 364 — canonical "actually blocked" flag from the server.
+  // Falls back to legacy is_exhausted on older /usage/me payloads so
+  // the composer disables correctly during the deploy roll.
+  const exhausted = !!(usage?.is_blocked || usage?.is_exhausted);
 
   // Iter 154 — toggleMaxx removed; Maxx is now selected via ModeSelector.
 

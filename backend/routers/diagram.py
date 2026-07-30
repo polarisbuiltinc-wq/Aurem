@@ -126,6 +126,13 @@ async def generate_diagram(
     authorization: Optional[str] = Header(None),
 ) -> dict:
     user = await current_dev(authorization)
+    # Iter 364 · Phase 3 — token hard-stop (silent-burn hole close).
+    # A single diagram call can run 2 LLM invocations (initial + strict
+    # retry). Enforce the budget BEFORE dispatch so an exhausted wallet
+    # can't drain $ here.
+    from services.usage import assert_has_budget, assert_has_task_budget
+    await assert_has_budget(user["user_id"])
+    await assert_has_task_budget(user["user_id"])
     diagram_type = detect_type(body.prompt, body.diagram_type)
     sys_msg = (
         "You are ORA, an AI system architect.  Your job is to produce "

@@ -4954,3 +4954,81 @@ agent did the HALF it can:
 - 26/26 iter334 tests still green.
 FOUNDER TODO (only they can): create qa-bot acct + sandbox repo + link +
 QA_BOT_SESSION_TOKEN secret + QA_REPORT_COMMIT_TOKEN PAT. Code is ready.
+
+## Iter 364 (2026-07-30) — Loop tiered rollout + pricing truth gate + token hard-stop
+
+### Phase 1 — Loop stability closure (all 3 asks + 2 bonus tests)
+- `services/loop_engine.py`: Added `LOOP_TOTAL_BUDGET_S=1800` wall-clock guard;
+  `_run_pipeline` now wraps `_run_pipeline_inner` in `asyncio.wait_for` — on
+  breach flips session to FAILED with `resume_reason="total_budget_exceeded"`.
+- `routers/loop.py::start_loop`: Added per-user concurrency cap
+  (`LOOP_MAX_CONCURRENT_PER_USER=1`) — second in-flight loop returns 409
+  `too_many_in_flight` before any lock is acquired.
+- `tests/test_iter364_loop_beta_rollout.py`: 14 new pytest cases covering
+  Phase 1 (2), Phase 2 gate matrix (10), Phase 3 kill-switch + Maxx cap +
+  auto-trip.
+
+### Phase 2 — Feature-flag gate (replaces founder-only lock)
+- `services/loop_beta.py` (new, 300 LOC) — kill-switch + tier gate +
+  concurrency counter + execution log + Maxx cost log + Maxx daily cap +
+  stuck-detector. Central rollout module.
+- `routers/loop.py`: Founder-only gate → tiered gate. Pro/Team users need
+  `loop_beta_enabled=True` on dev_users. Free/Starter/Pro-without-flag get
+  explicit 403s.
+- `routers/admin.py`: New endpoints
+  `POST /admin/users/{user_id}/enable-loop-beta`,
+  `POST /admin/loop-beta/kill-switch`, `GET /admin/loop-beta/status`.
+
+### Phase 3 — Kill-switch + monitoring + logging + Maxx cap
+- Env `LOOP_MODE_KILL_SWITCH=true` or DB `system_flags.loop_mode_kill_switch`
+  hard-off the whole surface. Env wins.
+- `services/process_recovery.py`: Guard 19 sweep now also calls
+  `loop_beta.auto_trip_kill_switch_if_stuck` — auto-flips DB kill switch
+  when >3 stuck loops in 10 min. Guard 20 incident row created.
+- `db.loop_execution_log` — new collection. Row written on every terminal
+  loop `_emit` with tier/status/duration_s/stuck_reason/used_maxx/
+  used_parallel_agents/worker_tape_viewed/agent_count.
+- `db.maxx_cost_log` — new collection with deepseek + claude USD cost per
+  Maxx invocation. Wired from `chat_send` for legacy + new pill invocations.
+- Per-user daily Maxx cap (default 10) — `assert_maxx_daily_budget` hooked
+  into `chat_send` before Maxx invocation runs.
+
+### Pricing copy truth gate (separate ask, same session)
+- `components/PricingCards.jsx`: docblock rewritten to match backend
+  (10/50/300/400). "Direct GitHub commit — Beta" line added to Pro + Team
+  feature list.
+- `pages/Landing.jsx`: "unlimited repos, unlimited tasks" copy replaced
+  with real tier numbers.
+- `pages/Both.jsx`: two bullets fixed (previews, loop runs).
+- `scripts/pricing_copy_lint.py` (new) + `pricing_copy_lint_allowlist.txt` +
+  wired into `.github/workflows/ci.yml` as a required step. Fails the
+  build if "unlimited" appears within 60 chars of "task/Pro/Team/loop".
+- Verified via preview screenshot: `/pricing` renders correct Beta badge.
+
+### Token hard-stop enforcement (separate ask, same session)
+- `services/usage.py::get_usage`: new field `is_blocked` — canonical
+  server-authoritative "chat/send will 402" flag.
+- `routers/chat.py`: `assert_has_budget` + `assert_has_task_budget` called
+  at the TOP of `chat_send` AND `chat_stream`, BEFORE any LLM provider is
+  contacted. Closes the silent-burn hole (was previously only guarded
+  inside cto_projects.py).
+- `routers/diagram.py::generate_diagram`: same gate.
+- `routers/upload.py::upload_convert`: gate for the image-branch (vision LLM).
+- `components/chat/TokenBanner.jsx`: banner + composer read `is_blocked`
+  (server-authoritative) not just client-computed `pct_used`.
+- `lib/api.js`: axios 402 interceptor dispatches
+  `aurem:token-limit-reached` event → ChatPanel shows toast + re-fetches
+  usage. No more generic "something went wrong" for 402.
+- `tests/test_iter364_token_hard_stop.py`: 5 pytest cases (402 raise,
+  is_blocked=True on exhausted, is_blocked=False after grant, founder
+  bypass, AST invariant that endpoints keep the gate call).
+
+### Legacy test audit (deferred)
+- `memory/LEGACY_TEST_AUDIT.md` (new) — 270 quarantined tests bucketed:
+  A=live/103, B=dead/41, C=flaky/3, UNCATEGORIZED=123. Delete-first plan
+  in Phase 1 recommended for next session.
+
+### Test totals
+- **Before**: 92 loop-related tests passing.
+- **After**: 137 tests passing across `test_iter364_*` + all pre-existing
+  loop/guard suites. Zero regressions.

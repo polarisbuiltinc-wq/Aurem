@@ -474,7 +474,7 @@ function BuilderView() {
             </p>
             <ul style={{listStyle:"none", textAlign:"left",
                          marginBottom:24, padding:0}}>
-              {["Unlimited live previews",
+              {["Live previews for every draft",
                 "Chat-based edits with ORA",
                 "Pro: $9/mo — more ideas, custom domain",
                 "Team: $29/mo — priority queue"].map((li) => (
@@ -816,7 +816,7 @@ function DevView() {
             </p>
             <ul style={{listStyle:"none", marginBottom:26,
                          padding:0}}>
-              {["Unlimited loop runs",
+              {["300 loop runs/mo on Pro · 400 on Team",
                 "Held-out verifier on every ship",
                 "Sibling-model accuracy review",
                 "Branch-per-fix + draft PR mode",

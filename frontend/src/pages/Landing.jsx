@@ -626,7 +626,7 @@ const TEAMS = [
     desc: "ORA Council tracks every interaction across 5 modes (chat, advice, code, debug, audit) and fine-tunes ORA on your specific patterns. The more you use ORA, the better it gets at your codebase." },
   { icon: "💎", tag: "founder price · 498/500 left",
     title: "$9/Month. No Surprises.",
-    desc: "No IDE to install. No token meters to watch. No per-seat pricing. One flat price, unlimited repos, unlimited tasks. 55% cheaper than Copilot. 98% cheaper than Devin." },
+    desc: "No IDE to install. No token meters to watch. No per-seat pricing. Flat pricing: 10/50/300/400 tasks per month across Free/Starter/Pro/Team — 55% cheaper than Copilot. 98% cheaper than Devin." },
 ];
 const REVIEWS = [
   { stars: 5, text: "I shipped a Stripe integration in a Slack thread while waiting for a flight. ORA read the repo, wrote the code, ran the tests, committed. Mind blown.", name: "James R.", role: "Founder, Devstream", initials: "JR" },

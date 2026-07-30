@@ -719,6 +719,99 @@ class SuspendBody(BaseModel):
     suspend: bool
 
 
+class LoopBetaBody(BaseModel):
+    enabled: bool
+
+
+@router.post("/users/{user_id}/enable-loop-beta")
+async def enable_loop_beta(
+    user_id: str,
+    body: LoopBetaBody,
+    authorization: Optional[str] = Header(None),
+):
+    """Iter 364 · Phase-2 — admin toggles `loop_beta_enabled` on a
+    single dev_users doc so a Pro/Team user can pass the tiered gate
+    in `routers/loop.py::start_loop`. Founders always bypass the flag."""
+    admin = await _require_admin(authorization)
+    db = require_db()
+    target = await db.dev_users.find_one(
+        {"user_id": user_id}, {"_id": 0, "user_id": 1, "email": 1, "tier": 1},
+    )
+    if not target:
+        raise HTTPException(404, "User not found")
+    now = time.time()
+    await db.dev_users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "loop_beta_enabled":         bool(body.enabled),
+            "loop_beta_updated_at":      now,
+            "loop_beta_updated_by":      admin.get("email") or admin.get("user_id"),
+        }},
+    )
+    return {
+        "ok":                True,
+        "user_id":           user_id,
+        "email":             target.get("email"),
+        "tier":              target.get("tier"),
+        "loop_beta_enabled": bool(body.enabled),
+    }
+
+
+class KillSwitchBody(BaseModel):
+    enabled: bool
+    reason:  Optional[str] = ""
+
+
+@router.post("/loop-beta/kill-switch")
+async def toggle_loop_kill_switch(
+    body: KillSwitchBody,
+    authorization: Optional[str] = Header(None),
+):
+    """Iter 364 · Phase-3 — flip the DB-backed kill switch. When ON,
+    every user (including founders) sees a 403 on /loop/start until
+    it's flipped OFF. Env var LOOP_MODE_KILL_SWITCH=true is an
+    orthogonal override (env wins if set)."""
+    admin = await _require_admin(authorization)
+    db = require_db()
+    from services import loop_beta as _lb
+    await _lb.set_kill_switch(
+        db, on=bool(body.enabled),
+        reason=(body.reason or "").strip()[:400] or (
+            f"manual flip by {admin.get('email') or admin.get('user_id')}"),
+    )
+    return {
+        "ok":                     True,
+        "kill_switch_enabled":    bool(body.enabled),
+        "env_override_wins":      bool(os.environ.get("LOOP_MODE_KILL_SWITCH", "").lower()
+                                        in ("1", "true", "yes", "on")),
+    }
+
+
+@router.get("/loop-beta/status")
+async def loop_beta_status(authorization: Optional[str] = Header(None)):
+    """Iter 364 · Phase-3 — dashboard snapshot for the admin QA UI."""
+    await _require_admin(authorization)
+    db = require_db()
+    from services import loop_beta as _lb
+    n_active = await db.loop_sessions.count_documents({
+        "state": {"$in": list(_lb._ACTIVE_STATES)},
+    })
+    n_beta   = await db.dev_users.count_documents({"loop_beta_enabled": True})
+    n_stuck  = await _lb.count_stuck_loops(db)
+    row = await db.system_flags.find_one({"key": "loop_mode_kill_switch"}) or {}
+    return {
+        "kill_switch_db":        bool(row.get("value")),
+        "kill_switch_env":       os.environ.get("LOOP_MODE_KILL_SWITCH", ""),
+        "kill_switch_reason":    row.get("reason"),
+        "beta_users":            n_beta,
+        "active_loops":          n_active,
+        "stuck_last_10min":      n_stuck,
+        "stuck_trip_threshold":  _lb.LOOP_STUCK_TRIP_THRESHOLD,
+        "max_concurrent_per_user": _lb.LOOP_MAX_CONCURRENT_PER_USER,
+        "maxx_daily_cap":        _lb.MAXX_DAILY_TASK_CAP,
+    }
+
+
 @router.post("/users/{user_id}/suspend")
 async def toggle_suspend(
     user_id: str,

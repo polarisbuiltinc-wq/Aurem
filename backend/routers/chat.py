@@ -633,6 +633,20 @@ async def chat_send(
     """Non-streaming chat — returns full response, persists turn.
     If maxx_mode=True, runs Emergent watchdog review after DeepSeek reply."""
     user = await current_dev(authorization)
+    # Iter 364 · Phase 3 · Token hard-stop enforcement.
+    # BEFORE any LLM provider call, refuse the request if the user has
+    # exhausted their effective token budget OR blown their monthly
+    # task cap. Founders / unlimited accounts short-circuit inside
+    # assert_has_budget so this is a no-op for them. Doing this at the
+    # very top of the handler ensures we NEVER pay OpenRouter/DeepSeek/
+    # Claude for a request we then reject. Iter 364 RCA:
+    #   Old code did an atomic $max: [0, remaining - cost] clamp AFTER
+    #   the LLM call — wallet floored at zero but chat kept working,
+    #   silently burning tokens with no server-side stop. The banner
+    #   at 100% was purely cosmetic. This is the fix.
+    from services.usage import assert_has_budget, assert_has_task_budget
+    await assert_has_budget(user["user_id"])
+    await assert_has_task_budget(user["user_id"])
     jwt_token = authorization.split(" ", 1)[1] if authorization else ""
     # Iter 212m-15 — parallelise the two pre-flight context fetches AND
     # log the cumulative timing for each stage so the next time a
@@ -744,6 +758,15 @@ async def chat_send(
     from services.subscription_tiers import allowed_modes_for_tier
     _allowed = allowed_modes_for_tier((user or {}).get("tier") or "free")
     req_mode = body.mode if (body.mode in _allowed) else _allowed[-1]
+    # Iter 364 · Phase-3 — Maxx daily cap. Even Team tier users are
+    # capped at MAXX_DAILY_TASK_CAP (default 10) Maxx-mode invocations
+    # per rolling 24h. Prevents a single user from burning $200+ of
+    # DeepSeek+Claude cost in a single day. Applies to both the legacy
+    # `maxx_mode=True` boolean and the new `mode="maxx"` pill.
+    _wants_maxx = bool(body.maxx_mode) or (req_mode == "maxx")
+    if _wants_maxx:
+        from services.loop_beta import assert_maxx_daily_budget
+        await assert_maxx_daily_budget(_db, user["user_id"])
     # Iter 212m-168 — surface founder/admin role to the orchestrator so
     # only these accounts see `execute_bash` (local pod filesystem).
     from services.usage import is_founder_email as _is_fnd_email
@@ -782,6 +805,32 @@ async def chat_send(
     if body.maxx_mode and content.strip() and not is_new_maxx_pill:
         watchdog = await call_emergent_watchdog(content)
         provider = (provider or "deepseek") + "+emergent-watchdog"
+    # Iter 364 · Phase-3 — persist Maxx cost row. Best-effort accounting:
+    # LLM meta usually surfaces per-provider $ estimates; if not, we
+    # still log a 0-cost row so counts + daily-cap enforcement have
+    # ground truth. Any legacy or new Maxx invocation lands here.
+    if _wants_maxx and content.strip():
+        try:
+            from services.loop_beta import log_maxx_cost
+            meta = result.get("meta") or {}
+            deepseek_cost = float(meta.get("deepseek_cost_usd") or 0.0)
+            claude_cost   = float(meta.get("claude_cost_usd")   or 0.0)
+            await log_maxx_cost(
+                _db,
+                user_id=user["user_id"],
+                loop_id=None,
+                deepseek_cost_usd=deepseek_cost,
+                claude_cost_usd=claude_cost,
+                model_meta={
+                    "provider":         provider,
+                    "req_mode":         req_mode,
+                    "maxx_mode_legacy": bool(body.maxx_mode),
+                    "watchdog":         bool(watchdog),
+                    "surface":          "chat_send",
+                },
+            )
+        except Exception as _mce:
+            logger.debug("maxx_cost_log write failed (chat_send): %r", _mce)
 
     await _persist_turn(user["user_id"], body.session_id or "",
                         body.prompt, content, provider, watchdog=watchdog,
@@ -1072,6 +1121,12 @@ async def chat_stream(
     """SSE token-streaming chat. Iter 45: rate-limited to 30 req/min per IP.
     Iter 50.1: founders / unlimited accounts bypass the rate-limit."""
     user = await current_dev(authorization)
+    # Iter 364 · Phase 3 · Token hard-stop enforcement (streaming path).
+    # Same as /chat/send — refuse the request before spending any LLM
+    # tokens when the wallet is empty or the monthly task cap is blown.
+    from services.usage import assert_has_budget, assert_has_task_budget
+    await assert_has_budget(user["user_id"])
+    await assert_has_task_budget(user["user_id"])
     # Iter 212m-49 — clear stale LLM provenance from a previous turn
     # in the same worker so the SSE `done` frame for THIS turn only
     # reflects what we actually hit this request.

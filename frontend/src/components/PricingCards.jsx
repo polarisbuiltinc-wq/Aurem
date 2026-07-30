@@ -2,12 +2,15 @@
  * PricingCards.jsx — 4-tier flat-fee pricing display (USD).
  *
  *   Free     $0          10 tasks/month
- *   Starter  $9/mo USD   50 tasks, Standard mode
- *   Pro      $19/mo USD  Unlimited tasks, Maxx mode (100/mo), Project Brain
- *   Team     $49/mo USD  Pro + admin + priority queue + unlimited Maxx
+ *   Starter  $9/mo USD   50 tasks, Swift mode
+ *   Pro      $19/mo USD  300 tasks/month, Swift+Pro modes, Project Brain
+ *   Team     $49/mo USD  400 tasks/month, all 3 modes incl Maxx
  *
  * Iter 94 (Feb 2026) — migrated CAD → USD per founder direction, Team
  * raised from $35 → $49 to protect margin against multi-seat teams.
+ * Iter 364 (Feb 2026) — copy fixed: Pro/Team caps were mislabeled
+ * "unlimited" for marketing; source of truth is
+ * `subscription_tiers.py:26-83` and now every card matches (300/400).
  * Pro tier now advertises the 100 Maxx-tasks/mo cap explicitly so the
  * commercial expectation is set up-front.
  */
@@ -61,6 +64,7 @@ export const PRICING_TIERS = [
     features: [
       "300 tasks per month",
       "Swift + Pro review modes",
+      "Direct GitHub commit — Beta",
       "Project Brain memory",
       "Parallel agents",
       "VS Code extension",
@@ -80,6 +84,7 @@ export const PRICING_TIERS = [
       "Everything in Pro",
       "400 tasks per month",
       "🚀 Maxx mode — Claude writes your code",
+      "Direct GitHub commit — Beta",
       "All 3 modes: Swift, Pro, Maxx",
       "Admin dashboard + roles",
       "Priority queue",

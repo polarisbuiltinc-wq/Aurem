@@ -40,6 +40,27 @@ api.interceptors.response.use((response) => {
     }
   } catch { /* never let interceptor errors break the call */ }
   return response;
+}, (error) => {
+  // Iter 364 · Phase 3 — surface 402 (token_limit_reached /
+  // monthly_task_limit_reached / maxx_daily_cap_reached) as a
+  // dedicated event the ChatPanel + TokenBanner can react to,
+  // instead of letting the generic error handler show "something
+  // went wrong". We do NOT swallow the rejection — callers still
+  // see the raw axios error so they can decide their own UX.
+  try {
+    if (error?.response?.status === 402) {
+      const detail = error.response.data?.detail || {};
+      window.dispatchEvent(new CustomEvent("aurem:token-limit-reached", {
+        detail: {
+          kind:        detail.error || "token_limit_reached",
+          message:     detail.message
+                         || "Token limit reached — upgrade to continue.",
+          upgrade_url: detail.upgrade_url || "/pricing",
+        },
+      }));
+    }
+  } catch { /* interceptor must never itself throw */ }
+  return Promise.reject(error);
 });
 
 // Health check (no /aurem-dev prefix — it's on /api/health)

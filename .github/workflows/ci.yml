@@ -128,6 +128,10 @@ jobs:
         working-directory: backend
         run: python scripts/g21_security_scan.py
 
+      - name: Iter 364 — Pricing copy truth gate
+        working-directory: backend
+        run: python scripts/pricing_copy_lint.py
+
       - name: Run tests
         working-directory: backend
         run: |

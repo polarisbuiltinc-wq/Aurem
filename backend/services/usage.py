@@ -148,6 +148,16 @@ async def get_usage(user_id: str) -> dict:
         "monthly_task_cap": task_cap,
         "tasks_remaining":  None if task_cap is None
                             else max(0, task_cap - tasks_this_month),
+        # Iter 364 · Phase 3 — canonical "actually blocked" flag for
+        # the frontend banner. TRUE only when the server WILL refuse
+        # a fresh chat/send call. Founders/unlimited never blocked.
+        # This is exactly what assert_has_budget checks below, so
+        # server + banner can't drift.
+        "is_blocked": bool(
+            (not is_unlimited)
+            and (is_exhausted
+                 or (task_cap is not None and tasks_this_month >= task_cap))
+        ),
     }
 
 
