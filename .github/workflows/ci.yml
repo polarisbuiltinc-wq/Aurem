@@ -120,6 +120,10 @@ jobs:
       - name: Map workspace to /app (legacy hardcoded test paths)
         run: sudo ln -sfn "$GITHUB_WORKSPACE" /app
 
+      - name: Guard 18 — universal timeout audit (Iter 359)
+        working-directory: backend
+        run: python scripts/timeout_audit.py
+
       - name: Run tests
         working-directory: backend
         run: |

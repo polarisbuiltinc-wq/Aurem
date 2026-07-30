@@ -106,7 +106,7 @@ export default function AdminSystemHealth() {
 
     // 2) Production /version (cross-origin, no auth)
     try {
-      const r = await fetch(`${PROD_ORIGIN}/api/aurem-dev/version`, { cache: "no-store" });
+      const r = await fetch(`${PROD_ORIGIN}/api/aurem-dev/version`, { cache: "no-store", signal: AbortSignal.timeout(10000) });
       if (r.ok) setProdVer(await r.json());
       else nextErrs.prod_version = `prod /version → HTTP ${r.status}`;
     } catch (e) { nextErrs.prod_version = e?.message || "prod /version fetch failed"; }

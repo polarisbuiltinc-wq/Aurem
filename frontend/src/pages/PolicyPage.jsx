@@ -36,7 +36,7 @@ export default function PolicyPage({ slug }) {
   const [err, setErr]   = useState("");
 
   useEffect(() => {
-    fetch(`/policies/${meta.file}`)
+    fetch(`/policies/${meta.file}`, { signal: AbortSignal.timeout(10000) })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.text();

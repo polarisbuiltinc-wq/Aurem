@@ -234,6 +234,7 @@ function OperationHistoryInner({ projectId, activeLoopId, authToken }) {
     const tok = authToken || localStorage.getItem("aurem_token") || "";
     fetch(url, {
       headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+      signal: AbortSignal.timeout(15000),
     })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((d) => {

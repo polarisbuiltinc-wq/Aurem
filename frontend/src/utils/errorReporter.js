@@ -61,6 +61,7 @@ async function _send(payload) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       keepalive: true,
+      signal: AbortSignal.timeout(10000),
     });
   } catch { /* swallow — never log, would loop */ }
 }

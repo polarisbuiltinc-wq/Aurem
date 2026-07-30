@@ -39,7 +39,17 @@ Wave 3 (17-21): 18 → 17 → 21 → 19 → 20
   (require_admin_dep) + live non-founder 112-endpoint 403 sweep lock
   (Iter 358b, deployed with SEO/chip). Remaining: revoked-key/
   expired-token/auth-endpoint-rate-limiter tests.
-- Guards 1, 3-7, 9-15, 17-21: NOT STARTED.
+- Guards 1, 3-7, 9-15, 17, 19-21: NOT STARTED.
+- Guard 18: ✅ SHIPPED (Iter 359, 2026-07-30): scripts/timeout_audit.py —
+  static audit (Python AST: httpx/requests/aiohttp/urlopen need timeout=;
+  JS regex: fetch needs signal/timeout, axios.create + direct axios.* need
+  timeout). 23 violations found + fixed (6 backend AsyncClient ctors,
+  17 frontend fetch/axios sites → AbortSignal.timeout). 179/179 covered.
+  Escape hatch: `g18-exempt: reason` comment. Wired: ci.yml backend job
+  step + predeploy_gate.sh Lane 4 (build-fail on violation). Endpoint:
+  GET /admin/qa/guard18-timeout-audit (founder-gated, computed live).
+  Locks: test_iter359_guard18_timeout_audit.py (11 — live-zero-violations
+  + scanner self-tests + exempt + endpoint gate). QA page row ships last.
 
 ## GUARD SPECS
 

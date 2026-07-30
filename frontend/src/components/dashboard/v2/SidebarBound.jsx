@@ -235,6 +235,7 @@ export default function SidebarBound({
         const token = getToken();
         const res = await fetch(`${API_BASE}/cto/projects/connection-status`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
+          signal: AbortSignal.timeout(15000),
         });
         if (!res.ok || cancelled) return;
         const j = await res.json();

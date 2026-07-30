@@ -96,7 +96,7 @@ export default function AdminQADashboard() {
         || localStorage.getItem("aurem_token");
       const r = await axios.get(
         `${API}/api/aurem-dev/admin/qa/status`,
-        { headers: { Authorization: `Bearer ${tok || ""}` } },
+        { headers: { Authorization: `Bearer ${tok || ""}` }, timeout: 20000 },
       );
       setData(r.data);
     } catch (e) {
@@ -322,7 +322,7 @@ function LatestAutoQASection() {
     const tok = localStorage.getItem("aurem_admin_token")
       || localStorage.getItem("aurem_token");
     axios.get(`${API}/api/aurem-dev/admin/qa/latest-report`,
-      { headers: { Authorization: `Bearer ${tok || ""}` } })
+      { headers: { Authorization: `Bearer ${tok || ""}` }, timeout: 20000 })
       .then((r) => setReport(r.data))
       .catch((e) => setReport({
         error: e?.response?.data?.detail || e.message,

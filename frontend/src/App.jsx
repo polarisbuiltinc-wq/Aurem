@@ -172,6 +172,7 @@ export default function App() {
               path: window.location.pathname,
               user_agent: navigator.userAgent.slice(0, 200),
             }),
+            signal: AbortSignal.timeout(10000),
           }).catch(() => {});
         }
       }

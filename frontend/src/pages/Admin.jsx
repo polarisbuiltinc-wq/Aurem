@@ -2374,6 +2374,7 @@ export default function Admin({ initialTab = "overview" }) {
           method:  "POST",
           headers: { Authorization: `Bearer ${tok}` },
           keepalive: true,
+          signal: AbortSignal.timeout(10000),
         }).catch(() => { /* ignore */ });
       } catch { /* ignore */ }
     }

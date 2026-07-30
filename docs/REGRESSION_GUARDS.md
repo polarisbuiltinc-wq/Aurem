@@ -1,6 +1,6 @@
 # REGRESSION_GUARDS — bus-factor doc for the guards system
 
-Last updated: 2026-06-30. Full specs: /app/memory/GUARDS_CHARTER.md.
+Last updated: 2026-07-30 (Iter 359 — G18 shipped). Full specs: /app/memory/GUARDS_CHARTER.md.
 Live status: /admin/qa "REGRESSION GUARDS" section (planned — ships
 last) + Admin Overview critical-alerts banner (RED/STALE escalation).
 Rule: guards integrate into the EXISTING QA system — never a parallel
@@ -25,7 +25,7 @@ system. STALE = no run within 2× expected interval.
 | 15 | Dependency vuln scanning | Known-CVE deps shipping | planned |
 | 16 | Auth/session hardening tests | Admin endpoints reachable by non-founder; stale keys | partial ✅ — router-level admin gate on all 4 admin routers + live non-founder 112-endpoint sweep lock (test_iter358_admin_auth_hardening.py); revoked-key/expired-token/rate-limiter locks pending |
 | 17 | Retry & circuit breakers | Hammering dead providers, cascade failures | planned |
-| 18 | Universal timeout budget | Infinite-wait outbound calls / hangs | planned (first in wave 3) |
+| 18 | Universal timeout budget | Infinite-wait outbound calls / hangs | ✅ SHIPPED (Iter 359) — scripts/timeout_audit.py (AST py + regex js) 179/179 sites covered; CI step + predeploy Lane 4; GET /admin/qa/guard18-timeout-audit; locks test_iter359 (11) |
 | 19 | Process auto-recovery | Crash loops hiding real bugs | planned |
 | 20 | Automated postmortem log | Incidents without history/patterns | planned (ships last) |
 | 21 | OWASP/CWE coverage | Injection, misconfig, supply chain | planned |

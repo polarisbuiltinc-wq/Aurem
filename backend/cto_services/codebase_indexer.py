@@ -101,7 +101,7 @@ async def refresh_index(user_id: str, repo_url: str, pat: str) -> dict[str, Any]
     if db is None:
         raise HTTPException(503, "db_not_ready")
     owner, name = _parse_repo_url(repo_url)
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         repo = await _gh_get(c, f"{GITHUB_API}/repos/{owner}/{name}", pat)
         branch = repo.get("default_branch", "main")
         tree = await _gh_get(

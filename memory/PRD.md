@@ -563,3 +563,10 @@ Language: **Hinglish** — main agent responds in Hinglish.
 - Locks: test_iter348 expanded (PR#9 + PR#173 classes + 9 pipeline files) 4/4 PASS; scanner-related suites 254 passed.
 - NEW scripts/classify_open_prs.py — produces founder's eyeball table (PR#, created, category, files, +/-, draft, POISON/marker-only/REVIEW verdict + totals). Requires GITHUB_PAT + REPO env. Founder to run or supply PAT.
 - RULE: no merge proposals until founder reviews the table.
+
+## Iter 359 · 2026-07-30 — GUARD 18 SHIPPED: Universal timeout budget (wave 3 start)
+- NEW scripts/timeout_audit.py: static audit — Python via AST (httpx.get/post/stream + AsyncClient/Client, requests.*, aiohttp.ClientSession, urlopen must carry timeout=), JS/JSX via paren-balanced regex (fetch needs signal:/timeout, axios.create + direct axios.* need timeout). Comment/docstring-safe (AST + comment-line skip). Escape hatch: `g18-exempt: reason` comment on/above the call line.
+- FOUND + FIXED 23 violations: 6 backend httpx.AsyncClient() ctors (security_scan, loop_engine trimmed-scan, both codebase_indexers, ora_chat/canary, a2a_handoff_service) → timeout=30/10; 17 frontend sites → AbortSignal.timeout(10-120s) (App.jsx referral, OperationHistory, AuremAdminPanel apiFetch, SidebarBound, errorReporter, Both.jsx×5 incl. scaffold 60s/materialize 120s, AdminOverview health, AdminSystemHealth prod version, PolicyPage, Admin+api.js logout keepalive, AdminQADashboard axios×2). Streams already abortable via ctrl.signal — counted covered.
+- WIRED: ci.yml backend job "Guard 18 — universal timeout audit" step (build fail on violation) + predeploy_gate.sh Lane 4. Founder-gated GET /admin/qa/guard18-timeout-audit (computed live from disk, admin_qa router convention). QA page row ships last per charter.
+- VERIFIED: 179/179 sites covered; locks test_iter359_guard18_timeout_audit.py 11/11 (live-zero + scanner self-tests + exempt + endpoint gate); targeted suites 42 passed; vitest 236 passed; live curl on preview → pass:true, unauth → 401; landing smoke OK.
+- NEXT (charter wave 3 order): G17 retry+circuit breaker → G21 → G19 → G20.

@@ -173,7 +173,7 @@ async def run_canary(triggered_by: str = "cron") -> dict:
     retraction_ok = None
     gaps_session: str | None = None
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         for name, prompt in TRAP_PROMPTS:
             try:
                 if name == "challenge" and gaps_session:

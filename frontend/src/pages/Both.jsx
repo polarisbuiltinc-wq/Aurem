@@ -109,6 +109,7 @@ function BuilderView() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ brief }),
+        signal: AbortSignal.timeout(60000),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -140,6 +141,7 @@ function BuilderView() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({}),
+          signal: AbortSignal.timeout(120000),
         }
       );
       const j = await res.json().catch(() => ({}));
@@ -175,6 +177,7 @@ function BuilderView() {
       const res = await fetch(`${API}/api/aurem-dev/notify-interest`, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
+        signal: AbortSignal.timeout(15000),
         body: JSON.stringify({
           tool: "bug-hunt",         // reusing the existing capture bucket
           email: wlEmail,
@@ -520,7 +523,7 @@ function DevView() {
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch(`${API}/api/aurem-dev/integrity-log`);
+        const r = await fetch(`${API}/api/aurem-dev/integrity-log`, { signal: AbortSignal.timeout(15000) });
         const j = await r.json();
         if (!cancelled) setIntegrity(j);
       } catch (e) {
@@ -529,7 +532,7 @@ function DevView() {
     })();
     (async () => {
       try {
-        const r = await fetch(`${API}/api/aurem-dev/wall/feed?limit=6`);
+        const r = await fetch(`${API}/api/aurem-dev/wall/feed?limit=6`, { signal: AbortSignal.timeout(15000) });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
         const items = (j?.items || j?.feed || j || [])

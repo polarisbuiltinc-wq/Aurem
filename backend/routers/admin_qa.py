@@ -378,3 +378,20 @@ async def qa_status(authorization: Optional[str] = Header(None)):
         "a11y":         a11y,
         "ci_status":    ci_status,
     }
+
+
+@router.get("/guard18-timeout-audit")
+async def guard18_timeout_audit(authorization: Optional[str] = Header(None)):
+    """Guard 18 — universal timeout budget. Runs the static audit
+    (scripts/timeout_audit.py) at request time; computed from actual
+    source on disk, never cached/fabricated."""
+    await _require_admin(authorization)
+    from scripts.timeout_audit import run_audit
+    t0 = time.time()
+    result = run_audit()
+    return {
+        "guard": "G18",
+        "generated_at": time.time(),
+        "took_ms": int((time.time() - t0) * 1000),
+        **result,
+    }

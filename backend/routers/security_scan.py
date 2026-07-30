@@ -413,7 +413,7 @@ async def run_security_scan(
             "or connect GitHub in Settings.",
         )
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         # 1. List repo tree.
         try:
             blobs = await _list_repo_tree(client, owner, repo, pat)

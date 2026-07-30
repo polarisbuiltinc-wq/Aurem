@@ -3616,7 +3616,7 @@ async def _run_security_scan(user_id: str,
         _list_repo_tree, _fetch_file, _SCAN_EXTS, _SKIP_DIRS,
         _MAX_BYTES_PER_FILE,
     )
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         try:
             blobs = await _list_repo_tree(client, owner, repo, pat)
         except Exception as e:                          # noqa: BLE001

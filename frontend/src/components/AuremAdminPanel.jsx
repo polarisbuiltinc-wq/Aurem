@@ -33,6 +33,7 @@ function _relTime(ms) {
 async function apiFetch(path, opts = {}) {
   const token = localStorage.getItem("aurem_token");
   const res = await fetch(`${API}${path}`, {
+    signal: AbortSignal.timeout(20000),
     ...opts,
     headers: {
       "Content-Type": "application/json",

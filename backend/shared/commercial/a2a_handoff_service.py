@@ -624,7 +624,7 @@ class A2AHandoffService:
         """Send callback with handoff result."""
         try:
             import httpx
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10) as client:
                 await client.post(url, json=result.to_dict(), timeout=10)
         except Exception as e:
             logger.warning(f"[A2A] Callback failed: {e}")

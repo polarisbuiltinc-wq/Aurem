@@ -32,6 +32,9 @@ echo "── Lane 3/3: regression library locks ──"
     --files "predeploy" \
     --sha "$(git rev-parse --short HEAD 2>/dev/null || echo predeploy)")
 
+echo "── Lane 4: Guard 18 — universal timeout audit (Iter 359) ──"
+(cd backend && python scripts/timeout_audit.py)
+
 echo "── Post-lane: regenerate backend/qa_manifest.json (Iter 351) ──"
 (cd backend && python scripts/gen_qa_manifest.py)
 

@@ -34,7 +34,7 @@ export default function AdminOverview() {
     try {
       const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes] =
         await Promise.allSettled([
-          fetch(HEALTH_URL).then((r) => r.json()),
+          fetch(HEALTH_URL, { signal: AbortSignal.timeout(10000) }).then((r) => r.json()),
           api.get("/usage/public/stats"),
           api.get("/wall/stats"),
           api.get("/admin/council/stats",   { headers: h }),
