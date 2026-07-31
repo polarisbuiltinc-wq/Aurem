@@ -4,6 +4,49 @@ Append-only iteration log. See `PRD.md` for the original problem
 statement and historical context; this file captures recent feature
 work in date-stamped chunks so PRD.md stays focused.
 
+## 2026-07-31 02:00 UTC — Iter 367 · Session 3 — 4 confirmed fixes + Payments audit
+
+### Fix 1 — 2 Iter-367-caused test failures repaired
+- `test_iter212m9_deploy_ui::test_save_config_with_project_id_writes_scoped_row` — updated the expected dict to include `target: "ssh"` (Item B added the field).
+- `test_iter212m9_deploy_ui::test_save_config_without_project_id_writes_user_level` — same fix.
+- `test_iter212m119_langfuse_tracing::test_call_llm_with_meta_wraps_inner_with_trace` — updated assertion to confirm `call_via_router` is NO LONGER referenced (Iter 367 STEP 1 deleted `llm_router.py`); test now asserts the legacy multi-provider chain IS the production path.
+- **Real proof**: 20/20 tests pass in the two affected files.
+
+### Fix 2 — PERSONAL_TRACK_SCOPE.md file names aligned with reality
+- Removed references to `PublishCheckpoint.jsx`, `Start.jsx`, `BuildLive.jsx` (never existed).
+- Replaced with the real `ChooseTrack.jsx` and `ShipProgress.jsx`.
+- **Real proof**: `diff` between scope-doc references and disk files = empty.
+
+### Fix 3 — 6 confirmed dead scripts deleted
+- `backend/scripts/persona_drift_eval.py` (0 refs)
+- `/app/scripts/build_favicons.py` (0 refs)
+- `/app/scripts/iter308_api_probe.py` (0 refs)
+- `/app/scripts/iter308_cleanup_test_locks.py` (0 refs)
+- `/app/scripts/iter308_db_probe.py` (0 refs)
+- `/app/scripts/iter308_sse_reaper_visibility_probe.py` (0 refs)
+- Cascading: deleted `tests/test_iter124e_persona_drift_eval.py` (was importing the deleted script)
+- **Real proof**: repo-wide grep for any reference returns empty.
+
+### Fix 4 — Supabase + Vercel platform silent no-ops now visible on admin dashboard
+- `services/integration_health.py`: added `_probe_supabase_platform()` + `_probe_vercel_platform()` — return `status: "disabled"` with explicit `Disabled — missing <ENV>` summary when required envs aren't set.
+- `services/integration_health.py::summary_counts`: added `disabled` bucket.
+- `frontend/src/pages/AdminIntegrations.jsx::STATUS_META`: added `disabled` (blue, "Disabled" label) so the dashboard renders the state distinctly.
+- **Real proof**: `POST /admin/integrations/refresh` returns both new probes with `status=disabled` and correct missing-env details.
+
+### Payments/Stripe discovery scan
+- 8 payment test files re-run: **63 pass / 4 skipped / 0 fail**.
+- File-level classification written to `/app/memory/SESSION_3_PAYMENTS_AUDIT.md`.
+- **Critical finding**: `billing_cron.bill_maxx_overages()` is documented as "safe to call repeatedly" but is NEVER scheduled at startup. Only fires when an admin manually hits `POST /admin/billing/run-overage-cron`. Real revenue risk — overages only billed on manual trigger.
+- 4 silent-swallow patterns found in payments subsystem (2 in stripe_client key-fallback path, 2 in payment_reconciliation) — noted but not fixed per Session 3 discipline.
+- No end-to-end test hits real Stripe test-mode API (all payment tests use mocks) — flagged as a gap for future zero-mocks E2E addition.
+
+### Deploy status
+- Redeployed via deployer_agent at ~01:12 UTC — live at https://auremcto.com.
+- Iter 367 (STEP 0 rollback fix + Items A–E + Item F scope) all shipped to prod.
+- User needs to hit "Save to GitHub" UI button to sync commits to remote main; production is already running the current code from the deploy pipeline.
+
+
+
 ## 2026-07-31 01:15 UTC — Iter 367 · FINAL BUILD SESSION (Steps 0→2) — audit + real E2E
 
 ### Step 0 — Fake-success rollback bug FIXED (P0 real-user-facing)

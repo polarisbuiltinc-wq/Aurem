@@ -15,13 +15,13 @@ zero GitHub knowledge required, and safety rails that make it impossible
 to break a live app.
 
 The current Personal Track scaffold exists in code:
-- `frontend/src/pages/personal/_shell.jsx`      — shared shell
-- `frontend/src/pages/personal/BuildHome.jsx`   — entry / draft input
-- `frontend/src/pages/personal/DraftReview.jsx` — plan preview
-- `frontend/src/pages/personal/PreviewPanel.jsx` — live iframe
-- `frontend/src/pages/personal/BuildSuccess.jsx` — post-ship summary
-- `frontend/src/pages/personal/PublishCheckpoint.jsx` — before-live gate
-- `frontend/src/pages/personal/Start.jsx`, `BuildLive.jsx`
+- `frontend/src/pages/personal/_shell.jsx`        — shared shell
+- `frontend/src/pages/personal/ChooseTrack.jsx`   — track chooser (entry)
+- `frontend/src/pages/personal/BuildHome.jsx`     — draft input
+- `frontend/src/pages/personal/DraftReview.jsx`   — plan preview
+- `frontend/src/pages/personal/PreviewPanel.jsx`  — live iframe (imported by DraftReview)
+- `frontend/src/pages/personal/ShipProgress.jsx`  — safety gate + progress
+- `frontend/src/pages/personal/BuildSuccess.jsx`  — post-ship summary
 
 The scaffold routes are mounted in `App.jsx` but the **loop wiring**
 (`POST /loop/*`, streaming SSE, ship, rollback) is only wired for
@@ -93,32 +93,24 @@ cannot be relaxed by the AI or by a support agent.
 
 All under `/personal/*` in `App.jsx`. Each is a full-screen step.
 
-### 4.1 `/personal/start` — Onboarding (3 fields, 30 seconds)
-- Site URL (WordPress / Shopify / raw HTML — auto-detected)
-- What you want to change (freeform, one paragraph)
-- Your email
+### 4.1 `/personal/choose-track` — Track chooser (existing `ChooseTrack.jsx`)
+Existing entry point. Personal vs Technical selector. Personal Track click calls `POST /auth/set-track` (already wired) and routes to `/personal/build`.
 
-Backend: `POST /personal/onboard` — creates the `cto_projects` row
-with `single_page_mode=true`, provisions storage, sends verification
-email via Resend. No GitHub connect, no PAT — Personal Track uses
-Aurem's org-level integration to write to the user's site via the
-provisioned FTP/SFTP config (**Item B** is what unlocks this — that's
-why Item B was P0 for the whole session).
+### 4.2 `/personal/build` — Draft input (existing `BuildHome.jsx`)
+Existing surface. Currently calls `POST /scaffold/new-project` — Phase F.1 needs to also fire `POST /loop/start` with `track=personal`.
+No context switching, no chat history from other projects, no `/switch` slash command.
 
-### 4.2 `/personal/build` — Draft input
-The chat surface, but LOCKED to the single project. No context switching,
-no chat history from other projects, no `/switch` slash command.
-
-Backend: `POST /loop/start` with `track=personal` — routes through
+Backend for the loop wiring: `POST /loop/start` with `track=personal` — routes through
 `services/loop_engine.py::PersonalTrackEngine` (subclass of the
 main engine that pre-applies rails S3/S4 above).
 
-### 4.3 `/personal/draft-review` — Plan preview
+### 4.3 `/personal/draft-review` — Plan preview (existing `DraftReview.jsx`)
 Shows the user WHAT will change in plain English + a screenshot preview
-of the affected page rendered in an iframe. **Never** shows filenames,
+of the affected page rendered in an iframe (via `PreviewPanel.jsx`, already imported). **Never** shows filenames,
 line numbers, or code.
 
-### 4.4 `/personal/publish-checkpoint` — Safety gate
+### 4.4 `/personal/ship-progress` — Safety gate + progress (existing `ShipProgress.jsx`)
+Combines the Publish Checkpoint and progress tracker in one screen.
 - Green: "Your site is ready to update. Publish now?" (single button)
 - Amber: "Preview looks slightly different — check the two views side-by-side"
 - Red: "We spotted a problem — we're fixing it. Give us a minute."
@@ -126,7 +118,7 @@ line numbers, or code.
 Green comes from a passing Item E smoke test + Item D `AUTO_SHIP` or
 `WARN_SHIP` tier. Red comes from `PAUSE_FOR_FOUNDER` or a failed smoke.
 
-### 4.5 `/personal/success` — Post-ship
+### 4.5 `/personal/success` — Post-ship (existing `BuildSuccess.jsx`)
 - Success animation.
 - "Your change is live at [URL]"
 - Single "Undo" button (calls STEP 0's real rollback).

@@ -1,7 +1,7 @@
 # AUREM CTO — Product Requirements Document (living)
 
-**Last updated**: 2026-07-31 (Iter 367 · FINAL BUILD SESSION — Steps 0→2 complete) — see CHANGELOG.md for the full session narrative
-**Live**: https://auremcto.com (redeployed via deployer_agent on 2026-07-30 — pipeline green, /api routes healthy)
+**Last updated**: 2026-07-31 02:00 UTC (Iter 367 · Session 3 — 4 fixes + Payments discovery) — see CHANGELOG.md for the full narrative
+**Live**: https://auremcto.com — Iter 367 deployed 01:12 UTC via deployer_agent
 
 ## Original problem statement
 Optimize onboarding, strict separation of backend founder logic, and expand codebase health scanners.

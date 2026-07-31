@@ -97,9 +97,17 @@ def test_call_llm_with_meta_wraps_inner_with_trace():
     cl_block = src.split("async def call_llm_with_meta(", 1)[1].split("async def _call_llm_with_meta_inner(", 1)[0]
     assert "trace_llm_call" in cl_block
     assert '_lf["success"](result)' in cl_block
-    # The router short-circuit (iter 118) must live INSIDE the inner.
+    # The router short-circuit (iter 118) was REMOVED in Iter 367
+    # (litellm.Router opt-in was gated on LITELLM_ROUTER_ENABLED=1, an
+    # env flag never set — 167 lines of permanently-dead code). The
+    # inner must NOT reference the deleted module. Instead it goes
+    # straight into the temperature/max-tokens setup for the legacy
+    # multi-provider chain, which IS the production LLM path.
     inner_block = src.split("async def _call_llm_with_meta_inner(", 1)[1].split("async def ", 1)[0]
-    assert "call_via_router" in inner_block
+    assert "call_via_router" not in inner_block
+    assert "from services.llm_router" not in inner_block
+    assert "temperature = temperature_for(mode)" in inner_block
+    assert "actual_tokens = min(max_tokens, cap_for(mode))" in inner_block
 
 
 def test_langfuse_dependency_is_in_requirements():

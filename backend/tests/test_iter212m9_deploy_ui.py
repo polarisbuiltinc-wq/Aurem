@@ -334,7 +334,7 @@ async def test_save_config_with_project_id_writes_scoped_row():
          patch.object(deploy_mod, "is_vault_available", return_value=True), \
          patch.object(deploy_mod, "encrypt", new=AsyncMock(side_effect=_fake_encrypt)):
         out = await deploy_mod.save_config(body, "Bearer x")
-    assert out == {"ok": True, "project_id": "p_app1"}
+    assert out == {"ok": True, "project_id": "p_app1", "target": "ssh"}
     upd_args, _ = db.aurem_cto_deploy_configs.update_one.call_args
     flt = upd_args[0]
     payload = upd_args[1]["$set"]
@@ -369,7 +369,7 @@ async def test_save_config_without_project_id_writes_user_level():
          patch.object(deploy_mod, "is_vault_available", return_value=True), \
          patch.object(deploy_mod, "encrypt", new=AsyncMock(side_effect=_fake_encrypt)):
         out = await deploy_mod.save_config(body, "Bearer x")
-    assert out == {"ok": True, "project_id": None}
+    assert out == {"ok": True, "project_id": None, "target": "ssh"}
     upd_args, _ = db.aurem_cto_deploy_configs.update_one.call_args
     flt = upd_args[0]
     payload = upd_args[1]["$set"]

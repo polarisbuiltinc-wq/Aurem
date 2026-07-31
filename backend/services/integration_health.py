@@ -541,6 +541,97 @@ async def _probe_vercel() -> dict:
                        detail=f"email={user.get('email','?')}")
 
 
+async def _probe_supabase_platform() -> dict:
+    """Iter 367 · Session 3 · Fix 4 — surface the silent no-op.
+
+    `services/supabase_provisioner.py` is imported 24× and its cron
+    sweeper (`supabase_sweeper.py`) runs at startup. But the whole
+    module silently no-ops when SUPABASE_MANAGEMENT_TOKEN or
+    SUPABASE_ORG_ID isn't set. Before this probe the admin dashboard
+    would show Supabase as absent-but-fine; now it shows a REAL
+    'disabled' state with the exact missing env var(s) named."""
+    token = _safe_env("SUPABASE_MANAGEMENT_TOKEN")
+    org   = _safe_env("SUPABASE_ORG_ID")
+    missing = []
+    if not token: missing.append("SUPABASE_MANAGEMENT_TOKEN")
+    if not org:   missing.append("SUPABASE_ORG_ID")
+    if missing:
+        return _result(
+            "supabase_platform", "Supabase Provisioner",
+            "disabled",
+            summary=f"Disabled — missing {', '.join(missing)}",
+            detail=(f"services/supabase_provisioner.py imports 24 call "
+                    f"sites but every function silently returns without "
+                    f"provisioning when these are unset."),
+            fix_hint=("Set both in backend/.env then restart backend, "
+                      "OR delete supabase_provisioner + sweeper if the "
+                      "feature is intentionally shelved."),
+        )
+    # Env is set — do a real reachability check via the org endpoint.
+    async with httpx.AsyncClient(timeout=10) as c:
+        try:
+            r = await c.get(
+                f"https://api.supabase.com/v1/organizations/{org}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        except Exception as e:
+            return _result("supabase_platform", "Supabase Provisioner",
+                           "broken", summary=f"Network error: {type(e).__name__}",
+                           detail=str(e)[:200])
+        if r.status_code == 200:
+            return _result("supabase_platform", "Supabase Provisioner", "ok",
+                           summary=f"Live • org={org}")
+        return _result("supabase_platform", "Supabase Provisioner", "broken",
+                       summary=f"HTTP {r.status_code}",
+                       detail=r.text[:200],
+                       fix_hint="Rotate SUPABASE_MANAGEMENT_TOKEN")
+
+
+async def _probe_vercel_platform() -> dict:
+    """Iter 367 · Session 3 · Fix 4 — surface the silent no-op.
+
+    `services/vercel_platform_deploy.py` (6 imports) implements the
+    platform-scoped Vercel deploy path for Personal Track hosting.
+    It silently returns error dicts when AUREM_VERCEL_PLATFORM_TOKEN
+    isn't set — but the admin dashboard had no probe for THIS token
+    (the existing `_probe_vercel` checks per-user `VERCEL_API_TOKEN`,
+    a different key). Now the founder sees both."""
+    token = _safe_env("AUREM_VERCEL_PLATFORM_TOKEN")
+    team  = _safe_env("VERCEL_PLATFORM_TEAM_ID")
+    missing = []
+    if not token: missing.append("AUREM_VERCEL_PLATFORM_TOKEN")
+    if not team:  missing.append("VERCEL_PLATFORM_TEAM_ID")
+    if missing:
+        return _result(
+            "vercel_platform", "Vercel (Platform-scoped)",
+            "disabled",
+            summary=f"Disabled — missing {', '.join(missing)}",
+            detail=(f"services/vercel_platform_deploy.py has 6 call "
+                    f"sites but silently returns error dicts when these "
+                    f"are unset. Personal Track hosting depends on it."),
+            fix_hint=("Set both in backend/.env then restart, OR delete "
+                      "vercel_platform_deploy.py if not planned."),
+        )
+    # Env set — reachability check against the platform team.
+    async with httpx.AsyncClient(timeout=10) as c:
+        try:
+            r = await c.get(
+                f"https://api.vercel.com/v2/teams/{team}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        except Exception as e:
+            return _result("vercel_platform", "Vercel (Platform-scoped)",
+                           "broken", summary=f"Network error: {type(e).__name__}",
+                           detail=str(e)[:200])
+        if r.status_code == 200:
+            return _result("vercel_platform", "Vercel (Platform-scoped)",
+                           "ok", summary=f"Live • team={team}")
+        return _result("vercel_platform", "Vercel (Platform-scoped)", "broken",
+                       summary=f"HTTP {r.status_code}",
+                       detail=r.text[:200],
+                       fix_hint="Rotate AUREM_VERCEL_PLATFORM_TOKEN")
+
+
 async def _probe_mongodb() -> dict:
     mongo_url = os.environ.get("MONGO_URL") or ""
     if not mongo_url:
@@ -667,8 +758,10 @@ _PROBES: list[tuple[str, str, Callable[[], Awaitable[dict]]]] = [
     ("firecrawl",     "Firecrawl Scrape",      _probe_firecrawl),
     ("resend",        "Resend Email",          _probe_resend),
     ("sentry",        "Sentry Monitoring",     _probe_sentry),
-    ("vercel",        "Vercel Deploy",         _probe_vercel),
-    ("mongodb",       "MongoDB",               _probe_mongodb),
+    ("vercel",           "Vercel Deploy",               _probe_vercel),
+    ("supabase_platform","Supabase Provisioner",        _probe_supabase_platform),
+    ("vercel_platform",  "Vercel (Platform-scoped)",    _probe_vercel_platform),
+    ("mongodb",          "MongoDB",                     _probe_mongodb),
 ]
 
 
@@ -699,8 +792,11 @@ async def run_all_probes_serial(gap_s: float = 1.5) -> list[dict]:
 
 
 def summary_counts(results: list[dict]) -> dict:
-    """Reduce a probe list to {ok, warn, broken, missing} counts."""
-    out = {"ok": 0, "warn": 0, "broken": 0, "missing": 0, "total": len(results)}
+    """Reduce a probe list to {ok, warn, broken, missing, disabled} counts.
+    Iter 367 · Session 3 · Fix 4 — added `disabled` for silent-no-op
+    integrations (Supabase provisioner, Vercel platform)."""
+    out = {"ok": 0, "warn": 0, "broken": 0,
+           "missing": 0, "disabled": 0, "total": len(results)}
     for r in results:
         s = r.get("status", "broken")
         if s in out:

@@ -16,10 +16,14 @@ import { useNavigate } from "react-router-dom";
 import { api, getToken } from "../lib/api";
 
 const STATUS_META = {
-  ok:      { color: "#6dd4a1", bg: "rgba(109,212,161,0.10)", label: "Live"    },
-  warn:    { color: "#ffb454", bg: "rgba(255,180,84,0.10)",  label: "Degraded"},
-  broken:  { color: "#ff6b6b", bg: "rgba(255,107,107,0.10)", label: "Broken"  },
-  missing: { color: "#888d99", bg: "rgba(136,141,153,0.10)", label: "Missing" },
+  ok:       { color: "#6dd4a1", bg: "rgba(109,212,161,0.10)", label: "Live"     },
+  warn:     { color: "#ffb454", bg: "rgba(255,180,84,0.10)",  label: "Degraded" },
+  broken:   { color: "#ff6b6b", bg: "rgba(255,107,107,0.10)", label: "Broken"   },
+  missing:  { color: "#888d99", bg: "rgba(136,141,153,0.10)", label: "Missing"  },
+  // Iter 367 · Session 3 · Fix 4 — explicit "Disabled" state so an
+  // integration whose entire code path silently no-ops (missing env)
+  // surfaces distinctly instead of blending into "Missing" or "OK".
+  disabled: { color: "#7aa9ff", bg: "rgba(122,169,255,0.10)", label: "Disabled" },
 };
 
 function timeSince(epoch) {
