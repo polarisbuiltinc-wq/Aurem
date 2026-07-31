@@ -696,3 +696,6 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 | `routers/user_rollback.py` | `/rollback` | 2 | auto-detected new router (verify) (Iter 0, 2026-07-31T00:31:30.625864Z) | <!-- inv:router:routers/user_rollback.py -->
 - `loop_run_log kind='user_ship_revert'` — auto-detected in backend/routers/user_rollback.py (verify) [Iter 0, 2026-07-31T00:31:30.625891Z] <!-- inv:loop_run_log_kind:user_ship_revert -->
 - `services/ftp_ssh_deploy.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-31T00:31:30.625907Z] <!-- inv:service:services/ftp_ssh_deploy.py -->
+- `BILLING_CRON_DAY` — auto-detected in backend/services/billing_cron.py (verify) (default: unset) [Iter 0, 2026-07-31T03:43:53.595727Z] <!-- inv:envvar:BILLING_CRON_DAY -->
+- `BILLING_CRON_HOUR` — auto-detected in backend/services/billing_cron.py (verify) (default: unset) [Iter 0, 2026-07-31T03:43:53.595752Z] <!-- inv:envvar:BILLING_CRON_HOUR -->
+- `INTEGRATION_PROXY_URL` — auto-detected in backend/tests/test_session4_step_b_stripe_real_e2e.py (verify) (default: unset) [Iter 0, 2026-07-31T03:43:53.595765Z] <!-- inv:envvar:INTEGRATION_PROXY_URL -->

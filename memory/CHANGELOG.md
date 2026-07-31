@@ -5,7 +5,23 @@ statement and historical context; this file captures recent feature
 work in date-stamped chunks so PRD.md stays focused.
 
 
-## 2026-07-31 03:25 UTC — Iter 367 · Session 4 — Step A (billing cron) + Step B (real Stripe E2E) + Step C (discovery)
+## 2026-07-31 03:55 UTC — Iter 367 · Session 4 · Guard 15 npm audit gap closed
+
+### Discovery (user-driven verification)
+User asked to verify Guard 15 for `npm audit` specifically. Found: `scripts/g15_dependency_scan.py` docstring **claimed** it ran "yarn npm audit against frontend/yarn.lock" but the code was pip-audit ONLY — a doc-lies-code-doesn't gap. **Real current yarn audit output**: 1 CRITICAL (vitest CVE-2026-47429), 13 HIGH (vite CVE-2026-53571, brace-expansion CVE-2026-14257, form-data CVE-2026-12143, axios GHSA-gcfj-64vw-6mp9, postcss GHSA-r28c-9q8g-f849, tmp CVE-2026-44705 + transitive re-instances), 23 moderate, 3 low across 803 total deps. Deduped: **7 unique HIGH/CRITICAL advisories**.
+
+### Fix
+- Added `_run_yarn_audit()` to `scripts/g15_dependency_scan.py`. Parses yarn 1.x JSON-lines output, dedupes by advisory id, feeds into the same severity-gate + allowlist as pip-audit. Both scanners now run every G15 invocation.
+- Corrected top docstring to match reality.
+- Updated `main()` summary line to expose both counts: `Build fails: 7 HIGH/CRITICAL finding(s) not on allowlist (pip=85, yarn=26)`.
+- **Real E2E proof** — `tests/test_session4_step_d_guard15_yarn_audit.py` — 6/6 green in 38.44s. Includes a full scanner CLI subprocess run against real yarn.lock. Test also enforces:
+  - `frontend/yarn.lock` is tracked by git (reproducibility guard).
+  - No conflicting `frontend/package-lock.json` exists (this repo is yarn-only).
+
+### Note
+- 7 unique HIGH/CRITICAL findings NOW block CI at the G15 gate. Fix path is a founder call: either bump the affected packages (vite→6.4.3, vitest→3.2.6, axios→1.18.0, postcss→8.5.18, tmp→0.2.6, form-data→4.0.6, brace-expansion→5.0.8) or add time-boxed allowlist entries with expiry dates in `scripts/g15_allowlist.json`.
+
+
 
 ### Step A — `bill_maxx_overages()` wired as dedicated monthly scheduler
 - Added `schedule_maxx_overage_billing()` to `services/billing_cron.py`.
