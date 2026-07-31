@@ -92,15 +92,28 @@ def _day_key(ts: float | None = None) -> str:
 
 
 async def upsert_alerts_from_snapshot(db, snap: dict) -> list[dict]:
-    """Inspect `snap.results`, upsert one row per (integration, severity,
-    day) into `db.topup_alerts`. Returns the list of NEW alerts that were
-    not seen earlier today (i.e. the ones we should email about).
+    """Inspect `snap.results`, upsert one row per (integration, severity)
+    into `db.topup_alerts`. Returns the list of NEW alerts that were
+    not seen earlier in ANY currently-active window (i.e. the ones we
+    should email about).
 
     Iter 212m-70 — collapsed the per-result `find_one` existence check
     + the three branches' single `update_one` / `update_many` /
     `insert_one` writes into one `bulk_write`.  Round-trips drop from
     1 + 2·N to 1 + 1, regardless of how many integrations the snapshot
     contains.
+
+    Session 6 · Item 2 (2026-07-31) — dedup was per-day, so a
+    long-standing critical (e.g. Tavily unpaid credits) piled up one
+    new row EVERY DAY for the same underlying incident.  Real repro:
+    Tavily had 18 active `critical` rows in prod, one per day going
+    back to 2026-06-24.  Founder saw 2+ duplicates in the /admin
+    banner.  Fix: dedup key changed from
+    `{integration}::{severity}::{day}` → `{integration}::{severity}`
+    when an already-active row exists.  A new row is only inserted
+    when NO active row exists — i.e. an integration that was
+    healthy comes back broken.  Prevents the daily-pile-up while
+    keeping the "new incident after resolution" story intact.
     """
     from pymongo import InsertOne, UpdateOne, UpdateMany
 
@@ -110,30 +123,51 @@ async def upsert_alerts_from_snapshot(db, snap: dict) -> list[dict]:
     if not results:
         return new_alerts
 
-    # 1. Pre-fetch every alert_key we might touch in a single $in query
-    #    using the [(alert_key, 1)] unique sparse index added in Iter
-    #    212m-70.
-    candidate_keys: list[str] = []
-    classified:     list[tuple[dict, str | None, str]] = []
+    # 1. Pre-fetch ALL currently-active rows for every (integration,
+    #    severity) we might touch, in a single query.  A row counts as
+    #    "already covering this alert" if `status="active"` regardless
+    #    of which day originally opened it — long-standing incidents
+    #    must NOT spawn a new row per day.
+    candidate_bases: list[tuple[str, str]] = []   # (integration_id, severity)
+    classified:     list[tuple[dict, str | None, str, tuple[str, str] | None]] = []
     for r in results:
         severity = classify(r)
+        base = (r.get("id"), severity) if severity else None
+        # Today's alert_key — still used when we DO insert a new row,
+        # so the unique index prevents same-day dupes AND the record
+        # keeps a day marker for reporting/audit.
         key = f"{r.get('id')}::{severity}::{day}" if severity else ""
-        classified.append((r, severity, key))
-        if key:
-            candidate_keys.append(key)
-    existing_keys: set[str] = set()
-    if candidate_keys:
+        classified.append((r, severity, key, base))
+        if base:
+            candidate_bases.append(base)
+
+    # Query: any active row for (integration_id, severity) — day-agnostic.
+    existing_active_bases: set[tuple[str, str]] = set()
+    active_row_ids_by_base: dict[tuple[str, str], str] = {}
+    if candidate_bases:
+        or_clauses = [
+            {"integration_id": iid, "severity": sev}
+            for (iid, sev) in candidate_bases
+        ]
         cur = db.topup_alerts.find(
-            {"alert_key": {"$in": candidate_keys}}, {"_id": 0, "alert_key": 1},
+            {"$or": or_clauses, "status": "active"},
+            {"_id": 0, "integration_id": 1, "severity": 1, "alert_key": 1},
         )
         async for d in cur:
-            ak = d.get("alert_key")
-            if ak: existing_keys.add(ak)
+            iid = d.get("integration_id")
+            sev = d.get("severity")
+            ak  = d.get("alert_key")
+            if iid and sev:
+                existing_active_bases.add((iid, sev))
+                # Remember one canonical alert_key per base so we can
+                # `update_one` the CURRENT row without scanning again.
+                if (iid, sev) not in active_row_ids_by_base and ak:
+                    active_row_ids_by_base[(iid, sev)] = ak
 
     # 2. Build a single bulk_write list across all 3 branches.
     ops: list = []
     now = time.time()
-    for r, severity, key in classified:
+    for r, severity, key, base in classified:
         if not severity:
             # Iter 351 — resolve ALL active alerts for a now-healthy
             # integration, not just today's. The old `day_key: day`
@@ -149,19 +183,27 @@ async def upsert_alerts_from_snapshot(db, snap: dict) -> list[dict]:
                           "resolved_by": "auto_probe"}},
             ))
             continue
-        if key in existing_keys:
+        # Session 6 · Item 2 — active row already covers this
+        # (integration, severity)?  Just refresh it, do NOT create a
+        # new daily row.  If the existing alert_key differs from
+        # today's, we still refresh — that keeps the founder-facing
+        # `first_seen` stable at the true incident-open time.
+        if base in existing_active_bases:
+            existing_ak = active_row_ids_by_base.get(base) or key
             ops.append(UpdateOne(
-                {"alert_key": key},
+                {"alert_key": existing_ak},
                 {"$set": {
                     "last_seen": now,
                     "summary":   r.get("summary", "")[:300],
                     "detail":    r.get("detail", "")[:500],
                     "status":    "active",
+                    "last_seen_day_key": day,   # audit trail
                 },
                  "$inc": {"seen_count": 1}},
             ))
             continue
-        # First sighting today → row + flag as needing email.
+        # First sighting for this (integration, severity) — no active
+        # row exists → open a brand new row for today.
         doc = {
             "alert_id":          f"al_{uuid.uuid4().hex[:10]}",
             "alert_key":         key,

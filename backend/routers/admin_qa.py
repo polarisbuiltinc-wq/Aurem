@@ -718,3 +718,123 @@ async def correction_rules_graduate(
     if db is None:
         return {"available": False}
     return await graduate_shadow_eligible_rules(db, dry_run=dry_run)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Iter 367 · Session 6 · Item 1 — VS Code Marketplace live status
+# ═══════════════════════════════════════════════════════════════════
+# Real-check the Marketplace HTML/API so /admin can render an honest
+# state for the "VS Code extension" badge — instead of the previous
+# hardcoded "live" that stayed green even when the founder hadn't
+# published yet (Marketplace returns 404 for the identifier).
+#
+# Same discipline the codebase already applies to the Supabase /
+# Vercel silent-no-op fix: NEVER hardcode "live" for a feature whose
+# true prod-reachability hasn't been verified.
+_VSCODE_MARKETPLACE_CACHE: dict = {"ttl_epoch": 0.0, "payload": None}
+_VSCODE_MARKETPLACE_TTL_S = 300  # 5 min
+
+
+@router.get("/vscode-marketplace-status")
+async def vscode_marketplace_status(
+    authorization: Optional[str] = Header(None),
+):
+    """Return the true published state of the AUREM CTO VS Code
+    extension on the VS Marketplace.
+
+    Uses a 5-minute in-memory cache so the admin dashboard doesn't
+    hammer marketplace.visualstudio.com on every page refresh. On
+    Marketplace-side failure (network error, unexpected HTML) we
+    return `published=False, reason="check_failed"` — the frontend
+    treats that as "grey/pending" so a transient upstream blip
+    doesn't lie in the other direction (fake-green)."""
+    await _require_admin(authorization)
+    import time as _time
+    import httpx
+
+    now = _time.time()
+    if (_VSCODE_MARKETPLACE_CACHE["payload"]
+            and now < _VSCODE_MARKETPLACE_CACHE["ttl_epoch"]):
+        return _VSCODE_MARKETPLACE_CACHE["payload"]
+
+    # publisher.name derived from /app/vscode-extension/package.json
+    # ("publisher": "auremcto", "name": "aurem-cto"). The Marketplace
+    # itemName format is "<publisher>.<name>".
+    item_name = "auremcto.aurem-cto"
+    url = f"https://marketplace.visualstudio.com/items?itemName={item_name}"
+
+    payload: dict = {
+        "item_name":    item_name,
+        "url":          url,
+        "checked_at":   int(now),
+        "cache_ttl_s":  _VSCODE_MARKETPLACE_TTL_S,
+    }
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=8.0,
+            follow_redirects=True,
+            headers={"User-Agent": "AUREM-CTO-Admin-Health/1.0"},
+        ) as c:
+            r = await c.get(url)
+    except Exception as e:
+        payload.update({
+            "published":  False,
+            "http_code":  None,
+            "reason":     "check_failed",
+            "detail":     f"network_error: {type(e).__name__}",
+        })
+        # Do NOT cache network errors — retry sooner.
+        _VSCODE_MARKETPLACE_CACHE["ttl_epoch"] = now + 30
+        _VSCODE_MARKETPLACE_CACHE["payload"]   = payload
+        return payload
+
+    # Marketplace responds 200 for both "published" AND "not found" pages
+    # (with different HTML). Real 404 is rare but possible for older
+    # deprecated slugs. We look for the "Extension not found" marker
+    # in the returned HTML — Marketplace's canonical unpublished-state
+    # signal — rather than relying on status code alone.
+    body_lower = r.text.lower()
+    unpublished_markers = (
+        "we couldn't find any extensions matching",
+        "extension not found",
+        "no results found",
+        "the extension you are looking for could not be found",
+    )
+    is_missing = (
+        r.status_code == 404
+        or any(m in body_lower for m in unpublished_markers)
+    )
+
+    if is_missing:
+        payload.update({
+            "published": False,
+            "http_code": r.status_code,
+            "reason":    "not_published",
+            "detail":    "Marketplace has no listing for this itemName. "
+                         "Ship the .vsix via `vsce publish` after configuring "
+                         "the Azure DevOps PAT.",
+        })
+    elif r.status_code == 200 and item_name.split(".")[1] in body_lower:
+        # Sanity: the item slug should appear somewhere on a real
+        # extension page. Belt-and-braces against Marketplace serving
+        # a generic error page with 200 status.
+        payload.update({
+            "published": True,
+            "http_code": 200,
+            "reason":    "published",
+            "detail":    "Live on the VS Marketplace.",
+        })
+    else:
+        # Ambiguous response — treat as unpublished to avoid fake-green.
+        payload.update({
+            "published": False,
+            "http_code": r.status_code,
+            "reason":    "check_failed",
+            "detail":    f"Marketplace returned HTTP {r.status_code} but the "
+                         "response didn't include the extension slug.",
+        })
+
+    _VSCODE_MARKETPLACE_CACHE["ttl_epoch"] = now + _VSCODE_MARKETPLACE_TTL_S
+    _VSCODE_MARKETPLACE_CACHE["payload"]   = payload
+    return payload

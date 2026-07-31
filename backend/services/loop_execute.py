@@ -230,6 +230,47 @@ async def _generate_one_inner(
         logger.warning("[execute] fetch_file failed for %s: %r (treating as new file)", path, e)
         current = ""
 
+    # Session 6 · Item 3 (2026-07-31) — MINIMAL-EDIT FAST PATH.
+    # Real-user QA: "add a one-line comment at the top of README.md"
+    # was producing +36/-35 diffs because the executor unconditionally
+    # asked the LLM to rewrite the entire file body. Even a well-behaved
+    # model drifts whitespace/word-choice across untouched lines during
+    # a full rewrite. When the request is a small-scope insert/append/
+    # replace/delete, we now ask the LLM for a compact JSON operation
+    # and apply it programmatically — the resulting diff is EXACTLY
+    # the requested change, nothing more.
+    #
+    # If the surgical path returns `None` (LLM says "not expressible",
+    # JSON is malformed, op doesn't apply cleanly, or the request isn't
+    # trivial in the first place), we transparently fall through to
+    # the existing full-rewrite path. Zero regression risk.
+    if current:  # Skip for new files — full rewrite is the right path.
+        try:
+            from services.minimal_edit import try_minimal_edit
+            surgical = await try_minimal_edit(
+                user_message=user_message,
+                plan=plan,
+                path=path,
+                current=current,
+                user_id=user_id,
+                call_llm_with_meta=call_llm_with_meta,
+            )
+            if surgical:
+                logger.info(
+                    "[execute] %d/%d SURGICAL EDIT for %s "
+                    "(op=%s, ∆bytes=%+d)",
+                    idx, total, path, surgical["op"].get("op"),
+                    len(surgical["content"]) - len(current),
+                )
+                return {"path": path, "content": surgical["content"]}
+        except Exception as _e:                          # noqa: BLE001
+            # Never let the fast path failure break the full-rewrite
+            # fallback — this is optimisation, not required correctness.
+            logger.debug(
+                "[execute] minimal-edit path errored for %s: %r "
+                "(falling back to full rewrite)", path, _e,
+            )
+
     # Iter 212m-118 — DIAGNOSE-FIRST. Cheap "where exactly?" pass before
     # the rewrite. Best-effort; None on failure → full-file rewrite path.
     localization_block = ""

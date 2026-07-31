@@ -26,6 +26,7 @@ export default function AdminOverview() {
   const [ghSync,  setGhSync]  = useState(null);       // iter 357 — Guard 8 GitHub sync
   const [breakers, setBreakers] = useState(null);     // iter 360 — Guard 17 dependency breakers
   const [councilHealth, setCouncilHealth] = useState(null); // iter 212m-192 — Council A live status
+  const [vscodeMarketplace, setVscodeMarketplace] = useState(null); // Session 6 · Item 1 — VS Code real status
   const [refreshingHealth, setRefreshingHealth] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -33,7 +34,7 @@ export default function AdminOverview() {
     const h = { Authorization: `Bearer ${getToken()}` };
     const HEALTH_URL = `${process.env.REACT_APP_BACKEND_URL}/api/health`;
     try {
-      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes] =
+      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes] =
         await Promise.allSettled([
           fetch(HEALTH_URL, { signal: AbortSignal.timeout(10000) }).then((r) => r.json()),
           api.get("/usage/public/stats"),
@@ -48,6 +49,7 @@ export default function AdminOverview() {
           api.get("/admin/council/health", { headers: h }),  // Iter 212m-192
           api.get("/admin/github-sync", { headers: h }),     // Iter 357 — Guard 8
           api.get("/admin/qa/guard17-breakers", { headers: h }), // Iter 360 — Guard 17
+          api.get("/admin/qa/vscode-marketplace-status", { headers: h }), // Session 6 · Item 1
         ]);
       if (healthRes.status   === "fulfilled") setHealth(healthRes.value);
       if (statsRes.status    === "fulfilled") setStats(statsRes.value.data);
@@ -62,6 +64,7 @@ export default function AdminOverview() {
       if (councilHealthRes.status === "fulfilled") setCouncilHealth(councilHealthRes.value.data);
       if (ghSyncRes.status === "fulfilled") setGhSync(ghSyncRes.value.data);
       if (breakersRes.status === "fulfilled") setBreakers(breakersRes.value.data);
+      if (vscodeRes.status === "fulfilled") setVscodeMarketplace(vscodeRes.value.data);
     } catch { /* silent */ }
     finally { setLoading(false); }
   }, []);
@@ -502,7 +505,13 @@ export default function AdminOverview() {
       {/* ── User metrics ────────────────────────────────────── */}
       <Section title="Users & ships">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
-          <MetricCard label="Developers"     value={stats?.developers   ?? "—"} />
+          {/* Session 6 · Item 5 (2026-07-31) — QA discovered "Developers"
+              showed "—" because backend returns `real_developers` +
+              `users` fields but the frontend was reading `stats?.developers`
+              (undefined → falls back to "—"). Fixed by preferring the
+              test-account-filtered `real_developers` count with a
+              graceful fallback to the unfiltered `users` count. */}
+          <MetricCard label="Developers"     value={stats?.real_developers ?? stats?.users ?? "—"} />
           <MetricCard label="Tasks shipped"  value={wall?.total_ships   ?? stats?.tasks_shipped ?? "—"} />
           <MetricCard label="Active repos"   value={wall?.total_repos   ?? "—"} />
           <MetricCard label="Claude corrected" value={stats?.claude_corrected_pct != null ? `${stats.claude_corrected_pct}%` : "—"} />
@@ -529,7 +538,30 @@ export default function AdminOverview() {
           <FeatureRow name="Public stats strip"      status="live"    note="Real /usage/public/stats" />
           <FeatureRow name="Ship Wall"               status="live"    note="auremcto.com/wall" />
           <FeatureRow name="ORA Wrapped"             status="live"    note="/wrapped/me + share-to-X" />
-          <FeatureRow name="VS Code extension"       status="live"    note="aurem-cto-0.1.0.vsix shipped (Iter 72)" />
+          {/* Session 6 · Item 1 — VS Code extension row now reflects
+              REAL Marketplace state, not just the fact that we built
+              the .vsix. Green when actually published, amber "◐ Built
+              — not yet published" when the founder hasn't shipped it
+              yet. Falls back to the built-not-verified label if the
+              backend probe fails so we never lie in the fake-green
+              direction. */}
+          <FeatureRow
+            name="VS Code extension"
+            status={
+              vscodeMarketplace?.published === true  ? "live"
+              : vscodeMarketplace                    ? "not-published"
+              : "pending"
+            }
+            note={
+              vscodeMarketplace?.published === true
+                ? "Live on Marketplace — auremcto.aurem-cto"
+                : vscodeMarketplace?.reason === "not_published"
+                  ? "Built — not yet published (aurem-cto-0.1.0.vsix ready; needs `vsce publish` + PAT)"
+                  : vscodeMarketplace?.reason === "check_failed"
+                    ? "Built — Marketplace check failed (retrying in ~30s)"
+                    : "aurem-cto-0.1.0.vsix built — checking Marketplace…"
+            }
+          />
           <FeatureRow name="OpsRecipes runbook"      status="live"    note="/admin/ops — 5 ops recipes (Iter 73)" />
           <FeatureRow name="Live worker tape"        status="live"    note="Terminal-feed SSE in chat (Iter 73)" />
           <FeatureRow name="task_state per-file"     status="live"    note="Writing N/M files mini-bar (Iter 74)" />
@@ -755,6 +787,14 @@ export default function AdminOverview() {
 // Iter 351 — live test-suite counts strip. Replaces the hardcoded
 // stale iter-123-era test-count claim with real numbers.
 // Reads /admin/qa/counts (live FS on preview, build-manifest on prod).
+//
+// Session 6 · Item 6 (2026-07-31) — added a stale-manifest warning
+// pill. Founder QA discovered prod showed 3712 backend / 3944 grand
+// total while the actual live count was 3904 / 4142.  The frontend
+// silently used the build_manifest fallback without any indication
+// that the numbers may be days old.  Now surfaces `Δ days ago` when
+// the source is `build_manifest` so ops can see at a glance whether
+// the deploy pipeline is refreshing the manifest.
 export function QaCountsStrip() {
   const [d, setD] = useState(null);
   useEffect(() => {
@@ -763,21 +803,50 @@ export function QaCountsStrip() {
   if (!d) return null;
   const be = d.backend_pytest || {};
   const fe = d.frontend_vitest || {};
+  const isManifest = d.source === "build_manifest";
+  const manifestAgeDays = (
+    isManifest && d.manifest_generated_at
+      ? Math.floor(
+          (Date.now() / 1000 - d.manifest_generated_at) / 86400
+        )
+      : null
+  );
+  const stale = manifestAgeDays != null && manifestAgeDays > 3;
   return (
-    <div data-testid="qa-counts-strip" style={{
+    <div data-testid="qa-counts-strip"
+         data-source={d.source || "unknown"}
+         data-manifest-age-days={manifestAgeDays ?? ""}
+         style={{
       marginTop: 14, fontSize: 11, color: "var(--text-dim)",
       padding: "8px 12px",
-      background: "rgba(109,212,161,0.06)",
-      border: "1px solid rgba(109,212,161,0.22)",
+      background: stale
+        ? "rgba(239,159,39,0.09)"
+        : "rgba(109,212,161,0.06)",
+      border: `1px solid ${stale
+        ? "rgba(239,159,39,0.35)"
+        : "rgba(109,212,161,0.22)"}`,
       borderRadius: 5,
     }}>
-      Test suite (live): <strong style={{ color: "var(--ok, #6dd4a1)" }}>
+      Test suite (live): <strong style={{ color: stale ? "#EF9F27" : "var(--ok, #6dd4a1)" }}>
         {be.tests ?? 0} backend
       </strong>{" "}
       across {be.files ?? 0} files · {fe.tests ?? 0} frontend ·
       grand total {d.grand_total_tests ?? 0}
-      {d.source === "build_manifest" && (
-        <span style={{ opacity: 0.7 }}> · from build manifest</span>
+      {isManifest && (
+        <span data-testid="qa-counts-manifest-note"
+              style={{ opacity: 0.85, marginLeft: 6 }}>
+          · from build manifest
+          {manifestAgeDays != null && (
+            <span style={{ color: stale ? "#EF9F27" : "inherit" }}>
+              {" "}({manifestAgeDays === 0
+                ? "today"
+                : manifestAgeDays === 1
+                  ? "1 day ago"
+                  : `${manifestAgeDays} days ago`}
+              {stale ? " — stale, redeploy to refresh" : ""})
+            </span>
+          )}
+        </span>
       )}
     </div>
   );
@@ -1012,6 +1081,10 @@ const STATUS_COLORS = {
   pending:    { bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.08)", text: "var(--text-dim)", dot: "○" },
   "needs-dsn":  { bg: "rgba(239,159,39,0.1)",  border: "rgba(239,159,39,0.25)",  text: "#EF9F27", dot: "◐" },
   "needs-key":  { bg: "rgba(239,159,39,0.1)",  border: "rgba(239,159,39,0.25)",  text: "#EF9F27", dot: "◐" },
+  // Session 6 · Item 1 — explicit "built but not yet published" state
+  // for the VS Code extension. Same amber-yellow palette as needs-key /
+  // needs-dsn so the row stands out from the honest "live" green.
+  "not-published": { bg: "rgba(239,159,39,0.1)",  border: "rgba(239,159,39,0.25)",  text: "#EF9F27", dot: "◐" },
 };
 
 function FeatureRow({ name, status, note }) {

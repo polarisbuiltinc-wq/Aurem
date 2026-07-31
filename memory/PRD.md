@@ -1,46 +1,47 @@
 # AUREM CTO — Product Requirements Document (living)
 
-**Last updated**: 2026-07-31 18:55 UTC (Iter 367 · Session 5 · LLM.py split Phase 2 landed on preview + queued for prod deploy)
-**Live**: https://auremcto.com — Phase 0a + 1 landed; Phase 2 in flight
+**Last updated**: 2026-07-31 20:50 UTC (Session 6 · Items 1–6 real-user QA batch landed on preview)
+**Live**: https://auremcto.com — Session 5 LLM split (Phase 0a + 1 + 2) landed; Session 6 QA-batch in flight
 
 ## Original problem statement
 Optimize onboarding, strict separation of backend founder logic, and expand codebase health scanners.
 Build the "Personal Track" for non-technical users, implement the "Master QA Test Strategy", fix
-Loop engine stuck bugs (Phase 0), then build the next 4 competitive differentiators:
-- Phase 1: Persistent Correction Rules ✅ DONE (Iter 333 + 14-day auto-graduation Iter 367)
-- Phase 2: Risk-Based Routing ✅ DONE (Iter 367)
-- Phase 3: Checkpoints/Rollback ✅ DONE (Iter 367 STEP 0)
-- Phase 4: Browser Self-Testing ✅ DONE (Iter 367)
+Loop engine stuck bugs (Phase 0), then build the next 4 competitive differentiators.
 
 Language: **Hinglish** — main agent responds in Hinglish.
 
 ## What's implemented (chronological, most recent first)
 
+### Session 6 · Real-User QA Batch (2026-07-31 20:50) — 6 production bugs found via live Chrome test
+Item-by-item, each with E2E proof (zero mocks):
+
+- **Item 1 — VS Code "LIVE" badge lied**: `/admin` System-mapping showed green ● next to "VS Code extension" while Marketplace 404'd (founder hadn't published). Same anti-pattern as the earlier Supabase/Vercel silent-no-op. Fix: new endpoint `GET /api/aurem-dev/admin/qa/vscode-marketplace-status` real-probes marketplace.visualstudio.com with a 5-min TTL cache; FE renders amber "◐ Built — not yet published" when `published=false`, green when true, grey "checking…" during probe. Live check confirmed: HTTP 404 → `reason=not_published`. **5/5 regression tests pass.**
+
+- **Item 2 — Duplicate CRITICAL Tavily alerts (dedup bug)**: `db.topup_alerts` had **18 active `critical` rows** for Tavily — one per day since 2026-06-24 — because `alert_key = {integration}::{severity}::{day}`. A long-standing incident piled a new row every 24h; the unique index correctly prevented same-day dupes but not cross-day. Fix: dedup now day-agnostic on `(integration_id, severity, status="active")`; existing 18 dupes collapsed via `session6_item2_dedup_cleanup` migration → 1 active row. Screenshot verify: banner now reads "1 critical integration alert (total active: 1)". **5/5 regression tests pass** (including a 30-daily-cycle simulation).
+
+- **Item 3 — Diff scope-creep on trivial requests**: Real repro — "add a one-line comment at the top of README.md" → +36/-35 diff. Root cause: `loop_execute._generate_one` unconditionally asked LLM to "Rewrite the entire file content"; even a well-behaved model drifts whitespace/word-choice during full rewrites. Fix: new `services/minimal_edit.py` surgical-edit fast path. Detects trivial-scope prompts via lexical classifier, asks LLM for a compact JSON op (`prepend`/`append`/`insert_after_line`/`replace_line`/`delete_line`/`not_expressible`), applies it programmatically. Falls through to full-rewrite silently if the LLM says `not_expressible` or the op fails validation. **31/31 tests pass** including exact-byte-count contract (`+1 line net, every original line byte-identical`).
+
+- **Item 4 — Live-feed vs Ship-panel state mismatch**: LiveFeed showed "Writing README.md (stalled) — 1m 41s" WHILE the Ship panel showed "Ready to ship · manual confirmation required" simultaneously. Root cause: `resolveStalePendingByFrontier` (Iter 331) derived its frontier from NARRATION step order only; when the engine emitted `state=paused_for_user, phase=ship, data.kind=awaiting_ship` WITHOUT an accompanying narration frame with `step=ship`, the frontier stayed at execute and stale pending never resolved. Fix: frontier now also honours the raw event stream's `phase` field via `PHASE_FRONTIER` lookup — seeing `phase=ship` or `phase=paused_for_user` in the raw stream is proof enough that execute finished. **6/6 vitest tests pass**.
+
+- **Item 5 — "Developers: —" undefined value**: `/admin/Users & Ships` showed "— Developers" while sibling tiles had real numbers. Root cause: FE read `stats?.developers` but backend returns `real_developers` + `users` (no `developers` field). Fix: FE now reads `stats?.real_developers ?? stats?.users ?? "—"`. Live verify: backend returns `real_developers=74, users=549`. **2/2 regression tests pass.**
+
+- **Item 6 — Test-count discrepancy**: Admin dashboard showed "3712 backend / 3944 grand total" from a stale `backend/qa_manifest.json` (~2 days old). Live count was actually 3904 backend / 4142 grand total. Fix: (a) regenerated manifest fresh (3712→3904 backend, 3944→4142 total), (b) `QaCountsStrip` now surfaces manifest age when using build_manifest fallback + paints amber with "stale, redeploy to refresh" hint when > 3 days old. **4/4 regression tests pass**.
+
+- **Item 7 (observation only, not a code bug)**: Signup→GitHub-connect conversion is **23.1%** (20 of 26 signups drop off at this exact step). Biggest funnel leak in the product. Flagged for founder UX prioritization.
+
+**Cumulative Session 6 test tally: 53/53 pass** (47 backend + 6 frontend vitest).
+
 ### Iter 367 · Session 5 · LLM.py Split Phase 2 (2026-07-31 18:55) — probes.py + LONGCAT_LIVE ModuleType hook
-- Extracted the LongCat live-availability surface + `_deepseek_model()` into `services/_llm_probes.py`:
-  - `LONGCAT_LIVE` — canonical mutable bool (no longer duplicated in llm.py).
-  - `set_longcat_live(bool)` — explicit helper used by `_call_longcat` (still in llm.py until Phase 4).
-  - `probe_longcat_availability()` — OpenRouter live-check with Mongo persistence.
-  - `periodic_longcat_reprobe(interval_seconds)` — background reprobe loop with adaptive backoff.
-  - `_deepseek_model()` — env-derived slug lookup.
-- **`services.llm` gets a custom `ModuleType.__setattr__` hook** on `sys.modules['services.llm'].__class__`:
-  - Reads (`services.llm.LONGCAT_LIVE`, `from services.llm import LONGCAT_LIVE`) route via module `__getattr__` (PEP 562) to `_llm_probes.LONGCAT_LIVE`.
-  - Writes (`llm_mod.LONGCAT_LIVE = X`) route via `_LLMModule.__setattr__` to `_llm_probes.LONGCAT_LIVE = X`.
-  - All 3 prod bare-import sites (main.py::health, routers/admin.py::council_health, routers/feature_window.py::feature_window_status) do FUNCTION-BODY imports — they re-import per request → writes propagate automatically.
-- Replaced `global LONGCAT_LIVE` in `_call_longcat` with `_probes.set_longcat_live(False)` — no more cross-module `global`s.
-- 12/12 new Phase 2 regression tests (`tests/test_session5_llm_split_phase2.py`) cover identity, read/write routing, bool coercion, all 3 external-caller shapes, function-body import propagation, Council A LIVE flip visibility.
-- 119/119 across every LLM/council/probe/routing/CEO/session5 suite (0 regressions).
-- Live-verified on preview: `/api/health` returns `council_a_model: anthropic/claude-sonnet-4.5` + `longcat_live: true`; backend logs show `services._llm_probes INFO ✅ LongCat probe OK` — proof the call flowed through the new module.
+- Extracted `LONGCAT_LIVE` bool + `set_longcat_live()` + `probe_longcat_availability()` + `periodic_longcat_reprobe()` + `_deepseek_model()` into `services/_llm_probes.py`. Installed a `types.ModuleType.__setattr__` hook on `services.llm` to transparently route `llm.LONGCAT_LIVE = X` writes to the canonical location. 12/12 new tests + 119/119 across all LLM/council/probe/routing/CEO/session5 suites. Prod-verified.
 
 ### Iter 367 · Session 5 · LLM.py Split Phase 1 (2026-07-31 17:35) — routing.py extraction
-- Extracted pure/env-derived surface into `services/_llm_routing.py`: `MAX_TOKENS`, `TEMPERATURE`, `_DEEPSEEK_HOSTS`, `_CLAUDE_MODES`, V2 flags (`LONGCAT_ENABLED`, `COUNCIL_B_GLM_ENABLED`, `CEO_RESCUE_ENABLED`, `CEO_PRIMARY_TIMEOUT_S`, `CEO_RESCUE_MODEL`), `cap_for()`, `temperature_for()`, `council_a_primary_model()`, `council_b_primary_model()` (deferred `services.llm` imports for `LONGCAT_LIVE`/`_LONGCAT_MODEL`/`_GLM_MODEL`/`_deepseek_model`). Zero code churn in 45 importers. 13/13 new tests + 107/107 across all LLM-touched files. Prod-verified.
+- Extracted pure/env-derived surface into `services/_llm_routing.py` (constants + V2 flags + pure helpers + deferred-import routing). Zero code churn in 45 importers.
 
 ### Iter 367 · Session 5 · LLM.py Split Phase 0a (2026-07-31 17:00) — state.py extraction
-- Extracted mutable state surface into `services/_llm_state.py`: `_new_provenance_slot()`, `_last_provider_ctx` ContextVar, `_set_last_provider`, `get_last_provider`, `reset_last_provider`, `_LONGCAT_LAST_PROBE` dict. `LONGCAT_LIVE` deliberately deferred to Phase 2 (now landed). 7/7 new tests, all prior LLM suites green.
+- Extracted mutable state surface (`_last_provider_ctx`, `_LONGCAT_LAST_PROBE`, provenance helpers) into `services/_llm_state.py`.
 
 ### Iter 367 · Session 5 · Item 5 (2026-07-31) — ORA-chat silent-catch hygiene + Cloudflare-1010 founder-alert fix
-- P0 real prod bug: `founder_alerts._send_via_resend` was silently 403'ing every G10 founder alert via urllib default UA (Cloudflare error 1010). Fixed with named UA header. Three real live sends proved delivery. Founder confirmed inbox.
-- Item 5 (silent-catch hygiene): 4 sites in `ora_chat/` now emit `[silent-catch]` debug logs while preserving fail-OPEN. 6+3 new tests pass.
+- P0 real prod bug: `founder_alerts._send_via_resend` was silently 403'ing every G10 founder alert via urllib default UA (Cloudflare error 1010). Fixed with named UA header. Three real live sends proved delivery.
 
 ### Iter 367 · Session 4 (2026-07-31) — Step A billing cron + Step B real Stripe E2E + Step C deep discovery
 - **STEP A** (P0 revenue guardrail): `bill_maxx_overages()` now owned by a dedicated `schedule_maxx_overage_billing()` task in `services/billing_cron.py`, wired into `main.py` startup as `app.state.maxx_overage_billing_task`. Configurable via `BILLING_CRON_DAY` (default 1) & `BILLING_CRON_HOUR` (default 0 UTC), clamped to safe ranges. Idempotent within a YYYY-MM bucket via `billing_cron_runs` collection. Removed the piggyback from `daily_digest.py::_run_once()` with migration signpost. Live proof: backend log shows `sleeping 21h until 2026-08-01T00:00:00+00:00`. 16/16 tests green.

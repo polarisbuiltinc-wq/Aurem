@@ -392,13 +392,48 @@ export function resolveTerminalTone(events) {
 // spinner (missed SSE resolver frame or backend omission — founder
 // screenshot: "Writing tests/test_smoke.py ↻ 44s" while the loop sat
 // at the SHIP gate). Pure — safe in a memo.
+//
+// Session 6 · Item 4 (2026-07-31) — also derive the frontier from
+// the RAW event stream's `phase` field, not just from narration
+// steps. Real repro: LiveFeed showed "Writing README.md (stalled) —
+// 1m 41s" while the Ship panel simultaneously showed "Ready to
+// ship · manual confirmation required". The loop had emitted
+// `state=paused_for_user, phase=ship, data.kind=awaiting_ship` but
+// no matching NARRATION frame with step=ship — so the old frontier
+// logic saw only execute narrations and never advanced. The events-
+// derived frontier catches this case: seeing a `phase=ship` or
+// `phase=paused_for_user` frame in the raw event stream is proof
+// enough that execute finished, even without a narration.
 const NARRATION_STEP_ORDER = { plan: 1, execute: 2, verify: 3, scan: 4, ship: 5 };
 
-export function resolveStalePendingByFrontier(folded) {
+// Phase → frontier level. Matches NARRATION_STEP_ORDER so we can take
+// max() across both sources. `paused_for_user` after execute means
+// the engine reached ship / awaiting-confirmation → execute is done.
+const PHASE_FRONTIER = {
+  plan: 1,
+  execute: 2,
+  verify: 3,
+  scan: 4,
+  ship: 5,
+  paused_for_user: 5,   // ship gate = execute definitely finished
+  completed: 5,
+  done: 5,
+};
+
+export function resolveStalePendingByFrontier(folded, events) {
   let frontier = 0;
   for (const line of folded) {
     const o = NARRATION_STEP_ORDER[line.step] || 0;
     if (o > frontier) frontier = o;
+  }
+  // Session 6 · Item 4 — also honour the raw event stream's phase.
+  if (Array.isArray(events)) {
+    for (const ev of events) {
+      if (!ev) continue;
+      const p = String(ev.phase || "").toLowerCase();
+      const o = PHASE_FRONTIER[p] || 0;
+      if (o > frontier) frontier = o;
+    }
   }
   if (!frontier) return folded;
   return folded.map((line) => {
@@ -585,7 +620,7 @@ export default function LoopLiveFeed({ loopId, event, terminal, phase, projectId
   }, [terminal]);
 
   const folded = useMemo(
-    () => resolveStalePendingByFrontier(foldNarrations(events)),
+    () => resolveStalePendingByFrontier(foldNarrations(events), events),
     [events],
   );
   // Iter 329 · Fix B — resolve any still-pending narration lines when
