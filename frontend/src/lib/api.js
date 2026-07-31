@@ -174,7 +174,7 @@ export function logout() {
     // slow backend. Errors are swallowed intentionally; we're
     // clearing local state either way.
     try {
-      fetch(`${process.env.REACT_APP_BACKEND_URL}/api/aurem-dev/auth/logout`, {
+      fetch(`${API_BASE}/auth/logout`, {
         method:  "POST",
         headers: { Authorization: `Bearer ${tok}` },
         keepalive: true,
