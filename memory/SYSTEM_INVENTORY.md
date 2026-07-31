@@ -704,3 +704,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `services/_llm_state.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-31T17:30:40.543396Z] <!-- inv:service:services/_llm_state.py -->
 - `services/_llm_routing.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-31T18:42:10.924626Z] <!-- inv:service:services/_llm_routing.py -->
 - `services/_llm_probes.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-31T19:43:22.002604Z] <!-- inv:service:services/_llm_probes.py -->
+| `routers/github_funnel.py` | `/funnel/github` | 2 | auto-detected new router (verify) (Iter 0, 2026-07-31T23:04:33.691480Z) | <!-- inv:router:routers/github_funnel.py -->
