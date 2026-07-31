@@ -21,6 +21,7 @@ from cto_services.auth import create_token, current_dev
 from cto_services.db import get_db
 from services.github_oauth import auth_url, exchange, gh_user, gh_repos, IDENTITY_SCOPES
 from services.usage import is_founder_email
+from routers.github_funnel import track_server_side as _funnel_track  # 2026-08-01
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/github/oauth", tags=["GitHub OAuth"])
@@ -104,6 +105,8 @@ async def connect(
     signup: Optional[str] = Query(None),
     intent: Optional[str] = Query(None),
     force_reauth: Optional[str] = Query(None),
+    fs: Optional[str] = Query(default=None),    # 2026-08-01 funnel session_id
+    fsrc: Optional[str] = Query(default=None),  # 2026-08-01 funnel source
 ):
     """Kick off OAuth.
 
@@ -123,6 +126,12 @@ async def connect(
     GitHub re-shows the authorize page and lets the user switch accounts
     instead of silently returning the cached session. Used by the
     "Switch GitHub account" link in the Add-Project modal.
+
+    `?fs=<session_id>&fsrc=<source>` (2026-08-01) — funnel telemetry
+    hooks so the client `cta_click` event and the server-side
+    `oauth_redirect`/`callback_received`/`linked` events all share a
+    session_id. Both params are stored in `oauth_states` and re-read
+    inside `/callback` so the whole flow is stitchable.
     """
     fr = (force_reauth or "").lower() in ("1", "true", "yes")
     origin = _request_origin(request)
@@ -150,7 +159,15 @@ async def connect(
                 # rows if a user opens the OAuth tab, leaves it for
                 # hours, then completes auth.
                 "created_at": datetime.now(timezone.utc),
+                # 2026-08-01 — funnel stitching.
+                "funnel_session": fs,
+                "funnel_source":  fsrc or prefix,
             })
+        # 2026-08-01 — server-side funnel event.
+        await _funnel_track(
+            "oauth_redirect", source=(fsrc or prefix),
+            session_id=fs, meta={"mode": prefix},
+        )
         # Iter 212m-187 — signup/login only needs identity (profile +
         # email), NOT repo access. Repo connect happens later via the
         # PAT wizard.
@@ -170,7 +187,15 @@ async def connect(
             "ts":         time.time(),
             "origin":     origin,
             "created_at": datetime.now(timezone.utc),
+            "funnel_session": fs,
+            "funnel_source":  fsrc or "settings_card",
         })
+    # 2026-08-01 — server-side funnel event.
+    await _funnel_track(
+        "oauth_redirect", source=(fsrc or "settings_card"),
+        session_id=fs, user_id=user["user_id"],
+        meta={"mode": "connect"},
+    )
     return RedirectResponse(url=auth_url(state, force_reauth=fr))
 
 
@@ -194,6 +219,21 @@ async def callback(
     if error or not code:
         logger.info("[oauth] callback non-success: error=%s code_present=%s state=%s",
                     error, bool(code), state)
+        # 2026-08-01 — funnel event even on cancel/error so we can
+        # measure abandonment rate on the GitHub consent screen.
+        try:
+            s_funnel = None
+            db_f = get_db()
+            if db_f is not None and state:
+                s_funnel = await db_f.oauth_states.find_one({"state": state})
+        except Exception:
+            s_funnel = None
+        await _funnel_track(
+            "callback_received",
+            source=(s_funnel or {}).get("funnel_source") or "unknown",
+            session_id=(s_funnel or {}).get("funnel_session"),
+            meta={"outcome": "error", "reason": error or "missing_code"},
+        )
         # Iter 212m-99 — pull origin out of the state row so the
         # cancel-redirect lands on the same host the user started on.
         cancel_origin = None
@@ -261,6 +301,9 @@ async def callback(
     )
     # Iter 212m-99 — origin captured at /connect time; falls back to APP_URL.
     state_origin = s.get("origin")
+    # 2026-08-01 — funnel stitching info pulled from state row.
+    funnel_session = s.get("funnel_session")
+    funnel_source  = s.get("funnel_source") or flow
     # Iter 113 — both `signup:` and `login:` prefixes use the same
     # OAuth-first auth path. The only difference is the cancel-redirect
     # target (handled above) and where the SUCCESS path sends them on
@@ -272,6 +315,12 @@ async def callback(
         info  = await gh_user(token)
     except Exception as e:
         logger.error(f"[oauth] callback failed: {e!r}")
+        # 2026-08-01 — funnel event for exchange failures too.
+        await _funnel_track(
+            "callback_received", source=funnel_source,
+            session_id=funnel_session,
+            meta={"outcome": "exchange_error", "reason": str(e)[:200]},
+        )
         await db.oauth_states.delete_one({"state": state})
         # Iter 197 — connect-flow exchange errors should land back on
         # /projects (where the user started) rather than /settings, so
@@ -283,6 +332,13 @@ async def callback(
             url=_frontend_url(err_path, f"github=error&msg={quote_plus(str(e))}",
                               origin=state_origin)
         )
+
+    # 2026-08-01 — success side of callback_received.
+    await _funnel_track(
+        "callback_received", source=funnel_source,
+        session_id=funnel_session,
+        meta={"outcome": "success", "flow": flow},
+    )
 
     await db.oauth_states.delete_one({"state": state})
 
@@ -373,6 +429,13 @@ async def callback(
             })
 
         jwt_token = create_token(user_id, user_mail, is_admin=is_admin)
+        # 2026-08-01 — funnel `linked` event (terminal success for signup flow).
+        await _funnel_track(
+            "linked", source=funnel_source, session_id=funnel_session,
+            user_id=user_id,
+            meta={"flow": "signup", "new_account": is_new_account,
+                  "gh_login": gh_login},
+        )
         # Bounce the browser back to a tiny finish page that stashes
         # the token in localStorage and routes to /dashboard. Token
         # goes in the URL fragment (`#`) so it never hits server logs
@@ -410,6 +473,11 @@ async def callback(
             "avatar_url":   gh_avatar,
             "connected_at": time.time(),
         }}},
+    )
+    # 2026-08-01 — funnel `linked` event (terminal success for connect flow).
+    await _funnel_track(
+        "linked", source=funnel_source, session_id=funnel_session,
+        user_id=user_id, meta={"flow": "connect", "gh_login": gh_login},
     )
     return RedirectResponse(
         url=_frontend_settings_url(f"github=connected&login={gh_login}",

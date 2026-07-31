@@ -5,6 +5,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Github, ExternalLink, Plug, Unlink, Lock, FolderGit2 } from "lucide-react";
 import { api, API_BASE, getToken } from "../lib/api";
 import { toast } from "./Toast";
+import { trackFunnel, withFunnelParams } from "../lib/githubFunnel";
 
 export default function GitHubCard() {
   const [status, setStatus] = useState(null);
@@ -35,10 +36,16 @@ export default function GitHubCard() {
 
   function connect() {
     const tok = getToken();
+    // 2026-08-01 — funnel telemetry: cta_click on settings card.
+    trackFunnel("cta_click", "settings_card", { has_token: !!tok });
     // GitHub doesn't forward arbitrary headers, so we open the connect endpoint
     // in the current window. JWT travels as an `?auth=` query param that the
     // backend reads as a fallback (see github_oauth router).
-    window.location.href = `${API_BASE}/github/oauth/connect?auth=${encodeURIComponent(tok || "")}`;
+    const url = withFunnelParams(
+      `${API_BASE}/github/oauth/connect?auth=${encodeURIComponent(tok || "")}`,
+      "settings_card",
+    );
+    window.location.href = url;
   }
 
   async function disconnect() {

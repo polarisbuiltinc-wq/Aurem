@@ -1,680 +1,108 @@
-# AUREM CTO — Product Requirements Document (living)
-
-**Last updated**: 2026-07-31 21:05 UTC (Session 7 · Loop UI-State Reliability batch landed on preview)
-**Live**: https://auremcto.com — Session 5 LLM split + Session 6 QA batch shipped; Session 7 in flight
-
-## Original problem statement
-Optimize onboarding, strict separation of backend founder logic, and expand codebase health scanners.
-Language: **Hinglish** — main agent responds in Hinglish.
-
-## What's implemented (chronological, most recent first)
-
-### Session 7 · Loop UI-State Reliability Batch (2026-07-31 21:05) — 3 real-user QA bugs
-Item-by-item, all zero-mocks:
-
-- **Item 1 · Stop-loop UI stuck + SAFETY-CRITICAL missing Cancel button**: Backend cancel succeeded but frontend showed "LOOP · AWAITING APPROVAL" with a live timer for 263+ seconds (stale poll rehydrated ghost loop). Additionally the plan-approval panel sometimes rendered with ONLY "Run loop" send button + NO Cancel — safety-critical gap in the approval-gate promise. Fixes:
-  - Stop handler now synchronously clears `loopTerminalRef`, `loopTerminal`, `loopPhase="cancelled"`, `loopPlan=null` — chip poll can't reanimate a manually-stopped loop.
-  - `showPlanCard` gate broadened past strict `plan_pending` to a set of "waiting for user" phases (`plan`, `planning`, `awaiting_approval`, `awaiting_confirmation`) + fallback safety net for unrecognized phase names — guarantees Cancel is always rendered when a plan is shown.
-  - PlanApprovalCard's Cancel button is unconditional in the source; regression test locks that both buttons appear even when `disabled`. **6/6 vitest pass**.
-
-- **Item 2 · Duplicate plan-bubble on retries**: Real repro 3× — plan-generation with LLM retries + slow SSE re-emit + Iter 316 fallback poll could each deliver plan-ready → 3-4 identical bubbles in chat. Fix: `handleLoopEvent` plan-absorb block now checks `existingPlanIdx` by `loop_id` and updates in place (idempotent) instead of appending. Belt-and-braces branch appends when no pending exists so plans are never silently lost. **5/5 vitest pass**.
-
-- **Item 3 · Console errors on rapid concurrent chat**: Root-cause diagnosed: React's `busy` state is async — rapid double-clicks let both `send()` invocations read `busy=false` from stale closures and pass the guard, spawning two racing `startLoop`/chat calls (second hits 409 → surfaces on F12 error widget). Fix: synchronous `sendInFlightRef` ref-lock armed BEFORE any await point in `send()`, released either via `useEffect` on `busy=false` (covers all completion/error/abort paths) OR a 5s safety timeout (belt-and-braces for stuck promises). Debug log (not error) on dropped duplicate keeps prod traceable without console-noise. **6/6 vitest pass**.
-
-**Session 7 tally: 17/17 tests pass**. Zero backend changes — all fixes are contained to ChatPanel.jsx + PlanApprovalCard.jsx.
-
-### Session 6 · Real-User QA Batch (2026-07-31 20:50) — 6 production bugs
-Items 1-6 with E2E proof (VS Code fake-green badge → real Marketplace probe; Tavily duplicate criticals → day-agnostic dedup + 18→1 cleanup; diff scope-creep → surgical minimal_edit fast path; live-feed vs Ship-panel mismatch → phase-aware frontier; "Developers: —" → correct field; test-count staleness → manifest refresh + age warning). **53/53 tests pass**. Item 7 observation: signup→GitHub-connect 23.1% conversion.
-
-### Session 5 · LLM.py Split Phase 0a + 1 + 2 (2026-07-31 17:00-18:55)
-`services/_llm_state.py` + `_llm_routing.py` + `_llm_probes.py` extracted with ModuleType hook on `services.llm` for `LONGCAT_LIVE` transparent read/write routing. 119/119 across all LLM/council/probe/routing/CEO suites.
-
-### Session 5 · Item 5 (2026-07-31) — Cloudflare-1010 founder-alert fix + ORA-chat hygiene
-P0 real prod bug: `founder_alerts._send_via_resend` was silently 403'ing every G10 alert. Fixed with named UA header. Founder confirmed inbox delivery.
-
-
-**Live**: https://auremcto.com — Session 5 LLM split (Phase 0a + 1 + 2) landed; Session 6 QA-batch in flight
-
-## Original problem statement
-Optimize onboarding, strict separation of backend founder logic, and expand codebase health scanners.
-Build the "Personal Track" for non-technical users, implement the "Master QA Test Strategy", fix
-Loop engine stuck bugs (Phase 0), then build the next 4 competitive differentiators.
-
-Language: **Hinglish** — main agent responds in Hinglish.
-
-## What's implemented (chronological, most recent first)
-
-### Session 6 · Real-User QA Batch (2026-07-31 20:50) — 6 production bugs found via live Chrome test
-Item-by-item, each with E2E proof (zero mocks):
-
-- **Item 1 — VS Code "LIVE" badge lied**: `/admin` System-mapping showed green ● next to "VS Code extension" while Marketplace 404'd (founder hadn't published). Same anti-pattern as the earlier Supabase/Vercel silent-no-op. Fix: new endpoint `GET /api/aurem-dev/admin/qa/vscode-marketplace-status` real-probes marketplace.visualstudio.com with a 5-min TTL cache; FE renders amber "◐ Built — not yet published" when `published=false`, green when true, grey "checking…" during probe. Live check confirmed: HTTP 404 → `reason=not_published`. **5/5 regression tests pass.**
-
-- **Item 2 — Duplicate CRITICAL Tavily alerts (dedup bug)**: `db.topup_alerts` had **18 active `critical` rows** for Tavily — one per day since 2026-06-24 — because `alert_key = {integration}::{severity}::{day}`. A long-standing incident piled a new row every 24h; the unique index correctly prevented same-day dupes but not cross-day. Fix: dedup now day-agnostic on `(integration_id, severity, status="active")`; existing 18 dupes collapsed via `session6_item2_dedup_cleanup` migration → 1 active row. Screenshot verify: banner now reads "1 critical integration alert (total active: 1)". **5/5 regression tests pass** (including a 30-daily-cycle simulation).
-
-- **Item 3 — Diff scope-creep on trivial requests**: Real repro — "add a one-line comment at the top of README.md" → +36/-35 diff. Root cause: `loop_execute._generate_one` unconditionally asked LLM to "Rewrite the entire file content"; even a well-behaved model drifts whitespace/word-choice during full rewrites. Fix: new `services/minimal_edit.py` surgical-edit fast path. Detects trivial-scope prompts via lexical classifier, asks LLM for a compact JSON op (`prepend`/`append`/`insert_after_line`/`replace_line`/`delete_line`/`not_expressible`), applies it programmatically. Falls through to full-rewrite silently if the LLM says `not_expressible` or the op fails validation. **31/31 tests pass** including exact-byte-count contract (`+1 line net, every original line byte-identical`).
-
-- **Item 4 — Live-feed vs Ship-panel state mismatch**: LiveFeed showed "Writing README.md (stalled) — 1m 41s" WHILE the Ship panel showed "Ready to ship · manual confirmation required" simultaneously. Root cause: `resolveStalePendingByFrontier` (Iter 331) derived its frontier from NARRATION step order only; when the engine emitted `state=paused_for_user, phase=ship, data.kind=awaiting_ship` WITHOUT an accompanying narration frame with `step=ship`, the frontier stayed at execute and stale pending never resolved. Fix: frontier now also honours the raw event stream's `phase` field via `PHASE_FRONTIER` lookup — seeing `phase=ship` or `phase=paused_for_user` in the raw stream is proof enough that execute finished. **6/6 vitest tests pass**.
-
-- **Item 5 — "Developers: —" undefined value**: `/admin/Users & Ships` showed "— Developers" while sibling tiles had real numbers. Root cause: FE read `stats?.developers` but backend returns `real_developers` + `users` (no `developers` field). Fix: FE now reads `stats?.real_developers ?? stats?.users ?? "—"`. Live verify: backend returns `real_developers=74, users=549`. **2/2 regression tests pass.**
-
-- **Item 6 — Test-count discrepancy**: Admin dashboard showed "3712 backend / 3944 grand total" from a stale `backend/qa_manifest.json` (~2 days old). Live count was actually 3904 backend / 4142 grand total. Fix: (a) regenerated manifest fresh (3712→3904 backend, 3944→4142 total), (b) `QaCountsStrip` now surfaces manifest age when using build_manifest fallback + paints amber with "stale, redeploy to refresh" hint when > 3 days old. **4/4 regression tests pass**.
-
-- **Item 7 (observation only, not a code bug)**: Signup→GitHub-connect conversion is **23.1%** (20 of 26 signups drop off at this exact step). Biggest funnel leak in the product. Flagged for founder UX prioritization.
-
-**Cumulative Session 6 test tally: 53/53 pass** (47 backend + 6 frontend vitest).
-
-### Iter 367 · Session 5 · LLM.py Split Phase 2 (2026-07-31 18:55) — probes.py + LONGCAT_LIVE ModuleType hook
-- Extracted `LONGCAT_LIVE` bool + `set_longcat_live()` + `probe_longcat_availability()` + `periodic_longcat_reprobe()` + `_deepseek_model()` into `services/_llm_probes.py`. Installed a `types.ModuleType.__setattr__` hook on `services.llm` to transparently route `llm.LONGCAT_LIVE = X` writes to the canonical location. 12/12 new tests + 119/119 across all LLM/council/probe/routing/CEO/session5 suites. Prod-verified.
-
-### Iter 367 · Session 5 · LLM.py Split Phase 1 (2026-07-31 17:35) — routing.py extraction
-- Extracted pure/env-derived surface into `services/_llm_routing.py` (constants + V2 flags + pure helpers + deferred-import routing). Zero code churn in 45 importers.
-
-### Iter 367 · Session 5 · LLM.py Split Phase 0a (2026-07-31 17:00) — state.py extraction
-- Extracted mutable state surface (`_last_provider_ctx`, `_LONGCAT_LAST_PROBE`, provenance helpers) into `services/_llm_state.py`.
-
-### Iter 367 · Session 5 · Item 5 (2026-07-31) — ORA-chat silent-catch hygiene + Cloudflare-1010 founder-alert fix
-- P0 real prod bug: `founder_alerts._send_via_resend` was silently 403'ing every G10 founder alert via urllib default UA (Cloudflare error 1010). Fixed with named UA header. Three real live sends proved delivery.
-
-### Iter 367 · Session 4 (2026-07-31) — Step A billing cron + Step B real Stripe E2E + Step C deep discovery
-- **STEP A** (P0 revenue guardrail): `bill_maxx_overages()` now owned by a dedicated `schedule_maxx_overage_billing()` task in `services/billing_cron.py`, wired into `main.py` startup as `app.state.maxx_overage_billing_task`. Configurable via `BILLING_CRON_DAY` (default 1) & `BILLING_CRON_HOUR` (default 0 UTC), clamped to safe ranges. Idempotent within a YYYY-MM bucket via `billing_cron_runs` collection. Removed the piggyback from `daily_digest.py::_run_once()` with migration signpost. Live proof: backend log shows `sleeping 21h until 2026-08-01T00:00:00+00:00`. 16/16 tests green.
-- **STEP B** (P0 real Stripe E2E): New `tests/test_session4_step_b_stripe_real_e2e.py`. Zero mocks — provisions a real claimable sandbox via Emergent's proxy (`sk_test_51Ty...`), exercises happy path (4242 card → $9.00 → succeeded) + decline path (`tok_chargeDeclined` → real `stripe.error.CardError` with `decline_code=generic_decline`). Every assertion backed by a real HTTPS round-trip to `api.stripe.com`. 4/4 tests green in 4.13s.
-- **STEP C** (Discovery only, READ-ONLY): New report `memory/SESSION_4_DEEP_AUDIT.md`. Audited 5 ORA-chat services + top-10 remaining unaudited backend services (llm.py at 1,805 LOC / 45 imports leads the pack). Findings: **1 P0** — ORA upstream `aurem.live` is currently in a LIVE 24h fatal circuit-open state (OpenRouter model 404, ~19h to auto-close) — every dependent path silently no-ops right now; **7 P1** (llm.py refactor candidate, `local_tools.py` 11× `except: pass`, hallucination classifier has no scheduler, `GITHUB_API_TOKEN` unset lowers deep-research rate limit); **6 P2** (silent-return-None patterns in graph_builder/project_brain/repo_context, dead `use_claude_tools()` stub, `ORA_LEARNING_DISABLED` double-negative). Session 2 note about deep_research "depending on Tavily" **corrected** — actually uses GDELT + GitHub Search + Reddit + Perplexity Sonar (no Tavily). Zero code changed during audit.
-- Full-suite regression: **3821 pass / 22 pre-existing legacy failures / 68 skipped**. Delta: +1 pass, -1 fail vs prior baseline.
-
-
-### Iter 367 · FINAL BUILD SESSION (2026-07-31) — Steps 0→2
-- **STEP 0** (P0 real-user-facing bug fix): Fake-success rollback bug fixed. Both `services/rollback_manager.execute_rollback()` and `routers/user_rollback.py::/rollback/revert-last-ship` were writing to a `rollback_trigger` collection that had NO consumer (the "deployer daemon" mentioned in comments never existed). Both now redirect into `services/loop_rollback.py::run_rollback()` which calls the real `github_api_writer.revert_commit()`. `/rollback/candidates` filter fixed (was querying `shipped: True` — a field no doc has). Founder alerts fire on every admin-triggered rollback. Real live E2E proof captured: real HTTP 200, real GitHub API call recorded in `loop_sessions.rollback_steps`. 5/5 tests pass.
-- **STEP 1** (Session-1 audit cleanup): Deleted `services/llm_router.py` (167 lines dead — flag never set), `PublicStatsStrip.jsx`, `SaveToGithubDialog.jsx`. Kept `trust/unlock/harden/chat_commits` routers (BYOH deploy support features, flagged HALF BUILT).
-- **STEP 2 Item A** (G1 CI cron): `qa-weekly.yml` now has a DAILY `g1-route-sweep` job that runs `backend/scripts/g1_route_smoke_sweep.py` against `auremcto.com` with Slack alert + artifact upload on failure. Real E2E: script exits 0 (7/7 routes green against preview) / exit 1 on bad host.
-- **STEP 2 Item B** (FTP/SSH deploy wiring): `services/ftp_ssh_deploy.py` wired into `routers/deploy.py::POST /deploy/run` via new `target: ssh|ftp|sftp` field. Discovered & fixed 3 real bugs in `ftp_ssh_deploy.py` (ftplib auto-connect port 21, all_errors tuple-in-tuple, nested-dir mkdir missing). REAL E2E: 4/4 tests pass, real bytes transferred to a real `pyftpdlib` FTP server + a real OpenSSH `sshd`, verified byte-for-byte on disk.
-- **STEP 2 Item C** (14-day auto-graduation): `correction_rules.py` Phase 2 built. `shadow_started_at` stamped on every new rule. `graduate_shadow_eligible_rules()` promotes rules meeting age + hits + active. Scheduler `_correction_rules_graduation_cron` added to `main.py` startup (6h interval). `is_rule_effectively_enforced(rule, project_enforce)` — a rule enforces if EITHER project toggle OR individual `graduated_at` set. Admin endpoint `POST /admin/qa/correction-rules/graduate`. 10/10 tests pass.
-- **STEP 2 Item D** (Risk-Based Routing Phase 2): New `services/risk_routing.py` with locked-scope tiers **AUTO_SHIP / WARN_SHIP / PAUSE_FOR_FOUNDER** (compliance test explicitly rejects draft "SAFE/CAUTION/BLOCK" names). Mandatory 2-week shadow mode before `PAUSE_FOR_FOUNDER` actually halts. Wired into `loop_engine.py::_gen_via_parliament`. Admin endpoint `GET /admin/qa/risk-routing/summary` returns tier counts + mode + `days_until_enforce` countdown. 10/10 tests pass.
-- **STEP 2 Item E** (Browser Self-Testing Phase 4): New `services/browser_self_test.py`. Path classifier + REAL Playwright chromium post-ship smoke. Cache with 180s cooldown. Wired into `loop_engine.py::_do_ship`. Admin endpoint `GET /admin/qa/browser-selftest`. 10/10 tests pass INCLUDING a real Playwright launch against the live preview URL.
-- **STEP 2 Item F** (Personal Track): SCOPE PROPOSAL ONLY at `/app/memory/PERSONAL_TRACK_SCOPE.md` — 8 safety rails, 5-screen UX, 4-phase build plan, 5 open blocker questions. NO CODE, awaiting founder go-ahead.
-
-
-
-### Iter 355 · Health badge band mismatch fix (2026-06) — founder suggestion Jul 12
-- RCA: Dashboard HealthRing used 80/50 cutoffs; backend `_category_label` bands are
-  <20/<50/<=80/>80. Score 44 → page amber "NEEDS ATTENTION" but ring RED; score 78 → page
-  "GOOD" blue but ring ORANGE; score 80 → page "GOOD" but ring GREEN.
-- Fix: ring colors + tooltip label mirror backend bands exactly (TopBar.jsx). Lock test
-  asserts full 0-100 agreement between badge and page labels.
-- Founder action: mark the Jul-12 suggestion Approved+Resolved on prod /admin/suggestions
-  (founder-only; agent has no prod admin access).
-
-### Iter 354 · Round-4 audit fixes (2026-06) — deploying
-- **Net Profit sign bug**: `dollars()` used Math.abs → net LOSS rendered "$223.77" while CAD
-  showed "-316". FIXED (screenshot: "-$3241.04" red + "C$-4571" consistent on preview).
-  Identical Net-Profit/Total-Burn magnitudes were CORRECT math (MRR=0 → |mrr-burn| == burn).
-- **API Keys root-cause CORRECTION (honest)**: my "key never existed" claim was wrong — I had
-  checked the QA bot account (keys are per-user); founder's 3 keys (42d/41d/28d) existed and
-  were masked by the silent error state. Fixed the mask: header shows "(?)" not "(0)" on
-  fetch error. Audit trail: `last_used_at` touch live since 2026-06-17 (commit f32ce7c) —
-  founder's LAST USED column is the definitive record of prior successful MCP auths.
-- Locks added to test_iter353 file (7 total). Gate 3695 + 236 all green.
-
-### Iter 353 · Audit round 3 (2026-06) — deploying
-- **Financials/API-Keys "Cloudflare error" RCA**: NOT the scope-drift files — those two
-  routers (`admin_financials_router.py`, `aurem_llm_proxy_router.py`) NEVER existed in the
-  repo/git; the Iter-288 scope-drift guard PAUSED those 2026-07-26 loops before generation,
-  so nothing was written. Errors were transient origin 520s (deploy-rollout windows, prod
-  uptime now stable 1630s+; /admin/financials 200-OK on preview, /mcp/keys 200-OK ON PROD).
-- **MCP connector proof (prod)**: minted sk-aurem key via POST /mcp/keys on PROD, key
-  authenticated MCP initialize (200) — connector chain works; founder's issue was simply
-  "no key ever generated". Test key revoked after.
-- **Scope-drift invariant answer**: Iter 311 `candidates ⊆ planner_set` only stops
-  file_selector expansion; 07-26 extras were PLANNER-side bloat (planner itself proposed new
-  out-of-scope files) — the guard detected + paused, which is the designed behavior.
-- **Ship "slow" RCA**: ship avg 120.77s was PAUSED_FOR_USER confirm-wait counted as runtime
-  (manual-ship policy). Speed diagnostic now subtracts pause windows.
-- **Fixes**: shared `lib/cleanErr.js` (Financials/ApiKeys/HouseRules, + Retry button),
-  "NaNd ago" fix. Locks: `test_iter353_audit_round3.py` (4). Gate 3692+236 all green.
-- OPEN: "health badge wrong data" suggestion — founder will paste full text next message.
-
-### Iter 352 · Payments pipeline truth + audit fixes (2026-06) — deploying
-- **RCA — 22 stuck "pending" transactions**: (a) completed-webhook updated dev_users tier but
-  NEVER the cto_payments ledger row; (b) checkout.session.expired unhandled → abandoned
-  checkouts pending forever; (c) amount never stored → $0.00. Preview evidence: 14 stuck rows
-  reconciled — 12 Stripe-confirmed EXPIRED (abandoned), 0 paid → no lost revenue.
-- **Fixes**: webhook syncs ledger (paid+amount+paid_at), handles expired; new founder-only
-  `POST /admin/payments/reconcile` + "Reconcile pending with Stripe" button on Payments page.
-- **E2E proof**: signed-webhook simulation on preview flipped pending→paid ($9.00, timestamp)
-  and pending→expired in cto_payments.
-- **House Rules raw-error leak**: cleanErr() sanitizer — Cloudflare/HTML infra bodies never
-  render in founder UI (both load + save paths).
-- Locks: `test_iter352_payments_truth.py` (5). Gate 3687 green.
-- OPEN: "health badge wrong data" suggestion (Jul 12) needs full suggestion text from prod
-  Suggestions page to identify the exact badge bug. Flaky suite `test_iter212m22_*` should be
-  tagged llm_judge/flaky (3 different tests flaked across 3 gate runs, all pass isolated).
-
-### Iter 351 · Founder admin-audit fixes (2026-06) — DEPLOYED to prod
-- **Stripe verdict (evidence)**: prod checkout NOT broken — all 3 monthly plans create live
-  sessions; checkout.stripe.com page screenshot-verified rendering "$9 Starter + card form"
-  (Iter 335 self-heal covers stale env IDs). Probe now reports "warn/self-heals" not "broken".
-  FOUNDER ACTION remains: rotate STRIPE_STARTER/PRO/TEAM_PRICE_ID env vars.
-- **Stuck-alert fix**: healthy probe now resolves active alerts from ANY day (old day_key
-  scoping left yesterday's Firecrawl alert stuck).
-- **QA "0 files" fix**: build-time `backend/qa_manifest.json` fallback (gate regenerates it);
-  prod shows real 3653 backend tests / 421 files. New light `GET /admin/qa/counts`.
-- **"Invalid Date" ×2 fixed**: version.py built_at "+00:00Z" normalization + Council A
-  last_probe dict handling.
-- **Orphan mystery SOLVED**: loop-metrics owner classification looked up dev_users by `_id`
-  (ObjectId) but sessions store the `user_id` FIELD → every failed session mislabeled
-  "orphan". Fixed; phase + error_short now populate (was "phase=?").
-- **Stale content removed**: hardcoded "Next actions (Iter-123)" checklist + "700+ passing"
-  claim → live QaCountsStrip.
-- **Sidebar audit**: all 20 admin tabs content-check verified OK (client-side tab switch,
-  URL doesn't change — not a bug).
-- Locks: `test_iter351_admin_audit_fixes.py` (9), `test_iter123d` modernized. Gate 3682 green.
-
-### Iter 350 · Intent-gate observability + fail-message polish (2026-06)
-- **`services/loop_intent_stats.py`**: hourly Mongo buckets (`loop_intent_stats`) — 3 counters:
-  `chat_redirect`, `loop_triggered`, `timeout_failed`. Best-effort writes (never break hot path).
-- **GET `/loop/intent-stats?hours=N`** (founder-only 403, max 168h): totals + redirect_rate +
-  hourly rows. **IntentGateTile** on /admin → Architecture (redirect % + sparkline, timeouts red).
-- **Polish**: plan-phase failure message no longer repr()-wrapped (clean user-facing text).
-- Locks: `test_iter350_intent_stats.py` (10 tests). E2E: redirect counted via curl, tile
-  screenshot-verified, free-tier 403 verified.
-
-### Iter 349 · Loop intent gate + plan LLM hard timeout (2026-06) — PROD P0 fix
-- **Read-only intent gate**: `services/loop_intent.py` — conservative regex heuristic in
-  `/loop/start` (before lock/session/LLM). Read-only queries ("what is the current CI status
-  on main") return `{redirect_to_chat: true}`; frontend (`runLoopPlan`) answers via fast chat
-  stream with a "Loop Mode skip" note + "run this as a loop" escape hatch. Action verbs ALWAYS
-  win ("why is login failing AND fix it" → still Loop). Env flag `LOOP_INTENT_GATE` (default on).
-- **Plan LLM 30s hard timeout**: `PLAN_LLM_TIMEOUT_S=30` wraps `call_llm_with_meta` in
-  `_generate_plan` — hung provider fails fast with a clear message instead of eating the 120s
-  phase budget. Stale "60s budget" fail message also fixed.
-- Locks: `test_iter349_loop_intent.py` (23 tests green). E2E: curl redirect verified on preview,
-  action-verb pass-through verified, screenshot e2e confirmed no "Generating plan…" hang.
-
-### Iter 331-D · DELETE GATE (2026-07-28) — 3-layer file-deletion safety
-- **Layer 1**: `scripts/check-safe-to-delete.sh` — catches lazy/dynamic imports + string-keyed
-  routing refs (the exact class missed 3× with tool_executor.py). Verified: all 4 previously
-  "approved" files flag ❌ (tools_bridge 15 refs, tool_executor 7, VisualFixtures 3,
-  LoopLiveFeedDemo 2); a genuinely dead file flags ✅.
-- **Layer 2**: mandatory approval template in `docs/DELETE_GATE.md` — no script output pasted →
-  delete auto-rejected.
-- **Layer 3**: quarantine-first policy (DeprecationWarning or `_deprecated/` move, 1-2 week prod
-  log watch) before hard delete.
-- **CI**: `delete-gate` job in ci.yml — PR deletions need "Script output:" block in description;
-  pushes (Emergent auto-push) need docs/DELETE_GATE.md updated in the same push. YAML validated.
-- Locks: `test_iter331_delete_gate.py` (3 tests).
-
-### Iter 331-C · PROD /health starvation + Stripe 404 diagnosis (2026-07-28)
-- **Fixed — event-loop starvation**: `_probe_stripe` (8 sequential sync Stripe HTTP calls) and
-  `_probe_e2b` (sync 15s sandbox boot, `e2b.api.client_sync`) ran directly on the event loop →
-  nginx `GET /health` upstream timeouts (110) + "No response returned" in PROD logs, timestamps
-  matching the probe windows exactly. Both probes now offload via `asyncio.to_thread`.
-  Proof: heartbeat harness — ZERO loop stalls >200ms during real probes (stripe ok 1.3s, e2b ok 0.6s).
-  Lock: `test_iter331_health_probe_offload.py` (3 tests).
-- **Diagnosed — PROD-env-only**: 3 monthly Stripe price IDs in prod env
-  (`price_1TfXGf/TfXHp/TfXE1…2XYZ7cJIy2…`) belong to an OLD Stripe account → 404 → cron "1 broken"
-  + monthly checkout at risk. FOUNDER ACTION: update prod env vars STRIPE_STARTER_PRICE_ID,
-  STRIPE_PRO_PRICE_ID, STRIPE_TEAM_PRICE_ID with live-mode recurring price IDs from the CURRENT
-  account (annual 3 already correct, `0Exg9gU93t` prefix).
-
-### Iter 331-B · Items 4-7 closure (2026-07-28, post-deploy)
-- **P0 FOUND & FIXED — `tool_executor.py` restored**: an earlier session deleted it as "approved
-  dead code" but it's lazy-imported inside `invoke_local_tool` — EVERY chat tool-call crashed at
-  runtime (`ModuleNotFoundError`, reproduced live). Restored from git (`8e2536a~1`), validated by
-  its own suite (`test_iter209` 11/11 green) + live chat with tools. **Was live-broken on prod
-  since 27-Jul deploys — needs redeploy.**
-- **Item 4 · Deploy B / B1-race**: already implemented in Shell.jsx (`shouldDeferSessionMint` +
-  3s fallback) with `Shell.iter329_b1_race.test.jsx` green — shipped to prod in today's deploy.
-- **Item 5 · ORA learning resurrection (b→e) DONE with raw Mongo proof**:
-  - (b) **Callsite reattach**: casual-gateway/advisor paths label `mode:"chat"` which bypassed the
-    `(None,"A","B")` filter → council log + brain update silently dead on the main chat path.
-    Filter now accepts `"chat"`; D/E stay excluded (BUG 5 safe). Lock: `test_iter331_learning_reattach.py`.
-  - (c) **Live before/after proof**: ora_patterns wrote exact prompt file-paths into `hot_files`;
-    council count 89→91; `project_brains.p_norepotest.updated_at` 2026-06-14 → 2026-07-28 06:10 with
-    the decision text captured (`push_ops=1` log line).
-  - (d) **Flags ON**: `ORA_CANARY_ENABLED=1` (was already set; nightly 02:30 run confirmed in
-    ora_canary_runs) + `ENABLE_EVAL_CRON=1` added — startup logs show both armed.
-  - (e) **Learning-health tile** live on /admin/architecture: GET `/admin/learning-health`
-    (brains freshness → green/red, patterns, council 24h, canary last-run, flag badges) +
-    `LearningHealthTile` (3 vitest).
-- **BONUS FIX — /admin/architecture page was DEAD**: `Architecture()` (PersonaQualityTile +
-  code-surface) was defined but never wired into renderPage — route silently fell to Overview.
-  Added `case "arch"` + sidebar NAV entry. Verified live via Playwright screenshot.
-- **Item 6**: `useChatSession.js` pruned — dead `loadHistory`/`loadingHistory`/no-op
-  `refreshSessions` removed (zero callers, ChatPanel owns its own history loading).
-- **Item 7 (names were stale)**: "queue-status-bar"→AgentStatusBar (already tested),
-  "phase-stepper"→LoopStepBar (heavily tested). Real gap = **ShipStreakWidget**: 5-test suite
-  added (hidden@0, pill render, milestone toast + lower-milestone marking, ack dedupe,
-  aurem:shipped refetch).
-- **Stale-test repairs**: `test_iter138` modernised (invoke_local_tool ctx arg + founder-gate
-  test 2b + dynamic toolbelt-size assert). Suites: **210/210 vitest · touched-area pytest green**.
-
-### Iter 331 · Systematic Closure (2026-07-28) — tech-debt zeroing before Phase 1
-- **Section A** — 2 red vitest fixed: `LoopLiveFeed.iter329_task2_shipped_row.test.jsx` rewritten
-  for Iter 330 phases (`submitting`/`handed-off`, poll phases removed). Added hand-off assertion:
-  `streamLoopEvents` called with the loopId after POST resolves. **202/202 vitest green.**
-- **Section B** — `OperationHistory.test.jsx` created: 7 regression tests (history hydration,
-  Guard A parent churn → exactly ONE stream, Guard B/C post-terminal no-reopen, live rollback →
-  terminal collapse + abort, (loop_id, op_type) dedupe, fetch fail-open, stream onError non-fatal).
-- **Section C1** — ORA shadow-learning fail-open logging: both bare `except: pass` blocks in
-  `chat.py` (session patterns + council log/brain update) now `logger.warning` with the exception.
-- **Section C2 — DELETE LIST REJECTED WITH EVIDENCE** (founder decision needed):
-  - `tools_bridge.py` → **NOT dead**: `services/orchestrator.py:20` imports it; orchestrator is
-    live in 8 routers (chat.py:22, loop.py, admin.py…). Delete = backend crash.
-  - `VisualFixtures.jsx` (/dev/visual) → **NOT dead**: Playwright Layer 2 fixture page used by
-    `state_fixtures.spec.js` (7 fixtures) + `interaction_latency.spec.js`.
-  - `LoopLiveFeedDemo.jsx` (/dev/loop-live-feed) → **NOT dead**: used by `a11y_journeys.spec.js`
-    + `public_routes.spec.js`.
-- **Section D1 · Bug 1 FIXED (PLAN gray during EXECUTE)** — root cause chain proven by repro:
-  ChatPanel timeout-recovery (`setLoopPhase(active.phase…)` ~line 2478) and ship-gate hydration
-  (`setLoopPhase("ship")` line 591) leak RAW engine phases (`plan/execute/verify/scan/ship/
-  self_heal`) which did not exist in `PHASE_TO_STEP` → `active=0` → PLAN rendered gray "future".
-  Fix (a): raw-phase aliases added to `PHASE_TO_STEP` (LoopStepBar.jsx). Fix (b): engine now emits
-  `_narrate("plan","success")` at EXECUTE start (`loop_engine.py _do_execute`) — placed AFTER
-  `state=EXECUTING` because emitting in `confirm()` would carry `awaiting_confirmation` and
-  re-trigger PlanApprovalCard. Locks: 8 vitest (`LoopStepBar.iter331_raw_phase_alias.test.jsx`)
-  + 3 pytest (`test_iter331_plan_narration.py`).
-- **Section D2 · Bug 2 NO CODE BUG (ECG pulse-wave)** — live browser probe on preview
-  `/dev/visual?state=step-executing`: `animationName=ecg-scroll, playState=running`, transform
-  samples −43.7 → −5.3 → −24.5 over 700ms (**moving=True**), waveform visible in screenshot.
-  Production symptom = stale bundle or Bug 1's phase-mapping class (no step ever "active").
-  Regression lock added; founder re-verifies on prod after next deploy.
-- **Stale test repairs (pre-existing reds, evidence-verified via git)**:
-  `test_chat_history_returns_last_100_not_20` → asserts `[-200:]` (Iter 330 chat-vanish fix);
-  `test_step_bar_forces_ship_success_on_terminal_completed_phase` → Option C regex for the
-  Iter 329 nested Rule 0-a form.
-- **Backend suite regression proof**: failing-file subset run on pre-change vs post-change code —
-  set-diff shows ZERO new failures from Iter 331 (245-246 failures are old iter36-212 era debt).
-
-### Iter 329 · Task 2 Deploy A-Recovery (2026-07-27) — Rollback UI hardening
-- **Fix A** — Dropped redundant `terminal` gate on `ShippedRow` render (`LoopLiveFeed.jsx`). Server-side invariant (`loop_engine.py:2823-2944`) proves `commit_sha` is never optimistically set; `shipInfo` alone is a sufficient terminal signal. Eliminates Bug X unmount race that destroyed phase state between clicks.
-- **Fix B** — `LoopStatusChip` terminal grace split by outcome: success persists indefinitely until Done click, failure keeps 30s auto-dismiss.
-- **Fix C** — Rollback confirm-click hardening: `phaseRef` mirror replaces stale-closure phase capture, confirm window 4s→10s, high-contrast red-fill/white-text button + distinct testid variant, REAL-TIMER two-click test added (real setTimeout + 1.5s wait — the missing test class).
-- **187/187 frontend tests pass** — production deploy dispatched.
-
-### Iter 329 · Task 2 Deploy A (2026-07-27) — inline rollback UI (superseded by A-Recovery)
-- Loop-mode ship modal suppressed (`ChatPanel.jsx` `kind:"shipped"` dispatch removed)
-- Inline "Shipped {sha7} · View on GitHub · Rollback" row + "Done" chip button
-- `rollbackLoop()` helper wired to production-proven POST `/loop/{id}/rollback`
-
-### Iter 329 · Deploy 3-A (2026-07-27) — rollback route production-verified
-- Founder ran real ship (5d939a4) → curl'd POST /rollback with confirm="ROLLBACK" → real GitHub revert commit (ea3ebcf) landed with "chore: revert 5d939a4 [via ORA]", non-force-push, parent preserved. Backend rollback service fully proven.
-
-### Iter 329 · Fix A/B/C prior (2026-07-27) — render-layer resilience
-- **Fix A (data-seeding)**: `init_prod_collections.py` seed rewritten from `insert_many(if empty)` → per-flag `$setOnInsert` upsert. `integration_health_cron` flag now propagates to production. **Production-verified.**
-- **Fix B (LoopLiveFeed pending resolver)**: `resolveTerminalTone` + `resolvePendingOnTerminal` — pending narration lines auto-flip to success/warning/danger on terminal state. **Production-verified via commit 1f70444 real ship.**
-- **Fix C (LoopStepBar + LoopStatusChip terminal resolution)**: Rule 0 extended in `ecgVariant`; `phaseText` prefers terminal state over mid-loop phase. **Production-verified via commit d372b92 real ship.**
-
-### Iter 328 (2026-07-27) — Multi-item bundle
-- Deploy 2 hotfix v3: extracted `shipPendingMappers.js` (single source of truth for ship state shape). Founder-verified via real ship.
-- `/feature-window` auth gate (401→login, 403→dashboard, founder→system map)
-- Periodic `integration_health_cron` (600s, env-gated)
-- SYSTEM_INVENTORY auto-append wired to `_bg_bootstrap`
-- ShipPendingCard enrichment (Integrity guard pill + per-file diff chips)
-- Chat-history B3 fix approved but NOT YET SHIPPED — write cap `$slice: -40` → `-200` (queued in Deploy B)
-- Chat-history B1-race fix approved but NOT YET SHIPPED — Shell.jsx session-mint deferral with 3s fallback timeout (queued in Deploy B)
-
-## Prioritized backlog (top of queue → bottom)
-
-**P0 — awaiting founder:**
-- **REDEPLOY NEEDED**: prod is running with `tool_executor.py` deleted → every chat tool-call
-  crashes there. Iter 331-B restore + learning reattach + admin tile must ship.
-- **Iter 330+331 prod smoke test** (founder, 2 cycles): real ship → OperationHistory → rollback →
-  SSE progress → collapsed row. Also re-check Bug 1 (PLAN green during EXECUTE) + Bug 2 (ECG wave)
-  on prod AFTER deploying Iter 331.
-- **#14 dead-code delete list** — REJECTED with evidence (see Iter 331 above). Founder must supply
-  a corrected list; all 3 named files are live dependencies.
-- **Tavily credits exhausted + Firecrawl probe timeouts** — 32 critical integration alerts on
-  /admin/architecture (founder: top up tavily.com, check Firecrawl).
-
-**P1 — next in queue:**
-- **Deploy B** — Chat-history B1-race (`Shell.jsx` mint deferral with 3s fallback). (B3 `$slice: -200` already shipped.)
-- **#3 · ORA learning resurrection** (b→e): callsite reattach → real Mongo before/after proof → canary/eval flags ON (shadow) → learning-health tile on `/admin/architecture`. (Step (a) fail-open logging DONE in Iter 331.)
-- **Task 1 · ORA Canary + Admin Health Tile** — `ORA_CANARY_ENABLED` + `ENABLE_EVAL_CRON`, tile reads `project_brains.max(updated_at)`, RED if >24h stale.
-- **#17 · Large-plan E2E** — real live loop with 21+ files through PLAN→EXECUTE→SCAN→integrity guard→ship gate.
-- **Backend suite debt** — ~245 pre-existing failures (iter36-212 era source-assertion/env tests) +
-  2 import-dead files (`test_iter138_acceptance_seven.py`, `test_iter209_citation_guard_and_tool_executor.py`
-  import deleted `services.tool_executor`) + `test_iter212m163_aggression_chat.py` needs env at import.
-  Founder call: repair wave vs prune list.
-
-**P2 (batch when free):**
-- #12 Tier 3 discrepancy (Loop Readiness Score, pattern templates, branch-per-fix, trust levels)
-- #13 Surface MCP / ShipWall / Referral features
-- #15 ORA skills usage prune proposal
-- #16 Speed Diagnostic — `plan_latency_profile` data pull
-
-**Founder-only (external decisions):**
-- Stripe Dashboard webhook config check
-- Tavily key top-up/rotate
-- Firecrawl prod-secret confirmation
-- `DashboardPreviewV2.jsx` launch-vs-delete decision
-- Phase 1-4 design scope confirmations
-- CISO landing page (post customer-discovery)
-
-## Standing rules (enforced this session)
-- Every "done"/"verified" claim MUST include actual raw output (API JSON, Mongo query, DOM snapshot) inline in the report — not just prose.
-- Test-first for every fix. Real-timer / real-Mongo / real-live tests when possible; not just synthetic mocks.
-- Separate deploys for different classes of change (data-seeding vs UI vs backend logic).
-- No blind re-dispatch on cache lag — real functional verification is source of truth.
-- Founder verifies production via real ship + real click + real DOM/GitHub check.
-
-### Iter 327 · Firecrawl diagnostic prod logging
-### Iter 326 · Tavily 432 warn reclassification + Stripe .recurring validation
-### Iter 325 · Ship completion UI + failed chip repositioning
-### Iter 324 · ChatPanel duplicate bubble suppression + F12 chip repositioning
-### Iter 323 · Ship-completion UI polish
-### Iter 322 · Plan-phase latency profiling telemetry
-### Iter 321 · Removed recurring console.clear()
-### Iter 320 · Reload rehydration + LoopStepper sync
-### Iter 319 · Scan-phase NameError fixed + fail-CLOSED
-### Iter 318 · loop_integrity_guard.py — data-loss prevention pre-ship
-### Iter 309 · SSE reconnect harness (PASSED 25-min test)
-
-## Prioritized backlog / P0-P2 remaining
-
-### P0 (needs founder input to unblock)
-- **#2 Iter 329 frontend + real revert proof** — HELD on end-to-end proof
-- **#3 ORA shadow-learning resurrection** — HELD, requires timestamp proof
-- **#7 Stripe webhook dashboard verify** — founder must check dashboard endpoint state
-- **#8 Tavily key top-up** — founder-dependent
-- **#9 Firecrawl prod secret confirm** — founder-dependent
-- **#14 dead-code delete approvals** — 4 files await founder yes/no
-- **#10 sweepers dry-run approval** — awaiting founder yes/no
-- **#11 feature-flag first consumer** — awaiting founder proposal
-
-### P1 (queued but not started this session)
-- **#6 Iter 309 ECG/narration standalone deploy** — feature-parity check first
-- **#13 MCP/ShipWall/Referral surface** — one at a time with approval
-- **#17 large-plan (21+ file) edge case test**
-- **#18-21 Phase 1-4** — design confirmation required first
-
-### P2 (analysis-only, DONE this session)
-- ✅ #12 Tier 3 discrepancy (report in SYSTEM_INVENTORY.md)
-- ✅ #14 dead-code report (list documented)
-- ✅ #15 skills usage report (documented in session summary)
-- ✅ #16 plan-latency report (data absent — dead write path)
-
-## Key architecture invariants
-- ObjectId serialization: `PyObjectId` / `BaseDocument` pattern
-- datetime: `datetime.now(timezone.utc)`
-- Ripple-Update Rule: any change triggers same-iteration SYSTEM_INVENTORY.md update via `services/inventory_service.py`
-- Fail-open discipline: all background tasks (learning, inventory, cron) must never block user paths
-- Trust levels enforced at L1 (block low-trust from paid features) + L3 (auto-ship gate skip)
-
-## Test discipline
-- Backend: pytest under `backend/tests/` — all iter 328 additions have tests
-- Frontend: vitest + RTL under `src/**/__tests__/` and `src/**/*.test.jsx` — 124/124 passing
-- **NEW HARD RULE (added Iter 328)**: for UI regressions, an integration test that chains real wire shape → mapper → real component render is required. Component-level tests alone are insufficient (the exact gap that broke Deploy 2 three times).
-
-## Iter 358c · 2026-06-30 — Deploy build-fix (ESM/CJS) + gate flake fix
-- **Prod build failed** at Cloud Build step #8: seo-prerender.mjs imported
-  `src/data/competitors.js` which prod Node v20.18.1 loaded as CommonJS
-  (no "type":"module" in package.json) → named exports COMPARE_HUB/ALL_SLUGS
-  (declared after the ~450-line COMPETITORS object) not found. Preview Node
-  had tolerated it; vite/vitest unaffected (treat source as ESM).
-- **Fix** (per deployer RCA): renamed competitors.js → competitors.mjs (content
-  unchanged) + updated seo-prerender.mjs import. React pages import
-  extensionless → Vite resolves .mjs. Updated 2 test path-locks. Verified:
-  `node --input-type=module` resolves all 5 exports; yarn build writes 6
-  snapshots. ("type":"module" rejected — would break postcss/tailwind CJS.)
-- **Gate flake fix**: live 112-endpoint admin sweep exceeded the gate's global
-  --timeout=30 under parallel load (pytest-timeout killed it → false fail, NOT
-  a security gap). Added @pytest.mark.timeout(180) override + made sweep only
-  flag 2xx as a leak (transient 429/5xx/network retried, not flagged).
-- Gate PASSED clean: 3742 backend + 236 vitest. Redeploy dispatched.
-- **NOTE**: "Save to GitHub" reported broken by founder + agent cannot push
-  (no git remote, user-only feature) → routed to support; repo still stale.
-
-
-- **URGENT security verification (founder-mandated, RailShell merged admin into shared shell)**:
-  Proven with real NON-FOUNDER account (qa-free-339k@aurem.dev, tier=free, is_admin=False):
-  - CLIENT: Admin rail icon ABSENT from DOM (node count 0, no admin testid); visibility gated
-    by server-confirmed /auth/me (isFounder), no hardcoded flag.
-  - SERVER (authoritative, via curl — urllib was Cloudflare-1010-blocked, caught & redone):
-    ALL 112 admin endpoints across 4 routers → real app 403 {"detail":"Admin access required"};
-    no token → 401; founder → 200. ZERO leaks, ZERO Cloudflare false-positives.
-- **Hardening (defense-in-depth, founder's architectural ask)**: added router-level
-  `dependencies=[Depends(require_admin_dep)]` (cto_services/auth.py) to admin, admin_qa,
-  admin_bin, admin_vanguard — a NEW admin route now inherits the gate, can't ship unprotected.
-  Public write-only /errors/report moved to un-gated routers/admin_public.py at SAME URL
-  (no frontend change). Guard-16 static + live locks: test_iter358_admin_auth_hardening.py (5).
-- **Bundle diet** (surfaced by a flaky glob[0] test): lazy-loaded 6 dev/harness/admin +
-  Login/Signup/WhyOra pages; entry chunk 543KB→384KB. Fixed the test to read the REAL entry
-  from index.html (deterministic) + honest 400KB ceiling (React 19 baseline).
-- Gate: 3742 backend + 236 vitest green.
-
-
-- **"ships this week" chip fixed at route level** (routers/wrapped.py): `this_week` period
-  never existed (fell to ALL-TIME) + Loop Mode ships (loop_sessions) were never counted —
-  both fixed; verified live (this_week=7 vs all=8 with seeded old ship). Locks:
-  test_iter358_ship_week_chip.py (5).
-- **SEO refresh**: real /vs/cursor, /vs/github-copilot, /vs/replit-agent, /vs/windsurf pages +
-  /compare hub via single data source src/data/competitors.js + generic VsPage.jsx (FAQPage
-  JSON-LD 1:1 by construction); /vs/cursor redirect stub removed; unknown slug → /compare.
-  Competitor pricing web-verified June 2026 (Cursor $20/60/200, Copilot Pro+ $39/1500 premium
-  reqs, Replit effort-based, Windsurf quota model Mar 2026). LAST_VERIFIED=June 30, 2026.
-- **Truth fixes (Guard 2 extension)**: llms.txt/llms-full.txt fake stats removed (500+ devs,
-  12k commits, 4.9/5, 498 spots) → point AI systems to live /usage/public/stats; pricing
-  aligned to subscription_tiers SSOT ($0/10, $9/50, $19/300, $49/400 — "unlimited tasks"
-  claim killed); sitemap + llms links updated.
-- **AEO prerendering**: `yarn build` now runs scripts/seo-prerender.mjs → static HTML
-  snapshots (dist/vs/*/index.html + dist/compare/index.html) with swapped meta + JSON-LD +
-  full semantic content inside #root (React replaces on mount). Verify on prod post-deploy:
-  `curl -s https://auremcto.com/vs/cursor | grep '<h1>'`.
-- **Internal docs**: /app/docs/{00_INDEX,PRD,TRD,APP_FLOW,UI_UX_BRIEF,SCHEMA,
-  IMPLEMENTATION_STATUS,REGRESSION_GUARDS}.md — living docs, all facts traced to code/DB;
-  gate script prints docs-update reminder.
-- Tests: 44 pytest locks green (iter124h modernized to competitors.js), vitest 237/237.
-
-
-## Iter 356-357 · 2026-06-30 — Unified nav ship + E2E-session dedup + Guard 2 + Guard 8 (partial)
-- **DEPLOYED to prod (build faf5e1264d02)**: RailShell unified nav (Dashboard + 8 pages,
-  5 icons: Chat/Ship/Insights/Settings/Admin, flyout routing verified by testing agent),
-  /integrations back button, PricingCards tier-overlap + API-key masking (pre-fork).
-- **prod-e2e session debris ROOT FIX** (founder's own investigation: duplicates = ORA's prod
-  E2E test leftovers, NOT title dups): (a) /chat/sessions excludes ^(prod-e2e-|qa-e2e-|e2e-test-)
-  server-side (services/test_accounts.py E2E_SESSION_PREFIX_RE); (b) founder-only
-  POST /admin/qa/cleanup-e2e-sessions (deletes debris, returns count); (c) prod E2E suite
-  teardown deletes its own sessions; (d) /chat/sessions double-fetch fixed via
-  fetchSessionsShared 2s in-flight cache (12 calls → 2 on dashboard load, network-verified).
-- **Guard 2 marketing truth gate LIVE ON PROD**: landing social proof renders ONLY live
-  /usage/public/stats (real_developers=26, commits_shipped=88 on prod; test accounts excluded
-  via shared services/test_accounts.py; zero-valued stats hidden; 500+/12k+/4.9★ removed).
-  Grep-lock: test_iter356_nav_dedup_marketing.py (11 locks).
-- **RouteErrorBoundary**: lazy-chunk/render crashes → retry card, never a blank page
-  (testing agent found blank /admin/financials|suggestions|api-keys under 429 hammering;
-  organic repro clean — boundary is the safety net).
-- **Gate repairs**: 8 failures fixed (public_stats fail-soft for mocked-db tests; 4 mobile-drawer
-  tests modernized to RailShell contract; bundle rebuilt 144KB<350KB). GATE PASSED:
-  3714 pytest + 236 vitest + qa_matrix. Gate script now prints Save-to-GitHub reminder.
-- **Guard 8 (partial, Iter 357 — preview only, deploy pending)**: GitHub sync detection reusing
-  EXISTING Overview build badge (founder correction honored — no new system).
-  services/github_sync.py single source; badge shows in_sync/behind/not_wired; >48h → RED in
-  existing topup_alerts banner w/ auto-resolve. 8 locks. NEEDS: GITHUB_ACTIONS_TOKEN + GITHUB_REPO.
-- **Platform answers (support-confirmed)**: Save to GitHub is USER-ONLY, no auto-sync exists.
-  polarisbuiltinc-wq/auremdev = product repo (via Save to GitHub); tjsandhu/aurem = connected
-  dogfood project only — agent never wrote to either directly.
-- **Guards charter 1-21 saved**: /app/memory/GUARDS_CHARTER.md (specs, ship order, status).
-
-## Iter 339 · 2026-07-28 — Production deploy + dual verification
-- Preview smoke test PASS (login, /auth/me + /auth/tokens leak-scan, /version, /health, frontend load)
-- Deployed working-tree snapshot to prod (includes secret_leak_scan in Auto-QA + BUILD_INFO.txt fix)
-- Post-deploy verification (per founder's correction — SHA is a label, not proof):
-  - SHA check: prod /version = 05b5a310ce0a, matches preview ✓
-  - Behavioral proof: ran `_run_secret_leak_scan` manually against prod
-    (/auth/me + /auth/tokens) via new synthetic account qa-scan-bot@aurem.dev
-    → both PASS, no sensitive keys. Raw curl double-check also PASS.
-- New credential: qa-scan-bot@aurem.dev (prod synthetic QA account, see test_credentials.md)
-- Next: Section 0 QA sandbox (user manual steps), Phase 2 Risk-Based Routing, Phase 3 Checkpoints/Rollback
-
-## Iter 339b · 2026-07-28 — Post-ship Rollback bug investigation + fixes
-- Founder report (PROD): Rollback button dead post-ship (loop 38d7c242, commit cc60342), 0 network calls, AbortError BodyStreamBuffer in console.
-- Repro attempt (preview, HIGH-fidelity: real ChatPanel + real SSE + post-terminal click via seeded loop): flow WORKS — click1→confirming, click2→POST→rollback ran. Handler is stream-INDEPENDENT (direct axios POST).
-- 3 real defects found & fixed:
-  1. OperationHistory /loop/history fetch fired without Authorization (authToken prop never passed) → 401 → history always empty. Fixed via localStorage token fallback.
-  2. Unhandled AbortError "BodyStreamBuffer was aborted" — floating reader.cancel() promise in streamLoopEvents finally block. Fixed (await + catch).
-  3. sw.js CACHE_VERSION frozen at "aurem-v2" since June 5 across all deploys → stale-bundle hazard (STRONGEST suspect for prod dead button: pre-iter329 cached bundle had ShipConfirmModal with silently-dead rollback `if (!taskId) return` — exact symptom match). Bumped to aurem-v3.
-- NEW: persistent Rollback button on OperationHistory completed-ship rows (two-click confirm, stream-independent POST, live progress via shared stream). Ops timeline now renders STANDALONE in chat when no loop is active → rollback possible even after reload (was impossible before).
-- Console tracing added to ShippedRow + OperationHistory click handlers ([rollback] / [op-history rollback] debug lines) — next prod attempt is diagnosable.
-- Testing: 2 Playwright E2E flows on preview PASS, 226/226 vitest unit tests PASS.
-- NOT YET DEPLOYED — founder must trigger deploy; then rollback cc60342 via history row.
-
-## Iter 339c · 2026-07-29 — Ops timeline layout fix (founder prod screenshot)
-- Bug: 20+ history rows spilling out of LiveFeed card (maxHeight 220 overflow) — overlapping step bar/composer/human-review card; expand/collapse unreliable due to overlap.
-- Fixes: (1) OperationHistory list now bounded — header "OPS HISTORY · N", shows 5 recent, "Show all (N)" toggle, 190px scroll pane. (2) LoopLiveFeed root maxHeight removed (narration scroller keeps own 175px cap). (3) Expand keyed by loop_id::op_type (ship/rollback no longer co-expand); row click toggles expand/collapse.
-- Tested: Playwright E2E (standalone + demo feed) PASS, 230/230 vitest PASS. Deploy pending.
-
-## Iter 339d · 2026-07-29 — Loop chat persistence + collapsible replies
-- ROOT CAUSE (founder: "50 runs, prod pe older chats nahi dikhte"): loop-mode turns were NEVER written to chat_sessions — loop engine only wrote loop_sessions; _persist_turn only fires on normal chat streaming. After reload /chat/history had nothing.
-- FIX: /loop/start now accepts session_id (frontend passes it); LoopEngine._persist_chat_turns writes a compact user+assistant turn pair (shipped/failed/aborted variants, provider:"loop", loop_id tagged, $slice -200, idempotent one-shot) into chat_sessions at every terminal state via _emit hook.
-- NEW FEATURE: CollapsibleReply.jsx — older long assistant replies (>280 chars or >6 lines) collapse to one-line preview + "N lines"; click to expand/collapse. Last assistant reply always stays expanded. Wired via MessageBubble collapseDefault prop from ChatPanel (lastAssistantIdx).
-- Tested: backend unit (persist ship/fail/idempotent) PASS, pytest iter332/333 32 passed, Playwright E2E (8-turn seeded session: 2 collapsed, loop turn visible, expand/collapse toggle) PASS, 230/230 vitest PASS. Deploy pending.
-
-## Iter 339e · 2026-07-29 — Ops History toggle in composer toolbar
-- Founder request: chat window clean rahe — ops timeline default hidden, composer input mein toggle.
-- Removed Codebase Graph toggle from composer toolbar (Graph stays on top tab bar); replaced with Ops History toggle (History icon, data-testid="ops-history-toggle-btn").
-- Standalone ops timeline now renders ONLY when toggled ON (minimize/maximize in same place above composer); solid dark card styling (bg #0d1117, border, shadow) so it doesn't bleed over messages.
-- Tested: Playwright E2E (default hidden → toggle ON shows 5 rows + rollback btn → toggle OFF hides; graph btn gone; collapsed replies unaffected) PASS, 230/230 vitest PASS. Deploy pending.
-
-## Iter 339f · 2026-07-29 — Width alignment + compact LoopStepBar
-- Ops panel (and inline cards) ab exactly chat-input jitni width — inline padding ne .chat-inline-card ka clamp override kar diya tha; restructured to outer clamp wrapper + inner styled card. Verified: ops card x/w == composer card x/w (241/1438).
-- LoopStepBar (5-tools chip) compact: padding 12/18→6/12, margin bottom 0 (input se bilkul close), gap 6→4, fontSize 11→10, icon 16→14, ECG height 14→10.
-- Tested: 230/230 vitest PASS, Playwright width-alignment check PASS. Deploy pending.
-
-## Iter 339g/h · 2026-07-29 — One-line collapsed replies + Advisor default compressed
-- 339g: "via openai / via loop" scope-badge hidden for collapsed replies + loop-result turns (truly 1 line). Last expanded reply keeps badge. E2E verified (badges 0/0/0 collapsed+loop, 1 on last).
-- 339h: Ask Advisor default COLLAPSED on every login/refresh (Dashboard advisorCollapsed useState true). Click-only open (hover-reveal was already removed in 212m-122). E2E verified: load=collapsed (input off-screen), click=open, refresh=collapsed.
-- 230/230 vitest PASS (after 339g). Deploy pending (all Iter 339 series fixes).
-
-## Iter 340 · 2026-07-29 — Full regression + PROD DEPLOY
-- Testing agent pre-deploy regression: backend 4/4 + frontend 8/8 PASS (report: /app/test_reports/iteration_340.json).
-- Deployed Iter-339 bundle to prod. New build 79a420712378 (00:23 UTC) verified live.
-- Post-deploy: health 200, secret-leak scan /auth/me + /auth/tokens both PASS on prod.
-- Founder next: hard-reload prod, verify collapsed replies + ops toggle + advisor compressed; rollback cc60342 via Ops History if desired.
-
-## Iter 339i · 2026-07-29 — Collapsible mode pill + bottom tabs + sidebar default hidden
-- TopBar mode pill (Swift/Pro/Maxx) collapsed by default → shows only active mode + chevron (ds2-mode-collapsed); click expands all 3; select → collapses back.
-- Ask Advisor opener tab moved from right-middle to bottom-right (bottom-6).
-- NEW bottom-left "MENU" tab (sidebar-open-tab, desktop only): sidebar now DEFAULT HIDDEN on every load/refresh; opens via MENU click or left-edge (16px) hover; auto-hides when cursor drifts >264px. Mobile hamburger/drawer unchanged.
-- E2E verified: mode collapse/expand/select, sidebar hidden(w=0)→open(220px)→auto-hide, advisor tab at (1892,685). 230/230 vitest PASS. Deploy pending.
-
-## Iter 339i-b · 2026-07-29 — MENU tab exact mirror of Advisor tab
-- MENU tab rebuilt with same Tailwind classes as Advisor tab: orange lucide Menu icon (text-primary), vertical label, both tabs locked to 26x96px (h-[96px] w-[26px] justify-center) at same bottom offset. Verified: both bboxes 26x96 @ y=680. 
-
-## Iter 339j · 2026-07-29 — PROD rollback dead-click ROOT FIX + null-turn crash
-- Prod evidence: "[rollback] click" logged, but NO network, NO UI change, 7 attempts — phase state ("confirming") was being lost between clicks (component state reset/remount), so the second-click POST branch was never reachable.
-- ROOT FIX: confirm-arm state moved OUT of component state into module-level Map `_rollbackArmed` (loopId→armedAt). Second click within 10s fires POST regardless of any remount/state reset. Component `phase` is now visuals-only. Added MOUNT/UNMOUNTED console tracing + `armed` flag in click log for decisive prod diagnosis.
-- Regression test: LoopLiveFeed.iter339j_rollback_remount.test.jsx — click→UNMOUNT→REMOUNT→click fires exactly one POST. PASS.
-- E2E network proof (preview, real ChatPanel+SSE): POST /loop/repro-339j-2/rollback FIRED, phase confirming→handed-off, ops history live-updated. Loop-turn chat persistence also confirmed live ("Loop run … Shipped" bubble).
-- BONUS FIX: "[chat/history] Cannot read properties of null (reading 'role')" — Mongo null-padded turns crashed hydration. Frontend filters falsy/role-less turns; backend GET /chat/history strips non-dict turns. Verified: null-turn seeded session hydrates 2/2 messages.
-- 232/232 vitest PASS. DEPLOY PENDING.
-
-## 2026-07-29 — DEPLOY: Iter-339j (rollback root fix) LIVE
-- Prod build b266cb2332f1 (02:04 UTC). Health 200, secret-leak scan PASS (/auth/me, /auth/tokens).
-- Founder to verify: hard-reload prod → rollback 2-click within 10s → console shows armed:true + Network POST.
-
-## Iter 339k/l · 2026-07-29 — Prompt-mode NoneType P0 + Ops toggle root fix
-- 339k ROOT CAUSE (prod: every prompt-mode msg crashed after "ORA recalled…"): orchestrator.py session-history loader called t.get() on literal NULL turns (Mongo index-padding corruption). Fixed with isinstance guards in orchestrator.py + chat.py (_find_recent walk) + ora_chat/session.py (3 iterators). Raw exception leak fixed: worker "error" frames now route into the graceful "I wasn't able to produce a reply…" fallback instead of yielding raw error to the bubble (chat.py ~2609).
-- Regression tests: tests/test_iter339k_null_turn_prompt_mode.py — 2-char prompt + "What is 2+2?" through REAL /chat/stream on null-poisoned session → no NoneType, reply "4" generated, /chat/history strips nulls. PASS.
-- 339l ROOT FIX (history toggle dead-click): standalone ops panel was gated on !loopId → toggle did nothing whenever a loop session existed. OperationHistory REMOVED from inside LoopLiveFeed; the composer-toggle panel is now the SINGLE ops surface (renders regardless of loopId), ShippedRow rollback lifts loopId to ChatPanel via onRollbackStarted → auto-opens panel for live progress. iter329 test updated to new contract.
-- E2E: toggle works WITH active loop (panel+5 rows), off hides, no embedded ops in feed. 232/232 vitest + backend tests PASS. DEPLOY PENDING.
-
-## Iter 339m · 2026-07-29 — Free-tier 499 root fix + collapse-ALL messages
-- P0 FOUND during post-deploy check: /chat/stream returned 499 for ALL non-admin/free accounts — UnboundLocalError at chat.py:1121 (`is_founder_email`) caused by a LOCAL `from services.usage import is_founder_email` at ~line 1212 inside chat_stream shadowing the module-level import for the whole function scope. Admin/founder accounts short-circuited before the call, masking it. FIX: removed the local import. Verified: free-tier account now gets "2 + 2 = 4." reply.
-- Collapse-ALL (founder request): EVERY message (user inputs too) now collapses to one-line preview except the LAST message — length threshold removed (was: only >280-char assistant replies → "80% outputs / 0% inputs"). MessageBubble: collapsedUserMsg branch; ChatPanel: collapseDefault = i !== messages.length-1.
-- 232/232 vitest + 2/2 pytest PASS, E2E verified (n-1 collapsed, last expanded, user-msg expand/collapse). DEPLOYED.
-
-## 2026-07-29 — DEPLOY: Iter-339k/l/m LIVE on https://auremcto.com
-- Prod build m1c60458. Health 200, db:true. Includes: null-turn NoneType fix, ops-toggle root fix, free-tier 499 fix, collapse-all-but-last chat.
-- Section 0 QA sandbox account (qa-bot GitHub PAT): founder confirmed created ("yes"). Next: wire PAT into Prod CI scenarios.
-
-## Iter 342 · 2026-07-29 — Rollback ROOT FIX (3rd recurrence) + chip vanish + feed collapse — DEPLOYED
-- Rollback: two-click arm/confirm state machine REMOVED. New contract: `pointerdown` (fires pre-remount) → native `window.confirm()` → immediate POST. Module-level `_rollbackInFlight`/`_rollbackLastFire` Maps survive remounts; synthetic click after handled pointerdown swallowed (800ms). Applied to BOTH surfaces: ShippedRow (LoopLiveFeed) + OperationHistory row.
-- E2E network proof on preview: single press → confirm dialog → POST /loop/repro-342-1/rollback FIRED, ops history live-updated.
-- LoopStatusChip: terminal-SUCCESS auto-vanishes after SUCCESS_GRACE_MS=6s (Done button still instant-dismisses). Failure keeps 30s.
-- LoopLiveFeed: collapse/expand chevron toggle at header right corner (loop-live-feed-collapse-toggle).
-- 234/234 vitest PASS. Deployed to https://auremcto.com.
-
-## Iter 343 · 2026-07-29 — Regression Library Gate (founder charter)
-- FINDINGS: auto-qa.yml didn't exist; QA robot = auto-qa-agent job in quality-gate.yml, gated behind `needs:[invariants,...]` where invariants has 13 local failures → QA robot skipped on pushes. GITHUB_TOKEN in preview .env is 401 → Actions history unverifiable without PAT.
-- qa_matrix.py: paths now derived from repo root via __file__ (was hardcoded /app — broken on GH runners). NEW `run_regression_locks()` runs on EVERY run_auto: status=fixed entries' locks (pytest via service_layer_lock + vitest via vitest_lock) re-executed; fail/missing/no-lock → FAIL → CLI exit 1 → red Actions. status=open → informational OPEN row. requires_live_server → DEFERRED on CI, enforced in preview.
-- NEW .github/workflows/auto-qa.yml: standalone, push ['**'], mongo service, python+node setup, runs qa_matrix CLI, uploads report artifact. NOT gated behind invariants.
-- regression_library.json now has 4 entries: ship-gate-infinite-loop (open), null-turn-prompt-mode (fixed, live-server lock), freetier-499-unboundlocal (fixed, NEW static AST lock test_regression_iter339m_freetier_unboundlocal.py), rollback-dead-click (fixed, 2 vitest locks).
-- Verified locally: full CLI run → 3 fixed entries PASS (locks actually executed), loud-fail paths (missing lock/no lock/FAIL→exit 1/CI DEFERRED) all assert-checked. iter334 suite 26/26 PASS.
-
-## Iter 344 · 2026-07-29 — Invariants gate repaired: 13F+2E → 0F+0E (452 passed, 3 skipped)
-- REAL BUG FIX (founder ruling): file_selector.py — planner-selected files are NEVER dropped by top_n truncation (Iter 311's trim removed; candidates = all ranked planner files). Original test assertion kept, code satisfies it.
-- Verifications before rewrite (founder-required): #1 emit invariant — 7 real preview loops carry last_event.state=completed (written only by emit path) → COMPLETED emit fires (line 3050, 62 lines after assignment); #6 PHASE_TO_STEP — NEW runtime vitest (LoopStepBar.iter344_phase_map_runtime) imports executed map via new __PHASE_TO_STEP export, all 13 backend states covered, 2/2 PASS. Old test's ^-anchored regex only matched first key per line.
-- 8 stale tests rewritten to new contracts: emit-scanner (80-line window + __init__ exempt), LiveFeed single-root data-state, loop_rollback status-filtered $sets, frontend_sync regex + emptyLine IIFE, scope_drift row-by-kind + last-frame gate (frame-count assert brittle), iter288 narration-only contract, j005 async /loop/start (state=planning immediate).
-- 5 env fixes: test_aurem_rollback password testpass123→AuremTest2026! + QA_GITHUB_PAT skip-gate (PAT now live-validated by /projects/add), iter212m190 idempotent seed (_ensure_seed_users: lockout clear + delete/signup), iter212m55 lockout clear in session fixture, Stripe iter124d gated behind STRIPE_E2E=1 (requires_live_server class).
-- Post-fix: invariants subset 452 passed/0 failed; iter212m142 5/5; vitest 219/219; qa_matrix full run PASS. auto-qa.yml + quality-gate invariants job now unblocked pending push.
-- PENDING: GitHub Actions green-run link needs founder push (Save to Github) + PAT for API access.
-
-## Iter 345 · 2026-07-29 — Legacy quarantine (founder ruling: defer, don't fix) — CI blocking lane GREEN
-- 270 nodeids quarantined via @pytest.mark.legacy (238 FAILED + 21 setup ERRORS from snapshot + 11 order-dependent flaky found during verification). Mechanism: tests/legacy_quarantine.txt (single source of truth) + pytest_collection_modifyitems hook in tests/conftest.py — NO test file edited.
-- pytest.ini: legacy marker registered; addopts now `-m "not flaky and not llm_judge and not legacy"`.
-- ci.yml: NEW non-blocking "Legacy lane" step (continue-on-error) runs `-m legacy`, writes .emergent/legacy-test-report.md + artifact. Local report generated with per-file breakdown.
-- Env hardening: LOGIN_RATE_PER_MIN=100 in preview .env (in-memory Layer-1 burst limit 10/min tripped by full-suite login hammering — prod env untouched); m55 login test clears lockout before login.
-- VERIFIED: blocking lane with ci.yml's exact flags → 3639 passed, 0 failed, 0 errors (273 deselected). Legacy lane collect = 270.
-- Awaiting founder: Save to Github push (STEP 1), then STEP 3 trigger verification on main. Branch protection = founder does it himself in UI.
-
-## Iter 346 · 2026-07-29 — Vanguard PR dedup + bulk-close script + PRE-DEPLOY GATE
-- DIAGNOSIS: 170 draft PRs = security_scan.py `_create_draft_pr` ("draft": True # NEVER force-merge, author Aurem Vanguard) + loop_safety.open_draft_pr. NO ready-for-review flip, NO auto-merge (never built), NO dedup → every auto_pr scan opened a fresh draft. Production deploys from workspace via Emergent deployer, NOT GitHub main — PR branches don't affect prod.
-- DEDUP GUARD: _vanguard_fingerprint (sha1 of sorted (id,file) pairs, line-insensitive) embedded as <!-- vanguard-fingerprint:X --> in PR body; _find_open_pr_with_fingerprint scans open PRs (3×100 pages) before creating; match → return existing URL, skip creation. Tests: test_iter346_vanguard_pr_dedup.py 3/3 + security suites 29/29.
-- BULK-CLOSE: scripts/bulk_close_vanguard_drafts.py (dry-run default; EXECUTE=1 to comment+close; DELETE_BRANCHES=1 optional; targets only draft + vanguard/aurem branches/titles). NEEDS FOUNDER PAT to run.
-- PRE-DEPLOY GATE: support_agent confirmed Emergent Deploy runs build+env+health ONLY, no tests. scripts/predeploy_gate.sh = 3 blocking lanes (pytest blocking lane, vitest, qa_matrix regression locks). Agent commitment: run before every deployer invocation.
-
-## Iter 347 · 2026-07-29 — First main-branch CI run (bfdc88a) failures: DIAGNOSED + FIXED (env mismatch, NOT regressions)
-- Local predeploy gate PASSED on same workspace → failures were CI-env-specific. auto_push.yml "Force sync" is a no-op notification job (doesn't force-push).
-- Auto-QA gate FAIL root causes: (1) CI=true makes vitest emit ANSI codes → count regex parse fail → false FAIL. Fix: NO_COLOR/FORCE_COLOR=0 + ANSI strip + exit-code authoritative. (2) scope scenarios (smoke_baseline/secret_leak/chat_tool_call) hit localhost:8001 — no backend on runners. Fix: --locks-only CLI flag; auto-qa.yml uses it (locks are the CI charter; scope scenarios = preview concern). (3) git diff HEAD~1 guarded for force-pushes.
-- Quality Gate invariants FAIL root causes: (1) job env pointed MONGO_URL at localhost:27017 but NO mongo service container existed — added mongo:7 service (timeout 6→15min). (2) m190 import-time seed did unguarded pymongo ops → 30s timeout collection error on CI. Fix: 3s timeout best-effort + module-level skip if preview API unreachable. (3) live-server fixtures (m55/iter340/aurem_rollback) now skip cleanly on ConnectionError. (4) m190 TestPreview = preview-only (seeds local Mongo + reads via remote API — cross-env on CI): CI skipif.
-- VERIFIED: CI simulation (CI=true + unreachable Mongo) → invariants subset 448 passed/0 failed; locks-only qa_matrix PASS; preview lanes unaffected (34 passed).
-- Founder must re-push (Save to Github → main) for CI to go green.
-
-## Iter 348 · 2026-07-29 — PR #173 self-scan incident: Vanguard scanning its OWN rule file
-- CONFIRMED: bug_hunt_rules.py (581 lines of regex rule definitions) self-flagged for exec/eval/secret patterns; /fix endpoint ("REAL Fix", Iter 212m-114) LLM-gutted 397 lines; validator ("rule must no longer fire") passed trivially → self-cannibalism loop.
-- 3 PR classes exist: (a) vanguard/auto-fix-* = marker-only report drafts; (b) /fix endpoint = REAL LLM patches on draft branches (PR #173 class); (c) aurem/fix-* push_fix = real single-file changes. "All marker-only" was WRONG.
-- Exclusion infra existed (scanner_utils.is_scanner_rule_file — used by codebase_health/bug_hunt/fix_triage) but security_scan route + /fix endpoint never wired it. FIXED: candidate filter skips rule files + .vanguard/; /fix hard-rejects rule-file findings with 400. Locks: test_iter348_self_scan_exclusion.py 3/3; security suites 39 passed.
-- PENDING: per-category sample-diff audit of 168 PRs needs founder PAT (or founder classifies by diff: single .vanguard/*.md = marker; source-file changes = /fix or push_fix class).
-
-## Iter 348b · 2026-07-29 — SECOND self-cannibalism case (PR #9: 564 lines gutted from routers/codebase_health.py)
-- Note: codebase_health.py WAS in the original exclusion list, but PR #9 predates today's wiring (route never called is_scanner_rule_file before Iter 348).
-- _SCANNER_RULE_FILES expanded from 9 → 35 entries: ENTIRE scan/fix pipeline (routers: security_scan, codebase_health, fix_pipeline, admin_vanguard, vanguard_ci; services: all scan/fix/triage/heal/audit files incl. finding_fix_applier, fix_triage, full_scan_orchestrator, repo_heal, loop_safety, scanner_utils itself; frontend scan UI pages). All existing callers (scan route, /fix guard, codebase_health, bug_hunt, fix_triage) inherit automatically.
-- Locks: test_iter348 expanded (PR#9 + PR#173 classes + 9 pipeline files) 4/4 PASS; scanner-related suites 254 passed.
-- NEW scripts/classify_open_prs.py — produces founder's eyeball table (PR#, created, category, files, +/-, draft, POISON/marker-only/REVIEW verdict + totals). Requires GITHUB_PAT + REPO env. Founder to run or supply PAT.
-- RULE: no merge proposals until founder reviews the table.
-
-## Iter 359 · 2026-07-30 — GUARD 18 SHIPPED: Universal timeout budget (wave 3 start)
-- NEW scripts/timeout_audit.py: static audit — Python via AST (httpx.get/post/stream + AsyncClient/Client, requests.*, aiohttp.ClientSession, urlopen must carry timeout=), JS/JSX via paren-balanced regex (fetch needs signal:/timeout, axios.create + direct axios.* need timeout). Comment/docstring-safe (AST + comment-line skip). Escape hatch: `g18-exempt: reason` comment on/above the call line.
-- FOUND + FIXED 23 violations: 6 backend httpx.AsyncClient() ctors (security_scan, loop_engine trimmed-scan, both codebase_indexers, ora_chat/canary, a2a_handoff_service) → timeout=30/10; 17 frontend sites → AbortSignal.timeout(10-120s) (App.jsx referral, OperationHistory, AuremAdminPanel apiFetch, SidebarBound, errorReporter, Both.jsx×5 incl. scaffold 60s/materialize 120s, AdminOverview health, AdminSystemHealth prod version, PolicyPage, Admin+api.js logout keepalive, AdminQADashboard axios×2). Streams already abortable via ctrl.signal — counted covered.
-- WIRED: ci.yml backend job "Guard 18 — universal timeout audit" step (build fail on violation) + predeploy_gate.sh Lane 4. Founder-gated GET /admin/qa/guard18-timeout-audit (computed live from disk, admin_qa router convention). QA page row ships last per charter.
-- VERIFIED: 179/179 sites covered; locks test_iter359_guard18_timeout_audit.py 11/11 (live-zero + scanner self-tests + exempt + endpoint gate); targeted suites 42 passed; vitest 236 passed; live curl on preview → pass:true, unauth → 401; landing smoke OK.
-- NEXT (charter wave 3 order): G17 retry+circuit breaker → G21 → G19 → G20.
-
-## Iter 360 · 2026-07-30 — GUARD 17 SHIPPED: Retry & cascade protection (central breaker)
-- NEW services/retry_guard.py = THE central retry utility: per-dep CircuitBreaker (closed/open/half_open, threshold 5, cooldown 60s, single half-open probe with 30s stale expiry), call_with_retry (full-jitter exponential backoff), transition ring (200) + best-effort Mongo breaker_events persist + trip_counts_7d. 10 deps pre-registered.
-- MIGRATIONS (no caller-side retry loops left): llm.py _call_deepseek → openrouter breaker (OPEN ⇒ skip candidates walk, straight to deepseek-direct/groq fallbacks; record chain-exhausted fail / success); loop_safety.github_request_with_retry → github breaker (fast-fail BreakerOpenError when open, record 5xx/network — rate-limits NOT counted); repo_heal._try_with_retries → call_with_retry (same tuple contract); web_skills web_search + fetch_url → tavily breaker with graceful "circuit open" tool errors. services/llm_circuit_breaker.py shim created — admin_bin Bin panel's breaker_state now real.
-- AUDIT NOTE: shared/resilience/{circuit_breaker,circuit_breaker_service}.py = pre-existing DEAD code (0 callers, other-product copy w/ WhatsApp/FlagShip) — scheduled for Phase 4 dead-code removal, NOT wired.
-- QA SURFACE: GET /admin/qa/guard17-breakers (founder-gated: states, open_deps, trips_7d, recent transitions). Admin Overview DEPENDENCIES strip (data-testid dependency-breaker-strip, per-dep dots green/amber/red, tooltip = last error + trips 7d).
-- VERIFIED: locks test_iter360_guard17_retry_breaker.py 17/17 (open-after-N, stops hammering w/ fn-not-invoked proof, half-open probe schedule + reopen, jitter backoff window, transition log full cycle, migrated-caller fast-fails, endpoint gate); FULL blocking lane 3769 passed (2 flakes rerun-green: m22 LLM stream, m125 teardown); vitest 236; live curl guard17 endpoint (10 deps closed, unauth 401); Admin Overview screenshot with strip live. Guard 18 audit still 179/179.
-- NEXT (charter wave 3): G21 OWASP/CWE → G19 auto-recovery → G20 postmortem log (last).
-
-## Iter 361 · 2026-07-30 — GUARD 21 SHIPPED: OWASP/CWE coverage (wave 3)
-- NEW scripts/g21_security_scan.py — SUPPLY-CHAIN (requirements.txt 0 unpinned/all ==; yarn.lock committed) + MISCONFIG (no FastAPI/uvicorn debug=True; no default-cred patterns; every routers/admin*.py has router-level admin gate except admin_public.py; @app.exception_handler present → no raw stack-trace leak). run_scan() computed live.
-- INJECTION FUZZ tests/test_iter361_guard21_owasp.py (23): SQLi/NoSQL($ne auth-bypass)/XSS/cmdi payloads vs live signup + notify-interest + login. Asserts: no 500, no stack-trace markers, XSS inert (checks Content-Type is JSON not text/html — reflection in JSON is safe + React escapes), NoSQL operator object rejected, nested/hostile shape → graceful 4xx. Static-scan self-tests prove scanner catches unpinned dep + ungated router. NOTE: login fuzz limited to 2 hits (NoSQL+nested) to avoid brute-force IP-lockout polluting shared preview.
-- WIRED: ci.yml backend step + predeploy_gate.sh Lane 5 (build-fail on finding). Founder-gated GET /admin/qa/guard21-security-scan (live).
-- VERIFIED: locks 23/23; FULL blocking lane 3793 passed / 0 failed / 62 skipped; vitest 236; live curl guard21 endpoint pass:true (0 misconfig, 0 unpinned), unauth 401. Guard 18 audit 179/179 still green.
-- NEXT (charter wave 3): G19 process auto-recovery → G20 postmortem log (last).
-
-## Iter 362 · 2026-07-30 — GUARD 19 SHIPPED: Process auto-recovery (wave 3)
-- OS half: supervisor autorestart=true (pod conf READ-ONLY, verified by lock). App half: services/process_recovery.py — record_boot() on lifespan startup → process_boots; restart-loop detection (>=3 boots in 600s, env RECOVERY_LOOP_THRESHOLD/WINDOW_S) → CRITICAL row in EXISTING topup_alerts banner (integration_id=process_recovery, deduped to 1 active) + process_loop_trips row + ERROR log; resolve_if_stable() auto-resolves once boots settle (runs in 60s housekeeping tick, also bumps heartbeat).
-- /api/healthz now returns last_cron_heartbeat + heartbeat_age_s (G9 external-monitor hook). Fixed test_iter120 healthz-exact-dict assertion. Founder-gated GET /admin/qa/guard19-recovery (restarts_7d, boots_in_window, last_boot, loop_trips_7d, loop_active, heartbeat). All Mongo writes best-effort so recovery telemetry can't crash the boot it records.
-- LIVE PROOF (preview): 3 dev hot-reloads tripped the loop detector + raised the critical alert exactly as designed (log + endpoint loop_active:true, loop_trips_7d:1); auto-resolves after 10min stable. Prod uvicorn has NO --reload so boots = real restarts only.
-- VERIFIED: locks test_iter362_guard19_recovery.py 10/10; FULL blocking lane 3803 passed / 0 failed (after healthz test fix); vitest 236; live healthz + guard19 endpoint confirmed.
-- WAVE 3 STATUS: 18✅ 17✅ 21✅ 19✅. NEXT + LAST: G20 postmortem/incident log (auto-creates entry from any RED/critical alert across guards 1-19; /admin/qa Incident-log sub-tab; MTTR).
-
-## Iter 363 · 2026-07-30 — GUARD 20 SHIPPED: Automated postmortem/incident log — WAVE 3 COMPLETE
-- NEW services/incident_log.py = central postmortem funnel: open_incident (deduped by source_key+open, records guard linkage + detected_at), resolve_incident (fills resolution + MTTR on clear), list_incidents (all/open/resolved), incident_stats (open, resolved_30d, mttr_30d mean).
-- HOOKS: process_recovery._trip_loop → open_incident(G19, source_key=process_recovery) placed BEFORE banner-dedup early-return (so repeat trips still guarantee incident) + resolve_if_stable → resolve_incident. topup_alerts.upsert_alerts_from_snapshot → new critical opens incident(integration_health, integration:<id>), recovered integration resolves it.
-- UI: /admin/qa "Incident Log (Guard 20)" section (AdminQADashboard IncidentLogSection) — filter chips all/open/resolved, per-row OPEN/RESOLVED badge + guard + MTTR + root cause + follow-up. data-testid admin-qa-incident-log / incident-row-<id> / incident-filter-*. Founder-gated GET /admin/qa/guard20-incidents.
-- LIVE PROOF: forced 3 backend restarts → G19 loop trip → incident inc_b0ca861b76 auto-opened (guard=G19, "Restart loop: 16 boots in 10min"), rendered in UI (screenshot) + endpoint stats open:1.
-- VERIFIED: locks test_iter363 8/8; FULL blocking lane 3810 passed / 1 known LLM-SSE flake (rerun-green); vitest 236.
-- **WAVE 3 (17,18,19,20,21) COMPLETE.** Remaining guards: 1, 3-7, 9-16 (partial), 15. Next per founder priority TBD.
+# AUREM CTO — PRD (Product Requirements & Change Log)
+
+## Original Problem Statement
+AUREM CTO is a React SPA + FastAPI + MongoDB developer-productivity
+platform ("aurem-dev" service). Focus: shipping features founders/devs
+actually use, with a strict **Verify-First / Zero Mocks / Full Prod-Ready**
+rule. Every fix must be reproducible on real data + tested via real APIs
+before being called "done".
+
+## Users
+- Founder (Teji, `teji.ss1986@gmail.com`) — production account owner.
+- Real developers (currently 30 on prod, 74 on preview).
+- Founder-controlled admin dashboard at `/admin`.
+
+## Core Product Areas
+1. **Two-Agent Loop** — Plan → Approve → Execute → Ship flow (Council models).
+2. **GitHub Integration** — OAuth-first signup, repo listing, push flow.
+3. **Admin Dashboard** — Live LLM/dep status, topup alerts, revenue, funnel.
+4. **QA / Vanguard** — Real-time diagnostic probes + scope-drift audits.
+5. **Session-based bug fixes** — recurring Session N batches driven by
+   real-user QA reports.
+
+---
+
+## Change Log
+
+### 2026-08-01 — GitHub Connect Funnel Telemetry (revenue-item follow-up)
+- **New router**: `backend/routers/github_funnel.py` at
+  `/api/aurem-dev/funnel/github/{event,stats}`
+- **New collection**: `github_funnel_events` (session_id + stage + source)
+- **5 tracked stages**: `cta_click → oauth_redirect → callback_received →
+  linked → repo_selected`. Client fires 1 + 5; server fires 2/3/4.
+- **CTA wiring** at 4 entry points: Login, Signup, GitHubCard,
+  NewUserWizard. `withFunnelParams()` appends `fs` + `fsrc` to the
+  OAuth URL so client + server events share a session_id.
+- **Silent-fail** — telemetry never blocks the OAuth flow.
+- **Tests**: 8/8 backend pytest + 6/6 frontend vitest (real HTTP + real
+  Mongo, zero mocks).
+- **Deploy status**: Shipped to prod. Data collection window: 3-5 days
+  of real new signups. Existing 41-user cohort NOT backfilled.
+
+### 2026-07-31 (evening) — build_hash Fix + Session 7 shipped
+- **Bug**: prod `/api/health` `build_hash` stayed at `m1c61197`
+  (2026-07-31 04:07 UTC) even after Session 6+7 landed. Root cause:
+  `_resolve_build_hash()` used only `main.py`'s mtime; Session 6/7
+  didn't modify main.py so fingerprint never shifted.
+- **Fix (Option A)**: `_resolve_build_hash()` now scans max mtime
+  across all `backend/**/*.py` files (skips `__pycache__`, `.venv`,
+  `node_modules`, `/tests`). Verified on prod: `m1c61197 → m1c615a4`.
+- **Follow-up (Option B, pending)**: Founder to set `BUILD_HASH=$GIT_COMMIT`
+  env var in Emergent deploy config so any future frontend/config-only
+  deploy also updates the fingerprint.
+
+### 2026-07-31 (day) — Session 7: Loop UI-State Reliability
+- Item 1: Cancel loop UI stuck chip → async state sync fixed
+- Item 2: Duplicate plan-bubble dedup
+- Item 3: Approval Panel missing Cancel button safety fix
+- Item 4: Rapid concurrent-send React race condition lock
+- Tests: 17/17 vitest pass (Session7_Item1/2/3 files)
+
+### 2026-07-31 (day) — Session 6: Real-User QA Batch
+- Item 1: VS Code Marketplace real status API in `/admin`
+- Item 2: Tavily `topup_alerts` cross-day dedup (was piling 1 row/day)
+- Item 3: `minimal_edit.py` surgical diff path (avoids full LLM rewrites)
+- Item 4: Live-feed vs Ship-panel state mismatch fix
+- Item 5: "Developers: —" undefined value → reads `stats?.real_developers`
+- Item 6: `qa_manifest.json` stale-data threshold warnings
+- Tests: 47/47 pytest pass
+
+### Earlier (pre-2026-07-31)
+- `services/llm.py` split into `_llm_state.py`, `_llm_routing.py`,
+  `_llm_probes.py` (Phase 0a, 1, 2 done; Phase 3 package conversion
+  pending)
+- Resend API key rotated + Cloudflare-1010 bypass fix
+- Session 5: ORA-chat silent catch cleanup
+
+---
+
+## Prioritized Backlog
+
+### P0 (needed for revenue / stability)
+- **GitHub Connect funnel data collection** — wait 3-5 days for real
+  new-signup data, then targeted fix (b/c/d — the specific drop-off
+  point once data reveals it).
+
+### P1 (soon)
+- **Option B build_hash env var** — Founder to set `BUILD_HASH=$GIT_COMMIT`
+  in Emergent deploy config so frontend-only deploys also shift the
+  fingerprint. (Backend code already reads it.)
+- **`services/llm.py` Phase 3** — convert to a proper package
+  (`llm/__init__.py` + submodules) now that soak is stable.
+
+### P2 (backlog)
+- Session 5 P2 findings: vanguard-config Mongo migration, MCP fallback logging
+- 20+ Unsupervised Background Tasks wrapper
+- Founder-Blocked env vars (G8-G11)
+- VS Code Marketplace publish (blocked on Azure DevOps PAT)
+- `/admin` funnel widget (visualise `/funnel/github/stats` output)
+
+---
+
+## Testing & Credentials
+- Backend: `pytest` in `/app/backend/tests/`
+- Frontend: `vitest` (via `npx vitest run`)
+- QA manifest: `backend/qa_manifest.json` (regen: `python scripts/gen_qa_manifest.py`)
+- **Zero mocks rule**: every test hits real Mongo + real HTTP; no
+  `unittest.mock` in the codebase for feature tests.
+- Credentials: `/app/memory/test_credentials.md` (preview + prod founder).

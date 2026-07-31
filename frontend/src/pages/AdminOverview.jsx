@@ -27,6 +27,7 @@ export default function AdminOverview() {
   const [breakers, setBreakers] = useState(null);     // iter 360 — Guard 17 dependency breakers
   const [councilHealth, setCouncilHealth] = useState(null); // iter 212m-192 — Council A live status
   const [vscodeMarketplace, setVscodeMarketplace] = useState(null); // Session 6 · Item 1 — VS Code real status
+  const [ghFunnel, setGhFunnel] = useState(null); // 2026-08-01 — GitHub Connect drop-off funnel
   const [refreshingHealth, setRefreshingHealth] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -34,7 +35,7 @@ export default function AdminOverview() {
     const h = { Authorization: `Bearer ${getToken()}` };
     const HEALTH_URL = `${process.env.REACT_APP_BACKEND_URL}/api/health`;
     try {
-      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes] =
+      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes, ghFunnelRes] =
         await Promise.allSettled([
           fetch(HEALTH_URL, { signal: AbortSignal.timeout(10000) }).then((r) => r.json()),
           api.get("/usage/public/stats"),
@@ -50,6 +51,7 @@ export default function AdminOverview() {
           api.get("/admin/github-sync", { headers: h }),     // Iter 357 — Guard 8
           api.get("/admin/qa/guard17-breakers", { headers: h }), // Iter 360 — Guard 17
           api.get("/admin/qa/vscode-marketplace-status", { headers: h }), // Session 6 · Item 1
+          api.get("/funnel/github/stats?days=7", { headers: h }),         // 2026-08-01 — GitHub Connect funnel
         ]);
       if (healthRes.status   === "fulfilled") setHealth(healthRes.value);
       if (statsRes.status    === "fulfilled") setStats(statsRes.value.data);
@@ -65,6 +67,7 @@ export default function AdminOverview() {
       if (ghSyncRes.status === "fulfilled") setGhSync(ghSyncRes.value.data);
       if (breakersRes.status === "fulfilled") setBreakers(breakersRes.value.data);
       if (vscodeRes.status === "fulfilled") setVscodeMarketplace(vscodeRes.value.data);
+      if (ghFunnelRes.status === "fulfilled") setGhFunnel(ghFunnelRes.value.data);
     } catch { /* silent */ }
     finally { setLoading(false); }
   }, []);
@@ -518,6 +521,13 @@ export default function AdminOverview() {
           <MetricCard label="Lint blocks"    value={stats?.lint_blocks_caught ?? "—"} />
         </div>
       </Section>
+
+      {/* ── GitHub Connect Funnel (2026-08-01) ─────────────────
+           Real-user CTA drop-off strip. Reads /funnel/github/stats?days=7.
+           Instrumented at 5 stages: cta_click → oauth_redirect →
+           callback_received → linked → repo_selected. Data starts
+           accumulating from 2026-08-01 for NEW signups only. */}
+      <GhFunnelStrip funnel={ghFunnel} />
 
       {/* ── Features checklist ──────────────────────────────── */}
       <Section title="Features — live status (Iter 73-123)">
@@ -1032,6 +1042,116 @@ function Section({ title, children }) {
       </div>
       {children}
     </div>
+  );
+}
+
+// ── GitHub Connect Funnel Strip (2026-08-01) ─────────────────────────
+// Small horizontal 5-stage bar reading /funnel/github/stats?days=7.
+// Shows counts per stage + conv-% between adjacent stages so the
+// drop-off point is one glance away without a curl command.
+function GhFunnelStrip({ funnel }) {
+  // Human-readable labels for the 5 canonical stages.
+  const LABELS = {
+    cta_click:         "CTA click",
+    oauth_redirect:    "OAuth redirect",
+    callback_received: "Callback",
+    linked:            "Linked",
+    repo_selected:     "Repo picked",
+  };
+  const STAGES = [
+    "cta_click", "oauth_redirect", "callback_received", "linked", "repo_selected",
+  ];
+  const stages = funnel?.stages || {};
+  const convs  = funnel?.conversions || [];
+  const totalClicks = stages.cta_click || 0;
+
+  // Empty-state — first 3-5 days of no data. Show a friendly placeholder
+  // instead of an ugly row of zeros.
+  const isEmpty = STAGES.every((s) => (stages[s] || 0) === 0);
+
+  return (
+    <Section title="GitHub Connect funnel (last 7 d)">
+      <div
+        data-testid="github-funnel-strip"
+        style={{
+          background: "rgba(255,255,255,0.04)",
+          border: "1px solid rgba(255,255,255,0.07)",
+          borderRadius: 8,
+          padding: "14px 16px",
+        }}
+      >
+        {isEmpty ? (
+          <div style={{
+            fontSize: 12, color: "var(--text-dim)", lineHeight: 1.5,
+          }} data-testid="github-funnel-empty">
+            No data yet — telemetry starts collecting from the moment
+            new signups click <b>Continue with GitHub</b>. Give it 3-5
+            days of real traffic before targeting the drop-off point.
+          </div>
+        ) : (
+          <>
+            <div style={{
+              display: "flex", alignItems: "flex-end", gap: 4,
+              overflowX: "auto", paddingBottom: 4,
+            }}>
+              {STAGES.map((s, i) => {
+                const n = stages[s] || 0;
+                const conv = i > 0 ? convs[i - 1] : null;
+                return (
+                  <React.Fragment key={s}>
+                    {i > 0 && (
+                      <div
+                        data-testid={`github-funnel-conv-${s}`}
+                        style={{
+                          fontSize: 10, color: "var(--text-faint)",
+                          padding: "0 6px 6px", whiteSpace: "nowrap",
+                          fontFamily: "'JetBrains Mono', monospace",
+                        }}
+                        title={`${conv?.from_n ?? 0} → ${conv?.to_n ?? 0}`}
+                      >
+                        {conv ? `→ ${conv.conv_pct}%` : "→"}
+                      </div>
+                    )}
+                    <div
+                      data-testid={`github-funnel-stage-${s}`}
+                      style={{
+                        flex: 1, minWidth: 64, textAlign: "center",
+                        padding: "8px 6px",
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        borderRadius: 6,
+                      }}
+                    >
+                      <div style={{
+                        fontSize: 18, fontWeight: 500, color: "var(--text)",
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }}>{n}</div>
+                      <div style={{
+                        fontSize: 10, color: "var(--text-dim)", marginTop: 2,
+                      }}>{LABELS[s]}</div>
+                    </div>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+            <div style={{
+              marginTop: 10, fontSize: 10, color: "var(--text-faint)",
+              display: "flex", justifyContent: "space-between",
+              flexWrap: "wrap", gap: 8,
+            }}>
+              <span data-testid="github-funnel-total">
+                {totalClicks} click{totalClicks === 1 ? "" : "s"} · {funnel?.window_days ?? 7} d window
+              </span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                overall conv {totalClicks > 0
+                  ? `${((stages.linked || 0) / totalClicks * 100).toFixed(1)}%`
+                  : "—"}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    </Section>
   );
 }
 

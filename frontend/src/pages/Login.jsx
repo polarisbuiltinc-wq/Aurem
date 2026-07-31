@@ -205,17 +205,31 @@ export default function Login() {
           <button
             type="button"
             data-testid="login-github-oauth"
-            onClick={() => {
-              // Use the live origin so the OAuth callback returns to
-              // whichever domain the user actually loaded the app from
-              // (preview pod, auremcto.com, custom domain). Reading
-              // REACT_APP_BACKEND_URL here would lock us to the build-
-              // time value and break across environments.
-              const base = window.location.origin;
-              // Iter 113 — pass intent=login so backend redirects to
-              // /login (not /signup) if the user clicks Cancel on
-              // GitHub's consent screen.
-              window.location.href = `${base}/api/aurem-dev/github/oauth/connect?signup=1&intent=login`;
+            onClick={async () => {
+              // 2026-08-01 — funnel telemetry: cta_click. Fires before
+              // the redirect; uses fetch keepalive so it survives.
+              try {
+                const { trackFunnel, withFunnelParams } = await import("../lib/githubFunnel");
+                await trackFunnel("cta_click", "login", { intent: "login" });
+                // Use the live origin so the OAuth callback returns to
+                // whichever domain the user actually loaded the app from
+                // (preview pod, auremcto.com, custom domain). Reading
+                // REACT_APP_BACKEND_URL here would lock us to the build-
+                // time value and break across environments.
+                const base = window.location.origin;
+                // Iter 113 — pass intent=login so backend redirects to
+                // /login (not /signup) if the user clicks Cancel on
+                // GitHub's consent screen.
+                const url = withFunnelParams(
+                  `${base}/api/aurem-dev/github/oauth/connect?signup=1&intent=login`,
+                  "login",
+                );
+                window.location.href = url;
+              } catch {
+                // Telemetry lib failure MUST NOT block the OAuth flow.
+                const base = window.location.origin;
+                window.location.href = `${base}/api/aurem-dev/github/oauth/connect?signup=1&intent=login`;
+              }
             }}
             style={{
               padding: "12px 14px", marginBottom: 16,

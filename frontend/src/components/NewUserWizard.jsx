@@ -132,8 +132,27 @@ export default function NewUserWizard({ onComplete }) {
       setErr("Session expired — please log in again.");
       return;
     }
+    // 2026-08-01 — funnel telemetry: cta_click for wizard entry.
+    // Fire-and-forget so popup opens synchronously (avoid pop-up blockers).
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      import("../lib/githubFunnel").then(({ trackFunnel, withFunnelParams }) => {
+        trackFunnel("cta_click", "wizard", { has_token: true });
+        const stitched = withFunnelParams(
+          `${API_BASE}/github/oauth/connect?auth=${encodeURIComponent(token)}`,
+          "wizard",
+        );
+        // Update popup location AFTER telemetry adds session params.
+        if (popupRef.current) {
+          try { popupRef.current.location.href = stitched; } catch {}
+        }
+      }).catch(() => {});
+    } catch {}
     // Open the OAuth flow in a popup. The backend's /connect handler
     // accepts the JWT via `?auth=` so cookieless browsers still work.
+    // NOTE: popup MUST open synchronously in the click handler or
+    // browsers will block it. Funnel stitching above updates the URL
+    // after the popup opens; if telemetry fails, popup still works.
     const url = `${API_BASE}/github/oauth/connect?auth=${encodeURIComponent(token)}`;
     const w = 560, h = 720;
     const left = Math.max(0, window.screenX + (window.outerWidth  - w) / 2);

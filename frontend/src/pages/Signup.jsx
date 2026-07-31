@@ -179,11 +179,23 @@ export default function Signup() {
           <button
             type="button"
             data-testid="signup-github-oauth"
-            onClick={() => {
-              // Live origin keeps callback aligned with whichever
-              // host (preview / auremcto.com / custom) loaded the app.
-              const base = window.location.origin;
-              window.location.href = `${base}/api/aurem-dev/github/oauth/connect?signup=1`;
+            onClick={async () => {
+              // 2026-08-01 — funnel telemetry: cta_click on signup entry.
+              try {
+                const { trackFunnel, withFunnelParams } = await import("../lib/githubFunnel");
+                await trackFunnel("cta_click", "signup", { intent: "signup" });
+                // Live origin keeps callback aligned with whichever
+                // host (preview / auremcto.com / custom) loaded the app.
+                const base = window.location.origin;
+                const url = withFunnelParams(
+                  `${base}/api/aurem-dev/github/oauth/connect?signup=1`,
+                  "signup",
+                );
+                window.location.href = url;
+              } catch {
+                const base = window.location.origin;
+                window.location.href = `${base}/api/aurem-dev/github/oauth/connect?signup=1`;
+              }
             }}
             style={{
               padding: "12px 14px", marginBottom: 16,
