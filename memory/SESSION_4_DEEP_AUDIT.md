@@ -266,3 +266,42 @@ grep '\[silent-catch\]' /var/log/supervisor/backend.*.log
 
 to see the exact file/line/function each swallow came from.
 
+
+---
+
+## APPENDIX B — Silent-catch count RE-RECONCILIATION (2026-07-31 · Session 5 Item 2)
+
+Appendix A's per-file hygiene counts were based on a heuristic classifier that had **two subtle bugs**:
+
+1. **`0 == False` quirk** — the emptiness check `value in (None, "", 0)` returned `True` for `return False`, mistakenly classifying `return False` as a bare-return.
+2. **Narrow preamble slice** — the "is this a UI-hook wrapper?" check only looked at 4 lines above the swallow, missing hook calls that appeared earlier in the try body.
+
+A properly-fixed AST classifier (see `tests/test_session5_item2_orchestrator_silent_catch_lock.py`) reveals the honest picture:
+
+### Corrected honest counts (5 files, 24 total sites)
+
+| File | Sites | UI-hook (legit) | Exc-type (legit) | **Real hygiene** |
+| --- | ---:| ---:| ---:| ---:|
+| `orchestrator.py` | 7 | 7 | 0 | **0** |
+| `llm.py` | 8 | 4 | 1 | **3** |
+| `ora_client.py` | 3 | 0 | 3 | **0** |
+| `ora_chat/deep_research.py` | 3 | 0 | 1 | **2** |
+| `ora_chat/hallucination_classifier.py` | 3 | 0 | 2 | **1** |
+| **TOTAL** | **24** | **11** | **7** | **6** |
+
+**Appendix A said "22 hygiene targets remaining across 6 files".**
+**Corrected reality: 6 hygiene targets** across 3 files (after ora_learning.py's 2 already patched in the earlier P1 batch). That's a 73% reclassification.
+
+### Sequence update
+
+- **Item 2** (orchestrator.py): **NO-OP shipped** — all 7 sites are UI-hook fail-opens, patching would add log spam. Classification locked by 5-test suite that catches any future silent-catch inflation OR any UI-hook wrapper being converted to a real invisible failure.
+- **Item 3** (llm.py 3-way split + 3 hygiene sites): still on deck, unchanged priority.
+- **Item 4** (deferred CI-lane failures — 22 tests): still on deck, unchanged priority.
+- **New Item 5** (ORA-chat cleanup — 3 hygiene sites): 2 in `deep_research.py` + 1 in `hallucination_classifier.py`. Combine with any future ORA-chat work.
+
+### Grep to verify at any time
+
+```bash
+cd /app/backend && python -m pytest tests/test_session5_item2_orchestrator_silent_catch_lock.py -v
+```
+
