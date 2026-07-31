@@ -464,8 +464,14 @@ async def probe_longcat_availability() -> bool:
                     "error":      error,
                     "checked_at": _LONGCAT_LAST_PROBE["checked_at"],
                 })
-        except Exception:
-            pass  # persistence failure never masks the probe result
+        except Exception as _e:
+            # Persistence failure never masks the probe result — this
+            # is intentional fail-open. Log at debug so ops can grep
+            # for Mongo trouble without spamming prod.
+            logger.debug(
+                "[silent-catch] llm.py:468 in probe_longcat_availability "
+                "— council_health_probes persistence failed: %r", _e,
+            )
 
     if not LONGCAT_ENABLED:
         _snapshot(live=LONGCAT_LIVE, http_code=None,
@@ -734,8 +740,15 @@ async def _call_deepseek(messages: list, system: str = "",
                                 (data or {}).get("usage") or {},
                                 temperature=temperature,
                             )
-                        except Exception:
-                            pass
+                        except Exception as _e:
+                            # Ledger failure is non-fatal for chat/scaffold
+                            # (fail-open), but should surface at debug so
+                            # ops can diagnose a broken loop-token track.
+                            logger.debug(
+                                "[silent-catch] llm.py:738 in _call_deepseek "
+                                "— loop_token_ledger.log_llm_usage failed: %r",
+                                _e,
+                            )
                         break
                     except Exception as e:
                         retryable, status = _retryable(e)
@@ -1100,8 +1113,13 @@ async def call_openrouter_model(
                     (data or {}).get("usage") or {},
                     temperature=temperature,
                 )
-            except Exception:
-                pass
+            except Exception as _e:
+                # Same rationale as _call_deepseek:738 — non-fatal
+                # fail-open, but log at debug for grep-ability.
+                logger.debug(
+                    "[silent-catch] llm.py:1104 in call_openrouter_model "
+                    "— loop_token_ledger.log_llm_usage failed: %r", _e,
+                )
             if i > 0:
                 logger.warning(
                     "call_openrouter_model: primary %r failed, served by free fallback %r",
