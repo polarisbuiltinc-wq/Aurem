@@ -703,3 +703,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `HALLUCINATION_CLASSIFY_INTERVAL_S` — auto-detected in backend/services/ora_chat/hallucination_classifier.py (verify) (default: unset) [Iter 0, 2026-07-31T04:36:14.391933Z] <!-- inv:envvar:HALLUCINATION_CLASSIFY_INTERVAL_S -->
 - `services/_llm_state.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-31T17:30:40.543396Z] <!-- inv:service:services/_llm_state.py -->
 - `services/_llm_routing.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-31T18:42:10.924626Z] <!-- inv:service:services/_llm_routing.py -->
+- `services/_llm_probes.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-31T19:43:22.002604Z] <!-- inv:service:services/_llm_probes.py -->
