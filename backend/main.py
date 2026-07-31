@@ -1723,10 +1723,30 @@ def _resolve_build_hash() -> str:
             return _BUILD_HASH
     except Exception:
         pass
-    # Last resort — mtime of this file. Format: m<unix-mins>. Stable
-    # within one deploy, changes whenever the container is rebuilt.
+    # Last resort — max mtime across all backend .py files. Format:
+    # m<unix-mins>. Prev impl only looked at main.py's mtime, so any
+    # deploy that touched routers/services/etc. but not main.py itself
+    # kept an unchanged fingerprint (real bug hit on 2026-07-31 when
+    # Session 6+7 shipped but /api/health still returned the old hash).
+    # Max-across-backend fixes .py-only deploys. Frontend/config-only
+    # deploys still need the proper Option B path (BUILD_HASH env var)
+    # to reliably shift.
     try:
-        mtime = int(os.path.getmtime(__file__) // 60)
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        latest = 0.0
+        for root, _dirs, files in os.walk(backend_dir):
+            # Skip virtualenvs, caches, tests, and node_modules
+            if any(seg in root for seg in ("__pycache__", ".venv", "node_modules", "/tests")):
+                continue
+            for f in files:
+                if f.endswith(".py"):
+                    try:
+                        m = os.path.getmtime(os.path.join(root, f))
+                        if m > latest:
+                            latest = m
+                    except OSError:
+                        pass
+        mtime = int(latest // 60) if latest else int(os.path.getmtime(__file__) // 60)
         _BUILD_HASH = f"m{mtime:x}"
     except Exception:
         _BUILD_HASH = "unknown"
