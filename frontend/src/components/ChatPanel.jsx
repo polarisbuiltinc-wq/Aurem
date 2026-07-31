@@ -341,6 +341,25 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   const lastActivityRef = useRef(0);
   const idleTimerRef = useRef(null);
   const retryAttemptRef = useRef(0);
+  // Session 7 · Item 3 — synchronous send-in-flight lock. Prevents
+  // rapid double-clicks from spawning two racing `startLoop`/chat
+  // API calls (async `busy` state can't close the race — see send()).
+  // Lock is released whenever `busy` transitions back to false, which
+  // covers every completion / error / abort path since they all pass
+  // through setBusy(false). Belt-and-braces: also release after 5 s
+  // if `busy` somehow stays true (e.g., a promise rejected without
+  // its own finally) so a stuck lock can't perma-block sends.
+  const sendInFlightRef = useRef(false);
+  const sendLockTimeoutRef = useRef(null);
+  useEffect(() => {
+    if (!busy && sendInFlightRef.current) {
+      sendInFlightRef.current = false;
+      if (sendLockTimeoutRef.current) {
+        clearTimeout(sendLockTimeoutRef.current);
+        sendLockTimeoutRef.current = null;
+      }
+    }
+  }, [busy]);
   const fileInputRef = useRef(null);
   const taRef = useRef(null);
   // Iter 146 — tracks whether the user has already sent a message in
@@ -1220,6 +1239,26 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     setBusy(false);
     // Iter 212m-57 — clear the slow/reconnecting pill on Stop.
     setStreamHealth({ phase: "idle", silentFor: 0, retryEtaSec: null });
+    // Session 7 · Item 1 (2026-07-31) — SYNCHRONOUSLY clear the
+    // client-side loop state. Before this fix, Stop:
+    //   • aborted the SSE stream ✓
+    //   • POSTed /loop/{id}/cancel to the backend ✓
+    //   • BUT left loopId/loopPhase/loopPlan/loopTerminal untouched
+    //     → the LoopStatusChip poll (10 s) kept reading the ghost
+    //       loop's `paused_for_user` state and re-showing
+    //       "LOOP · AWAITING APPROVAL" with a live timer for
+    //       hundreds of seconds after cancel
+    //     → a follow-up chat message auto-queued behind the dead
+    //       loop instead of processing immediately
+    // Real repro: 263+ seconds observed by founder QA. Fix marks
+    // the loop terminal + clears the pending plan so the approval
+    // card unmounts on the same render tick as the click. The
+    // subsequent poll response is IGNORED because loopTerminalRef
+    // is set — the chip won't reanimate a manually-stopped loop.
+    loopTerminalRef.current = true;
+    setLoopTerminal(true);
+    setLoopPhase("cancelled");
+    setLoopPlan(null);
     // Iter 134 — clean up orphan "thinking…" bubbles when the user
     // clicks Stop. Previously this only cancelled the SSE network call;
     // any assistant placeholders with streaming:true stayed in
@@ -1360,6 +1399,27 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     const readyAttachments = attachments.filter(
       (a) => a.status === "ready" || a.status === "error"
     );
+    // Session 7 · Item 3 (2026-07-31) — SYNCHRONOUS send-in-flight
+    // lock. Real-user QA reproduced: sending two rapid messages
+    // within ~1s triggered the F12 console-error capture ("1 console
+    // error" → "2 console errors"). Root cause: React's `busy` state
+    // is async — if the user click-clicks the send button faster
+    // than React can re-render, BOTH send() invocations read
+    // `busy=false` from their stale closures and both pass the guard.
+    // Result: two racing startLoop / api.post calls → the second
+    // hits a 409 conflict (loop already running) or double-appends
+    // user bubbles → the error surfaces on the console.
+    //
+    // The synchronous ref lock closes the race: a single
+    // `sendInFlightRef.current` check-and-set BEFORE any await point
+    // means the second invocation returns early without touching
+    // state, before React even schedules its first re-render.
+    if (sendInFlightRef.current) {
+      // eslint-disable-next-line no-console
+      console.debug("[send] dropped rapid duplicate send while "
+        + "previous is still in flight");
+      return;
+    }
     // Allow send when EITHER text OR attachments exist — previous gate
     // demanded text, which is why an image-only chat silently refused.
     // Iter 280 P0 — additionally allow send DURING an active loop when
@@ -1375,6 +1435,21 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       || (busy && !isLoopQueueAttempt)
       || !sessionId
     ) return;
+    // Set the ref lock AFTER passing the input-validity guard so a
+    // legitimately-blocked send (empty text, no session, busy in
+    // non-loop mode) doesn't spuriously arm the lock and starve the
+    // next real send.
+    sendInFlightRef.current = true;
+    // Safety-net auto-release: if `busy` never toggles back to false
+    // (unlikely — every real send does setBusy(false) somewhere),
+    // release the lock after 5 s so the next send isn't stuck.
+    if (sendLockTimeoutRef.current) {
+      clearTimeout(sendLockTimeoutRef.current);
+    }
+    sendLockTimeoutRef.current = setTimeout(() => {
+      sendInFlightRef.current = false;
+      sendLockTimeoutRef.current = null;
+    }, 5000);
     if (promptOverride == null) setInput("");
 
     // ──────────────────────────────────────────────────────────────
@@ -2790,6 +2865,43 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       const planMd = formatPlanMarkdown(data.plan);
       const lid = ev.loop_id || null;
       setMessages((m) => {
+        // ── Session 7 · Item 2 (2026-07-31) — duplicate-plan dedup ──
+        // Real-user QA reproduced 3× separately: plan-generation
+        // that takes multiple internal LLM retries + a slow SSE
+        // re-emit + the fallback-poll (Iter 316 Fix A) could each
+        // deliver a plan-ready for the SAME loop_id. Old code only
+        // guarded against duplicate loopPending bubbles — a new
+        // plan bubble was still appended each time no pending was
+        // present. Result: 3–4 identical "Plan ready" bubbles.
+        // Fix: if a `loopPlan` bubble ALREADY exists for this
+        // loop_id, update it in place. Only push a fresh bubble
+        // when we're replacing a pending placeholder for the first
+        // time.
+        const existingPlanIdx = m.findIndex(
+          (row) => row.role === "assistant"
+                && row.loopPlan === true
+                && lid && row.loop_id === lid,
+        );
+        if (existingPlanIdx !== -1) {
+          // Same loop, plan bubble already rendered → update in
+          // place (idempotent). Also drop any leftover pending /
+          // live bubbles so the ghost placeholder doesn't linger.
+          const cleaned = m.filter(
+            (row, i) => i === existingPlanIdx
+              || !(row.role === "assistant"
+                   && (row.loopPending || row.loopLive)),
+          );
+          return cleaned.map((row, i) =>
+            i === cleaned.findIndex(
+              (r) => r.role === "assistant"
+                  && r.loopPlan === true
+                  && r.loop_id === lid,
+            )
+              ? { ...row, content: planMd }
+              : row,
+          );
+        }
+
         // ── Iter 324 · Fix A2 — plan lands → replace the FIRST
         // (most recent) pending bubble, then purge any OTHER
         // stale pending bubbles left over from earlier failed
@@ -2817,6 +2929,20 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           } else {
             out.unshift(row);
           }
+        }
+        // Session 7 · Item 2 — if no pending existed to replace,
+        // append the plan bubble at the end (defensive). This is
+        // the belt-and-braces branch: whatever race condition
+        // stripped the pending bubble prematurely, we still show
+        // the plan.
+        if (!replaced) {
+          out.push({
+            role: "assistant",
+            streaming: false,
+            content: planMd,
+            loopPlan: true,
+            loop_id: lid,
+          });
         }
         return out;
       });
@@ -3217,16 +3343,41 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   // used to POST /confirm and return 499 (bug flagged by
   // bug_testing_agent in iter288). loopTerminalRef is the shared
   // synchronous guard; loopPhase covers the React-render pass.
+  //
+  // Session 7 · Item 1 (2026-07-31) — SAFETY-CRITICAL widening.
+  // Real-user QA found the approval panel sometimes rendered with
+  // ONLY the send button and NO Cancel option. The panel disappears
+  // because `loopPhase === "plan_pending"` was too narrow: during
+  // brief SSE-reconciliation races the phase can transit through
+  // "plan"/"planning"/"awaiting_confirmation" for a render tick,
+  // stripping the entire card. The safety model
+  // ("ORA will only start writing files once you approve — you can
+  //  cancel any time before Step 2") depends on Cancel being present
+  // whenever a plan is shown. Any loopId + loopPlan + non-terminal
+  // combination MUST render the card (which always includes both
+  // Approve & Cancel buttons).
+  const _PLAN_APPROVAL_PHASES = new Set([
+    "plan_pending",
+    "plan",
+    "planning",
+    "awaiting_approval",
+    "awaiting_confirmation",
+  ]);
   const showPlanCard =
     execMode === EXEC_MODES.LOOP &&
-    loopPhase === "plan_pending" &&
     !!loopPlan &&
     !!loopId &&
     !busy &&
     !loopTerminal &&
     !loopTerminalRef.current &&
-    loopPhase !== "error" &&
-    loopPhase !== "done";
+    (_PLAN_APPROVAL_PHASES.has(loopPhase) ||
+      // Extra safety net: if we have a plan + loop-id + non-terminal
+      // AND the phase is anything OTHER than an active execution/ship
+      // state, still show the approval card. This is the last defence
+      // against a phase-name we don't recognise stripping the Cancel.
+      !["execute", "executing", "verify", "verifying", "scan",
+        "security", "ship", "shipping", "done", "error",
+        "cancelled", "failed"].includes(loopPhase));
 
   return (
     <div

@@ -1,6 +1,38 @@
 # AUREM CTO — Product Requirements Document (living)
 
-**Last updated**: 2026-07-31 20:50 UTC (Session 6 · Items 1–6 real-user QA batch landed on preview)
+**Last updated**: 2026-07-31 21:05 UTC (Session 7 · Loop UI-State Reliability batch landed on preview)
+**Live**: https://auremcto.com — Session 5 LLM split + Session 6 QA batch shipped; Session 7 in flight
+
+## Original problem statement
+Optimize onboarding, strict separation of backend founder logic, and expand codebase health scanners.
+Language: **Hinglish** — main agent responds in Hinglish.
+
+## What's implemented (chronological, most recent first)
+
+### Session 7 · Loop UI-State Reliability Batch (2026-07-31 21:05) — 3 real-user QA bugs
+Item-by-item, all zero-mocks:
+
+- **Item 1 · Stop-loop UI stuck + SAFETY-CRITICAL missing Cancel button**: Backend cancel succeeded but frontend showed "LOOP · AWAITING APPROVAL" with a live timer for 263+ seconds (stale poll rehydrated ghost loop). Additionally the plan-approval panel sometimes rendered with ONLY "Run loop" send button + NO Cancel — safety-critical gap in the approval-gate promise. Fixes:
+  - Stop handler now synchronously clears `loopTerminalRef`, `loopTerminal`, `loopPhase="cancelled"`, `loopPlan=null` — chip poll can't reanimate a manually-stopped loop.
+  - `showPlanCard` gate broadened past strict `plan_pending` to a set of "waiting for user" phases (`plan`, `planning`, `awaiting_approval`, `awaiting_confirmation`) + fallback safety net for unrecognized phase names — guarantees Cancel is always rendered when a plan is shown.
+  - PlanApprovalCard's Cancel button is unconditional in the source; regression test locks that both buttons appear even when `disabled`. **6/6 vitest pass**.
+
+- **Item 2 · Duplicate plan-bubble on retries**: Real repro 3× — plan-generation with LLM retries + slow SSE re-emit + Iter 316 fallback poll could each deliver plan-ready → 3-4 identical bubbles in chat. Fix: `handleLoopEvent` plan-absorb block now checks `existingPlanIdx` by `loop_id` and updates in place (idempotent) instead of appending. Belt-and-braces branch appends when no pending exists so plans are never silently lost. **5/5 vitest pass**.
+
+- **Item 3 · Console errors on rapid concurrent chat**: Root-cause diagnosed: React's `busy` state is async — rapid double-clicks let both `send()` invocations read `busy=false` from stale closures and pass the guard, spawning two racing `startLoop`/chat calls (second hits 409 → surfaces on F12 error widget). Fix: synchronous `sendInFlightRef` ref-lock armed BEFORE any await point in `send()`, released either via `useEffect` on `busy=false` (covers all completion/error/abort paths) OR a 5s safety timeout (belt-and-braces for stuck promises). Debug log (not error) on dropped duplicate keeps prod traceable without console-noise. **6/6 vitest pass**.
+
+**Session 7 tally: 17/17 tests pass**. Zero backend changes — all fixes are contained to ChatPanel.jsx + PlanApprovalCard.jsx.
+
+### Session 6 · Real-User QA Batch (2026-07-31 20:50) — 6 production bugs
+Items 1-6 with E2E proof (VS Code fake-green badge → real Marketplace probe; Tavily duplicate criticals → day-agnostic dedup + 18→1 cleanup; diff scope-creep → surgical minimal_edit fast path; live-feed vs Ship-panel mismatch → phase-aware frontier; "Developers: —" → correct field; test-count staleness → manifest refresh + age warning). **53/53 tests pass**. Item 7 observation: signup→GitHub-connect 23.1% conversion.
+
+### Session 5 · LLM.py Split Phase 0a + 1 + 2 (2026-07-31 17:00-18:55)
+`services/_llm_state.py` + `_llm_routing.py` + `_llm_probes.py` extracted with ModuleType hook on `services.llm` for `LONGCAT_LIVE` transparent read/write routing. 119/119 across all LLM/council/probe/routing/CEO suites.
+
+### Session 5 · Item 5 (2026-07-31) — Cloudflare-1010 founder-alert fix + ORA-chat hygiene
+P0 real prod bug: `founder_alerts._send_via_resend` was silently 403'ing every G10 alert. Fixed with named UA header. Founder confirmed inbox delivery.
+
+
 **Live**: https://auremcto.com — Session 5 LLM split (Phase 0a + 1 + 2) landed; Session 6 QA-batch in flight
 
 ## Original problem statement
