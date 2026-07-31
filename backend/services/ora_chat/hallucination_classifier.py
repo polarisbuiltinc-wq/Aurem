@@ -42,7 +42,16 @@ _BATCH_MAX       = 40      # cap the batch so the LLM call stays cheap
 async def unreviewed_count() -> int:
     try:
         db = get_db()
-    except Exception:
+    except Exception as _e:
+        # Session 5 · Item 5 — fail-OPEN: 0 means "nothing to
+        # classify", so the batch scheduler treats a Mongo outage
+        # as a below-trigger no-op instead of a crash. Log at debug
+        # so DB flakes are still traceable.
+        logger.debug(
+            "[silent-catch] hallucination_classifier.unreviewed_count "
+            "db_unavailable err=%s",
+            type(_e).__name__,
+        )
         return 0
     return await db.ora_hallucination_log.count_documents({"reviewed": False})
 

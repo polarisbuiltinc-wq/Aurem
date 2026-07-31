@@ -1,6 +1,6 @@
 # AUREM CTO — Product Requirements Document (living)
 
-**Last updated**: 2026-07-31 03:25 UTC (Iter 367 · Session 4 — Step A billing cron + Step B real Stripe E2E + Step C deep discovery) — see CHANGELOG.md for the full narrative
+**Last updated**: 2026-07-31 17:10 UTC (Iter 367 · Session 5 · Item 5 — ORA-chat silent-catch hygiene + Cloudflare-1010 founder-alert bug caught during Resend live-verify)
 **Live**: https://auremcto.com — Iter 367 deployed 01:12 UTC via deployer_agent
 
 ## Original problem statement
@@ -15,6 +15,19 @@ Loop engine stuck bugs (Phase 0), then build the next 4 competitive differentiat
 Language: **Hinglish** — main agent responds in Hinglish.
 
 ## What's implemented (chronological, most recent first)
+
+### Iter 367 · Session 5 · Item 5 (2026-07-31) — ORA-chat silent-catch hygiene + Cloudflare-1010 founder-alert fix
+- **P0 REAL PROD BUG discovered during live-verify**: `services/founder_alerts._send_via_resend` was POSTing to `api.resend.com/emails` via `urllib.request.urlopen` with the default `Python-urllib/3.11` User-Agent. Cloudflare returns HTTP 403 (error code 1010) for that UA → every G10 founder alert has been silently 403'd in production since the module was written. The outer `try/except` swallowed it, so the outage was completely invisible. **Fix**: added explicit `User-Agent: AUREM-Guardian/1.0 (+https://aurem.live)` header. Three real live sends proved the fix (Resend message IDs `af7cfc11`, `286306c4`, `1011ed68`). No other Resend caller was affected — the rest use `httpx` which sends a proper UA.
+- **ENV hardening**: added `FOUNDER_ALERT_EMAIL=teji.ss1986@gmail.com` and `FOUNDER_ALERT_FROM="AUREM Guardian <alerts@aurem.live>"` to `backend/.env`. The old default pointed at `alerts@auremcto.com`, but `auremcto.com` is `not_started` in Resend — sends would 403 even with the UA fix. `aurem.live` IS verified. Regression test asserts the env keeps `aurem.live`.
+- **Item 5 (silent-catch hygiene)** — 4 sites in `services/ora_chat/` cleaned up while preserving fail-OPEN behavior:
+  - `deep_research._gh_fetch_repo_contents` git-tree fetch failure → `logger.debug("[silent-catch] tree_fetch_failed ...")` + returns metadata-only.
+  - `deep_research._gh_fetch_repo_contents` per-file content fetch failure → debug log per bad candidate, loop continues.
+  - `deep_research._robots_allows` robots.txt fetch failure → debug log + fail-OPEN allow (SSRF gate + downstream error path still cover us).
+  - `hallucination_classifier.unreviewed_count` DB outage → debug log + returns 0 (treated as below-trigger no-op).
+  - `deep_research._is_safe_public_url` L396 `except ValueError: pass` documented as **deliberate control-flow** (ValueError = "not a bare IP, fall through to DNS resolve") — NO-OP with a comment, same pattern as the orchestrator activity-hook finding.
+- **Verification (zero mocks)**: `tests/test_session5_item5_ora_chat_silent_catch.py` (6 tests) exercises each fail path with a real raising httpx client / real monkey-patched `get_db`. `tests/test_session5_item5_founder_alert_cf1010_regression.py` (3 tests) is a static regression guard so future refactors can't silently drop the UA header or downgrade to the `auremcto.com` sender. **9/9 pass in 0.45s**. Zero regressions across 25 related ora_chat tests.
+- **G10 endpoint verified GREEN with real audit row**: `/api/aurem-dev/admin/qa/guard10-founder-alerts` → `{state: "GREEN", enabled: true, last_send_at: "2026-07-31T17:05:07", last_delivered: true}`.
+- **RESEND_API_KEY rotated** to new value `re_K75xH2UQ_DuZU1d8RTQJt2r99xJAy4Yde` (founder-provided via Emergent secrets); backend restarted; verified via live domains-list API.
 
 ### Iter 367 · Session 4 (2026-07-31) — Step A billing cron + Step B real Stripe E2E + Step C deep discovery
 - **STEP A** (P0 revenue guardrail): `bill_maxx_overages()` now owned by a dedicated `schedule_maxx_overage_billing()` task in `services/billing_cron.py`, wired into `main.py` startup as `app.state.maxx_overage_billing_task`. Configurable via `BILLING_CRON_DAY` (default 1) & `BILLING_CRON_HOUR` (default 0 UTC), clamped to safe ranges. Idempotent within a YYYY-MM bucket via `billing_cron_runs` collection. Removed the piggyback from `daily_digest.py::_run_once()` with migration signpost. Live proof: backend log shows `sleeping 21h until 2026-08-01T00:00:00+00:00`. 16/16 tests green.

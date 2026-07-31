@@ -76,6 +76,13 @@ def _send_via_resend(conf: dict, subject: str, html: str) -> dict:
         headers={
             "Authorization": f"Bearer {conf['api_key']}",
             "Content-Type":  "application/json",
+            # Session 5 · Item 5 live-verify fix — Resend sits behind
+            # Cloudflare which returns HTTP 403 (CF error 1010) for
+            # requests with the default `Python-urllib/*` User-Agent.
+            # All G10 alerts were being silently dropped in production
+            # until the founder rotated the key and asked for a real
+            # delivery-proof send. A named UA passes CF's bot filter.
+            "User-Agent":    "AUREM-Guardian/1.0 (+https://aurem.live)",
         },
     )
     with urllib.request.urlopen(req, timeout=10) as r:

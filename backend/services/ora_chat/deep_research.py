@@ -210,8 +210,15 @@ async def _gh_fetch_repo_contents(c: httpx.AsyncClient, headers: dict,
                      if t.get("type") == "blob"]
             out["tree"] = paths[:100]
             out["tree_truncated"] = len(paths) > 100
-    except Exception:                                        # noqa: BLE001
-        pass
+    except Exception as _e:                                  # noqa: BLE001
+        # Session 5 · Item 5 — fail-OPEN: repo scan degrades to
+        # metadata-only when the tree API fails (rate-limit / 5xx /
+        # network). Log at debug so the sweep is observable in tests.
+        logger.debug(
+            "[silent-catch] deep_research._gh_fetch_repo_contents "
+            "tree_fetch_failed owner=%s repo=%s err=%s",
+            owner, name, type(_e).__name__,
+        )
     # Pick the highest-signal readable files.
     candidates = [p for p in out["tree"]
                   if p.lower() in ("readme.md", "claude.md", "readme.rst",
@@ -225,7 +232,15 @@ async def _gh_fetch_repo_contents(c: httpx.AsyncClient, headers: dict,
             if r.status_code == 200:
                 out["files"].append({"path": path,
                                       "content_head": r.text[:5000]})
-        except Exception:                                    # noqa: BLE001
+        except Exception as _e:                              # noqa: BLE001
+            # Session 5 · Item 5 — one bad file must not abort the
+            # remaining README/CLAUDE candidates; fail-OPEN with a
+            # debug trace instead of silent `continue`.
+            logger.debug(
+                "[silent-catch] deep_research._gh_fetch_repo_contents "
+                "file_fetch_failed owner=%s repo=%s path=%s err=%s",
+                owner, name, path, type(_e).__name__,
+            )
             continue
     return out
 
@@ -393,6 +408,10 @@ def _is_safe_public_url(url: str) -> tuple[bool, str]:
         ok, why = _ip_is_public(bare)
         return (ok, why) if not ok else (True, "")
     except ValueError:
+        # Session 5 · Item 5 — DELIBERATE control-flow, NOT a silent
+        # failure: ValueError here means `bare` isn't a valid IP
+        # literal → fall through to the DNS-resolve branch below.
+        # (Same pattern as orchestrator.py activity-hook NO-OPs.)
         pass
     # DNS resolve → validate EVERY answer.
     try:
@@ -435,7 +454,17 @@ async def _robots_allows(client: httpx.AsyncClient, url: str) -> bool:
                         rule = ln.strip().split(":", 1)[1].strip()
                         if rule:
                             disallows.append(rule)
-        except Exception:
+        except Exception as _e:
+            # Session 5 · Item 5 — fail-OPEN by design: robots.txt
+            # is best-effort. A site that truly blocks will 403 the
+            # actual fetch (SSRF gate + downstream error path handle
+            # it). Log at debug so cache-misses / DNS flakes are
+            # observable during the sweep.
+            logger.debug(
+                "[silent-catch] deep_research._robots_allows "
+                "robots_fetch_failed base=%s err=%s",
+                base, type(_e).__name__,
+            )
             disallows = []
         _robots_cache[base] = (now, disallows)
     path = parts.path or "/"
