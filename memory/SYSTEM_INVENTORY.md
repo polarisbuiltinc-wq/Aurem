@@ -700,3 +700,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `BILLING_CRON_HOUR` — auto-detected in backend/services/billing_cron.py (verify) (default: unset) [Iter 0, 2026-07-31T03:43:53.595752Z] <!-- inv:envvar:BILLING_CRON_HOUR -->
 - `INTEGRATION_PROXY_URL` — auto-detected in backend/tests/test_session4_step_b_stripe_real_e2e.py (verify) (default: unset) [Iter 0, 2026-07-31T03:43:53.595765Z] <!-- inv:envvar:INTEGRATION_PROXY_URL -->
 - `ORA_API_KEY` — auto-detected in backend/services/ora_client.py (verify) (default: unset) [Iter 0, 2026-07-31T04:07:13.541735Z] <!-- inv:envvar:ORA_API_KEY -->
+- `HALLUCINATION_CLASSIFY_INTERVAL_S` — auto-detected in backend/services/ora_chat/hallucination_classifier.py (verify) (default: unset) [Iter 0, 2026-07-31T04:36:14.391933Z] <!-- inv:envvar:HALLUCINATION_CLASSIFY_INTERVAL_S -->

@@ -219,3 +219,50 @@ Session 1 flagged it. Session 4 confirms it's still that way. Rename in the next
 ---
 
 **End of Session 4 Discovery Report — 15 services deep-audited, 1 P0 + 7 P1 + 6 P2 findings, ZERO code modified in this session.**
+
+---
+
+## APPENDIX A — Silent-catch reconciliation (added 2026-07-31 post-batch)
+
+The initial audit above quoted **"32 total exception-swallowing / silent-return-None sites"**. That number came from a regex heuristic which turned out to be an **UNDERCOUNT**. After the P1 batch shipped, a precise AST scan across all 15 audited files was run and the honest picture is:
+
+| Bucket | Count | Where |
+| --- | ---:| --- |
+| **✅ Patched this session** | **21** | `local_tools.py` (13) + `graph_builder.py` (4) + `project_brain.py` (3) + `repo_context.py` (1) |
+| **Remaining across the other 11 files** | **29** | — |
+| **TOTAL** | **50** | — |
+
+### The 29 remaining, classified by intent
+
+| Category | Count | Notes |
+| --- | ---:| --- |
+| **✅ Legit silent-by-design** | **7** | `OSError` on optional file reads (breaker files), `JSONDecodeError` parse guards, `asyncio.CancelledError` graceful-shutdown swallows. Logging these would be spam. |
+| **🔴 Real hygiene targets** | **22** | Split across 6 files below. |
+
+### The 22 remaining hygiene targets — per file
+
+| File | Sites | Session priority |
+| --- | ---:| --- |
+| `services/ora_learning.py` | **2** ✅ **DONE 2026-07-31** | Priority 1 (was the culprit of the live P0). Both patched: L98 rate-limit debug, L135 invariant WARNING. See `tests/test_session4_p1_ora_learning_silent_catch.py`. |
+| `services/orchestrator.py` | 8 | Priority 2 — tool-loop state machine, careful review needed (some `except: pass` are intentional resume points). |
+| `services/llm.py` | 7 | Priority 3 — combine with the deferred `llm.py` 3-way split session; natural time to clean up. |
+| `services/ora_client.py` | 1 | Priority 4 — cleanup batch alongside any ORA-chat work. |
+| `services/ora_chat/deep_research.py` | 2 | Priority 4. |
+| `services/ora_chat/hallucination_classifier.py` | 1 | Priority 4. |
+| **TOTAL remaining after 2026-07-31 P1** | **20** | Down from 22. |
+
+### Grep pattern to find every patched site
+
+```bash
+grep -rn 'logger\.debug("\[silent-catch\]' backend/services/
+grep -rn 'logger\.warning("\[silent-catch\]' backend/services/
+```
+
+Every previously-invisible failure now surfaces with the `[silent-catch]` prefix. Ops can:
+
+```bash
+grep '\[silent-catch\]' /var/log/supervisor/backend.*.log
+```
+
+to see the exact file/line/function each swallow came from.
+

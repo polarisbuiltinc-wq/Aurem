@@ -95,8 +95,15 @@ async def maybe_log_ora_escalation(
             cap = int(os.environ.get("ORA_LEARNING_HOURLY_CAP", "20"))
             if recent >= cap:
                 return
-        except Exception:
-            pass
+        except Exception as _e:
+            # Rate-limit lookup failed — proceed WITHOUT the cap (fail-open).
+            # Log at debug so this doesn't hide behind silence: during
+            # Session 4's live ORA outage we learned that silent skips
+            # here mean zero learning samples for hours with no alert.
+            logger.debug(
+                "[silent-catch] ora_learning.py:98 in maybe_log_ora_escalation "
+                "— rate-limit lookup failed: %r", _e,
+            )
 
         # Call ORA with the same prompt. system_hint guides ORA to act
         # as a senior reviewer evaluating AUREM's reply, not just re-answer.
@@ -132,8 +139,17 @@ async def maybe_log_ora_escalation(
             "ora_error": ora_err,
             "version": 1,
         })
-    except Exception:
+    except Exception as _e:
         # Strict invariant: shadow-logging never crashes the request path.
+        # BUT — Session 4's live P0 taught us that ALSO never logging
+        # means a total outage is invisible. Log at warning (not debug)
+        # because if we hit this catch-all it means one of the inner
+        # try/except blocks failed unexpectedly — that IS worth ops
+        # attention.
+        logger.warning(
+            "[silent-catch] ora_learning.py:135 in maybe_log_ora_escalation "
+            "— shadow-logging invariant caught unexpected error: %r", _e,
+        )
         return
 
 

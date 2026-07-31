@@ -310,3 +310,39 @@ def test_package_json_bumps_are_correct():
            res.get("form-data", "") >= "^4.0.6"
     assert res.get("tmp", "").startswith("^0.2.6") or res.get("tmp", "") >= "^0.2.6"
     assert res.get("postcss", "").startswith("^8.5.1")
+
+
+def test_vite_pinned_to_v6_via_resolutions():
+    """Deploy-blocker regression guard. `vitest@3.x` allows a transitive
+    `vite@^5.0.0 || ^6.0.0 || ^7.0.0-0`; without a `resolutions.vite`
+    pin, yarn resolves to vite@7.3.6 which requires node ≥20.19 —
+    Emergent's platform base image is on node 20.18.1 → build fails
+    at step #8 with `error vite@7.3.6: The engine "node" is
+    incompatible`. Prevent recurrence by asserting BOTH:
+      1. `resolutions.vite` is pinned to ^6.x
+      2. yarn.lock resolves vite to a single 6.x version (no 7.x
+         drift after a future `yarn install`)
+    """
+    import json, re
+    pkg = json.loads((ROOT / "frontend" / "package.json").read_text())
+    res = pkg.get("resolutions", {})
+    assert res.get("vite", "").startswith("^6."), (
+        f"resolutions.vite MUST be ^6.x — without it, vitest 3.x "
+        f"pulls transitive vite@7.x which needs node ≥20.19 and "
+        f"breaks Emergent's node 20.18.1 base image. Got: {res.get('vite')!r}"
+    )
+    # Also verify the lockfile agrees — no vite@7.x block exists.
+    lock = (ROOT / "frontend" / "yarn.lock").read_text()
+    seven_x = re.findall(r'^vite@[^\s]*7\.', lock, re.MULTILINE)
+    assert not seven_x, (
+        f"yarn.lock has vite@7.x entries — re-run `yarn install` to "
+        f"regenerate. Found: {seven_x}"
+    )
+    # And exactly one version block for vite
+    version_lines = re.findall(r'^vite@[^\n]+\n\s+version "([^"]+)"',
+                               lock, re.MULTILINE)
+    if version_lines:
+        # All resolved vite entries must be 6.x
+        assert all(v.startswith("6.") for v in version_lines), (
+            f"yarn.lock resolves vite to non-6.x versions: {version_lines}"
+        )
