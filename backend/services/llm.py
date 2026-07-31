@@ -180,60 +180,25 @@ def _groq_key() -> str:
     return os.environ.get("GROQ_API_KEY", "")
 
 
-# Iter 212m-49 — provenance stash. The non-streaming `_call_deepseek`
-# returns a plain string so the existing SSE pipeline can't attach
-# "served by Groq" metadata to the response object directly. We park
-# the most-recent provider in a contextvar so the orchestrator + SSE
-# `done` frame can read it and surface a "⚡ free mode" pill on the
-# frontend. ContextVar (not module-global) so concurrent requests
-# never read each other's provenance.
-from contextvars import ContextVar
-
-
-# Iter 212m-49 — provenance stash. The non-streaming `_call_deepseek`
-# returns a plain string so the existing SSE pipeline can't attach
-# "served by Groq" metadata to the response object directly. We park
-# the most-recent provider in a MUTABLE dict referenced from a
-# ContextVar so concurrent requests never read each other's
-# provenance, AND child asyncio tasks (the chat_stream worker) can
-# WRITE to the same dict the parent task reads from. Plain
-# ContextVar.set() in a child task is invisible to the parent
-# because each task gets its own context copy — so we mutate the
-# dict in place instead.
-def _new_provenance_slot() -> dict:
-    return {"provider": "openrouter", "model": "", "is_emergency": False}
-
-
-_last_provider_ctx: ContextVar[dict] = ContextVar(
-    "aurem_last_llm_provider",
-    default=_new_provenance_slot(),
+# Iter 212m-49 · Session 5 Phase 0a — provenance stash + LongCat
+# probe snapshot moved into `services/_llm_state.py`. The state
+# lives in a single canonical place so the upcoming `probes.py` /
+# `openrouter_client.py` extractions can read/write the same
+# ContextVar without divergent shadow copies.
+#
+# Everything below is a RE-EXPORT at module scope so external
+# callers (`from services.llm import get_last_provider`, tests
+# doing `llm._LONGCAT_LAST_PROBE["error"]`, etc.) keep working
+# byte-for-byte identically to pre-split behavior.
+from services._llm_state import (
+    _new_provenance_slot,
+    _last_provider_ctx,
+    _set_last_provider,
+    get_last_provider,
+    reset_last_provider,
+    _LONGCAT_LAST_PROBE,
 )
-
-
-def _set_last_provider(provider: str, model: str) -> None:
-    slot = _last_provider_ctx.get()
-    slot["provider"]     = provider
-    slot["model"]        = model
-    slot["is_emergency"] = (provider == "groq")
-
-
-def get_last_provider() -> dict:
-    """Returns provenance for the last LLM call on THIS request context.
-    Shape: {"provider": "openrouter"|"groq", "model": "<slug>",
-    "is_emergency": True iff served by the Groq emergency fallback}.
-    Reset per-request via the contextvar so concurrent users never
-    cross-pollute."""
-    return dict(_last_provider_ctx.get())
-
-
-def reset_last_provider() -> None:
-    """Call at the START of a request to clear stale provenance from a
-    previous turn in the same worker. Installs a FRESH mutable dict
-    so child tasks spawned later inherit a clean slot AND mutations
-    they perform are visible to the parent (the dict reference is
-    shared, only the ContextVar copy semantics break parent-child
-    propagation of `ContextVar.set` calls)."""
-    _last_provider_ctx.set(_new_provenance_slot())
+from contextvars import ContextVar  # noqa: F401 — kept for existing `llm.ContextVar` external access
 
 
 async def _call_groq(
@@ -403,19 +368,11 @@ CEO_RESCUE_MODEL      = os.getenv("CEO_RESCUE_MODEL", "deepseek/deepseek-chat")
 # back True without a code change.
 LONGCAT_LIVE = True
 
-# Iter 212m-192 — In-memory snapshot of the latest probe outcome so
-# the admin API can render a live badge without re-probing on every
-# request. Written by `probe_longcat_availability()` and read by
-# `routers/admin.py:council_health`. Never a source of truth over
-# `LONGCAT_LIVE` — this dict just adds context (last error, epoch).
-_LONGCAT_LAST_PROBE: dict = {
-    "live":       True,           # mirror of LONGCAT_LIVE
-    "checked_at": 0.0,             # epoch seconds
-    "http_code":  None,           # None when never probed / network error
-    "error":      None,           # short string; None on success
-    "model":      "",             # resolved model slug at probe time
-    "enabled":    False,          # LONGCAT_ENABLED at probe time
-}
+# Iter 212m-192 · Session 5 Phase 0a — `_LONGCAT_LAST_PROBE` now
+# lives in `services/_llm_state.py`. It was already imported at the
+# top of this file so `probe_longcat_availability()` below sees the
+# same dict, and `routers/admin.py`'s `from services.llm import
+# _LONGCAT_LAST_PROBE` still resolves via the module-level re-export.
 
 
 async def probe_longcat_availability() -> bool:
