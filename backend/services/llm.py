@@ -287,61 +287,27 @@ def _retry_delay(attempt: int) -> float:
     return random.uniform(0, cap)
 
 # Token caps per mode.
-# Iter 212m-26 — Production fix: raised `chat` from 1500 → 4000.
-# A 1500-token ceiling on chat replies meant GLM-5.2 was truncating
-# multi-paragraph answers mid-sentence, surfacing as the "ORA only
-# replies one line then stops" bug. Allow an env override so the
-# value can be tuned in production without redeploying.
-MAX_TOKENS = {
-    "chat":    int(os.getenv("LLM_CHAT_MAX_TOKENS", "4000")),
-    "code":    int(os.getenv("LLM_CODE_MAX_TOKENS", "3500")),
-    "review":  int(os.getenv("LLM_REVIEW_MAX_TOKENS", "4096")),
-    "analysis": int(os.getenv("LLM_ANALYSIS_MAX_TOKENS", "2000")),
-    # Iter 212m-161 — Ask Advisor dedicated budget (was hard-coded
-    # in routers/chat.py before the P1 advisor-fallback refactor).
-    "advisor": int(os.getenv("LLM_ADVISOR_MAX_TOKENS", "2500")),
-    # Iter 212m-165 — Council C dedicated mode (writing tasks).
-    # DeepSeek-only, lighter budget than chat because writing
-    # outputs tend to be tighter (emails, copy, drafts).
-    "write":   int(os.getenv("LLM_WRITE_MAX_TOKENS", "2500")),
-    "title":     30,
-    "default": int(os.getenv("LLM_DEFAULT_MAX_TOKENS", "1500")),
-}
-
-# Temperature per mode
-TEMPERATURE = {
-    "code":    0.0,
-    "review":  0.0,
-    "title":   0.0,
-    "chat":    0.7,
-    "analysis": 0.4,
-    # Iter 212m-161 — Ask Advisor (slightly creative but factual).
-    "advisor": 0.2,
-    # Iter 212m-165 — Council C writing tasks (slightly more creative
-    # than chat — readers expect personality in marketing copy).
-    "write":   0.8,
-    "default": 0.3,
-}
-
-_DEEPSEEK_HOSTS = ["deepseek", "streamlake", "deepinfra", "novita"]
-
-# Modes that use Claude for better code quality
-_CLAUDE_MODES = {"code", "review"}
-
-# ─── Iter 212m-159 — V2 council routing flags ─────────────────────────────────
-# Per /app/memory/V2_ROUTING_ROADMAP.md. All flags default False so
-# existing callers see zero behaviour change until env enables them.
-#
-#   LONGCAT_ENABLED       → Council A primary swaps GLM-5.2 → LongCat-2.0
-#                           Claude Sonnet 4.5 remains the rescue for pro/maxx.
-#   COUNCIL_B_GLM_ENABLED → mode="analysis" primary uses GLM-5.2 with DeepSeek
-#                           rescue.  When False, mode="analysis" behaves like
-#                           mode="chat" (DeepSeek only) — Council B unchanged.
-#   CEO_RESCUE_ENABLED    → CEO judge wraps its GLM-5.2 call in a
-#                           2 s timeout; on timeout falls back to DeepSeek.
-LONGCAT_ENABLED       = os.getenv("LONGCAT_ENABLED", "false").lower() == "true"
-COUNCIL_B_GLM_ENABLED = os.getenv("COUNCIL_B_GLM_ENABLED", "false").lower() == "true"
-CEO_RESCUE_ENABLED    = os.getenv("CEO_RESCUE_ENABLED", "false").lower() == "true"
+# Iter 212m-26 · Session 5 Phase 1 — `MAX_TOKENS`, `TEMPERATURE`,
+# `_DEEPSEEK_HOSTS`, `_CLAUDE_MODES` and the V2 council routing
+# flags moved into `services/_llm_routing.py`. Re-exported unchanged
+# at module scope so all 45 importers keep working:
+#   `from services.llm import MAX_TOKENS`  →  still resolves.
+#   `services.llm.LONGCAT_ENABLED`         →  still resolves.
+# `cap_for()`, `temperature_for()`, `council_a_primary_model()`,
+# `council_b_primary_model()` are defined below (re-imported near
+# their previous location) so the ordering — `_call_groq` still
+# references them — stays correct.
+from services._llm_routing import (
+    MAX_TOKENS,
+    TEMPERATURE,
+    _DEEPSEEK_HOSTS,
+    _CLAUDE_MODES,
+    LONGCAT_ENABLED,
+    COUNCIL_B_GLM_ENABLED,
+    CEO_RESCUE_ENABLED,
+    CEO_PRIMARY_TIMEOUT_S,
+    CEO_RESCUE_MODEL,
+)
 
 # OpenRouter model strings
 # Iter 212m-193 — Swapped Council A primary from meituan/longcat-2.0
@@ -354,10 +320,6 @@ CEO_RESCUE_ENABLED    = os.getenv("CEO_RESCUE_ENABLED", "false").lower() == "tru
 # Full run in `backend/tests/manual_ab_model_swap.py` — re-run to
 # compare against a future candidate before swapping again.
 _LONGCAT_MODEL  = os.getenv("LONGCAT_MODEL", "anthropic/claude-sonnet-4.5")
-
-# CEO rescue config (used when CEO_RESCUE_ENABLED=True — see core/loop hub)
-CEO_PRIMARY_TIMEOUT_S = float(os.getenv("CEO_PRIMARY_TIMEOUT_S", "2.0"))
-CEO_RESCUE_MODEL      = os.getenv("CEO_RESCUE_MODEL", "deepseek/deepseek-chat")
 
 
 # Iter 212m-160 — LongCat live-availability flag.
@@ -552,37 +514,16 @@ async def periodic_longcat_reprobe(interval_seconds: int = 900) -> None:
             return
 
 
-def council_a_primary_model() -> str:
-    """Returns the Council A primary model id.
-
-    V2: LongCat-2.0 when LONGCAT_ENABLED=True AND the live-probe flag
-    `LONGCAT_LIVE` is True; otherwise legacy GLM-5.2.  The flag is
-    refreshed on every supervisor restart by `probe_longcat_availability()`,
-    so the moment LongCat publishes upstream the next boot picks it up
-    without a code change.
-    """
-    if LONGCAT_ENABLED and LONGCAT_LIVE:
-        return _LONGCAT_MODEL
-    return _GLM_MODEL
-
-
-def council_b_primary_model() -> str:
-    """Returns the Council B primary model id.
-
-    V2: GLM-5.2 when COUNCIL_B_GLM_ENABLED=True, else DeepSeek V3 (legacy).
-    Council C is unchanged (always DeepSeek) and routed via mode="chat".
-    """
-    if COUNCIL_B_GLM_ENABLED:
-        return _GLM_MODEL
-    return _deepseek_model()
-
-
-def cap_for(mode: str) -> int:
-    return MAX_TOKENS.get(mode, MAX_TOKENS["default"])
-
-
-def temperature_for(mode: str) -> float:
-    return TEMPERATURE.get(mode, TEMPERATURE["default"])
+# Session 5 · Phase 1 — `council_a_primary_model`,
+# `council_b_primary_model`, `cap_for`, `temperature_for` all live
+# in `services/_llm_routing.py` now. Re-exported here so external
+# callers keep working via `from services.llm import cap_for` etc.
+from services._llm_routing import (
+    council_a_primary_model,
+    council_b_primary_model,
+    cap_for,
+    temperature_for,
+)
 
 
 def _openrouter_key() -> str:

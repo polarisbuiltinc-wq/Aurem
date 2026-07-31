@@ -25,6 +25,21 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 
+def _reload_llm():
+    """Session 5 · Phase 1 — routing constants moved to
+    `services/_llm_routing.py`, so `importlib.reload(llm)` alone no
+    longer re-evaluates `os.getenv(...)` for `LONGCAT_ENABLED` etc.
+    Reload the routing module FIRST, then llm re-imports the fresh
+    values from it. Same behavioural contract for the 7 test sites
+    below that monkeypatch env vars and expect a fresh flag pickup.
+    """
+    import services.llm as _llm
+    from services import _llm_routing as _routing
+    importlib.reload(_routing)
+    importlib.reload(_llm)
+    return _llm
+
+
 # ─── TaskRouter ─────────────────────────────────────────────────────────────
 
 def test_task_router_analysis_routes_to_b():
@@ -104,7 +119,7 @@ def test_loop_engine_no_longer_hardcodes_council_a():
 
 def test_longcat_live_flag_exists():
     import services.llm as llm
-    importlib.reload(llm)
+    llm = _reload_llm()
     assert hasattr(llm, "LONGCAT_LIVE")
     # Default optimistic — flipped by the boot probe.
     assert llm.LONGCAT_LIVE is True
@@ -113,7 +128,7 @@ def test_longcat_live_flag_exists():
 def test_probe_longcat_availability_skips_when_flag_off(monkeypatch):
     monkeypatch.setenv("LONGCAT_ENABLED", "false")
     import services.llm as llm
-    importlib.reload(llm)
+    llm = _reload_llm()
     assert llm.LONGCAT_ENABLED is False
     # When the flag is off the probe must NOT toggle the live flag.
     result = asyncio.run(llm.probe_longcat_availability())
@@ -125,7 +140,7 @@ def test_probe_longcat_flips_live_false_on_400(monkeypatch):
     monkeypatch.setenv("LONGCAT_ENABLED", "true")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     import services.llm as llm
-    importlib.reload(llm)
+    llm = _reload_llm()
 
     class _Resp:
         def __init__(self): self.status_code = 400; self.text = ""
@@ -148,7 +163,7 @@ def test_probe_longcat_keeps_live_true_on_200(monkeypatch):
     monkeypatch.setenv("LONGCAT_ENABLED", "true")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     import services.llm as llm
-    importlib.reload(llm)
+    llm = _reload_llm()
     # Pretend the flag was already flipped False by a previous boot.
     llm.LONGCAT_LIVE = False
 
@@ -171,7 +186,7 @@ def test_probe_longcat_keeps_live_true_on_200(monkeypatch):
 def test_council_a_primary_falls_back_to_glm_when_live_false(monkeypatch):
     monkeypatch.setenv("LONGCAT_ENABLED", "true")
     import services.llm as llm
-    importlib.reload(llm)
+    llm = _reload_llm()
     llm.LONGCAT_LIVE = False
     assert llm.council_a_primary_model() == "z-ai/glm-5.2"
     llm.LONGCAT_LIVE = True
@@ -183,7 +198,7 @@ def test_call_longcat_fast_paths_to_glm_when_dead(monkeypatch):
     actual call must NOT hit OpenRouter — it must go straight to GLM."""
     monkeypatch.setenv("LONGCAT_ENABLED", "true")
     import services.llm as llm
-    importlib.reload(llm)
+    llm = _reload_llm()
     llm.LONGCAT_LIVE = False
 
     or_calls = []
@@ -208,7 +223,7 @@ def test_call_longcat_flips_live_false_on_mid_session_empty(monkeypatch):
     monkeypatch.setenv("LONGCAT_ENABLED", "true")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     import services.llm as llm
-    importlib.reload(llm)
+    llm = _reload_llm()
     llm.LONGCAT_LIVE = True
 
     async def fake_openrouter(**kwargs):

@@ -1,7 +1,7 @@
 # AUREM CTO — Product Requirements Document (living)
 
-**Last updated**: 2026-07-31 17:10 UTC (Iter 367 · Session 5 · Item 5 — ORA-chat silent-catch hygiene + Cloudflare-1010 founder-alert bug caught during Resend live-verify)
-**Live**: https://auremcto.com — Iter 367 deployed 01:12 UTC via deployer_agent
+**Last updated**: 2026-07-31 17:35 UTC (Iter 367 · Session 5 · LLM.py split Phase 0a + Phase 1 landed on preview + queued for prod deploy)
+**Live**: https://auremcto.com — Iter 367 deployed 01:12 UTC via deployer_agent (Phase 0a landed at 17:00 UTC; Phase 1 in flight)
 
 ## Original problem statement
 Optimize onboarding, strict separation of backend founder logic, and expand codebase health scanners.
@@ -9,25 +9,37 @@ Build the "Personal Track" for non-technical users, implement the "Master QA Tes
 Loop engine stuck bugs (Phase 0), then build the next 4 competitive differentiators:
 - Phase 1: Persistent Correction Rules ✅ DONE (Iter 333 + 14-day auto-graduation Iter 367)
 - Phase 2: Risk-Based Routing ✅ DONE (Iter 367 — 2-week shadow live, tiers AUTO_SHIP/WARN_SHIP/PAUSE_FOR_FOUNDER)
-- Phase 3: Checkpoints/Rollback ✅ DONE (rollback plumbing fixed Iter 367 STEP 0 — no more fake-success writes to `rollback_trigger`; all revert paths now hit the real GitHub API)
+- Phase 3: Checkpoints/Rollback ✅ DONE (rollback plumbing fixed Iter 367 STEP 0)
 - Phase 4: Browser Self-Testing ✅ DONE (Iter 367 — real Playwright post-ship smoke wired into `_do_ship`)
 
 Language: **Hinglish** — main agent responds in Hinglish.
 
 ## What's implemented (chronological, most recent first)
 
-### Iter 367 · Session 5 · Item 5 (2026-07-31) — ORA-chat silent-catch hygiene + Cloudflare-1010 founder-alert fix
-- **P0 REAL PROD BUG discovered during live-verify**: `services/founder_alerts._send_via_resend` was POSTing to `api.resend.com/emails` via `urllib.request.urlopen` with the default `Python-urllib/3.11` User-Agent. Cloudflare returns HTTP 403 (error code 1010) for that UA → every G10 founder alert has been silently 403'd in production since the module was written. The outer `try/except` swallowed it, so the outage was completely invisible. **Fix**: added explicit `User-Agent: AUREM-Guardian/1.0 (+https://aurem.live)` header. Three real live sends proved the fix (Resend message IDs `af7cfc11`, `286306c4`, `1011ed68`). No other Resend caller was affected — the rest use `httpx` which sends a proper UA.
-- **ENV hardening**: added `FOUNDER_ALERT_EMAIL=teji.ss1986@gmail.com` and `FOUNDER_ALERT_FROM="AUREM Guardian <alerts@aurem.live>"` to `backend/.env`. The old default pointed at `alerts@auremcto.com`, but `auremcto.com` is `not_started` in Resend — sends would 403 even with the UA fix. `aurem.live` IS verified. Regression test asserts the env keeps `aurem.live`.
-- **Item 5 (silent-catch hygiene)** — 4 sites in `services/ora_chat/` cleaned up while preserving fail-OPEN behavior:
-  - `deep_research._gh_fetch_repo_contents` git-tree fetch failure → `logger.debug("[silent-catch] tree_fetch_failed ...")` + returns metadata-only.
-  - `deep_research._gh_fetch_repo_contents` per-file content fetch failure → debug log per bad candidate, loop continues.
-  - `deep_research._robots_allows` robots.txt fetch failure → debug log + fail-OPEN allow (SSRF gate + downstream error path still cover us).
-  - `hallucination_classifier.unreviewed_count` DB outage → debug log + returns 0 (treated as below-trigger no-op).
-  - `deep_research._is_safe_public_url` L396 `except ValueError: pass` documented as **deliberate control-flow** (ValueError = "not a bare IP, fall through to DNS resolve") — NO-OP with a comment, same pattern as the orchestrator activity-hook finding.
-- **Verification (zero mocks)**: `tests/test_session5_item5_ora_chat_silent_catch.py` (6 tests) exercises each fail path with a real raising httpx client / real monkey-patched `get_db`. `tests/test_session5_item5_founder_alert_cf1010_regression.py` (3 tests) is a static regression guard so future refactors can't silently drop the UA header or downgrade to the `auremcto.com` sender. **9/9 pass in 0.45s**. Zero regressions across 25 related ora_chat tests.
-- **G10 endpoint verified GREEN with real audit row**: `/api/aurem-dev/admin/qa/guard10-founder-alerts` → `{state: "GREEN", enabled: true, last_send_at: "2026-07-31T17:05:07", last_delivered: true}`.
-- **RESEND_API_KEY rotated** to new value `re_K75xH2UQ_DuZU1d8RTQJt2r99xJAy4Yde` (founder-provided via Emergent secrets); backend restarted; verified via live domains-list API.
+### Iter 367 · Session 5 · LLM.py Split Phase 1 (2026-07-31 17:35) — routing.py extraction
+- Extracted pure/env-derived surface of `services/llm.py` into `services/_llm_routing.py`:
+  - Constants: `MAX_TOKENS`, `TEMPERATURE`, `_DEEPSEEK_HOSTS`, `_CLAUDE_MODES`
+  - V2 flags: `LONGCAT_ENABLED`, `COUNCIL_B_GLM_ENABLED`, `CEO_RESCUE_ENABLED`, `CEO_PRIMARY_TIMEOUT_S`, `CEO_RESCUE_MODEL`
+  - Pure helpers: `cap_for()`, `temperature_for()`
+  - Deferred-import routing: `council_a_primary_model()`, `council_b_primary_model()` — defer-import `services.llm` inside the function body to read `LONGCAT_LIVE`/`_LONGCAT_MODEL`/`_GLM_MODEL`/`_deepseek_model` (those still live in llm.py pending Phase 0b/4).
+- `llm.py` re-exports every moved symbol at module scope — byte-for-byte identical behavior for all 45 external importers.
+- 13/13 new Phase 1 regression tests + 107/107 across all LLM-touched test files. Preview backend restarted cleanly, LongCat probe successful, `council_a_primary_model()` returns Claude Sonnet 4.5 as expected.
+- Two legacy test files (m159, m160) updated to reload `_llm_routing` before `llm` in `importlib.reload` scenarios because env-derived constants now cache in the routing module.
+
+### Iter 367 · Session 5 · LLM.py Split Phase 0a (2026-07-31 17:00) — state.py extraction
+- Extracted mutable state surface of `services/llm.py` into `services/_llm_state.py`:
+  - `_new_provenance_slot()` factory
+  - `_last_provider_ctx` ContextVar
+  - `_set_last_provider`, `get_last_provider`, `reset_last_provider`
+  - `_LONGCAT_LAST_PROBE` dict
+- `LONGCAT_LIVE` bool deliberately LEFT IN llm.py (Phase 0b) — 5+ tests + 3 bare-import sites do `llm.LONGCAT_LIVE = X` writes; moving cleanly needs a `types.ModuleType.__setattr__` hook. Deferred to future Phase.
+- 7/7 new Phase 0a regression tests, all prior LLM suites green. Prod deploy verified `longcat_live=true` after bootstrap.
+
+### Iter 367 · Session 5 · Item 5 (2026-07-31 17:00) — ORA-chat silent-catch hygiene + Cloudflare-1010 founder-alert fix
+- **P0 REAL PROD BUG**: `services/founder_alerts._send_via_resend` was silently 403'ing every G10 founder alert via urllib default `Python-urllib/*` UA (Cloudflare error 1010). Fixed with named `User-Agent: AUREM-Guardian/1.0` header. Three real live sends proved delivery. Founder confirmed inbox delivery.
+- ENV additions: `FOUNDER_ALERT_EMAIL`, `FOUNDER_ALERT_FROM=alerts@aurem.live` (auremcto.com was `not_started`). Regression test locks the aurem.live domain.
+- Item 5 (silent-catch hygiene): 4 sites in `ora_chat/` now emit `[silent-catch] ...` debug logs while preserving fail-OPEN. 6+3 new tests pass, zero regressions across 25 related ora_chat tests.
+- G10 endpoint GREEN with `last_delivered=true` + `last_send_at` populated. RESEND_API_KEY rotated verified live via domains API.
 
 ### Iter 367 · Session 4 (2026-07-31) — Step A billing cron + Step B real Stripe E2E + Step C deep discovery
 - **STEP A** (P0 revenue guardrail): `bill_maxx_overages()` now owned by a dedicated `schedule_maxx_overage_billing()` task in `services/billing_cron.py`, wired into `main.py` startup as `app.state.maxx_overage_billing_task`. Configurable via `BILLING_CRON_DAY` (default 1) & `BILLING_CRON_HOUR` (default 0 UTC), clamped to safe ranges. Idempotent within a YYYY-MM bucket via `billing_cron_runs` collection. Removed the piggyback from `daily_digest.py::_run_once()` with migration signpost. Live proof: backend log shows `sleeping 21h until 2026-08-01T00:00:00+00:00`. 16/16 tests green.

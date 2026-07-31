@@ -34,10 +34,21 @@ if str(BACKEND) not in sys.path:
 
 def _reload_llm(monkeypatch, **env):
     """Reload services.llm with the given env vars set so module-level
-    flag constants reflect the test's expected state."""
+    flag constants reflect the test's expected state.
+
+    Session 5 · Phase 1 — the routing constants (`LONGCAT_ENABLED`,
+    `COUNCIL_B_GLM_ENABLED`, `CEO_RESCUE_ENABLED`, `MAX_TOKENS`,
+    `TEMPERATURE`, etc.) now live in `services/_llm_routing.py`. A
+    plain `importlib.reload(llm)` no longer re-evaluates the
+    `os.getenv(...)` calls that populated those constants — the
+    routing module has to be reloaded FIRST so llm.py's re-import
+    picks up the fresh env-derived values.
+    """
     for k, v in env.items():
         monkeypatch.setenv(k, v)
     import services.llm as llm_mod
+    from services import _llm_routing as _routing
+    importlib.reload(_routing)
     importlib.reload(llm_mod)
     return llm_mod
 
@@ -149,6 +160,8 @@ def test_ceo_rescue_disabled_uses_single_call(monkeypatch):
     rescue overhead."""
     monkeypatch.setenv("CEO_RESCUE_ENABLED", "false")
     import services.llm as llm
+    from services import _llm_routing as _routing
+    importlib.reload(_routing)
     importlib.reload(llm)
     from core import parliament
     importlib.reload(parliament)
@@ -180,6 +193,8 @@ def test_ceo_rescue_fires_on_timeout(monkeypatch):
     monkeypatch.setenv("CEO_RESCUE_ENABLED", "true")
     monkeypatch.setenv("CEO_PRIMARY_TIMEOUT_S", "0.05")
     import services.llm as llm
+    from services import _llm_routing as _routing
+    importlib.reload(_routing)
     importlib.reload(llm)
     from core import parliament
     importlib.reload(parliament)
@@ -219,6 +234,8 @@ def test_ceo_rescue_fires_on_empty_primary(monkeypatch):
     (not just on timeout)."""
     monkeypatch.setenv("CEO_RESCUE_ENABLED", "true")
     import services.llm as llm
+    from services import _llm_routing as _routing
+    importlib.reload(_routing)
     importlib.reload(llm)
     from core import parliament
     importlib.reload(parliament)
@@ -251,6 +268,8 @@ def test_council_vote_trace_metadata_includes_primary_model(monkeypatch):
     monkeypatch.setenv("LONGCAT_ENABLED", "true")
     monkeypatch.setenv("COUNCIL_B_GLM_ENABLED", "true")
     import services.llm as llm
+    from services import _llm_routing as _routing
+    importlib.reload(_routing)
     importlib.reload(llm)
     from core import parliament
     importlib.reload(parliament)
