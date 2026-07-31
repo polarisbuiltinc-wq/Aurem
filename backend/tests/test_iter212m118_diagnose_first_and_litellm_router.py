@@ -163,57 +163,11 @@ async def test_generate_one_inner_falls_back_when_localizer_fails(monkeypatch):
     assert "DIAGNOSE-FIRST LOCALIZATION" not in captured_prompt[0]
 
 
-# ─── 2. litellm router ────────────────────────────────────────────────
-def test_llm_router_is_disabled_by_default(monkeypatch):
-    from services import llm_router
-    monkeypatch.delenv("LITELLM_ROUTER_ENABLED", raising=False)
-    assert llm_router.is_enabled() is False
-
-
-def test_llm_router_is_enabled_with_env_flag(monkeypatch):
-    from services import llm_router
-    monkeypatch.setenv("LITELLM_ROUTER_ENABLED", "1")
-    assert llm_router.is_enabled() is True
-    monkeypatch.setenv("LITELLM_ROUTER_ENABLED", "0")
-    assert llm_router.is_enabled() is False
-
-
-def test_llm_router_module_exposes_required_api():
-    from services import llm_router
-    assert callable(llm_router.is_enabled)
-    assert callable(llm_router.get_router)
-    assert callable(llm_router.call_via_router)
-    assert callable(llm_router._build_model_list)
-
-
-def test_llm_py_short_circuits_via_router_when_enabled():
-    """The legacy 4-hop chain in services/llm.py must check the router
-    flag at the top of call_llm_with_meta and delegate when enabled."""
-    src = open("/app/backend/services/llm.py").read()
-    cl_block = src.split("async def call_llm_with_meta(", 1)[1].split("async def ", 1)[0] if src.count("async def ") > 2 else src
-    assert "LITELLM_ROUTER_ENABLED" in src or "is_enabled" in cl_block
-    assert "call_via_router" in src
-    # On router init failure, must fall through to legacy chain.
-    assert "falling back to legacy chain" in src
-
-
-def test_llm_router_build_model_list_skips_when_no_keys(monkeypatch):
-    from services import llm_router
-    for k in ("ANTHROPIC_API_KEY", "EMERGENT_LLM_KEY", "DEEPSEEK_API_KEY",
-              "OPENROUTER_API_KEY", "GROQ_API_KEY"):
-        monkeypatch.delenv(k, raising=False)
-    models = llm_router._build_model_list()
-    assert models == []
-
-
-def test_llm_router_build_model_list_includes_configured_keys(monkeypatch):
-    from services import llm_router
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
-    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
-    for k in ("ANTHROPIC_API_KEY", "EMERGENT_LLM_KEY", "OPENROUTER_API_KEY"):
-        monkeypatch.delenv(k, raising=False)
-    models = llm_router._build_model_list()
-    model_strs = [m["litellm_params"]["model"] for m in models]
-    assert any("deepseek" in m for m in model_strs)
-    assert any("groq" in m for m in model_strs)
-    assert not any("anthropic" in m for m in model_strs)
+# ─── 2. litellm router — REMOVED Iter 367 ─────────────────────────────
+# The litellm.Router opt-in path (services/llm_router.py) has been
+# deleted after the deep-codebase audit found it was permanently
+# gated behind LITELLM_ROUTER_ENABLED=1 — an env flag that was
+# never set anywhere. The 167-line module was dead code; these
+# tests exercised behavior that could never fire in production.
+# The legacy multi-provider chain in services/llm.py IS the
+# production LLM path (verified live for years).

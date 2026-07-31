@@ -4,6 +4,52 @@ Append-only iteration log. See `PRD.md` for the original problem
 statement and historical context; this file captures recent feature
 work in date-stamped chunks so PRD.md stays focused.
 
+## 2026-07-31 01:15 UTC — Iter 367 · FINAL BUILD SESSION (Steps 0→2) — audit + real E2E
+
+### Step 0 — Fake-success rollback bug FIXED (P0 real-user-facing)
+Deep audit found that BOTH `services/rollback_manager.execute_rollback()` and `routers/user_rollback.py::/rollback/revert-last-ship` staged writes to a `rollback_trigger` collection expecting a "deployer daemon" that does NOT exist. Both endpoints returned 200-success while NEVER actually reverting anything. Additionally, `/rollback/candidates` filtered `{shipped: True}` — a field no `loop_outcomes` doc has, so it always returned `[]` even for real ships.
+- Fix: Both endpoints now redirect into `services/loop_rollback.py::run_rollback()` (the real workhorse that calls `github_api_writer.revert_commit()`).
+- `user_rollback.revert-last-ship`: resolves the user's most recent unreverted `loop_outcomes` row → project + PAT → fires the REAL revert as a `BackgroundTasks` task.
+- `rollback_manager.execute_rollback`: resolves `target_sha` → `loop_outcomes` prefix match → same real revert path. Unknown SHA returns `{ok: False, reason: "sha_not_shipped"}` (no fake queued status).
+- `/rollback/candidates`: filter fixed to `{reverted: {$ne: True}}`.
+- Founder alert (`send_founder_alert`) fired on every admin-triggered rollback for provenance.
+- Live proof: real HTTP 200 with real `github_api_writer` call recorded in `loop_sessions.rollback_steps` (401 error visible because test SHA is fake — but the API call actually happened). Unknown SHA correctly returns `sha_not_shipped`.
+- Tests: `test_iter367_rollback_fake_success_fix.py` — 5/5 pass.
+
+### Step 1 — Session-1 audit cleanup
+- Deleted `services/llm_router.py` (167 lines, dead code — gated by `LITELLM_ROUTER_ENABLED=1` env flag that was never set anywhere in the codebase; only import site was a conditional in `llm.py:1278` that never fired).
+- Deleted `frontend/src/components/PublicStatsStrip.jsx` (orphaned, zero imports).
+- Deleted `frontend/src/components/SaveToGithubDialog.jsx` (orphaned, zero imports).
+- Kept `trust.py`, `unlock.py`, `harden.py`, `chat_commits.py` — these are BYOH deploy support features flagged HALF BUILT (awaiting frontend), not orphans.
+
+### Step 2 — Message 607 FINAL BUILD SESSION — all 6 items closed
+
+**Item A — G1 CI cron schedule.** `.github/workflows/qa-weekly.yml` now has a dedicated `g1-route-sweep` job on a DAILY 09:00 UTC cron that runs `backend/scripts/g1_route_smoke_sweep.py` against `https://auremcto.com` with Slack alert + artifact upload on failure. Weekly promptfoo job unchanged. Real E2E proof: script exits 0 (7/7 routes) against preview, exits 1 (7/7 fail) against invalid host — CI will detect regressions.
+
+**Item B — FTP/SSH deploy router wiring.** `services/ftp_ssh_deploy.py` is now WIRED into `routers/deploy.py`. New `target: ssh|ftp|sftp` field in `DeployConfigBody`; `save_config` validates PEM for SSH/SFTP and password for FTP under a distinct vault kind. `run_deploy` branches to `_run_deploy_ftp_or_sftp` for FTP/SFTP targets. Discovered + fixed 3 REAL bugs in `ftp_ssh_deploy.py` during E2E: `ftplib.FTP(host, ...)` auto-connect to port 21, `except (ftplib.all_errors,)` tuple-in-tuple TypeError, missing intermediate mkdir for nested paths. Real E2E proof (`test_iter367_item_b_ftp_ssh_real_e2e.py`): 4/4 tests pass, real bytes transferred to a real `pyftpdlib` FTP server and a real OpenSSH `sshd`, files verified byte-for-byte on disk. Added `paramiko==3.5.0` to requirements.txt.
+
+**Item C — Persistent Correction Rules 14-day auto-graduation.** `services/correction_rules.py` Phase 2 built. `add_rule` now stamps `shadow_started_at`. New `graduate_shadow_eligible_rules(db, min_age_days=14, min_hits=1)` promotes eligible rules with `graduated_reason="auto_14day_hits"`. New helper `is_rule_effectively_enforced(rule, project_enforce)` — a rule is enforced when EITHER the project toggle OR its individual `graduated_at` is set. `loop_engine.py::_do_execute` updated to use per-rule filtering instead of monolithic `_cr_mode == "enforce"`. Scheduler `_correction_rules_graduation_cron` added to `main.py` startup (default 6h interval). Admin endpoint `POST /admin/qa/correction-rules/graduate` (dry-run supported). Tests: `test_iter367_item_c_correction_rules_graduation.py` — 10/10 pass.
+
+**Item D — Risk-Based Routing (Phase 2 full build).** New `services/risk_routing.py`. Locked-scope tier names verified in test: **AUTO_SHIP / WARN_SHIP / PAUSE_FOR_FOUNDER** (compliance test explicitly rejects "SAFE/CAUTION/BLOCK"). Scoring: sensitive-path weights + diff-size buckets + dangerous-pattern regexes (eval, exec, shell=True, hardcoded AWS/OpenAI keys, TLS off, admin routes) + new-dependency detection. Sigmoid-clipped score → tier. Mandatory 2-week shadow via `RISK_ROUTING_SHADOW_DAYS` — `is_enforcing()` returns False for first 14 days after shadow start; `should_halt()` respects this. Wired into `loop_engine.py::_gen_via_parliament` — scores every executor file, writes to `risk_scores`, halts only when enforcing. Admin endpoint `GET /admin/qa/risk-routing/summary` returns tier counts + mode + `days_until_enforce` countdown. FAIL-OPEN: scoring exceptions collapse to `AUTO_SHIP` with error tag. Tests: `test_iter367_item_d_risk_routing.py` — 10/10 pass.
+
+**Item E — Browser Self-Testing (Phase 4 full build).** New `services/browser_self_test.py`. Path classifier `classify_frontend_change(paths) -> [urls]` maps changed file paths to their live routes (pages/*.jsx → `/`, `/login`, `/wall`; personal/*.jsx → `/personal/*`; admin/* → `/admin` (deduped); backend/routers/* → `/docs`). Hard cap of 8 URLs per loop. Cache in `browser_selftest_cache` with `RESMOKE_COOLDOWN_S=180` prevents burst re-smoking. `run_smoke(base_url, urls)` launches REAL headless chromium via Playwright, visits each URL sequentially with a 15s wait, greps for `NaN`/`undefined`/`Invalid Date`/`TypeError:`/stack traces/empty `<main>`. Fail-open on Playwright errors. Wired into `loop_engine.py::_do_ship` post-commit-record, gated by `BROWSER_SELFTEST_BASE_URL` env var. Admin endpoint `GET /admin/qa/browser-selftest` returns last N runs. Tests: `test_iter367_item_e_browser_selftest.py` — 10/10 pass including a REAL Playwright chromium launch against the live preview URL.
+
+**Item F — Personal Track scope proposal (NO CODE).** Written to `/app/memory/PERSONAL_TRACK_SCOPE.md` (~250 lines): 2 personas, 8 non-negotiable safety rails, 5-screen UX, pricing tiers, 4-phase implementation plan (F.1-F.4 spanning ~3 sessions + 2-week beta), 5 open blocker questions. Zero code — awaiting founder go-ahead.
+
+### Regression status
+- All 46 new Iter 367 tests pass.
+- All 22 iter333 tests pass after updating 3 fragile source-text checks (behavior unchanged, source structure updated for per-rule graduation).
+- iter212m118 test file cleaned — 6 stale `llm_router` tests removed, 3 diagnose-first tests retained.
+- Pre-existing failures (signup rate-limit accumulated, iter331 pipeline source-structure check) NOT introduced by this session.
+
+### New DB collections
+- `risk_scores` — one row per scored file change
+- `risk_routing_meta` — one doc `{_key: "shadow_start"}` for enforce cutover
+- `browser_selftest_runs` — post-ship Playwright smoke results
+- `browser_selftest_cache` — per-URL cooldown tracker
+
+
+
 ## 2026-07-27 08:00 UTC — Iter 326 · Integration-health probe hardening (2 fixes + 1 diagnostic memo)
 
 **Founder-approved defensive fixes** (Tavily + Stripe) — awaiting deploy authorization.

@@ -186,13 +186,20 @@ class TestEngineWiring:
         assert 'phase="execute"' in seg
 
     def test_injection_gated_on_enforce_only(self):
+        """Iter 367 · Item C — the gate is now per-rule via
+        `is_rule_effectively_enforced()`, not a monolithic
+        `_cr_mode == "enforce"` comparison. Assert the new hook + the
+        block-builder + the per-rule filter are all wired."""
         seg = ENGINE_SRC.split("async def _do_execute")[1].split(
             "async def _do_verify")[0]
-        assert '_cr_mode == "enforce"' in seg
+        assert "is_rule_effectively_enforced" in seg
         assert "build_rules_block" in seg
+        assert "_cr_project_enforce" in seg
 
     def test_fail_open_wrapper(self):
-        seg = ENGINE_SRC.split("Persistent Correction Rules")[1][:3000]
+        """Iter 367 · Phase 2 rewrote the docstring header — search on
+        the module-level marker instead of the deprecated phrase."""
+        seg = ENGINE_SRC.split("correction rules skipped")[0][-3000:]
         assert "except Exception" in seg
 
     def test_no_llm_correction_detection(self):
@@ -200,4 +207,5 @@ class TestEngineWiring:
         slash command — no LLM detects/creates them."""
         src = Path("/app/backend/services/correction_rules.py").read_text()
         assert "call_llm" not in src and "openrouter" not in src.lower()
-        assert '"source":           "slash_command"' in src
+        # Iter 367 — the source= key exists (spacing may vary).
+        assert '"source":' in src and '"slash_command"' in src

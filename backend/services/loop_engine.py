@@ -1291,23 +1291,33 @@ class LoopEngine:
                 generated = []
                 _cr, _cr_rules, _cr_mode = None, [], "shadow"
             else:
-                # ── Iter 333 · Phase 1 — Persistent Correction Rules ──
-                # Shadow-first: match founder-set rules against the
-                # plan's file paths, log matches to
-                # correction_rule_events (the instrumented metric) and
-                # ONLY inject into the executor prompt when the
-                # per-project enforce toggle is ON (default OFF).
+                # ── Iter 333 · Phase 1 + Iter 367 · Phase 2 ─────────
+                # Phase 1: shadow-first — match founder-set rules
+                # against the plan's file paths, log matches to
+                # correction_rule_events, only inject when the
+                # per-project enforce toggle is ON.
+                # Phase 2 (Item C): individually-graduated rules
+                # (14-day auto-graduation) get injected even when
+                # the project global toggle is still OFF. So the
+                # mode is now per-rule, not per-project.
                 # Fail-open — a rules hiccup must never block a loop.
                 _cr, _cr_rules, _cr_mode = None, [], "shadow"
+                _cr_project_enforce = False
                 try:
                     from services import correction_rules as _cr_mod
                     _cr_rules = await _cr_mod.load_active_rules(
                         self.db, self.user_id, self.project_id)
                     if _cr_rules:
                         _cr = _cr_mod
-                        _cr_mode = ("enforce" if await _cr_mod.get_enforce(
+                        _cr_project_enforce = await _cr_mod.get_enforce(
                             self.db, self.user_id, self.project_id)
-                            else "shadow")
+                        # Effective-mode summary for narration: enforce
+                        # if project toggle on OR any rule graduated.
+                        any_graduated = any(
+                            _cr_mod.is_rule_effectively_enforced(
+                                r, _cr_project_enforce)
+                            for r in _cr_rules)
+                        _cr_mode = "enforce" if any_graduated else "shadow"
                         _cr_matches = _cr_mod.match_rules(_cr_rules, paths)
                         if _cr_matches:
                             await _cr_mod.record_rule_events(
@@ -1389,12 +1399,17 @@ class LoopEngine:
                         task_text = (
                             f"USER REQUEST:\n{self.user_message}\n\n"
                             f"APPROVED PLAN:\n{plan_title}\n{plan_bullets}\n\n"
-                            # Iter 333 · Phase 1 — enforce-mode rules
-                            # block (empty string in shadow mode).
-                            + (_cr.build_rules_block(
-                                   _cr.match_rules(_cr_rules, [path]))
-                               if (_cr is not None
-                                   and _cr_mode == "enforce") else "")
+                            # Iter 333 Phase 1 + Iter 367 Phase 2:
+                            # Inject block for matches where the rule
+                            # is EFFECTIVELY enforced (project toggle
+                            # OR individually graduated). Others stay
+                            # in shadow mode — logged, not injected.
+                            + (_cr.build_rules_block([
+                                    m for m in _cr.match_rules(_cr_rules,
+                                                               [path])
+                                    if _cr.is_rule_effectively_enforced(
+                                        m["rule"], _cr_project_enforce)])
+                               if _cr is not None else "")
                             + f"FILE PATH: {path}\n\n"
                             f"--- CURRENT CONTENT ({len(current)} bytes) ---\n"
                             f"{current}\n"
@@ -1542,6 +1557,68 @@ class LoopEngine:
                                     },
                                 )
                                 return None
+                            # ── Iter 367 · Item D · Risk-based routing ──
+                            # Score the intended change (path + before/after
+                            # bytes), always record to `risk_scores`, and:
+                            #   • AUTO_SHIP        → proceed silently
+                            #   • WARN_SHIP        → proceed but narrate WARN
+                            #   • PAUSE_FOR_FOUNDER → in shadow mode: log
+                            #     only; after 2-week window: halt the file.
+                            # Fail-open: scoring exceptions collapse to
+                            # AUTO_SHIP + `error` signal so a scoring bug
+                            # cannot break loops.
+                            try:
+                                from services import risk_routing as _rr
+                                _rr_score = _rr.score_change(
+                                    path=path,
+                                    before_bytes=(current or "").encode(
+                                        "utf-8", errors="ignore"),
+                                    after_bytes=(result["output"] or "").encode(
+                                        "utf-8", errors="ignore"),
+                                )
+                                await _rr.record_score(
+                                    self.db,
+                                    loop_id=self.loop_id,
+                                    user_id=self.user_id,
+                                    project_id=self.project_id,
+                                    phase="execute", path=path,
+                                    score=_rr_score,
+                                )
+                                if _rr_score.tier == _rr.TIER_WARN_SHIP:
+                                    await self._narrate(
+                                        step="execute", tone="warn",
+                                        text=(f"risk WARN on {path} "
+                                              f"(score={_rr_score.score})"),
+                                        correlation_id=f"risk:{path}",
+                                    )
+                                elif _rr_score.tier == _rr.TIER_PAUSE_FOR_FOUNDER:
+                                    if await _rr.should_halt(self.db, _rr_score):
+                                        logger.warning(
+                                            "[loop %s] risk PAUSE_FOR_FOUNDER "
+                                            "halting file %s (score=%s)",
+                                            self.loop_id, path,
+                                            _rr_score.score)
+                                        await self._narrate(
+                                            step="execute", tone="danger",
+                                            text=(f"risk PAUSE_FOR_FOUNDER "
+                                                  f"on {path} — halted for "
+                                                  f"founder review "
+                                                  f"(score={_rr_score.score})"),
+                                            correlation_id=f"risk:{path}",
+                                        )
+                                        return None
+                                    # Shadow mode — narrate but proceed.
+                                    await self._narrate(
+                                        step="execute", tone="warn",
+                                        text=(f"risk PAUSE_FOR_FOUNDER on "
+                                              f"{path} (shadow mode — score="
+                                              f"{_rr_score.score})"),
+                                        correlation_id=f"risk:{path}",
+                                    )
+                            except Exception as _rr_err:      # noqa: BLE001
+                                logger.warning(
+                                    "[loop %s] risk_routing skipped: %r",
+                                    self.loop_id, _rr_err)
                             return {"path": path, "content": result["output"]}
                         # manual_review or fail → skip this file; verify
                         # phase will surface anything else that breaks.
@@ -3058,6 +3135,37 @@ class LoopEngine:
         self.context.pop("ship_pending", None)
         self.state = LoopState.COMPLETED
         await _persist_session(self.db, self._doc())
+
+        # ── Iter 367 · Item E · Browser Self-Testing ────────────────
+        # Post-ship Playwright smoke against the live preview URL.
+        # Frontend paths → route classifier → chromium visits pages
+        # for red-flag rendered text (NaN, undefined, Invalid Date,
+        # stack traces, empty <main>). Cached at RESMOKE_COOLDOWN_S so
+        # rapid-fire loops on the same page don't pile up launches.
+        # FAIL-OPEN — a smoke miss must never rewrite the ship result.
+        try:
+            _fe_paths = [p for p in files_dict.keys()
+                         if p.startswith("frontend/") or "/src/" in p]
+            _base = os.environ.get("BROWSER_SELFTEST_BASE_URL", "")
+            if _fe_paths and _base:
+                from services import browser_self_test as _bst
+                _bst_report = await _bst.smoke_paths_for_loop(
+                    self.db, loop_id=self.loop_id,
+                    user_id=self.user_id, project_id=self.project_id,
+                    file_paths=_fe_paths, base_url=_base,
+                )
+                if _bst_report.get("failed_count"):
+                    await self._narrate(
+                        step="ship", tone="warn",
+                        text=(f"browser self-test flagged "
+                              f"{_bst_report['failed_count']} URL(s) — "
+                              f"see /admin/qa/browser-selftest"),
+                        correlation_id=f"ship:selftest:{full_sha[:7]}",
+                    )
+        except Exception as _bst_err:                          # noqa: BLE001
+            logger.warning(
+                "[loop %s] browser_self_test skipped: %r",
+                self.loop_id, _bst_err)
         # ── Iter 328 · #3-b · Brain V2 writeback ─────────────────────
         # Fire-and-forget writes to project_brains after every real
         # commit. Callsites 1 + 3 from ora_learning_callsite_proposal:

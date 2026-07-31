@@ -4,7 +4,6 @@
  * Toolbar:
  *  📎 Upload    — attach files (multi, <=50KB each) → injected as
  *                 [File: name]\n```...```\n blocks at end of input
- *  💾 GitHub    — open SaveToGithubDialog
  *  ⚡ Maxx      — toggle dual-engine mode (DeepSeek + Emergent watchdog)
  *  ➤ Send      — submits (Enter also submits)
  *

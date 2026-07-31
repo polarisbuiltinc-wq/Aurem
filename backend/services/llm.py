@@ -1272,20 +1272,14 @@ async def _call_llm_with_meta_inner(system: str, user: str,
                                      user_id: Optional[str] = None,
                                      review_mode: Optional[str] = None,
                                      step_hook=None) -> dict:
-    """Real body of call_llm_with_meta — Iter 212m-119 split for tracing."""
-    # Iter 212m-118 — litellm router fast-path.
-    try:
-        from services.llm_router import is_enabled, call_via_router
-        if is_enabled():
-            return await call_via_router(
-                system=system, user=user,
-                max_tokens=min(max_tokens, cap_for(mode)),
-                temperature=temperature_for(mode),
-            )
-    except Exception as _e:
-        # Router failed → fall through to the legacy chain. Never
-        # block the request on a router-init error.
-        logger.warning("litellm router failed, falling back to legacy chain: %r", _e)
+    """Real body of call_llm_with_meta — Iter 212m-119 split for tracing.
+
+    Iter 367 (audit cleanup) — Removed the litellm.Router opt-in path
+    (services.llm_router) that was permanently gated behind
+    LITELLM_ROUTER_ENABLED=1 — an env flag that was never set anywhere
+    in the codebase. The 167-line dead module has been deleted; the
+    legacy multi-provider chain below IS the production LLM path.
+    """
     temperature = temperature_for(mode)
     actual_tokens = min(max_tokens, cap_for(mode))
 

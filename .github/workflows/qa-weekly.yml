@@ -1,4 +1,4 @@
-name: Weekly Simulated-User QA (regression detection)
+name: Weekly Simulated-User QA (regression detection + G1 route sweep)
 
 # Passive regression detector — runs the promptfoo suite every
 # Monday 09:00 UTC (~14:30 IST) even when no PR is open, so an
@@ -12,10 +12,20 @@ name: Weekly Simulated-User QA (regression detection)
 # within hours of a regression, not weeks.
 #
 # Directive Session 5 · post-audit follow-up.
+#
+# Iter 367 (Item A) — Added a parallel job `g1-route-sweep` that
+# runs `backend/scripts/g1_route_smoke_sweep.py` against the LIVE
+# production URL (auremcto.com). Independent of the promptfoo job;
+# both must go green for the workflow to pass. This closes the last
+# regression-guard (G1) that was written but had no cron trigger.
 
 on:
   schedule:
     - cron: "0 9 * * 1"    # every Monday 09:00 UTC
+    - cron: "0 9 * * *"    # G1 also runs DAILY 09:00 UTC (Item A) so a
+                            # broken public route is caught within 24h,
+                            # not 7 days. Both jobs are cron-triggered;
+                            # `if:` branches gate which one runs.
   workflow_dispatch: {}    # allow manual triggering from Actions tab
 
 concurrency:
@@ -24,7 +34,10 @@ concurrency:
 
 jobs:
   qa-weekly:
-    name: Weekly QA baseline
+    name: Weekly QA baseline (promptfoo)
+    # Only runs on Monday's schedule OR manual dispatch — the daily
+    # 09:00 cron is reserved for the G1 sweep below.
+    if: github.event.schedule == '0 9 * * 1' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -144,3 +157,63 @@ jobs:
       - name: Fail the workflow if suite failed
         if: env.SUITE_FAILED == '1'
         run: exit 1
+
+
+  # ─── Iter 367 (Item A) · Daily G1 route smoke sweep ───────────────
+  # Runs backend/scripts/g1_route_smoke_sweep.py against the live
+  # production URL (auremcto.com) every day at 09:00 UTC.
+  # Fails the workflow on any 4xx/5xx status, empty <main>, or
+  # rendered "NaN"/"undefined"/"Invalid Date"/stack-trace text.
+  g1-route-sweep:
+    name: G1 · Playwright route smoke sweep (prod daily)
+    # Runs on the DAILY cron slot AND on manual dispatch (dispatch
+    # runs both jobs so operators can trigger a full check).
+    if: github.event.schedule == '0 9 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      G1_BASE_URL: "https://auremcto.com"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+
+      - name: Install Playwright + deps
+        run: |
+          pip install playwright==1.48.0
+          playwright install --with-deps chromium
+
+      - name: Run G1 route sweep
+        id: sweep
+        run: |
+          python backend/scripts/g1_route_smoke_sweep.py \
+            --base-url "$G1_BASE_URL" \
+            --out-json /tmp/g1_sweep.json
+        # Exit code 1 means one or more routes failed — the workflow
+        # step naturally fails, which surfaces on the Actions tab.
+
+      - name: Post to Slack — failure
+        if: failure() && env.SLACK_WEBHOOK != ''
+        env: { SLACK_WEBHOOK: "${{ secrets.CI_ALERTS_SLACK_WEBHOOK }}" }
+        run: |
+          # Parse the JSON to include the failed URLs in the alert.
+          if [[ -f /tmp/g1_sweep.json ]]; then
+            SUMMARY=$(python3 -c "import json; d=json.load(open('/tmp/g1_sweep.json')); fails=[r for r in d['results'] if not r['ok']]; print(f\"{len(fails)}/{d['total']} routes broken: \" + ', '.join(r['url'] for r in fails[:5]))")
+          else
+            SUMMARY="G1 sweep did not produce a report — sweep binary crashed"
+          fi
+          curl -sS -X POST "$SLACK_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "{\"text\":\":rotating_light: G1 route sweep FAILED on auremcto.com — $SUMMARY. Run: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|open>\"}" \
+            || true
+
+      - name: Upload sweep report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: g1-sweep-report
+          path: /tmp/g1_sweep.json
+          retention-days: 30

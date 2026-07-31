@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Header, HTTPException, Depends
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Depends
 from pydantic import BaseModel
 from cto_services.auth import require_admin_dep
 
@@ -646,10 +646,12 @@ class RollbackBody(BaseModel):
 @router.post("/guard12-rollback/trigger")
 async def guard12_trigger_rollback(
     body: RollbackBody,
+    bg: BackgroundTasks,
     authorization: Optional[str] = Header(None),
 ):
-    """Founder-gated. Stages a rollback intent in db.rollback_trigger
-    for the deployer daemon to pick up on the next tick."""
+    """Founder-gated. Resolves target_sha → loop_outcomes and fires a
+    REAL github_api_writer.revert_commit() via loop_rollback (Iter 367
+    audit fix — was fake-writing to rollback_trigger with no consumer)."""
     admin = await _require_admin(authorization)
     from cto_services.db import get_db
     from services.rollback_manager import execute_rollback
@@ -658,4 +660,61 @@ async def guard12_trigger_rollback(
         target_sha=(body.target_sha or "").strip(),
         triggered_by=admin.get("email") or admin.get("user_id") or "?",
         reason=(body.reason or "").strip(),
+        bg=bg,
     )
+
+
+# ── Iter 367 · Item D — Risk-based routing summary + rules graduation ──
+
+
+@router.get("/risk-routing/summary")
+async def risk_routing_summary(authorization: Optional[str] = Header(None)):
+    """Aggregate 30d of risk_scores + current shadow/enforce mode."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services.risk_routing import admin_summary
+    db = get_db()
+    if db is None:
+        return {"available": False}
+    return {"available": True, **(await admin_summary(db))}
+
+
+@router.get("/browser-selftest")
+async def browser_selftest_recent(
+    authorization: Optional[str] = Header(None),
+    limit: int = 20,
+):
+    """Iter 367 · Item E — last N post-ship Playwright smoke runs."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    db = get_db()
+    if db is None:
+        return {"available": False}
+    limit = max(1, min(int(limit or 20), 100))
+    rows = []
+    total = 0
+    failed = 0
+    async for r in db.browser_selftest_runs.find({}, {"_id": 0}) \
+            .sort("ts", -1).limit(limit):
+        rows.append(r)
+        total += 1
+        if not r.get("ok"):
+            failed += 1
+    return {"available": True, "count_returned": len(rows),
+            "failed_in_window": failed, "runs": rows}
+
+
+@router.post("/correction-rules/graduate")
+async def correction_rules_graduate(
+    authorization: Optional[str] = Header(None),
+    dry_run: bool = False,
+):
+    """Iter 367 · Item C — manual trigger for the 14-day auto-graduation
+    sweep. Dry-run returns the eligibility list without writing."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services.correction_rules import graduate_shadow_eligible_rules
+    db = get_db()
+    if db is None:
+        return {"available": False}
+    return await graduate_shadow_eligible_rules(db, dry_run=dry_run)

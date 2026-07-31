@@ -690,3 +690,9 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `loop_run_log kind='stripe_active_local_canceled'` — auto-detected in backend/services/payment_reconciliation.py (verify) [Iter 0, 2026-07-30T23:45:42.843571Z] <!-- inv:loop_run_log_kind:stripe_active_local_canceled -->
 - `services/rollback_manager.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T23:45:42.843582Z] <!-- inv:service:services/rollback_manager.py -->
 - `services/scope_drift_guard.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-30T23:45:42.843593Z] <!-- inv:service:services/scope_drift_guard.py -->
+
+### Iter 0 · 2026-07-31
+
+| `routers/user_rollback.py` | `/rollback` | 2 | auto-detected new router (verify) (Iter 0, 2026-07-31T00:31:30.625864Z) | <!-- inv:router:routers/user_rollback.py -->
+- `loop_run_log kind='user_ship_revert'` — auto-detected in backend/routers/user_rollback.py (verify) [Iter 0, 2026-07-31T00:31:30.625891Z] <!-- inv:loop_run_log_kind:user_ship_revert -->
+- `services/ftp_ssh_deploy.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-31T00:31:30.625907Z] <!-- inv:service:services/ftp_ssh_deploy.py -->

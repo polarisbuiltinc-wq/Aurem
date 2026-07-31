@@ -1,20 +1,32 @@
 # AUREM CTO — Product Requirements Document (living)
 
-**Last updated**: 2026-06-28 (Iter 334 · Auto-QA Agent) — see CHANGELOG.md for iter 332 (ship-gate P0 fix), 333 (Phase 1 correction rules), 334 (auto-QA agent)
-**Live**: https://auremcto.com (⚠️ /api routes 520 since last deploy — infra routing issue, deployer RCA done, awaiting founder decision: retry redeploy vs support escalation)
+**Last updated**: 2026-07-31 (Iter 367 · FINAL BUILD SESSION — Steps 0→2 complete) — see CHANGELOG.md for the full session narrative
+**Live**: https://auremcto.com (redeployed via deployer_agent on 2026-07-30 — pipeline green, /api routes healthy)
 
 ## Original problem statement
 Optimize onboarding, strict separation of backend founder logic, and expand codebase health scanners.
 Build the "Personal Track" for non-technical users, implement the "Master QA Test Strategy", fix
 Loop engine stuck bugs (Phase 0), then build the next 4 competitive differentiators:
-- Phase 1: Persistent Correction Rules
-- Phase 2: Risk-Based Routing
-- Phase 3: Checkpoints/Rollback
-- Phase 4: Browser Self-Testing
+- Phase 1: Persistent Correction Rules ✅ DONE (Iter 333 + 14-day auto-graduation Iter 367)
+- Phase 2: Risk-Based Routing ✅ DONE (Iter 367 — 2-week shadow live, tiers AUTO_SHIP/WARN_SHIP/PAUSE_FOR_FOUNDER)
+- Phase 3: Checkpoints/Rollback ✅ DONE (rollback plumbing fixed Iter 367 STEP 0 — no more fake-success writes to `rollback_trigger`; all revert paths now hit the real GitHub API)
+- Phase 4: Browser Self-Testing ✅ DONE (Iter 367 — real Playwright post-ship smoke wired into `_do_ship`)
 
 Language: **Hinglish** — main agent responds in Hinglish.
 
 ## What's implemented (chronological, most recent first)
+
+### Iter 367 · FINAL BUILD SESSION (2026-07-31) — Steps 0→2
+- **STEP 0** (P0 real-user-facing bug fix): Fake-success rollback bug fixed. Both `services/rollback_manager.execute_rollback()` and `routers/user_rollback.py::/rollback/revert-last-ship` were writing to a `rollback_trigger` collection that had NO consumer (the "deployer daemon" mentioned in comments never existed). Both now redirect into `services/loop_rollback.py::run_rollback()` which calls the real `github_api_writer.revert_commit()`. `/rollback/candidates` filter fixed (was querying `shipped: True` — a field no doc has). Founder alerts fire on every admin-triggered rollback. Real live E2E proof captured: real HTTP 200, real GitHub API call recorded in `loop_sessions.rollback_steps`. 5/5 tests pass.
+- **STEP 1** (Session-1 audit cleanup): Deleted `services/llm_router.py` (167 lines dead — flag never set), `PublicStatsStrip.jsx`, `SaveToGithubDialog.jsx`. Kept `trust/unlock/harden/chat_commits` routers (BYOH deploy support features, flagged HALF BUILT).
+- **STEP 2 Item A** (G1 CI cron): `qa-weekly.yml` now has a DAILY `g1-route-sweep` job that runs `backend/scripts/g1_route_smoke_sweep.py` against `auremcto.com` with Slack alert + artifact upload on failure. Real E2E: script exits 0 (7/7 routes green against preview) / exit 1 on bad host.
+- **STEP 2 Item B** (FTP/SSH deploy wiring): `services/ftp_ssh_deploy.py` wired into `routers/deploy.py::POST /deploy/run` via new `target: ssh|ftp|sftp` field. Discovered & fixed 3 real bugs in `ftp_ssh_deploy.py` (ftplib auto-connect port 21, all_errors tuple-in-tuple, nested-dir mkdir missing). REAL E2E: 4/4 tests pass, real bytes transferred to a real `pyftpdlib` FTP server + a real OpenSSH `sshd`, verified byte-for-byte on disk.
+- **STEP 2 Item C** (14-day auto-graduation): `correction_rules.py` Phase 2 built. `shadow_started_at` stamped on every new rule. `graduate_shadow_eligible_rules()` promotes rules meeting age + hits + active. Scheduler `_correction_rules_graduation_cron` added to `main.py` startup (6h interval). `is_rule_effectively_enforced(rule, project_enforce)` — a rule enforces if EITHER project toggle OR individual `graduated_at` set. Admin endpoint `POST /admin/qa/correction-rules/graduate`. 10/10 tests pass.
+- **STEP 2 Item D** (Risk-Based Routing Phase 2): New `services/risk_routing.py` with locked-scope tiers **AUTO_SHIP / WARN_SHIP / PAUSE_FOR_FOUNDER** (compliance test explicitly rejects draft "SAFE/CAUTION/BLOCK" names). Mandatory 2-week shadow mode before `PAUSE_FOR_FOUNDER` actually halts. Wired into `loop_engine.py::_gen_via_parliament`. Admin endpoint `GET /admin/qa/risk-routing/summary` returns tier counts + mode + `days_until_enforce` countdown. 10/10 tests pass.
+- **STEP 2 Item E** (Browser Self-Testing Phase 4): New `services/browser_self_test.py`. Path classifier + REAL Playwright chromium post-ship smoke. Cache with 180s cooldown. Wired into `loop_engine.py::_do_ship`. Admin endpoint `GET /admin/qa/browser-selftest`. 10/10 tests pass INCLUDING a real Playwright launch against the live preview URL.
+- **STEP 2 Item F** (Personal Track): SCOPE PROPOSAL ONLY at `/app/memory/PERSONAL_TRACK_SCOPE.md` — 8 safety rails, 5-screen UX, 4-phase build plan, 5 open blocker questions. NO CODE, awaiting founder go-ahead.
+
+
 
 ### Iter 355 · Health badge band mismatch fix (2026-06) — founder suggestion Jul 12
 - RCA: Dashboard HealthRing used 80/50 cutoffs; backend `_category_label` bands are

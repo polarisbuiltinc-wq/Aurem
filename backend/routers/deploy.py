@@ -55,6 +55,24 @@ class DeployConfigBody(BaseModel):
     # under (user_id, project_id) and overrides the user-level default
     # for that project. When omitted, behaves as before (user-level).
     project_id:   str = Field("", max_length=64)
+    # Iter 367 (Item B) — deploy target selector. Default 'ssh' keeps
+    # the existing SSH+docker-compose flow untouched. 'ftp' switches
+    # to services.ftp_ssh_deploy.deploy_via_ftp (FTPS by default);
+    # 'sftp' switches to services.ftp_ssh_deploy.deploy_via_ssh (SFTP
+    # over SSH, key-auth preferred).
+    target:       str = Field(
+        "ssh",
+        pattern="^(ssh|ftp|sftp)$",
+        description="ssh = docker-compose remote deploy (default); "
+                    "ftp = FTPS file upload; sftp = SFTP file upload.",
+    )
+    # For FTP: remote directory where files are uploaded (e.g. /public_html).
+    # For SSH docker-compose: repo_path is used (existing behaviour).
+    remote_dir:   str = Field("", max_length=255)
+    # Optional TLS override for FTP — default True (FTPS). Only allow
+    # plain FTP if the founder explicitly opted out (creds go in
+    # cleartext otherwise, which is a real footgun).
+    ftp_tls:      bool = True
 
 
 def _serialize_cfg(row: dict | None) -> dict[str, Any]:
@@ -72,6 +90,11 @@ def _serialize_cfg(row: dict | None) -> dict[str, Any]:
         "updated_at":    row.get("updated_at"),
         "project_id":    row.get("project_id") or None,
         "scope":         "project" if row.get("project_id") else "user",
+        # Iter 367 (Item B) — surface the deploy target + FTP-specific
+        # fields so the UI can badge each config with its transport.
+        "target":        row.get("target", "ssh"),
+        "remote_dir":    row.get("remote_dir") or None,
+        "ftp_tls":       row.get("ftp_tls", True),
     }
 
 
@@ -126,9 +149,26 @@ async def save_config(body: DeployConfigBody,
                     "ask an admin to configure the vault env var.",
         })
     pk = body.private_key.strip()
-    if "BEGIN" not in pk or "PRIVATE KEY" not in pk:
-        raise HTTPException(400, "private_key_must_be_pem")
-    enc = await encrypt(me["user_id"], pk, kind="ssh_private_key")
+    # Iter 367 (Item B) — validation branches by target:
+    #   ssh/sftp: private_key must be PEM (unchanged from Iter 212m-9)
+    #   ftp:      private_key field carries the FTP password (arbitrary
+    #             non-empty string). No PEM check applies.
+    if body.target in ("ssh", "sftp"):
+        if "BEGIN" not in pk or "PRIVATE KEY" not in pk:
+            raise HTTPException(400, "private_key_must_be_pem")
+        secret_kind = "ssh_private_key"
+    else:  # ftp
+        if len(pk) < 4:
+            raise HTTPException(400, "ftp_password_too_short")
+        # For FTP, the 'private_key' field carries the FTP password —
+        # encrypted under a distinct vault kind so we never mix key
+        # material with passwords in the same envelope.
+        secret_kind = "ftp_password"
+    if body.target == "ftp" and not body.remote_dir.strip():
+        raise HTTPException(
+            400, "remote_dir_required_for_ftp",
+        )
+    enc = await encrypt(me["user_id"], pk, kind=secret_kind)
     pid = (body.project_id or "").strip() or None
     await db.aurem_cto_deploy_configs.update_one(
         {"user_id": me["user_id"], "project_id": pid},
@@ -139,14 +179,18 @@ async def save_config(body: DeployConfigBody,
             "port":            body.port,
             "username":        body.username.strip(),
             "private_key_enc": enc,
+            "secret_kind":     secret_kind,
             "repo_path":       body.repo_path.strip(),
             "branch":          body.branch.strip(),
             "compose_file":    body.compose_file.strip(),
+            "target":          body.target,
+            "remote_dir":      body.remote_dir.strip(),
+            "ftp_tls":         body.ftp_tls,
             "updated_at":      _now_iso(),
         }},
         upsert=True,
     )
-    return {"ok": True, "project_id": pid}
+    return {"ok": True, "project_id": pid, "target": body.target}
 
 
 @router.delete("/config")
@@ -283,12 +327,124 @@ async def _run_deploy_remote(user_id: str, run_id: str,
         )
 
 
+async def _run_deploy_ftp_or_sftp(
+    user_id:  str,
+    run_id:   str,
+    cfg:      dict,
+    files:    dict,   # {rel_path: bytes|str}
+) -> None:
+    """Iter 367 (Item B) — runs the FTP or SFTP deploy path via
+    services.ftp_ssh_deploy. Decrypts the stored secret (FTP password
+    or SSH private key) and streams progress into the same
+    `aurem_cto_deploy_runs.output` array the SSH path uses."""
+    import base64
+    db = require_db()
+    target = cfg.get("target", "ssh")
+    kind   = cfg.get("secret_kind") or (
+        "ftp_password" if target == "ftp" else "ssh_private_key")
+
+    async def _append(line: str) -> None:
+        await db.aurem_cto_deploy_runs.update_one(
+            {"run_id": run_id},
+            {"$push": {"output": _scrub(line)},
+             "$set":  {"last_update": _now_iso()}},
+        )
+
+    try:
+        secret = await decrypt(user_id, cfg.get("private_key_enc", ""),
+                                kind=kind)
+    except Exception as e:
+        await db.aurem_cto_deploy_runs.update_one(
+            {"run_id": run_id},
+            {"$set": {"status": "failed",
+                       "error": f"vault_decrypt_failed: {type(e).__name__}",
+                       "finished_at": _now_iso()}},
+        )
+        return
+
+    # Normalize files: accept bytes OR str OR {content_b64: ...}
+    normalized: dict[str, bytes] = {}
+    for path, val in (files or {}).items():
+        if isinstance(val, dict) and "content_b64" in val:
+            normalized[path] = base64.b64decode(val["content_b64"])
+        elif isinstance(val, (bytes, bytearray)):
+            normalized[path] = bytes(val)
+        else:
+            normalized[path] = str(val).encode("utf-8")
+
+    from services.ftp_ssh_deploy import deploy_via_ftp, deploy_via_ssh
+    await _append(
+        f"$ transport={target} host={cfg.get('host')} "
+        f"remote_dir={cfg.get('remote_dir')} files={len(normalized)}")
+
+    try:
+        async with asyncio.timeout(DEPLOY_TIMEOUT_SECONDS):
+            if target == "ftp":
+                res = await deploy_via_ftp(
+                    host=cfg["host"], port=int(cfg.get("port", 21)),
+                    user=cfg.get("username", ""), password=secret,
+                    remote_dir=cfg.get("remote_dir", "/"),
+                    files=normalized,
+                    tls=bool(cfg.get("ftp_tls", True)),
+                )
+            else:  # sftp
+                res = await deploy_via_ssh(
+                    host=cfg["host"], port=int(cfg.get("port", 22)),
+                    user=cfg.get("username", "root"),
+                    key_pem=secret if "BEGIN" in secret else None,
+                    password=secret if "BEGIN" not in secret else None,
+                    remote_dir=cfg.get("remote_dir", "/"),
+                    files=normalized,
+                )
+    except asyncio.TimeoutError:
+        await _append(f"!! {target} deploy timed out after "
+                       f"{DEPLOY_TIMEOUT_SECONDS}s")
+        await db.aurem_cto_deploy_runs.update_one(
+            {"run_id": run_id},
+            {"$set": {"status": "timeout",
+                       "finished_at": _now_iso()}},
+        )
+        return
+    except Exception as e:
+        await _append(f"!! {target} crashed: {type(e).__name__}: "
+                       f"{str(e)[:200]}")
+        await db.aurem_cto_deploy_runs.update_one(
+            {"run_id": run_id},
+            {"$set": {"status": "failed", "finished_at": _now_iso(),
+                       "error": f"{type(e).__name__}: {str(e)[:200]}"}},
+        )
+        return
+
+    ok = bool(res.get("ok"))
+    for line in res.get("errors") or []:
+        await _append(f"! {line}")
+    await _append(f"→ uploaded={res.get('uploaded', 0)} "
+                   f"target={res.get('target', target)} ok={ok}")
+    await db.aurem_cto_deploy_runs.update_one(
+        {"run_id": run_id},
+        {"$set": {
+            "status":      "ok" if ok else "failed",
+            "exit_code":   0 if ok else 1,
+            "uploaded":    res.get("uploaded", 0),
+            "finished_at": _now_iso(),
+            "error":       res.get("fatal") or
+                            (res.get("errors") and res["errors"][0])
+                            or None,
+        }},
+    )
+
+
 class DeployRunBody(BaseModel):
     mode:      str = Field("deploy",
                             pattern="^(deploy|rollback|revert_to|dry_run)$")
     sha:       str = Field("", max_length=64)   # only used when mode=revert_to
     message_id: str = Field("", max_length=64)  # optional chat-message link
     project_id: str = Field("", max_length=64)  # optional dogfood project link
+    # Iter 367 (Item B) — files for FTP/SFTP target. Values may be
+    # base64-encoded strings (via `{"content_b64": "..."}`) or plain
+    # text. Ignored when target=ssh (SSH path uses git-pull on remote).
+    files:     dict = Field(default_factory=dict,
+                             description="{rel_path: content} — FTP/SFTP only.")
 
 
 @router.post("/run")
@@ -308,6 +464,50 @@ async def run_deploy(body: DeployRunBody = DeployRunBody(),
     # dogfood workflow is revived, add the flag to `cto_projects` and
     # re-implement the 24h dry-run check here.
 
+    target = cfg.get("target", "ssh")
+
+    # Iter 367 (Item B) — FTP/SFTP branch. Skips the docker-compose
+    # command construction entirely and routes to ftp_ssh_deploy.
+    if target in ("ftp", "sftp"):
+        if body.mode not in ("deploy",):
+            raise HTTPException(
+                400,
+                f"mode='{body.mode}' not supported for target='{target}' "
+                "(only 'deploy' is valid for FTP/SFTP transports).",
+            )
+        if not body.files:
+            raise HTTPException(
+                400,
+                "files_required — FTP/SFTP deploys need a non-empty "
+                "`files` map ({rel_path: content_b64 | str}).",
+            )
+        run_id = uuid.uuid4().hex[:16]
+        await db.aurem_cto_deploy_runs.insert_one({
+            "run_id":      run_id,
+            "user_id":     me["user_id"],
+            "mode":        body.mode,
+            "target":      target,
+            "host":        cfg.get("host"),
+            "remote_dir":  cfg.get("remote_dir"),
+            "message_id":  body.message_id or None,
+            "project_id":  body.project_id or None,
+            "command":     f"[{target}] upload {len(body.files)} file(s) → "
+                            f"{cfg.get('host')}:{cfg.get('remote_dir')}",
+            "status":      "running",
+            "exit_code":   None,
+            "output":      [],
+            "started_at":  _now_iso(),
+            "last_update": _now_iso(),
+            "finished_at": None,
+        })
+        asyncio.create_task(
+            _run_deploy_ftp_or_sftp(me["user_id"], run_id, cfg, body.files),
+            name=f"aurem-cto-deploy-{target}:{run_id}",
+        )
+        return {"run_id": run_id, "mode": body.mode,
+                "target": target, "status": "running"}
+
+    # ── SSH + docker-compose (legacy default) ─────────────────────
     if body.mode == "revert_to":
         cfg = {**cfg, "_revert_sha": body.sha}
     run_id = uuid.uuid4().hex[:16]
@@ -316,6 +516,7 @@ async def run_deploy(body: DeployRunBody = DeployRunBody(),
         "run_id":      run_id,
         "user_id":     me["user_id"],
         "mode":        body.mode,
+        "target":      "ssh",
         "host":        cfg.get("host"),
         "branch":      cfg.get("branch", "main"),
         "message_id":  body.message_id or None,
@@ -330,7 +531,8 @@ async def run_deploy(body: DeployRunBody = DeployRunBody(),
     })
     asyncio.create_task(_run_deploy_remote(me["user_id"], run_id, cfg, cmd),
                         name=f"aurem-cto-deploy:{run_id}")
-    return {"run_id": run_id, "mode": body.mode, "status": "running"}
+    return {"run_id": run_id, "mode": body.mode,
+            "target": "ssh", "status": "running"}
 
 
 @router.get("/log/{run_id}")

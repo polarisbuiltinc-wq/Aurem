@@ -46,8 +46,11 @@ async def deploy_via_ftp(
     errors: list[str] = []
     try:
         ftp_cls = ftplib.FTP_TLS if tls else ftplib.FTP
-        # `timeout` is critical — no infinite hang on a bad host.
-        with ftp_cls(host, timeout=30) as ftp:
+        # Iter 367 (Item B) — pass NO host to the ctor so it doesn't
+        # auto-connect to port 21 (which was the pre-existing bug: the
+        # ctor would silently connect to the default port and fail
+        # before .connect() ever ran with the user-supplied port).
+        with ftp_cls(timeout=30) as ftp:
             ftp.connect(host, port, timeout=30)
             ftp.login(user, password)
             if tls:
@@ -60,12 +63,20 @@ async def deploy_via_ftp(
                 ftp.cwd(remote_dir)
 
             for path, data in files.items():
+                # Iter 367 (Item B) — create any intermediate dirs
+                # under remote_dir for nested paths (e.g. public/x.html).
+                parent = "/".join(path.split("/")[:-1])
+                if parent:
+                    _mkdirs_ftp(ftp, f"{remote_dir.rstrip('/')}/{parent}")
                 try:
                     ftp.storbinary(f"STOR {path}", io.BytesIO(data))
                     uploaded += 1
                 except ftplib.all_errors as e:
                     errors.append(f"{path}: {e}")
-    except (socket.timeout, ftplib.all_errors, OSError) as e:
+    # Iter 367 (Item B) — ftplib.all_errors is a TUPLE (Error, IOError,
+    # EOFError), so it must be expanded — cannot be nested inside
+    # another tuple, which throws TypeError at bind-time.
+    except (socket.timeout, OSError, *ftplib.all_errors) as e:
         return {"ok": False, "uploaded": uploaded,
                 "errors": errors, "fatal": str(e)[:200]}
     return {"ok": len(errors) == 0, "uploaded": uploaded,

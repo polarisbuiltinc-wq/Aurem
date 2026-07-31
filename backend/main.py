@@ -302,6 +302,37 @@ async def lifespan(app: FastAPI):
         schedule_integration_health_cron()
     )
 
+    # Iter 367 (Item C) — Correction rule 14-day auto-graduation.
+    # Every CORRECTION_RULES_GRADUATION_INTERVAL_SEC (default 6h) we
+    # scan all shadow rules and promote any that hit the 14-day + ≥1-hit
+    # threshold. Idempotent — a rule already graduated is skipped.
+    # Fail-open: sweep exceptions are logged; loops must not break.
+    async def _correction_rules_graduation_cron():
+        import os as _os
+        from services.correction_rules import graduate_shadow_eligible_rules
+        interval_s = int(_os.environ.get(
+            "CORRECTION_RULES_GRADUATION_INTERVAL_SEC", str(6 * 3600)))
+        # Delay first sweep so we don't fight startup traffic.
+        await _asyncio.sleep(60)
+        while True:
+            try:
+                db = app.state.db
+                if db is not None:
+                    res = await graduate_shadow_eligible_rules(db)
+                    if res.get("promoted"):
+                        _asyncio_logger = logging.getLogger(
+                            "correction_rules_graduation")
+                        _asyncio_logger.info(
+                            "[graduation cron] promoted=%s eligible=%s",
+                            res["promoted"], res["eligible_count"])
+            except Exception as _e:
+                logging.getLogger("correction_rules_graduation").warning(
+                    "graduation sweep failed: %r", _e)
+            await _asyncio.sleep(interval_s)
+    app.state.correction_rules_graduation_task = _asyncio.create_task(
+        _correction_rules_graduation_cron()
+    )
+
     # Iter 309 · Phase 0.1 — Merged housekeeping loop.
     # Previously two independent `while True` background tasks:
     #   • _resume_stale_loops (rescues orphaned EXECUTING/VERIFYING/…)

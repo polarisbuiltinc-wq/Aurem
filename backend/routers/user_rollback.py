@@ -1,34 +1,39 @@
 """
-routers/user_rollback.py — Iter 366 · User-facing rollback
+routers/user_rollback.py — Iter 366 · User-facing rollback (REAL, not staged)
 
-Non-admin, per-loop rollback. A Pro/Team user who just shipped a
-loop can revert THEIR OWN latest ship with one call, without going
-through founder-only /admin/qa endpoints.
+Non-admin, per-loop rollback. A Pro/Team user who just shipped a loop
+can revert THEIR OWN latest ship with one call — the actual git-revert
+commit is created via `services/loop_rollback.run_rollback()` in a
+background task (the SAME workhorse `POST /loop/{loop_id}/rollback`
+already uses).
 
 Endpoints:
-  GET  /rollback/candidates          — user's last 5 successful ships
-  POST /rollback/revert-last-ship    — reverts THE latest ship by
-                                        creating an "undo" commit that
-                                        removes the loop's changes.
+  GET  /rollback/candidates          — user's last 5 unreverted ships
+  POST /rollback/revert-last-ship    — fires a real GitHub revert on
+                                        the most recent unreverted loop
 
 Guards:
   - Auth required (`current_dev`).
-  - Only the loop's own user_id can revert it (verified via
-    loop_sessions.user_id match).
-  - Free/Starter tier locked — this is a Pro/Team feature.
-  - Loop must be in COMPLETED state to revert.
-  - Only the MOST RECENT completed loop can be reverted (no
-    time-travel rollback across multiple ships).
+  - Only the loop's own `user_id` can revert it.
+  - Free/Starter tier locked — Pro/Team/founder only.
+  - Loop must have a persisted `commit_sha` (recorded via
+    `record_shipped_commit`) and `reverted=False`.
+
+Iter 367 (audit fix) — Previously wrote to a `rollback_trigger`
+collection expecting a "deployer daemon" to pick it up. No such
+daemon exists; the endpoint returned 200-success while doing nothing.
+Now calls `run_rollback()` directly so a real revert commit is created
+on GitHub before the client can consider the request "done".
 """
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Header
+
 from cto_services.auth import current_dev
-from cto_services.db import get_db, require_db
+from cto_services.db import require_db
 
 logger = logging.getLogger("aurem.user_rollback")
 
@@ -54,20 +59,26 @@ async def rollback_candidates(authorization: Optional[str] = Header(None)):
     db = require_db()
     out = []
     try:
+        # Iter 367 audit fix — was filtering `shipped: True` which no
+        # loop_outcomes doc ever has (record_shipped_commit doesn't
+        # write that field). The correct filter is unreverted rows —
+        # every row in loop_outcomes IS a shipped commit by construction.
         async for d in db.loop_outcomes.find(
-            {"user_id": user["user_id"], "shipped": True},
+            {"user_id": user["user_id"],
+             "reverted": {"$ne": True}},
             {"_id": 0, "loop_id": 1, "user_id": 1, "project_id": 1,
-             "shipped_at": 1, "commit_sha": 1, "summary": 1,
-             "reverted": 1},
+             "shipped_at": 1, "commit_sha": 1, "file_paths": 1,
+             "repeat_touch": 1},
         ).sort("shipped_at", -1).limit(5):
-            if d.get("reverted"):
-                continue
+            files = d.get("file_paths") or []
             out.append({
                 "loop_id":     d.get("loop_id"),
                 "project_id":  d.get("project_id"),
                 "commit_sha":  d.get("commit_sha"),
-                "summary":     (d.get("summary") or "")[:120],
+                "summary":     (f"{len(files)} file(s) changed"
+                                if files else "no files recorded"),
                 "shipped_at":  d.get("shipped_at"),
+                "repeat_touch": bool(d.get("repeat_touch")),
             })
     except Exception as e:
         logger.warning("rollback candidates query failed: %r", e)
@@ -76,11 +87,11 @@ async def rollback_candidates(authorization: Optional[str] = Header(None)):
 
 @router.post("/revert-last-ship")
 async def revert_last_ship(
+    bg: BackgroundTasks,
     authorization: Optional[str] = Header(None),
 ) -> dict:
-    """Reverts the user's MOST RECENT completed loop by staging a
-    rollback_trigger row. The actual git-revert commit is applied by
-    the deployer/github_deploy_service worker on next tick."""
+    """Reverts the user's MOST RECENT unreverted shipped loop by firing
+    a REAL github_api_writer.revert_commit() via loop_rollback."""
     user = await current_dev(authorization)
     if not _tier_allowed(user.get("tier")) and not user.get("is_admin"):
         raise HTTPException(403, {
@@ -88,9 +99,10 @@ async def revert_last_ship(
             "message": "Rollback is a Pro/Team feature.",
         })
     db = require_db()
+
+    # 1) Find latest unreverted ship for this user.
     latest = await db.loop_outcomes.find_one(
-        {"user_id": user["user_id"], "shipped": True,
-         "reverted": {"$ne": True}},
+        {"user_id": user["user_id"], "reverted": {"$ne": True}},
         sort=[("shipped_at", -1)],
     )
     if not latest:
@@ -98,33 +110,86 @@ async def revert_last_ship(
             "error":   "no_recent_ship",
             "message": "No recently-shipped loop found to revert.",
         })
-    loop_id = latest.get("loop_id")
 
-    # Stage the rollback intent — deployer picks it up on next tick.
-    intent = {
-        "kind":         "user_ship_revert",
-        "loop_id":      loop_id,
-        "user_id":      user["user_id"],
-        "project_id":   latest.get("project_id"),
-        "target_sha":   latest.get("commit_sha"),
-        "triggered_by": user.get("email") or user["user_id"],
-        "status":       "pending",
-        "created_at":   datetime.now(timezone.utc),
-    }
-    try:
-        res = await db.rollback_trigger.insert_one(intent)
-        # Mark the loop_outcomes row so a second click is idempotent.
-        await db.loop_outcomes.update_one(
-            {"loop_id": loop_id},
-            {"$set": {"reverted": True,
-                       "reverted_at": datetime.now(timezone.utc)}},
+    loop_id    = latest.get("loop_id")
+    project_id = latest.get("project_id")
+    commit_sha = latest.get("commit_sha")
+    if not (loop_id and project_id and commit_sha):
+        raise HTTPException(500, {
+            "error": "outcome_row_incomplete",
+            "message": ("The most recent ship row is missing loop_id/"
+                        "project_id/commit_sha — cannot resolve revert "
+                        "context. Contact support."),
+        })
+
+    # 2) Idempotence — refuse if already rolled back or in flight on
+    #    the loop_sessions doc.
+    sess = await db.loop_sessions.find_one(
+        {"loop_id": loop_id, "user_id": user["user_id"]},
+    )
+    if not sess:
+        raise HTTPException(404, {
+            "error":   "session_not_found",
+            "message": ("Loop session missing — cannot rollback "
+                        "without repo/PAT context."),
+        })
+    if sess.get("rollback_sha"):
+        raise HTTPException(409, "Loop already rolled back")
+    rb_status = sess.get("rollback_status")
+    if rb_status in ("queued", "running"):
+        raise HTTPException(409, "Rollback already in progress")
+    if rb_status == "failed":
+        raise HTTPException(
+            409, "Previous rollback failed — manual intervention required",
         )
-        intent["_id"] = str(res.inserted_id)
-    except Exception as e:
-        raise HTTPException(500, {"error": "rollback_stage_failed",
-                                   "detail": str(e)[:200]}) from None
-    logger.info("[user_rollback] staged for loop=%s user=%s",
-                loop_id, user["user_id"])
-    return {"ok": True, "loop_id": loop_id,
-             "commit_sha": latest.get("commit_sha"),
-             "status": "pending"}
+
+    # 3) Load project + PAT via the same helpers cto_projects uses so
+    #    encryption + fallback rules stay consistent with /loop/{id}/rollback.
+    proj = await db.cto_projects.find_one(
+        {"project_id": project_id, "user_id": user["user_id"]},
+        {"_id": 0, "repo_index_summary": 0, "brain_text": 0,
+         "repo_index_blocks": 0, "last_commit_diff": 0},
+    )
+    if not proj:
+        raise HTTPException(404, {
+            "error":   "project_not_found",
+            "message": "Parent project not found — cannot resolve repo.",
+        })
+    from routers.cto_projects import _decrypt_pat, _user_gh_token
+    user_token = await _decrypt_pat(
+        user["user_id"], proj.get("github_token"),
+    ) or await _user_gh_token(user["user_id"])
+    if not user_token:
+        raise HTTPException(400, {
+            "error":   "no_github_pat",
+            "message": ("No GitHub PAT on file for this project — open "
+                        "Projects → Edit and add one before rolling back."),
+        })
+
+    # 4) Stage state + fire the REAL rollback background task.
+    import time as _time
+    await db.loop_sessions.update_one(
+        {"loop_id": loop_id},
+        {"$set": {"rollback_status":     "queued",
+                  "rollback_started_at": _time.time(),
+                  "rollback_commit_sha": commit_sha,
+                  "rollback_triggered_by": "user_revert_last_ship"}},
+    )
+    from services.loop_rollback import run_rollback
+    bg.add_task(
+        run_rollback,
+        db=db, loop_id=loop_id, project=proj,
+        commit_sha=commit_sha, user_token=user_token,
+    )
+    logger.info(
+        "[user_rollback] queued real revert for loop=%s user=%s sha=%s",
+        loop_id, user["user_id"], commit_sha,
+    )
+    return {
+        "ok":               True,
+        "loop_id":          loop_id,
+        "project_id":       project_id,
+        "commit_sha":       commit_sha,
+        "rollback_status":  "queued",
+        "poll_hint":        f"/loop/{loop_id}",
+    }
