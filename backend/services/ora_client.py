@@ -111,6 +111,65 @@ def is_ora_available() -> bool:
     return bool(os.environ.get("ORA_API_KEY", "").strip()) and not _breaker_is_open()
 
 
+def breaker_status() -> dict:
+    """Session 4 · P0 · Return the ORA circuit-breaker state as
+    structured JSON — pure read, no side effects. Consumed by
+    `GET /api/health/ora-breaker` and the daily digest so ops learn
+    about a silent 24h outage within 5 minutes instead of never.
+
+    Contract:
+      open (bool)               — breaker currently short-circuits every call
+      fatal (bool)              — 24h cooldown (config-fix required upstream)
+      age_seconds (int|None)    — seconds since breaker was tripped (None if closed)
+      cooldown_seconds (int)    — cooldown window of the ACTIVE file
+      remaining_seconds (int)   — seconds until auto-close (0 if closed)
+      reason (str)              — first ~200 chars from the breaker file
+      file (str|None)           — which breaker file is live
+      api_key_configured (bool) — whether ORA_API_KEY is set (breaker is
+                                  irrelevant if the key is missing)
+    """
+    api_key_configured = bool(os.environ.get("ORA_API_KEY", "").strip())
+    # Check fatal file FIRST — matches `_breaker_is_open()` precedence.
+    for path, cooldown, is_fatal in (
+        (_BREAKER_FATAL_FILE, _BREAKER_FATAL_COOLDOWN_SECS, True),
+        (_BREAKER_FILE,       _BREAKER_COOLDOWN_SECS,       False),
+    ):
+        try:
+            if not path.exists():
+                continue
+            age = int(time.time() - path.stat().st_mtime)
+            if age >= cooldown:
+                # Stale file — breaker no longer effective on this path
+                continue
+            reason = ""
+            try:
+                reason = path.read_text(errors="replace").strip()[:200]
+            except OSError:
+                pass
+            return {
+                "open":              True,
+                "fatal":             is_fatal,
+                "age_seconds":       age,
+                "cooldown_seconds":  cooldown,
+                "remaining_seconds": max(0, cooldown - age),
+                "reason":            reason,
+                "file":              str(path),
+                "api_key_configured": api_key_configured,
+            }
+        except OSError:
+            continue
+    return {
+        "open":               False,
+        "fatal":              False,
+        "age_seconds":        None,
+        "cooldown_seconds":   0,
+        "remaining_seconds":  0,
+        "reason":             "",
+        "file":               None,
+        "api_key_configured": api_key_configured,
+    }
+
+
 async def call_ora(
     message: str,
     session_id: Optional[str] = None,

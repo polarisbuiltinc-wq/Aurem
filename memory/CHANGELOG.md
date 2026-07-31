@@ -5,7 +5,39 @@ statement and historical context; this file captures recent feature
 work in date-stamped chunks so PRD.md stays focused.
 
 
-## 2026-07-31 03:55 UTC — Iter 367 · Session 4 · Guard 15 npm audit gap closed
+## 2026-07-31 04:00 UTC — Iter 367 · Session 4 · P0 · ORA breaker surface (LIVE outage handled)
+
+### Discovery (user-driven — carry-forward from Session 4 audit)
+User escalated the P0 finding from `SESSION_4_DEEP_AUDIT.md`: aurem.live ORA upstream is CURRENTLY in a 24h fatal circuit-open state (OpenRouter model 404, `"This model is unavailable for free"`), silently degrading every dependent path for ~19h more. Zero alerts existed.
+
+### Fix
+- Added `services.ora_client.breaker_status()` — pure-read helper returning `{open, fatal, age_seconds, cooldown_seconds, remaining_seconds, reason, file, api_key_configured}`. No upstream calls, no side effects.
+- Added `GET /api/health/ora-breaker` — **public** (unauthenticated) endpoint so external monitors (UptimeRobot / statuscake / a curl in daily-digest cron) can catch a silent outage within 5 min.
+- Extended `services/daily_digest.py::_run_once()` to snapshot the breaker every cycle into `ora_breaker_snapshot` (timestamped + `latest` upsert) and log **WARNING** whenever `open=True` — so Grafana / paper trail catches future silent outages.
+- Short-circuited existing `GET /api/aurem-dev/health/ora` when breaker is open — saves an 8s wasted LLM call.
+
+### Real proof (LIVE production capture)
+```
+$ curl -s $BASE/api/health/ora-breaker | jq
+{
+  "ok": false,
+  "breaker": {
+    "open": true, "fatal": true,
+    "age_seconds": 21278, "remaining_seconds": 65122,
+    "cooldown_seconds": 86400,
+    "reason": "1785448573 http_500: ora_chat_error: openrouter HTTP 404: {\"error\":{\"message\":\"This model is unavailable for free.\"}}",
+    "file": "/tmp/aurem_ora_circuit_open_fatal",
+    "api_key_configured": true
+  }
+}
+```
+The exact live outage that was invisible for hours is now discoverable in one curl.
+
+### Tests
+- `tests/test_session4_p0_ora_breaker_surface.py` — 11/11 green in 1.97s. Covers: closed/open-fatal/open-short/expired-file breaker states, public endpoint (open + closed + no-auth), daily-digest snapshot & WARNING log, source-wiring regressions on all three surfaces.
+- Full-suite: **3838 passed / 22 pre-existing legacy failures / 68 skipped** — +17 pass vs prior baseline, no new regressions.
+
+
 
 ### Discovery (user-driven verification)
 User asked to verify Guard 15 for `npm audit` specifically. Found: `scripts/g15_dependency_scan.py` docstring **claimed** it ran "yarn npm audit against frontend/yarn.lock" but the code was pip-audit ONLY — a doc-lies-code-doesn't gap. **Real current yarn audit output**: 1 CRITICAL (vitest CVE-2026-47429), 13 HIGH (vite CVE-2026-53571, brace-expansion CVE-2026-14257, form-data CVE-2026-12143, axios GHSA-gcfj-64vw-6mp9, postcss GHSA-r28c-9q8g-f849, tmp CVE-2026-44705 + transitive re-instances), 23 moderate, 3 low across 803 total deps. Deduped: **7 unique HIGH/CRITICAL advisories**.

@@ -218,6 +218,42 @@ async def _run_once() -> None:
     # startup. Keeping this comment (no-op body) as a signpost so
     # future readers know why the digest no longer touches billing.
 
+    # Session 4 · P0 · ORA circuit-breaker surface.
+    # Before this hook, aurem.live going into a 24h fatal-open state
+    # was completely invisible — every dependent path silently no-op'd
+    # and no one knew until a founder happened to look. We now write a
+    # `ora_breaker_snapshot` row per digest cycle so admins have a
+    # timeline, AND log at WARNING level whenever the breaker is open
+    # so ops surfaces (Grafana / paper trail) catch it in ≤5 min.
+    try:
+        from services.ora_client import breaker_status as _ora_bs
+        from cto_services.db import get_db as _gd
+        _db = _gd()
+        bs = _ora_bs()
+        if _db is not None:
+            snap = dict(bs)
+            snap["captured_at"] = time.time()
+            snap["_id"] = f"ora_breaker_{int(snap['captured_at'])}"
+            await _db.ora_breaker_snapshot.insert_one(snap)
+            # Keep a `latest` pointer for a cheap dashboard read.
+            await _db.ora_breaker_snapshot.update_one(
+                {"_id": "latest"},
+                {"$set": {**bs, "captured_at": snap["captured_at"]}},
+                upsert=True,
+            )
+        if bs["open"]:
+            logger.warning(
+                "🚨 ORA circuit-breaker OPEN — fatal=%s age=%ss "
+                "remaining=%ss reason=%r file=%s",
+                bs["fatal"], bs["age_seconds"], bs["remaining_seconds"],
+                bs["reason"], bs["file"],
+            )
+        else:
+            logger.info("✅ ORA circuit-breaker CLOSED (api_key_configured=%s)",
+                        bs["api_key_configured"])
+    except Exception as e:
+        logger.warning(f"ora breaker snapshot failed: {e!r}")
+
 
 async def schedule_daily_digest() -> None:
     """Background loop — sleeps until target UTC hour, fires once, repeats."""

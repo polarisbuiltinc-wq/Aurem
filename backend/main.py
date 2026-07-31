@@ -1784,6 +1784,21 @@ async def health_ora(authorization: Optional[str] = Header(None)):
     if not (bool(user.get("is_admin")) or bool(user.get("is_unlimited"))
             or user.get("tier") == "founder"):
         raise HTTPException(403, "ORA health probe is admin-only")
+    # Session 4 · P0 — short-circuit if the breaker is already open.
+    # No point wasting an LLM call & 8s wait if we already KNOW upstream
+    # is fatally broken. Daily digest + /api/health/ora-breaker surface
+    # this to ops within 5 min instead of the previous 24h silent gap.
+    from services.ora_client import breaker_status as _ora_breaker_status
+    _bs = _ora_breaker_status()
+    if _bs["open"]:
+        return {
+            "ok":         False,
+            "status":     "circuit_open",
+            "latency_ms": 0,
+            "error":      _bs["reason"],
+            "reply":      "",
+            "breaker":    _bs,
+        }
     import asyncio as _asyncio
     import time as _t
     from services.llm import call_llm
@@ -1830,6 +1845,27 @@ async def health_ora(authorization: Optional[str] = Header(None)):
 @app.get("/ping")
 async def healthz_root():
     return {"ok": True}
+
+
+# Session 4 · P0 — public ORA circuit-breaker status.
+#
+# During Session 4's deep audit we discovered the ORA upstream had
+# been silently in a 24h fatal-open state for hours with zero alerts.
+# This endpoint is deliberately UNAUTHENTICATED so external
+# monitoring (UptimeRobot / statuscake / a simple curl in the daily
+# digest cron) can catch a silent outage within 5 min instead of 24h.
+#
+# It performs ZERO upstream calls — just reads the local breaker file.
+@app.get("/api/health/ora-breaker")
+async def health_ora_breaker():
+    """Return the ORA circuit-breaker state. Pure local read; no
+    upstream call. Public: intended for external monitors."""
+    from services.ora_client import breaker_status
+    bs = breaker_status()
+    # `ok=True` only when the breaker is closed. Monitors can trigger
+    # on `ok=false` OR on `breaker.fatal=true` (the latter means a
+    # manual founder fix is needed upstream).
+    return {"ok": not bs["open"], "breaker": bs}
 
 
 # Iter 140 — Versioned health endpoint. Stable contract for v1 API
