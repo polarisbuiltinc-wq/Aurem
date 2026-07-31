@@ -1600,9 +1600,8 @@ class LoopEngine:
                                             _rr_score.score)
                                         await self._narrate(
                                             step="execute", tone="danger",
-                                            text=(f"risk PAUSE_FOR_FOUNDER "
-                                                  f"on {path} — halted for "
-                                                  f"founder review "
+                                            text=(f"PAUSE_FOR_FOUNDER on "
+                                                  f"{path} — halted "
                                                   f"(score={_rr_score.score})"),
                                             correlation_id=f"risk:{path}",
                                         )
@@ -3134,6 +3133,7 @@ class LoopEngine:
         # Clear the pending payload (contains the GitHub token).
         self.context.pop("ship_pending", None)
         self.state = LoopState.COMPLETED
+        await self._emit("state", {"state": self.state.value})
         await _persist_session(self.db, self._doc())
 
         # ── Iter 367 · Item E · Browser Self-Testing ────────────────

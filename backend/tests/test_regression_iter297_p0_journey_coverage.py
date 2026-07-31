@@ -22,10 +22,13 @@ import time
 import uuid
 from typing import Any
 
+_fake_req = type("R", (), {"client": type("C", (), {"host": "127.0.0.1"})(), "headers": {}, "url": type("U", (), {"path": "/api/aurem-dev/loop/start"})()})()
+
 
 # ═══════════════════════════════════════════════════════════════════
 # Shared test doubles
 # ═══════════════════════════════════════════════════════════════════
+
 
 class _StubResult:
     def __init__(self, *, matched=1, modified=1, inserted_id="x"):
@@ -168,6 +171,7 @@ def test_j005_loop_start_endpoint_runs_plan_phase_and_returns_awaiting_confirmat
         async def _call_nonfounder():
             await _loop_router.start_loop(
                 body=_loop_router.StartBody(user_message="add /api/health"),
+                request=_fake_req,
                 authorization="Bearer x",
             )
         with pytest.raises(HTTPException) as exc:
@@ -222,6 +226,7 @@ def test_j005_loop_start_endpoint_runs_plan_phase_and_returns_awaiting_confirmat
                 body=_loop_router.StartBody(
                     user_message="add health endpoint"
                 ),
+                request=_fake_req,
                 authorization="Bearer f",
             )
         result = asyncio.run(_call_founder())

@@ -88,7 +88,18 @@ def test_summary_counts_shape():
         {"id": "e", "status": "missing"},
     ]
     out = summary_counts(sample)
-    assert out == {"ok": 2, "warn": 1, "broken": 1, "missing": 1, "total": 5}
+    # Iter 367 · surface change — Session 4 audit added a "disabled"
+    # bucket (Supabase/Vercel-style silent no-ops) so the shape has an
+    # extra key. Assert the known counts individually so future
+    # additions (e.g., "quota_exhausted") don't need another test edit.
+    assert out["ok"]      == 2
+    assert out["warn"]    == 1
+    assert out["broken"]  == 1
+    assert out["missing"] == 1
+    assert out["total"]   == 5
+    # `disabled` bucket exists but is 0 for this sample (no items
+    # with status="disabled" — the surface added the key).
+    assert out.get("disabled", 0) == 0
 
 
 def test_no_mock_imports_in_probe_module():

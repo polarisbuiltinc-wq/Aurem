@@ -19,6 +19,8 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 
+_fake_req = type("R", (), {"client": type("C", (), {"host": "127.0.0.1"})(), "headers": {}, "url": type("U", (), {"path": "/api/aurem-dev/loop/start"})()})()
+
 
 # ─── 1) Backend gate logic — direct unit test ─────────────────────
 @pytest.mark.parametrize("user,expected_block", [
@@ -33,6 +35,7 @@ from fastapi import HTTPException
     ({"user_id": "u1", "is_unlimited": True},       False),
     ({"user_id": "u1", "tier": "founder"},          False),
 ])
+
 def test_loop_gate_classifies_correctly(user, expected_block):
     """The gate condition lives inline in routers/loop.py — replicate
     it here so a future refactor doesn't accidentally widen access."""
@@ -63,13 +66,18 @@ async def test_loop_start_returns_coming_soon_for_non_founder(monkeypatch):
 
     body = loop_router.StartBody(user_message="ship me a feature")
     with pytest.raises(HTTPException) as exc_info:
-        await loop_router.start_loop(body=body, authorization=None)
+        await loop_router.start_loop(body=body, request=_fake_req, authorization=None)
     assert exc_info.value.status_code == 403
     detail = exc_info.value.detail
     assert isinstance(detail, dict)
     assert detail.get("error")       == "loop_mode_locked"
     assert detail.get("coming_soon") is True
-    assert "coming soon" in (detail.get("message") or "").lower()
+    # Iter 367 · message text was updated when the pricing/upgrade path
+    # landed — now says "upgrade your plan" rather than "coming soon".
+    # The structural `coming_soon: True` field above is the invariant;
+    # the message is user-facing copy that can drift.
+    msg = (detail.get("message") or "").lower()
+    assert "upgrade" in msg or "coming soon" in msg
 
 
 # ─── 3) Founder is NOT blocked by the gate ─────────────────────────
@@ -105,7 +113,7 @@ async def test_loop_start_lets_founder_through(monkeypatch):
     # If the gate is broken, this would raise 403; we expect a
     # different error code (409 from the locked acquire_loop_lock).
     with pytest.raises(HTTPException) as exc_info:
-        await loop_router.start_loop(body=body, authorization=None)
+        await loop_router.start_loop(body=body, request=_fake_req, authorization=None)
     # 409 == loop_already_running (the next safety after the gate).
     # That's proof we cleared the gate; any 403 would be a regression.
     assert exc_info.value.status_code == 409

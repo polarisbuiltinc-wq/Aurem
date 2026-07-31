@@ -40,5 +40,10 @@ def test_empty_plan_releases_loop_lock():
 
 
 def test_pipeline_still_guards_between_phases():
-    seg = SRC.split("async def _run_pipeline")[1].split("async def ")[0]
+    # Iter 364 · Total-budget wrap — `_run_pipeline` became a thin
+    # `asyncio.wait_for` guard around the actual phase machine, which
+    # was extracted into `_run_pipeline_inner`. The invariant (≥3
+    # `_should_stop()` calls between phases) still holds, just in the
+    # new location.
+    seg = SRC.split("async def _run_pipeline_inner")[1].split("async def ")[0]
     assert seg.count("_should_stop()") >= 3
