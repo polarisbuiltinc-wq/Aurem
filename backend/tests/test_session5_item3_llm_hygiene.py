@@ -29,55 +29,66 @@ import pytest
 
 BACKEND = Path(__file__).resolve().parents[1]
 LLM_PY = BACKEND / "services" / "llm.py"
+# Session 5 · Phase 2 — `probe_longcat_availability()` moved to
+# services/_llm_probes.py, so its hygiene site moved with it.
+LLM_PROBES_PY = BACKEND / "services" / "_llm_probes.py"
 
 
 # ═════════════════════════════════════════════════════════════════
 # 1) 3 hygiene sites now log at debug
 # ═════════════════════════════════════════════════════════════════
 def test_llm_py_has_three_silent_catch_debug_lines():
-    src = LLM_PY.read_text()
-    n = src.count('logger.debug(\n                "[silent-catch] llm.py:') \
-      + src.count('logger.debug(\n                                "[silent-catch] llm.py:') \
-      + src.count('logger.debug(\n                            "[silent-catch] llm.py:') \
-      + src.count('logger.debug(\n            "[silent-catch] llm.py:')
-    # Count is 3 across the various indent levels in the file.
-    # Simpler regex-free check:
-    prefix_count = src.count('"[silent-catch] llm.py:')
-    assert prefix_count == 3, (
-        f"expected exactly 3 [silent-catch] llm.py: prefixes, "
-        f"got {prefix_count}"
+    """Session 5 · Phase 2 update — one of the original 3 hygiene sites
+    (probe_longcat_availability) migrated to `_llm_probes.py`. We now
+    verify the TOTAL sweep is still 3 across the two files."""
+    llm_src = LLM_PY.read_text()
+    probes_src = LLM_PROBES_PY.read_text()
+    llm_count    = llm_src.count('"[silent-catch] llm.py:')
+    probes_count = probes_src.count(
+        '"[silent-catch] _llm_probes.probe_longcat_availability')
+    total = llm_count + probes_count
+    assert total == 3, (
+        f"expected 3 [silent-catch] sites across llm.py + _llm_probes.py, "
+        f"got llm={llm_count} probes={probes_count} total={total}"
+    )
+    # Precise pre/post-Phase-2 shape lock so a future refactor that
+    # accidentally MOVES a site back into llm.py breaks this test.
+    assert llm_count == 2 and probes_count == 1, (
+        f"expected llm.py=2 + _llm_probes.py=1 after Phase 2, "
+        f"got llm={llm_count} probes={probes_count}"
     )
 
 
 def test_llm_py_hygiene_sites_are_the_expected_ones():
-    """Locked line-numbers of the 3 patched sites so future refactors
+    """Locked identifiers of the 3 patched sites so future refactors
     trip when someone accidentally re-introduces a silent swallow."""
-    src = LLM_PY.read_text()
-    # Each patched site references its origin line in the message
-    assert '"[silent-catch] llm.py:468 in probe_longcat_availability' in src
-    assert '"[silent-catch] llm.py:738 in _call_deepseek' in src
-    assert '"[silent-catch] llm.py:1104 in call_openrouter_model' in src
+    llm_src = LLM_PY.read_text()
+    probes_src = LLM_PROBES_PY.read_text()
+    # 2 sites remaining in llm.py.
+    assert '"[silent-catch] llm.py:738 in _call_deepseek' in llm_src
+    assert '"[silent-catch] llm.py:1104 in call_openrouter_model' in llm_src
+    # 1 site migrated to _llm_probes.py during Phase 2 (originally
+    # llm.py:468, now inside _llm_probes.probe_longcat_availability).
+    assert (
+        '"[silent-catch] _llm_probes.probe_longcat_availability'
+        in probes_src
+    )
 
 
 def test_llm_py_hygiene_fixes_preserve_fail_open_behavior():
     """Every patched site MUST still swallow — behaviour-neutral fix.
     The `except X as _e: logger.debug(...)` block must NOT re-raise
     on the SAME LINE / immediate next line as the debug call."""
-    src = LLM_PY.read_text()
-    for ln_marker in ("llm.py:468", "llm.py:738", "llm.py:1104"):
+    llm_src    = LLM_PY.read_text()
+    probes_src = LLM_PROBES_PY.read_text()
+    checks = [
+        (llm_src,    "llm.py:738"),
+        (llm_src,    "llm.py:1104"),
+        (probes_src, "_llm_probes.probe_longcat_availability"),
+    ]
+    for src, ln_marker in checks:
         idx = src.index(f'"[silent-catch] {ln_marker}')
-        # The handler body ends at the CLOSING paren `)` of logger.debug(...)
-        # PLUS a few lines. If a `raise` appears within 200 chars AFTER
-        # the closing paren AND at the same indentation level, that's a
-        # regression. We use a simpler check: find the debug line's end
-        # and look forward until we hit code that leaves the handler.
         after = src[idx: idx + 300]
-        # The immediate handler body ends when we see a de-dented line
-        # (i.e., the "except ... as _e:" block closes and outer code resumes).
-        # For our fix pattern the handler is EXACTLY one `logger.debug(...)`
-        # call, so the very next non-whitespace non-comment line is
-        # outside the handler. Just verify the debug call closes with `)`
-        # and there's no `raise _e` or bare `raise` in the same handler.
         first_close = after.index(")\n") + 2
         handler_end = after[:first_close]
         assert "raise" not in handler_end, (
