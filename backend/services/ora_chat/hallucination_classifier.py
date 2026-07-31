@@ -8,9 +8,14 @@ with `status: "pending"` — a human MUST approve before a candidate
 rule is promoted into house rules.
 
 Trigger:
-  - Cron / manual admin endpoint POST /api/aurem-dev/ora-chat/
-    hallucination-patterns/classify-now
-  - Automatically kicks off when unreviewed_count >= _BATCH_TRIGGER
+  - Session 4 · P1 (Iter 367): dedicated cron scheduler at the
+    bottom of this file — `schedule_hallucination_classify_batch()`
+    is wired into `main.py` startup and polls every
+    `HALLUCINATION_CLASSIFY_INTERVAL_S` (default 4h). `force=False`
+    respects `_BATCH_TRIGGER`, so the queue self-drains without
+    a founder click.
+  - Manual admin endpoint POST /api/aurem-dev/ora-chat/
+    hallucination-patterns/classify-now (kept for on-demand runs).
 
 The classifier NEVER auto-adds a rule to `ora_chat_house_rules`.
 Human-in-the-loop is enforced at the API layer.
@@ -19,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -249,3 +255,66 @@ async def reject_pattern(slug: str, admin_email: str,
                    "reject_reason": (reason or "")[:400]}},
     )
     return {"ok": r.matched_count > 0, "slug": slug}
+
+
+# ═════════════════════════════════════════════════════════════════
+# Session 4 · P1 · Dedicated background scheduler.
+#
+# Before this cron, `classify_batch()` was ONLY reachable through
+# admin-manual `POST .../classify-now` — the docstring's promise
+# that classification "automatically kicks off when unreviewed_count
+# >= _BATCH_TRIGGER" was never wired. The `ora_hallucination_log`
+# queue grew forever until a founder remembered to click.
+#
+# Now: `schedule_hallucination_classify_batch()` polls every
+# `HALLUCINATION_CLASSIFY_INTERVAL_S` (default 4h, min 15 min) and
+# invokes `classify_batch(force=False)`. `force=False` respects the
+# `_BATCH_TRIGGER` short-circuit, so it's a cheap no-op when the
+# queue is empty or below threshold.
+# ═════════════════════════════════════════════════════════════════
+import asyncio as _asyncio  # noqa: E402 — deliberate placement
+
+_MIN_INTERVAL_S = 15 * 60  # 15 minutes floor to prevent misconfig hot-loop
+
+
+def _hallucination_cron_interval_s() -> int:
+    raw = int(os.environ.get("HALLUCINATION_CLASSIFY_INTERVAL_S",
+                             str(4 * 60 * 60)) or str(4 * 60 * 60))
+    return max(_MIN_INTERVAL_S, raw)
+
+
+async def schedule_hallucination_classify_batch() -> None:
+    """Background loop — every N seconds, invoke `classify_batch()`.
+
+    Idempotent by design: `classify_batch(force=False)` returns
+    `{skipped: True}` when the unreviewed queue is below the batch
+    trigger, so this loop costs one Mongo count() per cycle when
+    quiet. LLM call fires only when there's real work to do.
+    """
+    interval = _hallucination_cron_interval_s()
+    logger.info(
+        f"[hallucination_cron] scheduler started — polls every "
+        f"{interval}s ({interval // 60} min)"
+    )
+    while True:
+        try:
+            await _asyncio.sleep(interval)
+        except _asyncio.CancelledError:
+            return
+        try:
+            result = await classify_batch(force=False)
+            if result.get("skipped"):
+                logger.debug(f"[hallucination_cron] {result}")
+            elif not result.get("ok"):
+                logger.warning(f"[hallucination_cron] classify failed: {result}")
+            else:
+                new = len(result.get("inserted") or [])
+                bumped = result.get("bumped", 0)
+                logger.info(
+                    f"🎯 [hallucination_cron] reviewed="
+                    f"{result.get('cases_reviewed', 0)} new_patterns={new} "
+                    f"bumped={bumped}"
+                )
+        except Exception as e:
+            logger.warning(f"[hallucination_cron] cycle failed: {e!r}")
+

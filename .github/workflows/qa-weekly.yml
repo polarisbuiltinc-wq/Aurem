@@ -217,3 +217,52 @@ jobs:
           name: g1-sweep-report
           path: /tmp/g1_sweep.json
           retention-days: 30
+
+  # ─────────────────────────────────────────────────────────────
+  # Iter 367 · Session 4 — G15 · Dependency vulnerability scan
+  # Runs `backend/scripts/g15_dependency_scan.py` which merges
+  # pip-audit (backend/requirements.txt) + yarn audit (frontend/
+  # yarn.lock) through a single allowlist. Fails the job on any
+  # HIGH/CRITICAL finding not on `scripts/g15_allowlist.json`.
+  #
+  # Runs on the DAILY cron slot so a new CVE dropping into a
+  # transitive dep is caught within 24h, not 7 days.
+  # ─────────────────────────────────────────────────────────────
+  g15-dependency-scan:
+    name: G15 · Dependency vulnerability scan (pip + yarn)
+    if: github.event.schedule == '0 9 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          # No cache — we want a fresh yarn install so audit reads a
+          # fresh lock resolution (catches lockfile drift too).
+
+      - name: Install pip-audit
+        run: pip install pip-audit==2.7.3
+
+      - name: Install frontend deps (yarn.lock is committed)
+        working-directory: frontend
+        run: yarn install --frozen-lockfile --ignore-scripts
+
+      - name: Run G15 dependency scan
+        id: g15
+        run: |
+          python backend/scripts/g15_dependency_scan.py
+
+      - name: Post to Slack — failure
+        if: failure() && env.SLACK_WEBHOOK != ''
+        env: { SLACK_WEBHOOK: "${{ secrets.CI_ALERTS_SLACK_WEBHOOK }}" }
+        run: |
+          curl -sS -X POST "$SLACK_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "{\"text\":\":rotating_light: G15 dependency scan FAILED — new HIGH/CRITICAL CVE in pip or yarn deps. Run: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|open>\"}" \
+            || true

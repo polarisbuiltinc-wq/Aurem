@@ -324,7 +324,8 @@ async def _build_blob(project: dict) -> str:
                 return await _fetch_subtree_contents(
                     owner, repo, branch, token, top, max_depth=4,
                 )
-            except Exception:
+            except Exception as _e:
+                logger.debug("[silent-catch] services/repo_context.py:328 in _rescue_dir — %r", _e)
                 return []
         rescue_sem = asyncio.Semaphore(_FETCH_CONCURRENCY)
 

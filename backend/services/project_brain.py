@@ -491,7 +491,8 @@ async def _gh_list_files(
                 for e in data
                 if isinstance(e, dict) and e.get("name")
             ][:60]
-    except Exception:
+    except Exception as _e:
+        logger.debug("[silent-catch] services/project_brain.py:495 in _gh_list_files — %r", _e)
         return []
 
 
@@ -524,7 +525,8 @@ async def _gh_read_small(
                 return ""
             raw = base64.b64decode(content_b64).decode("utf-8", errors="ignore")
             return raw[:max_chars]
-    except Exception:
+    except Exception as _e:
+        logger.debug("[silent-catch] services/project_brain.py:528 in _gh_read_small — %r", _e)
         return ""
 
 
@@ -543,7 +545,8 @@ async def get_brain_v2(
             {"project_id": project_id, "user_id": user_id},
             {"_id": 0},
         )
-    except Exception:
+    except Exception as _e:
+        logger.debug("[silent-catch] services/project_brain.py:547 in get_brain_v2 — %r", _e)
         return {}
     return doc or {}
 

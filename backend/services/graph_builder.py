@@ -149,7 +149,8 @@ async def _llm_describe_files(files_content: dict[str, str]) -> dict[str, str]:
     # single httpx client + timeout policy + OPENROUTER_API_KEY lookup.
     try:
         from .llm import call_openrouter_model
-    except Exception:
+    except Exception as _e:
+        logger.debug("[silent-catch] services/graph_builder.py:153 in _llm_describe_files — %r", _e)
         return {}
 
     file_list: list[str] = []
@@ -320,7 +321,8 @@ async def build_graph(
                 )
                 if r.status_code == 200:
                     return path, (r.text or "")[:6000]
-        except Exception:
+        except Exception as _e:
+            logger.debug("[silent-catch] services/graph_builder.py:324 in _read — %r", _e)
             pass
         return path, ""
 
@@ -433,7 +435,8 @@ async def get_graph(db, project_id: str, user_id: str) -> dict:
             {"project_id": project_id, "user_id": user_id},
             {"_id": 0, "nodes": 0},
         )
-    except Exception:
+    except Exception as _e:
+        logger.debug("[silent-catch] services/graph_builder.py:437 in get_graph — %r", _e)
         return {}
     return doc or {}
 
@@ -447,7 +450,8 @@ async def get_graph_full(db, project_id: str, user_id: str) -> dict:
             {"project_id": project_id, "user_id": user_id},
             {"_id": 0},
         )
-    except Exception:
+    except Exception as _e:
+        logger.debug("[silent-catch] services/graph_builder.py:451 in get_graph_full — %r", _e)
         return {}
     return doc or {}
 

@@ -118,7 +118,8 @@ def _run_syntax_check(*, content: str, file_path: str, ext: str) -> dict:
     finally:
         try:
             os.unlink(tmp_path)
-        except Exception:
+        except Exception as _e:
+            logger.debug("[silent-catch] services/local_tools.py:122 in _run_syntax_check — %r", _e)
             pass
 
 
@@ -297,7 +298,8 @@ def _slice_content(content: str, lines: list | None, max_chars: int) -> tuple[st
             start = max(int(lines[0]), 1)
             end   = max(int(lines[1]), start)
             content = "\n".join(content.splitlines()[start - 1:end])
-        except Exception:
+        except Exception as _e:
+            logger.debug("[silent-catch] services/local_tools.py:301 in _slice_content — %r", _e)
             pass
     total = len(content)
     truncated = total > max_chars
@@ -552,7 +554,8 @@ async def read_repo_file(ctx: dict, args: dict) -> dict:
         asyncio.create_task(
             _update_structure_cache(project_id, path, content),
         )
-    except Exception:
+    except Exception as _e:
+        logger.debug("[silent-catch] services/local_tools.py:556 in read_repo_file — %r", _e)
         pass
 
     return {
@@ -845,7 +848,8 @@ async def write_repo_file(ctx: dict, args: dict) -> dict:
     # (next read will re-build the symbol map from fresh content).
     try:
         _cache_invalidate(project_id, path)
-    except Exception:
+    except Exception as _e:
+        logger.debug("[silent-catch] services/local_tools.py:849 in write_repo_file — %r", _e)
         pass
 
     # Iter 212m-13 — also drop the short-TTL GitHub-API cache so any
@@ -855,7 +859,8 @@ async def write_repo_file(ctx: dict, args: dict) -> dict:
     try:
         from .github_cache import invalidate_repo
         invalidate_repo(owner, repo, branch)
-    except Exception:
+    except Exception as _e:
+        logger.debug("[silent-catch] services/local_tools.py:859 in write_repo_file — %r", _e)
         pass
 
     return {
@@ -1183,7 +1188,8 @@ async def _ensure_repo_snapshot(
             with open(marker, encoding="utf-8") as fh:
                 if fh.read().strip() == head:
                     return dest, None      # cache hit — zero downloads
-        except OSError:
+        except OSError as _e:
+            logger.debug("[silent-catch] services/local_tools.py:1187 in _ensure_repo_snapshot — %r", _e)
             pass
 
         headers = {"Accept": "application/vnd.github+json"}
@@ -1221,7 +1227,8 @@ async def _ensure_repo_snapshot(
                         return None
                     try:
                         return tarfile.data_filter(member, path)
-                    except tarfile.FilterError:
+                    except tarfile.FilterError as _e:
+                        logger.debug("[silent-catch] services/local_tools.py:1225 in _tar_filter — %r", _e)
                         return None
 
                 try:
@@ -1253,7 +1260,8 @@ async def _ensure_repo_snapshot(
         finally:
             try:
                 os.unlink(tmp_tar.name)
-            except OSError:
+            except OSError as _e:
+                logger.debug("[silent-catch] services/local_tools.py:1257 in _ensure_repo_snapshot — %r", _e)
                 pass
 
 
@@ -1292,7 +1300,8 @@ def _search_snapshot_sync(root: str, pattern: str, compiled,
                     matches.append({"file": fpath, "line_no": int(line_no),
                                     "line": text.strip()[:280]})
                 return matches
-        except (subprocess.TimeoutExpired, OSError):
+        except (subprocess.TimeoutExpired, OSError) as _e:
+            logger.debug("[silent-catch] services/local_tools.py:1296 in _search_snapshot_sync — %r", _e)
             pass
 
     matches: list[dict] = []
@@ -1620,7 +1629,8 @@ async def semantic_search_repo(ctx: dict, args: dict) -> dict:
                 if h["path"] not in seen:
                     results.append(h)
                     seen.add(h["path"])
-        except Exception:
+        except Exception as _e:
+            logger.debug("[silent-catch] services/local_tools.py:1624 in semantic_search_repo — %r", _e)
             pass
 
     return {
@@ -1674,7 +1684,8 @@ async def _index_tfidf_search(query: str, user_id: str,
                 })
         scored.sort(key=lambda x: x["score"], reverse=True)
         return scored[:max_hits]
-    except Exception:
+    except Exception as _e:
+        logger.debug("[silent-catch] services/local_tools.py:1678 in _index_tfidf_search — %r", _e)
         return []
 
 
@@ -1918,7 +1929,8 @@ async def execute_bash(ctx: dict, args: dict) -> dict:
                         "cmd_head": cmd[:120],
                         "hit": _hit,
                     })
-            except Exception:
+            except Exception as _e:
+                logger.debug("[silent-catch] services/local_tools.py:1922 in execute_bash — %r", _e)
                 pass
             return {
                 "ok": False,
@@ -1970,7 +1982,8 @@ async def execute_bash(ctx: dict, args: dict) -> dict:
     except asyncio.TimeoutError:
         try:
             proc.kill()
-        except Exception:
+        except Exception as _e:
+            logger.debug("[silent-catch] services/local_tools.py:1974 in execute_bash — %r", _e)
             pass
         return {"ok": False, "error": "Command timed out after 15s"}
     except Exception as e:

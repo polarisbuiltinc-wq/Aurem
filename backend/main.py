@@ -343,6 +343,17 @@ async def lifespan(app: FastAPI):
         schedule_maxx_overage_billing(lambda: app.state.db)
     )
 
+    # Session 4 · P1 — Hallucination pattern-classifier cron.
+    # Before this, `ora_hallucination_log` grew forever unless a
+    # founder clicked `POST .../classify-now`. Now polled every
+    # `HALLUCINATION_CLASSIFY_INTERVAL_S` (default 4h, 15-min floor).
+    from services.ora_chat.hallucination_classifier import (
+        schedule_hallucination_classify_batch,
+    )
+    app.state.hallucination_classify_task = _asyncio.create_task(
+        schedule_hallucination_classify_batch()
+    )
+
     # Iter 309 · Phase 0.1 — Merged housekeeping loop.
     # Previously two independent `while True` background tasks:
     #   • _resume_stale_loops (rescues orphaned EXECUTING/VERIFYING/…)

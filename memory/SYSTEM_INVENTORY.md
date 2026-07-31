@@ -699,3 +699,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `BILLING_CRON_DAY` — auto-detected in backend/services/billing_cron.py (verify) (default: unset) [Iter 0, 2026-07-31T03:43:53.595727Z] <!-- inv:envvar:BILLING_CRON_DAY -->
 - `BILLING_CRON_HOUR` — auto-detected in backend/services/billing_cron.py (verify) (default: unset) [Iter 0, 2026-07-31T03:43:53.595752Z] <!-- inv:envvar:BILLING_CRON_HOUR -->
 - `INTEGRATION_PROXY_URL` — auto-detected in backend/tests/test_session4_step_b_stripe_real_e2e.py (verify) (default: unset) [Iter 0, 2026-07-31T03:43:53.595765Z] <!-- inv:envvar:INTEGRATION_PROXY_URL -->
+- `ORA_API_KEY` — auto-detected in backend/services/ora_client.py (verify) (default: unset) [Iter 0, 2026-07-31T04:07:13.541735Z] <!-- inv:envvar:ORA_API_KEY -->
