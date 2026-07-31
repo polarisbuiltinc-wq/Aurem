@@ -210,27 +210,13 @@ async def _run_once() -> None:
     except Exception as e:
         logger.warning(f"integration health daily refresh failed: {e!r}")
 
-    # Iter 102 — Maxx overage billing. Run on the 1st of each month
-    # (UTC) only. Idempotent within the day: once we bill a user, their
-    # overage_count resets to 0 so the next pass is a no-op.
-    try:
-        from datetime import datetime as _dt, timezone as _tz
-        from cto_services.db import get_db
-        if _dt.now(_tz.utc).day == 1:
-            from services.billing_cron import bill_maxx_overages
-            _db = get_db()
-            if _db is not None:
-                result = await bill_maxx_overages(_db)
-                logger.info(
-                    f"💵 Maxx overage cron: billed {result['billed']}/"
-                    f"{result['processed']} users for ${result['total_revenue_usd']} "
-                    f"({result['failed']} failed)"
-                )
-                # Stash the result for the admin Financials page audit trail.
-                if _db is not None:
-                    await _db.billing_cron_runs.insert_one(result)
-    except Exception as e:
-        logger.warning(f"Maxx overage cron failed: {e!r}")
+    # Iter 102 — Maxx overage billing.
+    # Session 4 · Step A — MIGRATED. This piggyback previously fired
+    # `bill_maxx_overages` on the 1st of every month via the daily
+    # digest cron. It is now owned by `schedule_maxx_overage_billing()`
+    # in `services/billing_cron.py`, wired directly into main.py
+    # startup. Keeping this comment (no-op body) as a signpost so
+    # future readers know why the digest no longer touches billing.
 
 
 async def schedule_daily_digest() -> None:

@@ -4,6 +4,40 @@ Append-only iteration log. See `PRD.md` for the original problem
 statement and historical context; this file captures recent feature
 work in date-stamped chunks so PRD.md stays focused.
 
+
+## 2026-07-31 03:25 UTC — Iter 367 · Session 4 — Step A (billing cron) + Step B (real Stripe E2E) + Step C (discovery)
+
+### Step A — `bill_maxx_overages()` wired as dedicated monthly scheduler
+- Added `schedule_maxx_overage_billing()` to `services/billing_cron.py`.
+  - Reads `BILLING_CRON_DAY` (default 1) & `BILLING_CRON_HOUR` (default 0 UTC), clamped to safe ranges.
+  - Idempotent within a YYYY-MM bucket via `billing_cron_runs` collection — mid-month restart cannot double-bill.
+  - Pure `_next_run_at()` helper tested against Feb-non-leap, Dec→Jan, mid-month, and same-day boundaries.
+- Wired in `main.py` startup as `app.state.maxx_overage_billing_task`.
+- Removed the piggyback from `daily_digest.py` (`_run_once()`) — migration signpost comment kept.
+- Updated legacy `test_iter102_billing_cron_referral_reward::test_daily_digest_schedules_overage_cron_on_first_of_month` to guard the NEW architecture.
+- **Real E2E proof**: `test_session4_step_a_billing_cron_wiring.py` — 16/16 tests green. Backend log shows: `[billing_cron] scheduler started — fires day=1 hour=00:00 UTC monthly` + `sleeping 21h until 2026-08-01T00:00:00+00:00`.
+
+### Step B — Real Stripe test-mode E2E (zero mocks)
+- Provisioned real claimable sandbox via Emergent's proxy → obtained `sk_test_51Ty...` (CA account).
+- New `test_session4_step_b_stripe_real_e2e.py` — 4/4 tests green (4.13s):
+  1. Sandbox key is valid & test-mode (real `Account.retrieve()`).
+  2. **Happy path**: 4242 card → PaymentMethod → Customer → PaymentIntent $9.00 → **status=succeeded**, charge captured, paid=True.
+  3. **Decline path**: `tok_chargeDeclined` → real `stripe.error.CardError` with `code=card_declined`, `decline_code=generic_decline`.
+  4. `services.stripe_client.stripe_client()` service resolves a working key via `set_runtime_stripe_key()`.
+- Every assertion backed by a real HTTPS round-trip to `api.stripe.com`.
+
+### Step C — Session 4 Deep Discovery (READ-ONLY, no code changed)
+- New report: `memory/SESSION_4_DEEP_AUDIT.md`.
+- Audited: 5 ORA-chat services (ora_client, ora_council_retriever, ora_learning, deep_research, hallucination_classifier) + top-10 remaining backend services by import count (llm, orchestrator, local_tools, usage, vanguard_scanner, github_api_writer, subscription_tiers, repo_context, project_brain, graph_builder).
+- Findings tally: **1 P0** (ORA upstream `aurem.live` is CURRENTLY in a live 24h fatal circuit-breaker due to OpenRouter model 404), **7 P1**, **6 P2**. Session 2's "deep_research depends on Tavily" note found to be **wrong** — actually uses GDELT + GitHub Search + Reddit + Perplexity Sonar (no Tavily).
+- Every finding has severity + recommended-fix DIRECTION only. Zero code edits during audit.
+
+### Regression proof
+- Full suite (excluding `test_iter212m163_aggression_chat.py` which requires REACT_APP_BACKEND_URL at import): **3821 passed / 22 pre-existing legacy failures / 68 skipped** in 271s.
+- Delta vs prior baseline (3820 pass / 23 fail): **+1 pass, -1 fail** (Step B stripe_client test now robust to in-suite runtime-key mutations).
+- No new regressions introduced.
+
+
 ## 2026-07-31 02:00 UTC — Iter 367 · Session 3 — 4 confirmed fixes + Payments audit
 
 ### Fix 1 — 2 Iter-367-caused test failures repaired

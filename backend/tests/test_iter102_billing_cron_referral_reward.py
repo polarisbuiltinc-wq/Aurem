@@ -141,12 +141,30 @@ def test_webhook_captures_customer_id_and_calls_reward():
 
 
 def test_daily_digest_schedules_overage_cron_on_first_of_month():
-    src = (Path(__file__).resolve().parents[1] / "services" / "daily_digest.py").read_text()
-    assert "bill_maxx_overages" in src, (
-        "daily_digest must invoke bill_maxx_overages on month-start"
+    """Session 4 · Step A migration. Cron ownership moved from
+    `daily_digest._run_once()` to a dedicated `schedule_maxx_overage_billing()`
+    task in `services/billing_cron.py` wired directly into `main.py`
+    startup. This test now guards the NEW architecture, so if someone
+    inadvertently pipes the cron back through the digest we catch it."""
+    bc = (Path(__file__).resolve().parents[1] / "services" / "billing_cron.py").read_text()
+    dd = (Path(__file__).resolve().parents[1] / "services" / "daily_digest.py").read_text()
+    mp = (Path(__file__).resolve().parents[1] / "main.py").read_text()
+
+    # New scheduler exists in billing_cron.py
+    assert "async def schedule_maxx_overage_billing" in bc, (
+        "billing_cron must expose the dedicated monthly scheduler"
     )
-    assert ".day == 1" in src, (
-        "Cron must guard with .day == 1 to run only on month-start"
+    # Wired into main.py startup
+    assert "schedule_maxx_overage_billing" in mp, (
+        "main.py must register schedule_maxx_overage_billing task"
+    )
+    # Piggyback removed from daily_digest — carries the migration signpost
+    assert "await bill_maxx_overages" not in dd, (
+        "daily_digest must NOT invoke bill_maxx_overages any more — "
+        "cron is now owned by services/billing_cron.py"
+    )
+    assert "MIGRATED" in dd and "schedule_maxx_overage_billing" in dd, (
+        "daily_digest must carry the migration signpost comment"
     )
 
 

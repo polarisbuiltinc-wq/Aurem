@@ -333,6 +333,16 @@ async def lifespan(app: FastAPI):
         _correction_rules_graduation_cron()
     )
 
+    # Session 4 · Step A — Dedicated monthly Maxx overage billing cron.
+    # Fires `bill_maxx_overages()` on BILLING_CRON_DAY (default 1) at
+    # BILLING_CRON_HOUR (default 0 UTC) — real revenue guardrail so
+    # overages are never left un-billed by a founder-forgetting-to-click.
+    # Idempotent within a month via `billing_cron_runs` bucket record.
+    from services.billing_cron import schedule_maxx_overage_billing
+    app.state.maxx_overage_billing_task = _asyncio.create_task(
+        schedule_maxx_overage_billing(lambda: app.state.db)
+    )
+
     # Iter 309 · Phase 0.1 — Merged housekeeping loop.
     # Previously two independent `while True` background tasks:
     #   • _resume_stale_loops (rescues orphaned EXECUTING/VERIFYING/…)

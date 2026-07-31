@@ -1,6 +1,6 @@
 # AUREM CTO — Product Requirements Document (living)
 
-**Last updated**: 2026-07-31 02:00 UTC (Iter 367 · Session 3 — 4 fixes + Payments discovery) — see CHANGELOG.md for the full narrative
+**Last updated**: 2026-07-31 03:25 UTC (Iter 367 · Session 4 — Step A billing cron + Step B real Stripe E2E + Step C deep discovery) — see CHANGELOG.md for the full narrative
 **Live**: https://auremcto.com — Iter 367 deployed 01:12 UTC via deployer_agent
 
 ## Original problem statement
@@ -15,6 +15,13 @@ Loop engine stuck bugs (Phase 0), then build the next 4 competitive differentiat
 Language: **Hinglish** — main agent responds in Hinglish.
 
 ## What's implemented (chronological, most recent first)
+
+### Iter 367 · Session 4 (2026-07-31) — Step A billing cron + Step B real Stripe E2E + Step C deep discovery
+- **STEP A** (P0 revenue guardrail): `bill_maxx_overages()` now owned by a dedicated `schedule_maxx_overage_billing()` task in `services/billing_cron.py`, wired into `main.py` startup as `app.state.maxx_overage_billing_task`. Configurable via `BILLING_CRON_DAY` (default 1) & `BILLING_CRON_HOUR` (default 0 UTC), clamped to safe ranges. Idempotent within a YYYY-MM bucket via `billing_cron_runs` collection. Removed the piggyback from `daily_digest.py::_run_once()` with migration signpost. Live proof: backend log shows `sleeping 21h until 2026-08-01T00:00:00+00:00`. 16/16 tests green.
+- **STEP B** (P0 real Stripe E2E): New `tests/test_session4_step_b_stripe_real_e2e.py`. Zero mocks — provisions a real claimable sandbox via Emergent's proxy (`sk_test_51Ty...`), exercises happy path (4242 card → $9.00 → succeeded) + decline path (`tok_chargeDeclined` → real `stripe.error.CardError` with `decline_code=generic_decline`). Every assertion backed by a real HTTPS round-trip to `api.stripe.com`. 4/4 tests green in 4.13s.
+- **STEP C** (Discovery only, READ-ONLY): New report `memory/SESSION_4_DEEP_AUDIT.md`. Audited 5 ORA-chat services + top-10 remaining unaudited backend services (llm.py at 1,805 LOC / 45 imports leads the pack). Findings: **1 P0** — ORA upstream `aurem.live` is currently in a LIVE 24h fatal circuit-open state (OpenRouter model 404, ~19h to auto-close) — every dependent path silently no-ops right now; **7 P1** (llm.py refactor candidate, `local_tools.py` 11× `except: pass`, hallucination classifier has no scheduler, `GITHUB_API_TOKEN` unset lowers deep-research rate limit); **6 P2** (silent-return-None patterns in graph_builder/project_brain/repo_context, dead `use_claude_tools()` stub, `ORA_LEARNING_DISABLED` double-negative). Session 2 note about deep_research "depending on Tavily" **corrected** — actually uses GDELT + GitHub Search + Reddit + Perplexity Sonar (no Tavily). Zero code changed during audit.
+- Full-suite regression: **3821 pass / 22 pre-existing legacy failures / 68 skipped**. Delta: +1 pass, -1 fail vs prior baseline.
+
 
 ### Iter 367 · FINAL BUILD SESSION (2026-07-31) — Steps 0→2
 - **STEP 0** (P0 real-user-facing bug fix): Fake-success rollback bug fixed. Both `services/rollback_manager.execute_rollback()` and `routers/user_rollback.py::/rollback/revert-last-ship` were writing to a `rollback_trigger` collection that had NO consumer (the "deployer daemon" mentioned in comments never existed). Both now redirect into `services/loop_rollback.py::run_rollback()` which calls the real `github_api_writer.revert_commit()`. `/rollback/candidates` filter fixed (was querying `shipped: True` — a field no doc has). Founder alerts fire on every admin-triggered rollback. Real live E2E proof captured: real HTTP 200, real GitHub API call recorded in `loop_sessions.rollback_steps`. 5/5 tests pass.

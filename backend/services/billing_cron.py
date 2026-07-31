@@ -16,14 +16,23 @@ billing month):
      `trial_end` update, send a Resend congrats email, and mark the
      referrals row as `rewarded`.
 
+Session 4 · Step A — `schedule_maxx_overage_billing()` is a
+dedicated background scheduler that fires `bill_maxx_overages()`
+once per month on `BILLING_CRON_DAY` (default 1) at
+`BILLING_CRON_HOUR` UTC (default 0). Persists a per-month
+`billing_cron_runs` row keyed on the YYYY-MM bucket so a restart
+mid-month cannot cause a double-bill.
+
 Both wrap every Stripe call in try/except so a single bad row doesn't
 poison the whole batch.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import datetime, timezone, timedelta
+from calendar import monthrange
 
 import httpx
 
@@ -203,3 +212,104 @@ async def grant_referral_reward(db, new_user_id: str) -> dict:
     except Exception as e:
         logger.warning(f"[referral_reward] Stripe extend failed: {e!r}")
         return {"granted": False, "reason": str(e)}
+
+
+# ───────────────────────────────────────────────────────────────────────
+# 3) Session 4 · Step A — Dedicated monthly scheduler
+# ───────────────────────────────────────────────────────────────────────
+def _billing_cron_env() -> tuple[int, int]:
+    """Return `(day_of_month, hour_utc)` from env, clamped to valid values."""
+    day  = int(os.environ.get("BILLING_CRON_DAY", "1") or "1")
+    hour = int(os.environ.get("BILLING_CRON_HOUR", "0") or "0")
+    # Clamp to safe ranges — day 1..28 keeps every month reachable
+    # (February has only 28 days in non-leap years); hour 0..23.
+    day  = max(1, min(28, day))
+    hour = max(0, min(23, hour))
+    return day, hour
+
+
+def _next_run_at(now: datetime, day: int, hour: int) -> datetime:
+    """Return the next UTC datetime the cron should fire, strictly after `now`.
+
+    Contract:
+      • Fires monthly on `day` at `hour:00:00 UTC`.
+      • If today == `day` and current time < target hour, fires today.
+      • Otherwise fires on the same `day` next month.
+    Pure function — deterministic, easy to unit-test.
+    """
+    assert now.tzinfo is not None, "now must be timezone-aware"
+    now = now.astimezone(timezone.utc)
+    candidate = now.replace(day=min(day, monthrange(now.year, now.month)[1]),
+                            hour=hour, minute=0, second=0, microsecond=0)
+    if candidate > now:
+        return candidate
+    # Roll to next month
+    if now.month == 12:
+        y, m = now.year + 1, 1
+    else:
+        y, m = now.year, now.month + 1
+    return datetime(y, m, min(day, monthrange(y, m)[1]),
+                    hour, 0, 0, tzinfo=timezone.utc)
+
+
+async def _run_overage_billing_once(db) -> dict:
+    """One idempotent run guarded by the YYYY-MM bucket.
+
+    Persists to `billing_cron_runs` after every successful run. A
+    second call within the same bucket returns `{skipped: True}` so
+    a mid-month restart cannot double-bill.
+    """
+    bucket = datetime.now(timezone.utc).strftime("%Y-%m")
+    already = await db.billing_cron_runs.find_one(
+        {"bucket": bucket, "source": "schedule_maxx_overage_billing"},
+        {"_id": 1},
+    )
+    if already:
+        logger.info(f"[billing_cron] {bucket} already billed — skipping (idempotent)")
+        return {"skipped": True, "bucket": bucket, "reason": "already_billed_this_month"}
+    result = await bill_maxx_overages(db)
+    result["source"] = "schedule_maxx_overage_billing"
+    await db.billing_cron_runs.insert_one(dict(result))
+    return result
+
+
+async def schedule_maxx_overage_billing(get_db_callable) -> None:
+    """Background loop — sleeps until next `BILLING_CRON_DAY` @
+    `BILLING_CRON_HOUR` UTC, fires `bill_maxx_overages()` once, repeats.
+
+    `get_db_callable` is a zero-arg callable that returns the async
+    Mongo db handle (allows lazy binding at task start, since
+    `app.state.db` may not exist at import time).
+    """
+    day, hour = _billing_cron_env()
+    logger.info(
+        f"[billing_cron] scheduler started — fires day={day} hour={hour:02d}:00 UTC monthly"
+    )
+    while True:
+        now      = datetime.now(timezone.utc)
+        next_run = _next_run_at(now, day, hour)
+        wait_s   = (next_run - now).total_seconds()
+        logger.info(
+            f"[billing_cron] sleeping {int(wait_s/3600)}h until {next_run.isoformat()}"
+        )
+        try:
+            await asyncio.sleep(wait_s)
+        except asyncio.CancelledError:
+            return
+        try:
+            db = get_db_callable()
+            if db is None:
+                logger.warning("[billing_cron] db unavailable — will retry next cycle")
+            else:
+                result = await _run_overage_billing_once(db)
+                if result.get("skipped"):
+                    logger.info(f"[billing_cron] {result}")
+                else:
+                    logger.info(
+                        f"💵 [billing_cron] billed {result.get('billed', 0)}/"
+                        f"{result.get('processed', 0)} users for "
+                        f"${result.get('total_revenue_usd', 0)} "
+                        f"({result.get('failed', 0)} failed) bucket={result.get('bucket')}"
+                    )
+        except Exception as e:
+            logger.warning(f"[billing_cron] run failed: {e!r}")
