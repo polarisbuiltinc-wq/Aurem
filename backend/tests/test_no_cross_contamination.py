@@ -44,15 +44,51 @@ BACKEND   = REPO_ROOT / "backend"
 
 # ── Contamination markers (see file docstring) ───────────────────────
 # Each entry: (regex, human-readable label)
+#
+# LOW-FALSE-POSITIVE RULE: only add markers here that would clearly
+# never appear in a legitimate AuremCTO source path. Generic English
+# words are OUT. Specific product-fingerprints (unique docstring
+# phrases, import module names, tightly-shaped constants) are IN.
 MARKERS: list[tuple[re.Pattern, str]] = [
+    # ── Original set (2026-08-01, from `shared/agents/*` deletion) ──
     (re.compile(r"\bhunt_live\b"),          "hunt_live (Aurem sales module)"),
     (re.compile(r"\bflame_auto_dialer\b"),  "flame_auto_dialer (Aurem sales)"),
     (re.compile(r"\bdrip_sequencer\b"),     "drip_sequencer (Aurem sales)"),
     (re.compile(r"\ba2a_bus\b"),            "a2a_bus (Aurem sales)"),
     (re.compile(r"Scout\s*[→>-]+\s*Verify\s*[→>-]+\s*Website\s*[→>-]+\s*Blast"),
-                                             "OODA pipeline (Aurem sales docstring)"),
+                                             "OODA pipeline: Scout→Verify→Website→Blast (Aurem sales docstring)"),
     (re.compile(r'\bTERRITORY_DISTRIBUTION\b.*(?:Ontario|Quebec|Alberta)',
                 re.DOTALL),                  "TERRITORY_DISTRIBUTION (Aurem sales)"),
+
+    # ── Safety-extension (2026-08-01, from `shared/*` broader audit) ──
+    # Additional Aurem sales-outreach fingerprints found while scanning
+    # the wider `backend/shared/` tree. Files were NOT deleted yet
+    # (dedicated audit session planned) — but any NEW file matching
+    # these must fail CI so contamination can't grow.
+    (re.compile(r"Scout\s*[→>-]+\s*Architect\s*[→>-]+\s*Envoy\s*[→>-]+\s*Closer"),
+                                             "OODA pipeline: Scout→Architect→Envoy→Closer (Aurem sales docstring)"),
+    # Multi-line variant — same 4 personas listed separately in a docstring
+    # (as in `shared/memory_tiers.py`). Any 4-persona co-occurrence within
+    # a 400-char window flags the OODA pattern regardless of formatting.
+    (re.compile(r"Scout\b.{0,400}Architect\b.{0,400}Envoy\b.{0,400}Closer",
+                re.DOTALL),                  "OODA persona quartet: Scout+Architect+Envoy+Closer (Aurem sales)"),
+    (re.compile(r"AUREM\s+Agent\s+RBAC"),   "'AUREM Agent RBAC' header (Aurem sales role-model)"),
+    # Match the exact SCOUT-role/CLOSER-role pairing that Aurem uses to
+    # define per-agent permissions. Legit RBAC in AuremCTO uses roles
+    # like "admin"/"user"/"founder" — never "SCOUT"/"CLOSER".
+    (re.compile(r"\bSCOUT\s*=\s*read-only\b"), "SCOUT=read-only role (Aurem sales RBAC)"),
+    (re.compile(r"\bCLOSER\s*=\s*write\b"),   "CLOSER=write role (Aurem sales RBAC)"),
+    # `WHAPI service` is the WhatsApp-API-replacement phrase in the
+    # Aurem Twilio shim's docstring. AuremCTO does NOT do WhatsApp,
+    # so this string uniquely fingerprints the sales-comms shim.
+    (re.compile(r"\bWHAPI\s+service\b"),    "WHAPI service (Aurem sales-comms Twilio shim)"),
+    # `B2B email finder` + `Phone validation` co-occurrence uniquely
+    # fingerprints the Aurem lead-enrichment provider bundle. A single
+    # match of either alone is too weak — the docstring pairs them, so
+    # we match the paired phrase.
+    (re.compile(r"B2B\s+email\s+finder"),   "B2B email finder (Aurem lead-enrichment)"),
+    (re.compile(r"Phone\s+validation.*lead\s+enrichment", re.IGNORECASE),
+                                             "Phone-validation+lead-enrichment (Aurem sales)"),
 ]
 
 # ── Paths that are allowed to mention markers (docs, this test, PRD) ──
@@ -64,9 +100,41 @@ ALLOWLIST_SUFFIXES = (
     "memory/PROD_DEPLOY_2026-07-31.md",       # timeline docs
 )
 
+# ── Grandfathered known-contamination (2026-08-01) ────────────────────
+#
+# These files ARE cross-contamination from the Aurem sales-outreach
+# product (same 2026-05-29 bulk-import commit as `shared/agents/*`).
+# They are ALREADY confirmed to have zero live callers in AuremCTO.
+#
+# They are NOT deleted YET because the Batch-1 audit only sanctioned
+# `shared/agents/*` deletion. A dedicated `backend/shared/*` audit
+# session is queued (same discipline: verify zero-live-callers per
+# file, confirm delete). Until that session runs, these paths are
+# grandfathered — the guard SKIPS them so pytest stays green, but
+# any NEW file matching the same markers OR any change to these
+# files will still surface as a diff review.
+#
+# WHEN YOU DELETE ONE OF THESE FILES: remove its entry here. The
+# guard will then enforce marker-freedom for that path going forward.
+GRANDFATHERED_CONTAMINATION: set[str] = {
+    "backend/shared/providers/free_apis.py",     # B2B lead enrichment
+    "backend/shared/providers/twilio.py",        # WHAPI/WhatsApp sales
+    "backend/shared/auth/rbac.py",               # SCOUT/CLOSER RBAC
+    "backend/shared/memory_tiers.py",            # OODA (Scout→Architect→Envoy→Closer)
+    # `shared/providers/email_legacy.py` (SendGrid→Resend shim) is
+    # NOT in this list — no marker currently flags it. If a future
+    # marker catches it, add it here (or delete the file in the
+    # scheduled `shared/*` audit).
+    # Add others here as broader audit confirms them.
+}
+
 
 def _is_allowlisted(relpath: str) -> bool:
-    return any(relpath.endswith(suf) for suf in ALLOWLIST_SUFFIXES)
+    if any(relpath.endswith(suf) for suf in ALLOWLIST_SUFFIXES):
+        return True
+    if relpath in GRANDFATHERED_CONTAMINATION:
+        return True
+    return False
 
 
 def _iter_source_files():
@@ -141,3 +209,48 @@ def test_aurem_cache_is_gitignored():
         "directory where snapshots of external repos land. Any code path "
         "that writes there must never leak into the tracked tree."
     )
+
+
+def test_grandfathered_paths_still_exist_and_still_contaminated():
+    """Two-sided guard on the grandfathered list:
+
+    1. If a grandfathered path is DELETED (dedicated Batch audit
+       actually cleaned it up), the entry should be REMOVED from
+       GRANDFATHERED_CONTAMINATION — else the guard silently keeps
+       allowlisting a path that no longer exists.
+    2. If a grandfathered path has been CLEANED (no longer contains
+       any contamination marker), same removal is needed.
+
+    Either drift means someone edited the list incorrectly. This test
+    catches it in one line.
+    """
+    stale: list[str] = []
+    cleaned: list[str] = []
+    for relpath in GRANDFATHERED_CONTAMINATION:
+        p = REPO_ROOT / relpath
+        if not p.exists():
+            stale.append(relpath)
+            continue
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        hit = any(pat.search(text) for pat, _lbl in MARKERS)
+        if not hit:
+            cleaned.append(relpath)
+
+    problems: list[str] = []
+    if stale:
+        problems.append(
+            "Deleted grandfathered paths still in the allowlist "
+            "(remove them from GRANDFATHERED_CONTAMINATION): "
+            + ", ".join(stale)
+        )
+    if cleaned:
+        problems.append(
+            "Grandfathered paths that no longer contain contamination "
+            "markers — remove them from GRANDFATHERED_CONTAMINATION so "
+            "the guard enforces marker-freedom for them going forward: "
+            + ", ".join(cleaned)
+        )
+    assert not problems, "\n".join(problems)
