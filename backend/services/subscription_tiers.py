@@ -28,6 +28,7 @@ TIER_LIMITS: dict[Tier, dict] = {
         "tasks_per_month":     10,
         "modes":               ["swift"],
         "maxx_mode":           False,
+        "maxx_tasks_per_month": 0,       # REAL BUG #11 fix (Feb 2026) — was implicitly None (= unlimited!)
         "brain_memory":        False,
         "parallel_agents":     False,
         "priority_queue":      False,
@@ -43,6 +44,7 @@ TIER_LIMITS: dict[Tier, dict] = {
         "tasks_per_month":     50,
         "modes":               ["swift"],
         "maxx_mode":           False,
+        "maxx_tasks_per_month": 0,       # Starter doesn't include Maxx mode
         "brain_memory":        True,
         "parallel_agents":     False,
         "priority_queue":      False,
@@ -57,6 +59,7 @@ TIER_LIMITS: dict[Tier, dict] = {
         "tasks_per_month":     300,
         "modes":               ["swift", "pro"],
         "maxx_mode":           False,
+        "maxx_tasks_per_month": 100,     # Pro gets 100 Maxx tasks/mo (overage billed at $0.50/task)
         "brain_memory":        True,
         "parallel_agents":     True,
         "priority_queue":      False,
@@ -71,6 +74,7 @@ TIER_LIMITS: dict[Tier, dict] = {
         "tasks_per_month":     400,
         "modes":               ["swift", "pro", "maxx"],
         "maxx_mode":           True,
+        "maxx_tasks_per_month": None,    # unlimited Maxx on Team
         "brain_memory":        True,
         "parallel_agents":     True,
         "priority_queue":      True,
@@ -85,6 +89,7 @@ TIER_LIMITS: dict[Tier, dict] = {
         "tasks_per_month":     None,
         "modes":               ["swift", "pro", "maxx"],
         "maxx_mode":           True,
+        "maxx_tasks_per_month": None,    # unlimited Maxx on Founder,
         "brain_memory":        True,
         "parallel_agents":     True,
         "priority_queue":      True,

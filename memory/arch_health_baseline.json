@@ -1,156 +1,576 @@
 {
   "bloated_files": [
     {
-      "lines": 1788,
-      "rel": "routers/cto_projects.py"
-    },
-    {
-      "lines": 1353,
-      "rel": "routers/chat.py"
-    },
-    {
-      "lines": 1160,
-      "rel": "services/auto_website_builder.py"
-    },
-    {
-      "lines": 1143,
-      "rel": "pages/Admin.jsx"
-    },
-    {
-      "lines": 1106,
+      "lines": 4574,
       "rel": "components/ChatPanel.jsx"
     },
     {
-      "lines": 1105,
+      "lines": 4502,
       "rel": "routers/admin.py"
     },
     {
-      "lines": 1077,
-      "rel": "shared/providers/twilio.py"
+      "lines": 3968,
+      "rel": "services/loop_engine.py"
     },
     {
-      "lines": 890,
-      "rel": "pages/Projects.jsx"
+      "lines": 3495,
+      "rel": "routers/cto_projects.py"
     },
     {
-      "lines": 797,
-      "rel": "shared/commercial/brain_orchestrator.py"
+      "lines": 3403,
+      "rel": "routers/chat.py"
     },
     {
-      "lines": 753,
-      "rel": "components/Shell.jsx"
+      "lines": 2527,
+      "rel": "pages/Admin.jsx"
     },
     {
-      "lines": 726,
-      "rel": "services/local_tools.py"
-    },
-    {
-      "lines": 667,
+      "lines": 2267,
       "rel": "services/orchestrator.py"
     },
     {
-      "lines": 650,
-      "rel": "shared/commercial/billing_service.py"
+      "lines": 2132,
+      "rel": "main.py"
     },
     {
-      "lines": 629,
-      "rel": "components/MessageBubble.jsx"
+      "lines": 2002,
+      "rel": "services/local_tools.py"
     },
     {
-      "lines": 571,
-      "rel": "shared/commercial/a2a_handoff_service.py"
+      "lines": 1942,
+      "rel": "pages/Projects.jsx"
     },
     {
-      "lines": 548,
-      "rel": "shared/memory_tiers.py"
+      "lines": 1796,
+      "rel": "routers/mcp.py"
     },
     {
-      "lines": 528,
+      "lines": 1731,
       "rel": "pages/AdminOverview.jsx"
     },
     {
-      "lines": 523,
-      "rel": "shared/commercial/workspace_service.py"
+      "lines": 1414,
+      "rel": "pages/Landing.jsx"
     },
     {
-      "lines": 516,
-      "rel": "shared/commercial/date_parser.py"
+      "lines": 1270,
+      "rel": "routers/scaffold.py"
     },
     {
-      "lines": 469,
-      "rel": "shared/providers/free_apis.py"
+      "lines": 1200,
+      "rel": "core/parliament.py"
     },
     {
-      "lines": 467,
-      "rel": "services/llm_gateway.py"
+      "lines": 1159,
+      "rel": "routers/codebase_health.py"
     },
     {
-      "lines": 452,
+      "lines": 1158,
+      "rel": "components/MessageBubble.jsx"
+    },
+    {
+      "lines": 1152,
+      "rel": "routers/loop.py"
+    },
+    {
+      "lines": 1118,
+      "rel": "routers/security_scan.py"
+    },
+    {
+      "lines": 1110,
+      "rel": "routers/ora_chat.py"
+    },
+    {
+      "lines": 1046,
+      "rel": "services/qa_matrix.py"
+    },
+    {
+      "lines": 1041,
+      "rel": "components/Shell.jsx"
+    },
+    {
+      "lines": 1010,
+      "rel": "pages/Both.jsx"
+    },
+    {
+      "lines": 951,
+      "rel": "components/SecurityScanDrawer.jsx"
+    },
+    {
+      "lines": 865,
+      "rel": "services/ora_chat/deep_research.py"
+    },
+    {
+      "lines": 864,
+      "rel": "services/dev_skills.py"
+    },
+    {
+      "lines": 806,
+      "rel": "components/demo/demoSteps.jsx"
+    },
+    {
+      "lines": 798,
+      "rel": "services/project_brain.py"
+    },
+    {
+      "lines": 798,
+      "rel": "routers/fix_pipeline.py"
+    },
+    {
+      "lines": 782,
+      "rel": "pages/OraDirect.jsx"
+    },
+    {
+      "lines": 754,
+      "rel": "components/LoopLiveFeed.jsx"
+    },
+    {
+      "lines": 748,
+      "rel": "services/integration_health.py"
+    },
+    {
+      "lines": 734,
+      "rel": "routers/admin_qa.py"
+    },
+    {
+      "lines": 733,
+      "rel": "pages/CodebaseHealth.jsx"
+    },
+    {
+      "lines": 722,
+      "rel": "components/GraphPanel.jsx"
+    },
+    {
+      "lines": 697,
+      "rel": "components/FixProgressDrawer.jsx"
+    },
+    {
+      "lines": 696,
+      "rel": "services/mode_d_debugger.py"
+    },
+    {
+      "lines": 676,
       "rel": "components/NewUserWizard.jsx"
     },
     {
-      "lines": 437,
+      "lines": 676,
+      "rel": "pages/AdminSystemHealth.jsx"
+    },
+    {
+      "lines": 668,
+      "rel": "components/PreviewPanel.jsx"
+    },
+    {
+      "lines": 665,
+      "rel": "pages/Dashboard.jsx"
+    },
+    {
+      "lines": 664,
+      "rel": "components/ORASidePanel.jsx"
+    },
+    {
+      "lines": 646,
+      "rel": "components/OraChatDrawer.jsx"
+    },
+    {
+      "lines": 645,
+      "rel": "components/DeployPanel.jsx"
+    },
+    {
+      "lines": 642,
+      "rel": "services/vanguard_scanner.py"
+    },
+    {
+      "lines": 635,
+      "rel": "routers/auth.py"
+    },
+    {
+      "lines": 605,
+      "rel": "components/dashboard/v2/SidebarBound.jsx"
+    },
+    {
+      "lines": 597,
+      "rel": "services/vanguard_verify_agent.py"
+    },
+    {
+      "lines": 597,
+      "rel": "pages/admin/PersonalTrackAdmin.jsx"
+    },
+    {
+      "lines": 593,
+      "rel": "routers/payments.py"
+    },
+    {
+      "lines": 590,
+      "rel": "services/vercel_skills.py"
+    },
+    {
+      "lines": 589,
+      "rel": "components/AddProjectWizard.jsx"
+    },
+    {
+      "lines": 588,
+      "rel": "services/supabase_provisioner.py"
+    },
+    {
+      "lines": 586,
+      "rel": "components/AdminHouseRules.jsx"
+    },
+    {
+      "lines": 568,
+      "rel": "components/OperationHistory.jsx"
+    },
+    {
+      "lines": 564,
+      "rel": "services/llm/_meta.py"
+    },
+    {
+      "lines": 550,
+      "rel": "services/bug_hunt_rules.py"
+    },
+    {
+      "lines": 545,
+      "rel": "routers/deploy.py"
+    },
+    {
+      "lines": 540,
+      "rel": "pages/Integrations.jsx"
+    },
+    {
+      "lines": 536,
+      "rel": "pages/AdminQADashboard.jsx"
+    },
+    {
+      "lines": 534,
+      "rel": "components/ShipConfirmModal.jsx"
+    },
+    {
+      "lines": 532,
+      "rel": "pages/FeatureWindow.jsx"
+    },
+    {
+      "lines": 531,
+      "rel": "pages/BugHunt.jsx"
+    },
+    {
+      "lines": 525,
+      "rel": "pages/Settings.jsx"
+    },
+    {
+      "lines": 519,
+      "rel": "services/repo_context.py"
+    },
+    {
+      "lines": 509,
+      "rel": "routers/github_oauth.py"
+    },
+    {
+      "lines": 501,
+      "rel": "services/llm/openrouter_providers.py"
+    },
+    {
+      "lines": 499,
+      "rel": "pages/AdminFinancials.jsx"
+    },
+    {
+      "lines": 491,
+      "rel": "components/LoopStatusChip.jsx"
+    },
+    {
+      "lines": 490,
+      "rel": "components/KnowledgeGraph.jsx"
+    },
+    {
+      "lines": 483,
       "rel": "services/architecture_health.py"
     },
     {
-      "lines": 410,
+      "lines": 479,
+      "rel": "services/ora_chat/codebase_index.py"
+    },
+    {
+      "lines": 468,
+      "rel": "routers/admin_bin.py"
+    },
+    {
+      "lines": 464,
+      "rel": "services/tools_bridge.py"
+    },
+    {
+      "lines": 461,
+      "rel": "core/intent_gateway.py"
+    },
+    {
+      "lines": 451,
+      "rel": "components/dashboard/v2/AskAdvisorReal.jsx"
+    },
+    {
+      "lines": 449,
+      "rel": "components/AdminThinkingHints.jsx"
+    },
+    {
+      "lines": 449,
+      "rel": "components/AuremAdminPanel.jsx"
+    },
+    {
+      "lines": 446,
+      "rel": "components/PricingCards.jsx"
+    },
+    {
+      "lines": 438,
+      "rel": "services/loop_speed_diagnostic.py"
+    },
+    {
+      "lines": 436,
+      "rel": "scripts/init_prod_collections.py"
+    },
+    {
+      "lines": 436,
+      "rel": "services/ora_fix_learning.py"
+    },
+    {
+      "lines": 431,
+      "rel": "components/LiveTaskPopup.jsx"
+    },
+    {
+      "lines": 430,
       "rel": "services/web_skills.py"
     },
     {
-      "lines": 408,
-      "rel": "services/mode_d_debugger.py"
+      "lines": 426,
+      "rel": "services/graph_builder.py"
+    },
+    {
+      "lines": 425,
+      "rel": "services/repo_indexing.py"
+    },
+    {
+      "lines": 425,
+      "rel": "pages/SystemStatsPage.jsx"
+    },
+    {
+      "lines": 424,
+      "rel": "services/admin_analytics_cache.py"
+    },
+    {
+      "lines": 421,
+      "rel": "components/FixJobContext.jsx"
+    },
+    {
+      "lines": 418,
+      "rel": "services/finding_fix_applier.py"
+    },
+    {
+      "lines": 414,
+      "rel": "components/nav/RailShell.jsx"
+    },
+    {
+      "lines": 407,
+      "rel": "pages/Login.jsx"
+    },
+    {
+      "lines": 405,
+      "rel": "routers/supabase.py"
     },
     {
       "lines": 404,
       "rel": "services/github_deploy_service.py"
     },
     {
+      "lines": 404,
+      "rel": "routers/oauth.py"
+    },
+    {
+      "lines": 403,
+      "rel": "pages/WhyOra.jsx"
+    },
+    {
+      "lines": 399,
+      "rel": "components/FounderOfferCard.jsx"
+    },
+    {
+      "lines": 399,
+      "rel": "components/LoopStepBar.jsx"
+    },
+    {
+      "lines": 388,
+      "rel": "services/ora_chat/slash_commands.py"
+    },
+    {
       "lines": 386,
       "rel": "pages/BrainDump.jsx"
     },
     {
-      "lines": 386,
-      "rel": "pages/Landing.jsx"
+      "lines": 375,
+      "rel": "services/financials.py"
     },
     {
-      "lines": 380,
-      "rel": "shared/commercial/token_vault.py"
+      "lines": 375,
+      "rel": "pages/Analytics.jsx"
     },
     {
-      "lines": 364,
-      "rel": "components/AuremAdminPanel.jsx"
+      "lines": 374,
+      "rel": "services/loop_execute.py"
     },
     {
-      "lines": 362,
-      "rel": "services/repo_context.py"
+      "lines": 361,
+      "rel": "services/repo_heal.py"
+    },
+    {
+      "lines": 357,
+      "rel": "services/llm/__init__.py"
+    },
+    {
+      "lines": 356,
+      "rel": "pages/AdminApiKeys.jsx"
+    },
+    {
+      "lines": 355,
+      "rel": "services/fix_job_manager.py"
+    },
+    {
+      "lines": 355,
+      "rel": "routers/founder_offer.py"
+    },
+    {
+      "lines": 354,
+      "rel": "pages/AdminInspectSpeedDiagnostic.jsx"
+    },
+    {
+      "lines": 353,
+      "rel": "components/SecretScanCard.jsx"
     },
     {
       "lines": 352,
-      "rel": "services/project_brain.py"
+      "rel": "components/dashboard/v2/GraphView.jsx"
     },
     {
-      "lines": 339,
+      "lines": 352,
+      "rel": "pages/ShippedRowHarness.jsx"
+    },
+    {
+      "lines": 345,
       "rel": "services/mode_e_auditor.py"
     },
     {
-      "lines": 326,
-      "rel": "main.py"
-    },
-    {
-      "lines": 313,
+      "lines": 341,
       "rel": "components/TaskLiveTape.jsx"
     },
     {
-      "lines": 310,
-      "rel": "routers/deploy.py"
+      "lines": 339,
+      "rel": "services/ora_chat/safety.py"
+    },
+    {
+      "lines": 337,
+      "rel": "pages/Signup.jsx"
+    },
+    {
+      "lines": 333,
+      "rel": "scripts/iter309_sse_reconnect_harness.py"
+    },
+    {
+      "lines": 333,
+      "rel": "services/topup_alerts.py"
+    },
+    {
+      "lines": 330,
+      "rel": "services/agents.py"
+    },
+    {
+      "lines": 330,
+      "rel": "evals/runner.py"
+    },
+    {
+      "lines": 329,
+      "rel": "services/onboarding_email.py"
+    },
+    {
+      "lines": 328,
+      "rel": "routers/repo_status.py"
+    },
+    {
+      "lines": 324,
+      "rel": "services/correction_rules.py"
+    },
+    {
+      "lines": 322,
+      "rel": "services/loop_safety.py"
+    },
+    {
+      "lines": 321,
+      "rel": "components/ShipPendingCard.jsx"
+    },
+    {
+      "lines": 317,
+      "rel": "components/dashboard/v2/ChatView.jsx"
+    },
+    {
+      "lines": 316,
+      "rel": "services/risk_routing.py"
+    },
+    {
+      "lines": 316,
+      "rel": "components/demo/WalkthroughPlayer.jsx"
+    },
+    {
+      "lines": 315,
+      "rel": "routers/findings.py"
+    },
+    {
+      "lines": 312,
+      "rel": "lib/api.js"
     },
     {
       "lines": 310,
-      "rel": "shared/commercial/key_service.py"
+      "rel": "services/fix_triage.py"
     },
     {
-      "lines": 303,
+      "lines": 309,
+      "rel": "pages/AdminVanguard.jsx"
+    },
+    {
+      "lines": 308,
       "rel": "cto_services/codebase_indexer.py"
+    },
+    {
+      "lines": 307,
+      "rel": "services/generation_rules.py"
+    },
+    {
+      "lines": 307,
+      "rel": "evals/harness.py"
+    },
+    {
+      "lines": 307,
+      "rel": "pages/Deploy.jsx"
+    },
+    {
+      "lines": 306,
+      "rel": "pages/personal/DraftReview.jsx"
+    },
+    {
+      "lines": 305,
+      "rel": "services/ora_chat/grounding_check.py"
+    },
+    {
+      "lines": 302,
+      "rel": "services/reasoning_evals.py"
+    },
+    {
+      "lines": 302,
+      "rel": "App.jsx"
+    },
+    {
+      "lines": 302,
+      "rel": "components/TabBar.jsx"
+    },
+    {
+      "lines": 301,
+      "rel": "services/ora_learning.py"
+    },
+    {
+      "lines": 301,
+      "rel": "components/TwoFactorCard.jsx"
     }
   ],
   "line_limit": 300

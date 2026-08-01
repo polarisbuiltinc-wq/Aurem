@@ -143,19 +143,15 @@ def test_warn_only_env_flag_downgrades_to_warning(monkeypatch) -> None:
     warning + returns without raising. This is the actual founder-
     directed default mode (warn-only).
     """
+    import sys
     import services.orchestrator as orch_mod
     monkeypatch.setattr(orch_mod, "AUREM_CTO_PERSONA", "x" * 20_500)
-    # Re-import the value in the test-module scope (module-cached).
-    monkeypatch.setattr(
-        "tests.test_persona_loc_guardrail.AUREM_CTO_PERSONA",
-        "x" * 20_500,
-    )
+    # Rebind the module-local import so the guard reads the mock:
+    monkeypatch.setattr(sys.modules[__name__], "AUREM_CTO_PERSONA", "x" * 20_500)
     monkeypatch.delenv("PERSONA_GUARDRAIL_HARD", raising=False)
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        # Call the guard directly (import path is fine — monkeypatch
-        # already swapped the module-level constant).
         test_persona_under_early_warning_threshold()
         matched = [w for w in caught
                    if "EARLY-WARNING" in str(w.message)]
@@ -168,12 +164,10 @@ def test_hard_env_flag_upgrades_to_pytest_fail(monkeypatch) -> None:
     """`PERSONA_GUARDRAIL_HARD=1` must upgrade the warning to a hard
     pytest.fail — useful for persona-diet PRs that want a red run
     until the dedupe lands."""
+    import sys
     import services.orchestrator as orch_mod
     monkeypatch.setattr(orch_mod, "AUREM_CTO_PERSONA", "x" * 20_500)
-    monkeypatch.setattr(
-        "tests.test_persona_loc_guardrail.AUREM_CTO_PERSONA",
-        "x" * 20_500,
-    )
+    monkeypatch.setattr(sys.modules[__name__], "AUREM_CTO_PERSONA", "x" * 20_500)
     monkeypatch.setenv("PERSONA_GUARDRAIL_HARD", "1")
 
     with pytest.raises(BaseException, match="EARLY-WARNING"):
