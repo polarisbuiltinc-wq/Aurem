@@ -132,13 +132,22 @@ async def test_groq_house_rules_silent_skip_when_file_missing(monkeypatch, tmp_p
     _setup_env(monkeypatch)
     import importlib
     import services.llm as llm_mod
+    # Session D · D-2b — Groq transport moved to a sibling module.
+    # Monkeypatching `services.llm._GROQ_HOUSE_RULES_PATH` would only
+    # mutate the re-export binding on the parent module; the real
+    # `_load_groq_house_rules()` reads its own module global. Target
+    # the canonical location.
+    from services.llm import groq_client as groq_mod
+    importlib.reload(groq_mod)
     importlib.reload(llm_mod)
     # Point the loader at a path that doesn't exist.
     missing = str(tmp_path / "nope.md")
-    monkeypatch.setattr(llm_mod, "_GROQ_HOUSE_RULES_PATH", missing)
-    # Clear the module-level cache so the next call re-reads.
-    if hasattr(llm_mod._load_groq_house_rules, "_cached"):
-        delattr(llm_mod._load_groq_house_rules, "_cached")
+    monkeypatch.setattr(groq_mod, "_GROQ_HOUSE_RULES_PATH", missing)
+    # Clear the module-level cache so the next call re-reads. The
+    # cached attr lives on the canonical function object — same
+    # identity accessed via either the parent or the sibling module.
+    if hasattr(groq_mod._load_groq_house_rules, "_cached"):
+        delattr(groq_mod._load_groq_house_rules, "_cached")
 
     fake_completion = MagicMock()
     fake_completion.choices = [MagicMock(message=MagicMock(content="ok"))]
@@ -163,6 +172,11 @@ async def test_groq_house_rules_applied_when_no_caller_system(monkeypatch) -> No
     _setup_env(monkeypatch)
     import importlib
     import services.llm as llm_mod
+    # Session D · D-2b — cache attr lives on the canonical function
+    # object in `groq_client.py`, so reload THAT module to reset
+    # any `_cached=""` left behind by prior missing-file tests.
+    from services.llm import groq_client as groq_mod
+    importlib.reload(groq_mod)
     importlib.reload(llm_mod)
     fake_completion = MagicMock()
     fake_completion.choices = [MagicMock(message=MagicMock(content="ok"))]

@@ -54,19 +54,25 @@ from .openrouter_client import (
     call_openrouter_model,
 )
 
-# ─── Iter 212m-49 — Groq as TRUE last-resort fallback ─────────────────
-# Vendor-independent safety net for when OpenRouter (paid AND free
-# tier) is unreachable / quota-exhausted / globally rate-limited.
-# Groq's own free tier has its own quota that's independent of
-# OpenRouter — so a credit-stuffing attack on OpenRouter, an
-# OpenRouter outage, or a "global free-tier 429 storm" still gets the
-# user a response. Active only when GROQ_API_KEY is set.
+# ─── Session D · D-2b — Groq transport moved to sibling module ────────
+# `_GROQ_MODEL`, `_GROQ_HOUSE_RULES_PATH`, `_load_groq_house_rules`,
+# `_groq_key`, and `_call_groq` now live in
+# `services/llm/groq_client.py`. Re-imported here so legacy callers
+# (`routers/chat.py`, `routers/suggestions.py`, existing tests, and
+# the `_call_deepseek` fallback ladder below) resolve unchanged.
 #
-# Per founder's spec (2026-02-27): "Groq sirf emergency net hai,
-# primary nahi banana." → Groq is ONLY reached after BOTH the
-# primary OpenRouter call AND every entry in the OpenRouter `:free`
-# fallback chain has failed. Never called speculatively.
-_GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+# MONKEYPATCH-CONTRACT NOTE: tests that monkeypatch
+# `_GROQ_HOUSE_RULES_PATH` must target the canonical module
+# (`services.llm.groq_client._GROQ_HOUSE_RULES_PATH`), NOT this
+# re-export binding — patching the re-export leaves
+# `_load_groq_house_rules()` reading the real path.
+from .groq_client import (
+    _GROQ_MODEL,
+    _GROQ_HOUSE_RULES_PATH,
+    _load_groq_house_rules,
+    _groq_key,
+    _call_groq,
+)
 
 
 # ─── Iter 212m-51 — DeepSeek direct API as second-hop fallback ────────
@@ -132,39 +138,6 @@ async def _call_deepseek_direct(
 # module load (cheap, ~1 KB) and silently absent → defaults apply.
 # These rules nudge Groq toward the same shape/voice that ORA uses
 # on GLM-5.2 / Claude so the fallback feels seamless to the user.
-_GROQ_HOUSE_RULES_PATH = os.path.join(
-    # Session C · Sub-step 1 — `__file__` is now
-    # `services/llm/__init__.py` (was `services/llm.py`), so we need
-    # three `dirname` hops to reach `/app/backend/` instead of two.
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "prompts",
-    "groq_house_rules.md",
-)
-
-
-def _load_groq_house_rules() -> str:
-    """Read the Groq-only house rules from disk. Silent-skip on any
-    error (file missing, permission, encoding) — Groq must still
-    work even if the rules file is removed. Cached after the first
-    successful read for the lifetime of the process."""
-    cached = getattr(_load_groq_house_rules, "_cached", None)
-    if cached is not None:
-        return cached
-    try:
-        with open(_GROQ_HOUSE_RULES_PATH, "r", encoding="utf-8") as fh:
-            text = fh.read().strip()
-        setattr(_load_groq_house_rules, "_cached", text)
-        return text
-    except (FileNotFoundError, PermissionError, UnicodeDecodeError, OSError) as e:
-        logger.debug("groq_house_rules.md not loaded: %r — defaults apply", e)
-        setattr(_load_groq_house_rules, "_cached", "")
-        return ""
-
-
-def _groq_key() -> str:
-    return os.environ.get("GROQ_API_KEY", "")
-
-
 # Iter 212m-49 · Session 5 Phase 0a — provenance stash + LongCat
 # probe snapshot moved into `services/_llm_state.py`. The state
 # lives in a single canonical place so the upcoming `probes.py` /
@@ -186,51 +159,14 @@ from ._state import (
 from contextvars import ContextVar  # noqa: F401 — kept for existing `llm.ContextVar` external access
 
 
-async def _call_groq(
-    messages: list,
-    system: str = "",
-    max_tokens: int = 1500,
-    temperature: float = 0.7,
-) -> str:
-    """Async call to Groq Cloud — only reached when OpenRouter primary
-    AND every free-tier candidate have failed. Returns the completion
-    string. Raises on any error so callers can decide whether to log
-    or re-raise; this function never silently returns "" because Groq
-    is the LAST link — we want a loud failure to surface that the
-    whole chain is dead and the user should know to retry later.
 
-    Note: the official `groq` Python SDK exposes an `AsyncGroq` client
-    that mirrors OpenAI's `/v1/chat/completions` schema, so no payload
-    surgery is needed."""
-    key = _groq_key()
-    if not key:
-        raise RuntimeError("GROQ_API_KEY not set — emergency fallback unavailable")
-    # Imported lazily so deploys without groq installed don't crash at
-    # module import time.
-    from groq import AsyncGroq
-    client = AsyncGroq(api_key=key, timeout=float(os.getenv("GROQ_TIMEOUT_S", "30.0")))
-    # Iter 212m-50 — Groq-only house rules. Prepend the markdown rules
-    # to the caller-supplied system prompt so the fallback maintains
-    # ORA's voice, never breaks character, and refuses destructive ops
-    # without confirmation. Silent-skip if the rules file is missing.
-    house_rules = _load_groq_house_rules()
-    if house_rules:
-        effective_system = (
-            f"{house_rules}\n\n---\n\n{system}".strip()
-            if system else house_rules
-        )
-    else:
-        effective_system = system
-    msgs = ([{"role": "system", "content": effective_system}]
-            + messages) if effective_system else messages
-    completion = await client.chat.completions.create(
-        model=_GROQ_MODEL,
-        messages=msgs,
-        max_tokens=max_tokens,
-        temperature=temperature,
-    )
-    content = (completion.choices[0].message.content or "").strip()
-    return content
+
+
+# ─── Session D · D-2b — _call_groq moved to groq_client.py ──────────────
+# The Groq emergency transport lives in `services/llm/groq_client.py`.
+# It's re-exported via the top-of-file `from .groq_client import ...`
+# block so `_call_deepseek` (below) and external callers still find it
+# on `services.llm`.
 
 
 # ─── Session D · D-2a — pure classifier helpers moved to openrouter_client.py ──
