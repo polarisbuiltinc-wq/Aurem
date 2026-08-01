@@ -55,9 +55,23 @@ logger = logging.getLogger(__name__)
 # Claude Sonnet 4.5 via OpenRouter — same key as the rest of the app.
 # Iter 212g — use OpenRouter's dotted ID (4.5); the dash-date Anthropic
 # native format returns HTTP 400 from OpenRouter.
+#
+# SSOT-refactor (Feb 2026) — Claude/DeepSeek model IDs now imported
+# from `services.llm.openrouter_providers` so this file cannot drift
+# from Parliament V2's canonical model slugs. Env override still wins
+# for PROD hot-swap without a redeploy.
+try:
+    from .llm.openrouter_providers import _CLAUDE_MODEL as _SSOT_CLAUDE
+    from .llm import _deepseek_model as _ssot_deepseek_model
+    _SSOT_DEEPSEEK = _ssot_deepseek_model()
+except Exception as _e:  # pragma: no cover — defensive on import cycles
+    logger.warning("vanguard_verify_agent: SSOT model import failed (%r)", _e)
+    _SSOT_CLAUDE = "anthropic/claude-sonnet-4.5"
+    _SSOT_DEEPSEEK = "deepseek/deepseek-chat"
+
 _VERIFY_MODEL = os.environ.get(
     "VANGUARD_VERIFY_MODEL",
-    "anthropic/claude-sonnet-4.5",
+    _SSOT_CLAUDE,
 )
 
 # Iter 212m-172 — Rescue model for when the primary Vanguard verifier
@@ -66,7 +80,7 @@ _VERIFY_MODEL = os.environ.get(
 # and is env-tunable so PROD can pin an alternative on outage.
 _VERIFY_RESCUE_MODEL = os.environ.get(
     "VANGUARD_VERIFY_RESCUE_MODEL",
-    "deepseek/deepseek-chat",
+    _SSOT_DEEPSEEK,
 )
 
 # Iter 212m-41 — env-tunable severity threshold + kill-switch.

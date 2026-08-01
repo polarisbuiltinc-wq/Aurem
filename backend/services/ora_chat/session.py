@@ -46,7 +46,16 @@ TAIL_TOKEN_BUDGET = int(__import__("os").getenv("ORA_TAIL_TOKEN_BUDGET", "70000"
 CHARS_PER_TOKEN = 3.5
 
 SUMMARY_MAX_CHARS = 4000         # cap on rolling summary size
-SUMMARY_MODEL = "z-ai/glm-5.2"   # cheapest capable model for summarization
+
+# SSOT-refactor (Feb 2026) — pull GLM slug from services.llm so the
+# summarizer cannot drift from the canonical Parliament V2 model ID.
+# Env override for PROD hot-swap: `GLM_MODEL` (respected upstream)
+# or `ORA_SUMMARY_MODEL` for a per-purpose override on this call site.
+try:
+    from services.llm.openrouter_providers import _GLM_MODEL as _SSOT_GLM
+except Exception:  # pragma: no cover — defensive on import cycles
+    _SSOT_GLM = "z-ai/glm-5.2"
+SUMMARY_MODEL = __import__("os").getenv("ORA_SUMMARY_MODEL", _SSOT_GLM)
 
 
 # ── Session CRUD ────────────────────────────────────────────────────

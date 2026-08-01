@@ -46,7 +46,17 @@ from services.loop_task_specs import get as _get_spec
 logger = logging.getLogger(__name__)
 
 _COLL = "loop_verification_log"
-_DEFAULT_MODEL = os.getenv("VERIFIER_MODEL", "anthropic/claude-sonnet-4.5")
+
+# SSOT-refactor (Feb 2026) — pull Claude model slug from services.llm
+# so this verifier cannot drift from Parliament V2's canonical ID.
+# Env override still honoured for per-deploy pinning without redeploy.
+try:
+    from services.llm.openrouter_providers import _CLAUDE_MODEL as _SSOT_CLAUDE
+except Exception as _e:  # pragma: no cover — defensive on import cycles
+    logger.warning("loop_independent_verifier: SSOT model import failed (%r)", _e)
+    _SSOT_CLAUDE = "anthropic/claude-sonnet-4.5"
+
+_DEFAULT_MODEL = os.getenv("VERIFIER_MODEL", _SSOT_CLAUDE)
 _MAX_DIFF_CHARS = 20_000        # keep the verifier prompt bounded
 _MAX_FILES_SHOWN = 12
 

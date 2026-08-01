@@ -24,6 +24,38 @@ before being called "done".
 
 ## Change Log
 
+### 2026-02-02 — SSOT-Model-ID-Refactor (Focused Session)
+**P0 fix** — Runtime files that duplicated Claude / GLM model slugs in
+their env-fallback defaults now resolve through the canonical SSOT in
+`services/llm/openrouter_providers.py` (`_CLAUDE_MODEL`, `_GLM_MODEL`).
+Prevents future copy-paste drift when Council A swaps primary models.
+
+- **8 runtime files refactored** — each now imports the SSOT constant
+  (with a defensive literal fallback ONLY inside `except` blocks for
+  circular-import safety):
+  1. `services/vanguard_verify_agent.py` (Claude + DeepSeek)
+  2. `services/loop_independent_verifier.py` (Claude)
+  3. `services/reasoning_evals.py` (Anthropic-native — see below)
+  4. `main.py` (GLM fallback in exception path)
+  5. `services/ora_chat/session.py` (`SUMMARY_MODEL` — added
+     `ORA_SUMMARY_MODEL` env override)
+  6. `services/ora_chat/router.py` (`fallback` route)
+  7. `services/scaffold_design_review.py` (`_DEFAULT_MODEL`)
+  8. `routers/feature_window.py` (Council A fallback label)
+- **Real bug fixed** — `reasoning_evals.py::llm_faithfulness_check`
+  had `model="claude-sonnet-4-6"` (invented ID that returns 404 from
+  Anthropic). Corrected to `claude-sonnet-4-5` (Anthropic-native
+  format is required by the Emergent SDK path — distinct from
+  OpenRouter's dotted slug).
+- **Drift-guard tests** — `tests/test_ssot_model_id_no_drift.py`
+  (9 cases, zero mocks): env-override propagation, SSOT re-export
+  identity, anthropic-native format assertion, and a static-scan
+  guard that fails if any listed file loses its SSOT import.
+- **Verification** — 85 related tests pass (vanguard verify, loop
+  verify, tier2 parliament scaffold, smart_router, advisor). Backend
+  boots clean, `/api/health` returns `council_a_model:
+  anthropic/claude-sonnet-4.5` and `dead_tasks: []`.
+
 ### 2026-02-01 — Session C · Sub-step 2 (LLM Package Modularization) + BUILD_HASH file-based fix
 - **BUILD_HASH workaround** — `_resolve_build_hash()` ladder now has 2
   new file-based steps (priority 2: `backend/.build_info`, priority 4:
@@ -132,7 +164,18 @@ before being called "done".
   (+12 tests unblocked; full Bucket-A completion needs PAT-mock + SSE-shape work)
 - **~~`services/llm.py` Phase 3~~** ✅ COMPLETE (Sub-step 1 + Sub-step 2).
 
-### P2 (backlog)
+### P0 (current focus)
+- **~~SSOT-Model-ID-Refactor~~** ✅ COMPLETE (Feb 2026 — 8 files + drift-guard test suite)
+
+### P1 (next up)
+- **Persona-Dedupe** — `AUREM_CTO_PERSONA` currently at 25,687 chars
+  (+16% over the 22,000 char latency budget from
+  `test_iter129_chat_latency_budget.py`). Needs a focused session
+  (dedupe → real conversation spot-checks to verify quality holds).
+- **Session G Bucket-A Batch 4c** — production_wiring,
+  ora_chat_persistence, ora_dropdown, local_tools_project. Same
+  discipline as 4b (test-only edits when real bugs surface, deploy
+  after batch).
 - Session 5 P2 findings: vanguard-config Mongo migration, MCP fallback logging
 - **~~20+ Unsupervised Background Tasks wrapper~~** ✅ COMPLETE (Session F)
 - Founder-Blocked env vars (G8-G11)
@@ -141,6 +184,13 @@ before being called "done".
 - Session G Phase 3.2+ — Bucket A remaining ~80 nodeids
   (needs PAT mocking + SSE shape update + individual fixture repair)
 - Session G Phase 4 — Categorise the 78 UNCATEGORIZED legacy files
+
+### P2 (backlog)
+- Fix `test_iter80_seo_pwa.py` post-marketing-content refresh
+  (blocked on canonical pricing $9/mo + brand "Aurem CTO" + current
+  feature-list confirmation from founder)
+- Re-investigate `test_iter267_url_fetch_retry.py` (SSRF pre-check
+  timing issue)
 
 ### Overnight Session — Feb 2026 — LOC + Test Score Deltas
 - `services/llm/__init__.py`: 1591 → 426 LOC (**−73%**)

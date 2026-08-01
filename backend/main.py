@@ -1943,12 +1943,21 @@ async def health():
             council_a_primary_model as _council_a_primary_model,
             LONGCAT_LIVE as _LONGCAT_LIVE,
             LONGCAT_ENABLED as _LONGCAT_ENABLED,
+            _GLM_MODEL as _SSOT_GLM,
         )
         council_a_model = _council_a_primary_model()
         longcat_live = bool(_LONGCAT_LIVE)
         longcat_enabled = bool(_LONGCAT_ENABLED)
     except Exception:
-        council_a_model = "z-ai/glm-5.2"
+        # SSOT-refactor (Feb 2026) — fallback still uses the canonical
+        # GLM slug even if `services.llm` import fails, so drift is
+        # confined to a single well-known constant. Env-override at
+        # boot via `GLM_MODEL` is already honoured by that module.
+        try:
+            from services.llm.openrouter_providers import _GLM_MODEL as _SSOT_GLM
+        except Exception:
+            _SSOT_GLM = "z-ai/glm-5.2"
+        council_a_model = _SSOT_GLM
         longcat_live = False
         longcat_enabled = False
 

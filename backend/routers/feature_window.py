@@ -99,7 +99,13 @@ async def feature_window_status(
         longcat_enabled_flag = bool(LONGCAT_ENABLED)
     except Exception as _e:
         logger.warning("feature_window: could not import council_a_primary_model: %r", _e)
-        swift_model_id = "z-ai/glm-5.2"
+        # SSOT-refactor (Feb 2026) — fallback pulls GLM slug from
+        # services.llm.openrouter_providers so this label never drifts.
+        try:
+            from services.llm.openrouter_providers import _GLM_MODEL as _SSOT_GLM
+        except Exception:
+            _SSOT_GLM = "z-ai/glm-5.2"
+        swift_model_id = _SSOT_GLM
         longcat_live_flag = False
         longcat_enabled_flag = False
     swift_model_label = f"{swift_model_id} via OpenRouter"

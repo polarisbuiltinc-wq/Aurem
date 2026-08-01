@@ -35,7 +35,15 @@ from services.loop_independent_verifier import (
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_MODEL   = os.getenv("SCAFFOLD_REVIEWER_MODEL", "z-ai/glm-5.2")
+# SSOT-refactor (Feb 2026) — pull GLM slug from services.llm so the
+# scaffold reviewer cannot drift from Parliament V2's canonical ID.
+# `SCAFFOLD_REVIEWER_MODEL` env override still wins for per-deploy tune.
+try:
+    from services.llm.openrouter_providers import _GLM_MODEL as _SSOT_GLM
+except Exception:  # pragma: no cover — defensive on import cycles
+    _SSOT_GLM = "z-ai/glm-5.2"
+
+_DEFAULT_MODEL   = os.getenv("SCAFFOLD_REVIEWER_MODEL", _SSOT_GLM)
 _MAX_FILES_SHOWN = 24
 _MAX_CONTENT_PER = 1200
 _MAX_TOTAL       = 16_000

@@ -22,6 +22,16 @@ from dataclasses import dataclass
 from typing import Optional
 
 
+# SSOT-refactor (Feb 2026) — canonical model slug for the "fallback"
+# route. Pulled from services.llm so we cannot drift from Parliament
+# V2's Council A GLM ID. `ORA_MODEL_FALLBACK` still wins for per-deploy
+# override (existing behaviour preserved).
+try:
+    from services.llm.openrouter_providers import _GLM_MODEL as _SSOT_GLM
+except Exception:  # pragma: no cover — defensive on import cycles
+    _SSOT_GLM = "z-ai/glm-5.2"
+
+
 # ────────────────────────────────────────────────────────────────────
 # Route table — model slug + sampling params per intent
 # ────────────────────────────────────────────────────────────────────
@@ -72,7 +82,7 @@ _ROUTES: dict[str, RouteConfig] = {
     ),
     "fallback": RouteConfig(
         name="fallback", model=os.getenv("ORA_MODEL_FALLBACK",
-                                          "z-ai/glm-5.2"),
+                                          _SSOT_GLM),
         temp_env="ORA_TEMP_FALLBACK",  temp_default=0.4,
         top_p_env="ORA_TOP_P_FALLBACK", top_p_default=0.9,
         pp_env="ORA_PP_FALLBACK",       pp_default=0.1,

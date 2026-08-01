@@ -259,7 +259,7 @@ _JUDGE_SYSTEM = (
 async def llm_faithfulness_check(output: str,
                                     source: str,
                                     *,
-                                    model: str = "claude-sonnet-4-6") -> dict:
+                                    model: str = "claude-sonnet-4-5") -> dict:
     """Ask a Claude judge whether `output` is faithful to `source`.
 
     Returns {ok, verdict, unsupported_claims, reasoning, raw_response}.
@@ -269,6 +269,12 @@ async def llm_faithfulness_check(output: str,
     Cost: ~1 message per call. Uses the Emergent LLM key from
     `EMERGENT_LLM_KEY`. Requires the key to be set; returns
     `{"ok": False, "verdict": "error", ...}` if not.
+
+    SSOT-refactor (Feb 2026) — default model is Anthropic-native
+    `claude-sonnet-4-5` (not the OpenRouter dotted `4.5`) because this
+    call uses `emergentintegrations.LlmChat.with_model("anthropic",…)`
+    which requires Anthropic's dash-date format. Fixed the earlier
+    hard-coded `claude-sonnet-4-6` typo which never existed.
     """
     key = os.environ.get("EMERGENT_LLM_KEY")
     if not key:
