@@ -35,8 +35,8 @@ import os
 
 import httpx
 
-from services.llm._state import _LONGCAT_LAST_PROBE
-from services.llm._routing import LONGCAT_ENABLED
+from ._state import _LONGCAT_LAST_PROBE
+from ._routing import LONGCAT_ENABLED
 
 logger = logging.getLogger(__name__)
 
