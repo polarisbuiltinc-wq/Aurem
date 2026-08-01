@@ -54,6 +54,21 @@ async def _ok_guard(_authz):
     return {"user_id": "admin", "is_admin": True}
 
 
+# Session G · Bucket A — Iter 212m-154 wrapped activation_funnel in a
+# Mongo-SWR cache that reads via `cto_services.db.get_db()`, NOT via
+# the `admin_router.require_db` we monkeypatch in each test. Result:
+# a live cache entry from test 2 leaked into tests 3-6 (or vice
+# versa in randomised orders). Fixture below bypasses the SWR layer
+# by monkeypatching `mongo_swr_cache` to just call the builder
+# directly — the tests are exercising the COMPUTATION, not the cache
+# invalidation behaviour (that has its own suite).
+@pytest.fixture(autouse=True)
+def _bypass_swr_cache(monkeypatch):
+    async def _direct(key, ttl_seconds, builder, *, hard_timeout=4.0):
+        return await builder()
+    monkeypatch.setattr(admin_router, "mongo_swr_cache", _direct)
+
+
 # ──────────────────────────────────────────────────────────────────
 # Test 1 — route & handler exist.
 # ──────────────────────────────────────────────────────────────────

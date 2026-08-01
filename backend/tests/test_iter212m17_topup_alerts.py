@@ -174,6 +174,48 @@ class _FakeColl:
                 n += 1
         return n
 
+    # Session G · Bucket A — production topup_alerts.py now uses
+    # bulk_write(ops, ordered=False) instead of per-doc update_one
+    # loops. Emulate the pymongo semantics: UpdateOne(filter, upd,
+    # upsert=True) → same effect as update_one() with upsert=True.
+    async def bulk_write(self, ops, ordered=False):
+        # Session G · Bucket A — production topup_alerts.py uses BOTH
+        # UpdateOne and InsertOne within the same bulk_write.  Duck-
+        # type by classname so we handle either.
+        upserted = 0
+        modified = 0
+        for op in ops:
+            name = type(op).__name__
+            if name == "InsertOne":
+                doc = getattr(op, "_doc", None) or getattr(op, "_document", None) or {}
+                self.docs.append(dict(doc))
+            elif name == "UpdateOne":
+                filt = getattr(op, "_filter", None) or {}
+                upd  = getattr(op, "_doc", None)    or {}
+                upsert = getattr(op, "_upsert", False)
+                result = await self.update_one(filt, upd, upsert=upsert)
+                if getattr(result, "upserted_id", None) is not None:
+                    upserted += 1
+            elif name == "UpdateMany":
+                filt = getattr(op, "_filter", None) or {}
+                upd  = getattr(op, "_doc", None)    or {}
+                await self.update_many(filt, upd)
+        class _R:
+            pass
+        _R.upserted_count = upserted
+        _R.modified_count = modified
+        return _R()
+
+    async def update_many(self, query, update):
+        # Same shape as update_one but touches every match.
+        for d in list(self.docs):
+            if all(d.get(k) == v for k, v in query.items()):
+                if "$set" in update:
+                    d.update(update["$set"])
+        class _R:
+            modified_count = 0
+        return _R()
+
 
 class _FakeCursor:
     def __init__(self, docs):
@@ -186,8 +228,16 @@ class _FakeCursor:
         self.docs = self.docs[:n]
         return self
 
-    async def to_list(self, _n):
-        return list(self.docs)
+    async def to_list(self, length=None):
+        return list(self.docs)[: (length or len(self.docs))]
+
+    # Session G · Bucket A — production topup_alerts uses
+    # `async for r in cur` in newer paths.
+    def __aiter__(self):
+        async def _gen():
+            for x in list(self.docs):
+                yield x
+        return _gen()
 
 
 class _FakeDB:

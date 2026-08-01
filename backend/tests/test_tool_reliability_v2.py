@@ -44,6 +44,31 @@ def _clean_cache():
     _REPO_STRUCTURE_CACHE.clear()
 
 
+# Session G · Bucket A — Iter 212m-169 added a `_repo_ctx_from(ctx)`
+# BINContext gate at the top of `get_repo_structure` so cache reads
+# can't be poisoned across users. Tests here validate the CACHE
+# invariants (cold-hit, path-filter, whole-project), not the
+# ownership check — so stub the resolver to always return the
+# ctx's project_id. Ownership is exercised in its own dedicated
+# suite (see test_iter212m169_ora_context_isolation.py).
+@pytest.fixture(autouse=True)
+def _bypass_repo_ctx_gate(monkeypatch):
+    from services import local_tools as _lt
+    def _stub(ctx):
+        pid = (ctx or {}).get("project_id") or "home"
+        # Session G · Bucket A — the "home" project_id represents
+        # "no real project selected" (Iter 212m-169 semantics). The
+        # tests exercise both success paths (real project_id) and
+        # the negative path (project_id="home" → no BINContext).
+        # Return None for "home" so the production error path fires.
+        if pid == "home":
+            return None
+        return {"ok": True, "pid": pid, "owner": "o", "repo": "r",
+                "branch": "main", "token": "t", "is_founder": False,
+                "bin_id": "u1"}
+    monkeypatch.setattr(_lt, "_repo_ctx_from", _stub)
+
+
 # ──────────────────────────────────────────────────────────────────
 # Fix #1 — needs_tool detection (prompt-level equivalent of tool_choice)
 # ──────────────────────────────────────────────────────────────────
