@@ -10,7 +10,7 @@ code-reference-harness"):
 > patterns PLUS its own LLM-grade judgement → only on PASS does the
 > patch progress to commit.
 
-Iter 169 — migrated to OpenRouter (anthropic/claude-sonnet-4-5-20250929).
+Iter 169 — migrated to OpenRouter (anthropic/claude-sonnet-4.5).
 The previous Emergent SDK dependency was dead weight after llm.py was
 cleaned up — when EMERGENT_LLM_KEY was unset the verify pipeline
 silently skipped LLM review, leaving only the regex floor. Now it
@@ -284,7 +284,7 @@ def _has_executable_python(blocks: dict) -> bool:
 async def _llm_review(file_blocks: dict, repo_ctx: str,
                      line_map: Optional[dict[str, set[int]]] = None) -> dict:
     """Make the second-agent LLM call. Iter 169 — uses OpenRouter
-    (anthropic/claude-sonnet-4-5-20250929). Returns
+    (anthropic/claude-sonnet-4.5). Returns
     {pass, findings, summary, model}. On any error, returns pass=True
     with a note so we don't accidentally block the pipeline on
     transient infra; the regex scan stays the floor.

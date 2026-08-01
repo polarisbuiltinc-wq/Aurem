@@ -49,13 +49,13 @@ def test_router_pro_review_is_kimi_thinking():
 
 def test_router_maxx_code_is_claude():
     from services.smart_router import get_model
-    assert get_model("code", "maxx") == "anthropic/claude-sonnet-4-5-20250929"
+    assert get_model("code", "maxx") == "anthropic/claude-sonnet-4.5"
 
 
 def test_router_security_is_always_claude():
     from services.smart_router import get_model
     for mode in ("swift", "pro", "maxx"):
-        assert get_model("security", mode) == "anthropic/claude-sonnet-4-5-20250929", \
+        assert get_model("security", mode) == "anthropic/claude-sonnet-4.5", \
             f"security must use Claude in mode={mode}"
 
 

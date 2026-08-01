@@ -33,12 +33,19 @@ def test_execute_bash_registered_in_dispatcher():
     )
 
 
+# Session G · Bucket A — execute_bash was hardened to founder/admin
+# only (real production security policy change). Tests now pass
+# `is_founder=True` ctx so the tool proceeds to its actual
+# execution path. This matches the current allow-list contract
+# for legit founder use of local shell (repo tools remain the
+# recommended path for user-repo file reads).
+
 # ── Behavioural contract ─────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_execute_bash_runs_real_command():
     from services.local_tools import execute_bash
-    r = await execute_bash({}, {"command": "echo iter138_proof"})
+    r = await execute_bash({"is_founder": True, "user_id": "founder"}, {"command": "echo iter138_proof"})
     assert r["ok"] is True
     assert r["exit_code"] == 0
     assert "iter138_proof" in r["stdout"]
@@ -47,9 +54,20 @@ async def test_execute_bash_runs_real_command():
 @pytest.mark.asyncio
 async def test_execute_bash_blocks_dangerous_binary():
     from services.local_tools import execute_bash
-    r = await execute_bash({}, {"command": "rm -rf /app"})
+    r = await execute_bash({"is_founder": True, "user_id": "founder"}, {"command": "rm -rf /app"})
     assert r["ok"] is False
-    assert "not allowed" in r["error"].lower()
+    # Session G · Bucket A — production security policy now blocks
+    # any `/app` reference in normal (non-debug) mode even for
+    # founders. Message shape: "refused: the command references
+    # ora-internal path `/app` which is off-limits in normal mode".
+    # Legacy assertion looked for "not allowed" (older binary-
+    # allowlist wording). Widen to accept EITHER phrasing so the
+    # invariant — "rm on /app is blocked" — is preserved regardless
+    # of which of the two guards catches it first.
+    lower = r["error"].lower()
+    assert ("not allowed" in lower or "off-limits" in lower or "refused" in lower), (
+        f"Expected a security-refusal message, got: {r['error']!r}"
+    )
 
 
 @pytest.mark.asyncio
@@ -63,14 +81,14 @@ async def test_execute_bash_blocks_chained_dangerous_command():
     the second half through shell; the spec calls this out. We test
     that the most obvious abuse (rm-first) is blocked."""
     from services.local_tools import execute_bash
-    r = await execute_bash({}, {"command": "rm -rf /tmp/foo; cat /etc/passwd"})
+    r = await execute_bash({"is_founder": True, "user_id": "founder"}, {"command": "rm -rf /tmp/foo; cat /etc/passwd"})
     assert r["ok"] is False, "rm must still be blocked when it's the leading binary"
 
 
 @pytest.mark.asyncio
 async def test_execute_bash_empty_command_rejected():
     from services.local_tools import execute_bash
-    r = await execute_bash({}, {"command": ""})
+    r = await execute_bash({"is_founder": True, "user_id": "founder"}, {"command": ""})
     assert r["ok"] is False
     assert "required" in r["error"]
 
@@ -80,18 +98,16 @@ async def test_execute_bash_pipes_with_allowed_first_binary():
     """Pipes are allowed as long as the FIRST binary passes the
     allowlist. This is how the LLM will typically chain `grep | head`."""
     from services.local_tools import execute_bash
-    r = await execute_bash(
-        {}, {"command": "ls /app/backend | head -3"},
+    r = await execute_bash({"is_founder": True, "user_id": "founder"}, {"command": "echo one two three | head -1"},
     )
     assert r["ok"] is True
-    assert r["stdout"], "ls | head should produce output"
+    assert r["stdout"], "echo | head should produce output"
 
 
 @pytest.mark.asyncio
 async def test_execute_bash_dispatches_via_invoke_local_tool():
     from services.local_tools import invoke_local_tool
-    r = await invoke_local_tool(
-        "execute_bash", {"command": "pwd"}, {},
+    r = await invoke_local_tool("execute_bash", {"command": "pwd"}, {"is_founder": True, "user_id": "founder"},
     )
     assert r is not None, "dispatcher must route execute_bash"
     assert r["ok"] is True

@@ -55,7 +55,7 @@ def test_vanguard_verify_uses_openrouter():
 
 def test_vanguard_verify_uses_openrouter_slug():
     text = (SERVICES / "vanguard_verify_agent.py").read_text()
-    assert "anthropic/claude-sonnet-4-5-20250929" in text
+    assert "anthropic/claude-sonnet-4.5" in text
 
 
 # ── Fix 4 ───────────────────────────────────────────────────────────

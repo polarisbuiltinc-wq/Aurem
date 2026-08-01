@@ -104,10 +104,19 @@ class _FakeDB:
             outer_q = q or {}
             matches = [r for r in self.rows if _match(r, outer_q)]
             class _Cur:
+                # Session G · Bucket A — production onboarding_email.py
+                # now uses `async for p in cur` (not just `to_list()`);
+                # add `__aiter__` to the fake so tests match the newer
+                # iteration API.
                 def __init__(self, items): self.items = items
                 def sort(self, *_a, **_k): return self
                 async def to_list(self, length=None):
                     return list(self.items)[: (length or len(self.items))]
+                def __aiter__(self):
+                    async def _gen():
+                        for x in list(self.items):
+                            yield x
+                    return _gen()
             return _Cur(matches)
         async def find_one(self, q=None, projection=None, sort=None):
             outer_q = q or {}

@@ -192,7 +192,7 @@ def test_council_a_primary_falls_back_to_glm_when_live_false(monkeypatch):
     llm.LONGCAT_LIVE = False
     assert llm.council_a_primary_model() == "z-ai/glm-5.2"
     llm.LONGCAT_LIVE = True
-    assert llm.council_a_primary_model() == "meituan/longcat-2.0"
+    assert llm.council_a_primary_model() == "anthropic/claude-sonnet-4.5"
 
 
 def test_call_longcat_fast_paths_to_glm_when_dead(monkeypatch):

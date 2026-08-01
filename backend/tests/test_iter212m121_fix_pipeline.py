@@ -58,6 +58,29 @@ class _FakeColl:
             inserted_id = "fake"
         return _R()
 
+    # Session G · Bucket A — production `fix_pipeline` code now calls
+    # `db.cto_tasks.aggregate([...])` to compute per-repo counters.
+    # Fake returns an empty aggregation result (matches "no prior
+    # tasks" state, which is what all the preview/bulk tests want).
+    def aggregate(self, pipeline):
+        rows = self.rows
+        class _AggCur:
+            def __init__(self, items): self.items = items
+            async def to_list(self, length=None):
+                return list(self.items)[: (length or len(self.items))]
+            def __aiter__(self):
+                async def _gen():
+                    for x in list(self.items):
+                        yield x
+                return _gen()
+        # For preview/bulk tests, empty is the correct signal (no
+        # prior tasks means no in-flight quota to subtract).
+        return _AggCur([])
+
+    async def count_documents(self, query):
+        # Same intent as aggregate — no prior data.
+        return 0
+
 
 class _FakeDB:
     def __init__(self, user_doc=None, projects=None):
@@ -66,6 +89,25 @@ class _FakeDB:
         self.finding_fixes = _FakeColl()
         self.cto_tasks = _FakeColl()
         self.vanguard_ci_findings = _FakeColl()
+        # Session G · Bucket A — new collections introduced after this
+        # test was originally written; the production pipeline touches
+        # each so the fake must present the same surface.  Empty-list
+        # backing is fine (all tests here start from a clean slate).
+        self.scan_fix_usage = _FakeColl()
+        self.scan_fix_jobs = _FakeColl()
+        self.topup_alerts = _FakeColl()
+        self.incidents = _FakeColl()
+        self.loop_events = _FakeColl()
+
+    # Some new callers use `db.get_collection(name)` / `db["name"]` —
+    # forward to an on-demand empty collection so a fresh attribute
+    # never AttributeError-crashes the test.
+    def __getattr__(self, name):
+        # Attribute is only reached when normal lookup fails — safe
+        # to allocate a fresh empty _FakeColl.
+        coll = _FakeColl()
+        object.__setattr__(self, name, coll)
+        return coll
 
 
 @pytest.fixture

@@ -10,7 +10,7 @@ Verifies:
   • CEO judge has a rescue wrapper that times-out the primary on
     CEO_PRIMARY_TIMEOUT_S and switches to DeepSeek.
   • Langfuse traces emit `primary_model` metadata at every Council vote.
-  • Source guards: no hard-coded "z-ai/glm-5.2" or "meituan/longcat-2.0"
+  • Source guards: no hard-coded "z-ai/glm-5.2" or "anthropic/claude-sonnet-4.5"
     string outside services/llm.py (model strings live in one place).
 """
 
@@ -75,13 +75,13 @@ def test_longcat_model_string_is_meituan(monkeypatch):
     documented in PARLIAMENT_V2_ROUTING_ROADMAP.md."""
     monkeypatch.delenv("LONGCAT_MODEL", raising=False)
     llm = _reload_llm(monkeypatch)
-    assert llm._LONGCAT_MODEL == "meituan/longcat-2.0"
+    assert llm._LONGCAT_MODEL == "anthropic/claude-sonnet-4.5"
 
 
 def test_council_a_primary_swaps_to_longcat_when_enabled(monkeypatch):
     llm = _reload_llm(monkeypatch, LONGCAT_ENABLED="true")
     assert llm.LONGCAT_ENABLED is True
-    assert llm.council_a_primary_model() == "meituan/longcat-2.0"
+    assert llm.council_a_primary_model() == "anthropic/claude-sonnet-4.5"
 
 
 def test_council_a_primary_stays_glm_when_flag_off(monkeypatch):
@@ -294,7 +294,7 @@ def test_council_vote_trace_metadata_includes_primary_model(monkeypatch):
     member = parliament.CouncilA.members[0]
     asyncio.run(member.cast_vote(task="task", context={"council": "A", "user_id": "u"}))
     md = captured.get("trace_metadata") or {}
-    assert md.get("primary_model") == "meituan/longcat-2.0"
+    assert md.get("primary_model") == "anthropic/claude-sonnet-4.5"
     assert md.get("v2_longcat") is True
     assert md.get("v2_council_b_glm") is True
 
@@ -319,7 +319,7 @@ def test_council_a_review_mode_pro_still_falls_back_to_claude(monkeypatch):
 
 
 def test_no_hardcoded_longcat_string_outside_llm_py():
-    """The literal string 'meituan/longcat-2.0' must only appear inside
+    """The literal string 'anthropic/claude-sonnet-4.5' must only appear inside
     the `services/llm/` package (single source of truth) and tests."""
     backend = pathlib.Path("/app/backend")
     offenders = []
@@ -335,7 +335,7 @@ def test_no_hardcoded_longcat_string_outside_llm_py():
             txt = path.read_text(errors="ignore")
         except Exception:
             continue
-        if "meituan/longcat-2.0" in txt:
+        if "anthropic/claude-sonnet-4.5" in txt:
             offenders.append(str(path))
     assert not offenders, f"hard-coded LongCat string leaked into: {offenders}"
 

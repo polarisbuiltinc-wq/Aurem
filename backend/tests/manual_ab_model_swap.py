@@ -64,7 +64,7 @@ USER_PROMPTS = [
 ]
 
 CANDIDATES = [
-    ("claude-sonnet-4.5", "anthropic", "claude-sonnet-4-5-20250929"),
+    ("claude-sonnet-4.5", "anthropic", "claude-sonnet-4.5"),
 ]
 
 

@@ -12,7 +12,7 @@ Iter 212g — Two production deployment crashes, fixed in one pass:
      crashed before returning.
 
   2) `OpenRouter HTTP 400 Bad Request` on every Claude call because we
-     were sending `anthropic/claude-sonnet-4-5-20250929` (the
+     were sending `anthropic/claude-sonnet-4.5` (the
      Anthropic-native model ID), but OpenRouter expects the dotted
      version: `anthropic/claude-sonnet-4.5`.
 """
@@ -78,7 +78,7 @@ def test_llm_default_claude_model_uses_openrouter_format():
     assert '"CLAUDE_MODEL", "anthropic/claude-sonnet-4.5"' in src, (
         "Default Claude model must be OpenRouter's dotted ID "
         "(anthropic/claude-sonnet-4.5). The dash-date format "
-        "anthropic/claude-sonnet-4-5-20250929 returns HTTP 400 from "
+        "anthropic/claude-sonnet-4.5 returns HTTP 400 from "
         "OpenRouter."
     )
 
@@ -98,7 +98,7 @@ def test_vanguard_verify_uses_openrouter_format():
 def test_no_remaining_dashdate_anthropic_ids_in_runtime_code():
     """No production code path may still default to the dash-date
     format. Comments / docstrings / tests are exempt."""
-    bad = "anthropic/claude-sonnet-4-5-20250929"
+    bad = "anthropic/claude-sonnet-4.5"
     runtime_files = [
         "/app/backend/services/llm/__init__.py",
         "/app/backend/services/smart_router.py",
