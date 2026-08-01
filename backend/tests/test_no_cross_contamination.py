@@ -87,8 +87,32 @@ MARKERS: list[tuple[re.Pattern, str]] = [
     # match of either alone is too weak — the docstring pairs them, so
     # we match the paired phrase.
     (re.compile(r"B2B\s+email\s+finder"),   "B2B email finder (Aurem lead-enrichment)"),
-    (re.compile(r"Phone\s+validation.*lead\s+enrichment", re.IGNORECASE),
-                                             "Phone-validation+lead-enrichment (Aurem sales)"),
+    # ── Session-B extension (2026-08-01, from full `backend/shared/*` deletion) ──
+    # Additional Aurem sales-outreach fingerprints found while auditing
+    # the 26 remaining `shared/*` files (all deleted in this session).
+    # These are HIGH-signal phrases that uniquely fingerprint the Aurem
+    # Commercial Platform sub-product. Keeps future re-contamination
+    # from any Aurem-product code (not just the sales-outreach agents).
+    (re.compile(r"AUREM\s+Commercial\s+Platform"),
+                                             "'AUREM Commercial Platform' header (Aurem sub-product)"),
+    (re.compile(r"\bsk_aurem_"),             "sk_aurem_ API-key prefix (Aurem sales key system)"),
+    (re.compile(r"PIPEDA\s+Compliant"),      "'PIPEDA Compliant' banner (Aurem commercial compliance)"),
+    (re.compile(r"Multi-Tenant\s+(Rate\s+Limiter|Workspace)"),
+                                             "Multi-Tenant Rate-Limiter / Workspace (Aurem multi-tenant sales infra)"),
+    (re.compile(r"\bThe\s+Hiring\s+Protocol\b"),
+                                             "'The Hiring Protocol' (Aurem A2A handoff docstring)"),
+    (re.compile(r"AUREM\s+AI\s+Brain\s+Orchestrator"),
+                                             "AUREM AI Brain Orchestrator ('The Handshake')"),
+    (re.compile(r"AUREM\s+CASL"),            "AUREM CASL/Anti-Spam Compliance (Aurem outreach)"),
+    (re.compile(r"AUREM\s+HMAC\s+Patch\s+Signing"),
+                                             "AUREM HMAC Patch Signing (Aurem SOC-2 lineage)"),
+    (re.compile(r"AUREM\s+Circuit\s+Breaker\s+(System|Service)"),
+                                             "AUREM Circuit Breaker System/Service (Aurem resilience lineage)"),
+    # NOTE: `iter 322*` was considered as a marker but removed as too
+    # noisy — AuremCTO's own comments legitimately reference Aurem's
+    # iter numbers as teaching notes (e.g. `services/orchestrator.py`
+    # cites "iter 322ex" to warn about a design pitfall). The 9
+    # markers above are specific enough on their own.
 ]
 
 # ── Paths that are allowed to mention markers (docs, this test, PRD) ──
@@ -117,15 +141,11 @@ ALLOWLIST_SUFFIXES = (
 # WHEN YOU DELETE ONE OF THESE FILES: remove its entry here. The
 # guard will then enforce marker-freedom for that path going forward.
 GRANDFATHERED_CONTAMINATION: set[str] = {
-    "backend/shared/providers/free_apis.py",     # B2B lead enrichment
-    "backend/shared/providers/twilio.py",        # WHAPI/WhatsApp sales
-    "backend/shared/auth/rbac.py",               # SCOUT/CLOSER RBAC
-    "backend/shared/memory_tiers.py",            # OODA (Scout→Architect→Envoy→Closer)
-    # `shared/providers/email_legacy.py` (SendGrid→Resend shim) is
-    # NOT in this list — no marker currently flags it. If a future
-    # marker catches it, add it here (or delete the file in the
-    # scheduled `shared/*` audit).
-    # Add others here as broader audit confirms them.
+    # All previously-grandfathered `backend/shared/*` paths were
+    # deleted in Session B (2026-08-01) — full-tree removal of the
+    # Aurem sales-outreach product's dormant subtree. Set is now
+    # empty; contamination guard enforces ZERO tolerance across the
+    # whole codebase.
 }
 
 
@@ -195,6 +215,20 @@ def test_shared_agents_dir_is_gone():
         "(Aurem sales-outreach agents). If you're re-adding a directory "
         "with this exact name, use a different name — this path is "
         "poisoned by prior contamination."
+    )
+
+
+def test_shared_dir_is_gone():
+    """Session B (2026-08-01) — entire `backend/shared/` tree was
+    deleted as cross-contamination (Aurem sales product's dormant
+    subtree, 9,782 LOC, zero live callers). Any reappearance means
+    someone re-imported Aurem-product code."""
+    p = BACKEND / "shared"
+    assert not p.exists(), (
+        f"{p} was deleted on 2026-08-01 as full-tree cross-contamination "
+        "(Aurem Commercial Platform sub-product). Do NOT re-create this "
+        "directory in the AuremCTO codebase — use `services/` for any "
+        "shared library code that legitimately belongs to AuremCTO."
     )
 
 
