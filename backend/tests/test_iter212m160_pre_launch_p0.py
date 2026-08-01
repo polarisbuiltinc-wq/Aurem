@@ -212,8 +212,15 @@ def test_call_longcat_fast_paths_to_glm_when_dead(monkeypatch):
     async def fake_glm(**kwargs):
         return "via-glm"
 
-    monkeypatch.setattr(llm, "call_openrouter_model", fake_openrouter)
-    monkeypatch.setattr(llm, "_call_glm", fake_glm)
+    # Session D · D-2a/D-2c — `call_openrouter_model` and `_call_glm`
+    # now live in sibling modules. Patching the re-export on
+    # `services.llm` no longer reaches these names when they're
+    # referenced from INSIDE those sibling modules (`_call_longcat`
+    # is one such caller). Target canonical modules.
+    from services.llm import openrouter_client as _oc
+    from services.llm import openrouter_providers as _op
+    monkeypatch.setattr(_oc, "call_openrouter_model", fake_openrouter)
+    monkeypatch.setattr(_op, "_call_glm", fake_glm)
     out = asyncio.run(llm._call_longcat(system="s", user="u", max_tokens=10))
     assert out == "via-glm"
     assert or_calls == [], "OpenRouter must NOT be called when LONGCAT_LIVE=False"
@@ -234,8 +241,11 @@ def test_call_longcat_flips_live_false_on_mid_session_empty(monkeypatch):
     async def fake_glm(**kwargs):
         return "via-glm"
 
-    monkeypatch.setattr(llm, "call_openrouter_model", fake_openrouter)
-    monkeypatch.setattr(llm, "_call_glm", fake_glm)
+    # Session D · D-2a/D-2c — patch canonical modules (see previous test).
+    from services.llm import openrouter_client as _oc
+    from services.llm import openrouter_providers as _op
+    monkeypatch.setattr(_oc, "call_openrouter_model", fake_openrouter)
+    monkeypatch.setattr(_op, "_call_glm", fake_glm)
     out = asyncio.run(llm._call_longcat(system="s", user="u", max_tokens=10))
     assert out == "via-glm"
     assert llm.LONGCAT_LIVE is False, (

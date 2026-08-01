@@ -215,7 +215,9 @@ from ._routing import (
 #   • ~1.85s average latency (GPT-5.2 was 100× slower)
 # Full run in `backend/tests/manual_ab_model_swap.py` — re-run to
 # compare against a future candidate before swapping again.
-_LONGCAT_MODEL  = os.getenv("LONGCAT_MODEL", "anthropic/claude-sonnet-4.5")
+# Session D · D-2c — `_LONGCAT_MODEL` moved to `openrouter_providers.py`
+# alongside `_CLAUDE_MODEL` and `_GLM_MODEL`. See the re-import block
+# further down. The AB-eval commentary above stays for archaeology.
 
 
 # Iter 212m-160 — LongCat live-availability flag.
@@ -261,23 +263,32 @@ def _openrouter_key() -> str:
     return os.getenv("OPENROUTER_API_KEY", "")
 
 
-# Claude model slug on OpenRouter.
-# Iter 212g — OpenRouter accepts dotted version IDs (anthropic/claude-sonnet-4.5)
-# NOT the dash-date Anthropic-native format (claude-sonnet-4-5-20250929)
-# which we were sending until prod logs showed 400 Bad Request from
-# OpenRouter on every Claude call. Verified against
-# `GET https://openrouter.ai/api/v1/models`.
-_CLAUDE_MODEL = os.getenv(
-    "CLAUDE_MODEL", "anthropic/claude-sonnet-4.5"
+# ─── Session D · D-2c — provider wrappers moved to openrouter_providers.py ──
+# `_CLAUDE_MODEL`, `_GLM_MODEL`, `_LONGCAT_MODEL`, and the three
+# thin adapters (`_call_claude`, `_call_glm`, `_call_longcat`) that
+# wrap `call_openrouter_model` now live in
+# `services/llm/openrouter_providers.py`. Re-exported here so legacy
+# call sites (routers/chat.py bulk import, admin dashboards, tests
+# using `monkeypatch.setattr(llm_mod, "_call_glm", ...)`) resolve
+# unchanged.
+#
+# MONKEYPATCH-CONTRACT NOTE (Session D · D-2c): patches applied to
+# `services.llm._call_glm` etc. still take effect for CALL SITES in
+# THIS module (`_call_deepseek`, `_call_llm_with_meta_inner`) because
+# name resolution walks the function's `__globals__` (= this module's
+# namespace) — the re-export IS the name they resolve. But patches
+# do NOT reach into `openrouter_providers._call_glm` from within
+# `_call_longcat`'s fallback branch (that block resolves via
+# `openrouter_providers`'s OWN namespace). Tests exercising that
+# fallback branch should patch the canonical module.
+from .openrouter_providers import (
+    _CLAUDE_MODEL,
+    _GLM_MODEL,
+    _LONGCAT_MODEL,
+    _call_claude,
+    _call_glm,
+    _call_longcat,
 )
-
-# Iter 212m-18 — GLM-5.2 (Zhipu AI's flagship via OpenRouter) is the new
-# primary model for Swift/Pro/Maxx review modes:
-#   Swift → GLM only (fastest path)
-#   Pro   → GLM, fall back to Claude on empty / error (resilience)
-#   Maxx  → GLM first, then Claude reviews+improves the GLM output
-# Override per-deploy via env so we can pin a specific revision.
-_GLM_MODEL = os.getenv("GLM_MODEL", "z-ai/glm-5.2")
 
 
 # ── DeepSeek path (chat, review, title) ─────────────────────────────────────
@@ -532,147 +543,12 @@ async def _call_deepseek(messages: list, system: str = "",
         raise RuntimeError(f"OpenRouter malformed response: {e}: {data!r}")
 
 
-# ── Claude path (code tasks) ─────────────────────────────────────────────────
-
-async def _call_claude(system: str, user: str,
-                       max_tokens: int = 3500,
-                       temperature: float = 0.0) -> str:
-    """Call Claude Sonnet 4.5 via OpenRouter for code tasks.
-
-    Iter 166 — Migrated from Emergent SDK to OpenRouter. Single key
-    (OPENROUTER_API_KEY) now serves DeepSeek + Claude + all agents.
-    Falls back to DeepSeek if Claude call returns empty (network /
-    upstream failure) so code tasks never hard-fail.
-    """
-    if not _openrouter_key():
-        logger.info("OPENROUTER_API_KEY not set — falling back to DeepSeek for code task")
-        return await _call_deepseek(
-            messages=[{"role": "user", "content": user}],
-            system=system,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
-
-    content = await call_openrouter_model(
-        model=_CLAUDE_MODEL,
-        system=system,
-        user=user,
-        max_tokens=max_tokens,
-        temperature=temperature,
-    )
-    if content:
-        return content
-
-    # Empty content → fall back to DeepSeek so we never silently 500 a code task.
-    logger.warning("Claude (OpenRouter) returned empty — falling back to DeepSeek")
-    return await _call_deepseek(
-        messages=[{"role": "user", "content": user}],
-        system=system,
-        max_tokens=max_tokens,
-        temperature=temperature,
-    )
-
-
-# ── GLM path (Swift/Pro/Maxx primary — z-ai/glm-5.2) ───────────────────────
-
-async def _call_glm(system: str, user: str,
-                    max_tokens: int = 3500,
-                    temperature: float = 0.0) -> str:
-    """Iter 212m-18 — Call GLM-5.2 (`z-ai/glm-5.2`) via OpenRouter.
-
-    Mirrors `_call_claude`'s shape so the orchestrator and review-mode
-    router can swap models without code branching downstream. Returns
-    the assistant content string (may be empty on upstream failure —
-    callers in pro/maxx mode use that as the trigger to fall back to
-    Claude).
-    """
-    if not _openrouter_key():
-        logger.info(
-            "OPENROUTER_API_KEY not set — GLM call falling back to DeepSeek"
-        )
-        return await _call_deepseek(
-            messages=[{"role": "user", "content": user}],
-            system=system,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
-    content = await call_openrouter_model(
-        model=_GLM_MODEL,
-        system=system,
-        user=user,
-        max_tokens=max_tokens,
-        temperature=temperature,
-    )
-    return content or ""
-
-
-# ── LongCat-2.0 path (Iter 212m-159 — Council A primary) ─────
-
-async def _call_longcat(system: str, user: str,
-                        max_tokens: int = 3500,
-                        temperature: float = 0.0) -> str:
-    """Call LongCat-2.0 (`meituan/longcat-2.0`) via OpenRouter.
-
-    Only invoked when `LONGCAT_ENABLED=true` and the caller routes via
-    Council A (`mode="code"` + Swift/Pro/Maxx).  Mirrors `_call_glm`'s
-    shape so the routing block can swap models with a single conditional.
-
-    Iter 212m-160 — fast-path: if the boot-time probe already marked
-    LongCat unavailable (`LONGCAT_LIVE=False`), skip the wasted
-    OpenRouter round-trip and go straight to GLM-5.2. Saves ~200 ms
-    + an OR rate-limit slot per Council A call until LongCat is live.
-
-    Session 5 · Phase 2 — `LONGCAT_LIVE` now lives in
-    `services/_llm_probes.py`. Read directly from there so we always
-    see the latest value even if a background probe just flipped it,
-    and write via `set_longcat_live()` so the mutation is
-    single-sourced.
-    """
-    from . import _probes as _p
-    if not _p.LONGCAT_LIVE:
-        # Boot probe already detected LongCat is dead — straight to GLM.
-        return await _call_glm(
-            system=system, user=user,
-            max_tokens=max_tokens, temperature=temperature,
-        )
-    if not _openrouter_key():
-        logger.info(
-            "OPENROUTER_API_KEY not set — LongCat call falling back to DeepSeek"
-        )
-        return await _call_deepseek(
-            messages=[{"role": "user", "content": user}],
-            system=system,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
-    content = await call_openrouter_model(
-        model=_LONGCAT_MODEL,
-        system=system,
-        user=user,
-        max_tokens=max_tokens,
-        temperature=temperature,
-    )
-    if not (content or "").strip():
-        # LongCat suddenly unreachable mid-flight (probe said it was
-        # live, but this call returned empty). Update the live flag
-        # so subsequent calls take the fast-path, then fall back to GLM.
-        if _probes.LONGCAT_LIVE:
-            _probes.set_longcat_live(False)
-            logger.warning(
-                "_call_longcat: %s returned empty mid-session — "
-                "flipping LONGCAT_LIVE=False, Council A on GLM-5.2 "
-                "until next restart.",
-                _LONGCAT_MODEL,
-            )
-        try:
-            return await _call_glm(
-                system=system, user=user,
-                max_tokens=max_tokens, temperature=temperature,
-            )
-        except Exception as e:
-            logger.error("_call_longcat: GLM-5.2 fallback also failed: %r", e)
-            return ""
-    return content
+# ─── Session D · D-2c — _call_claude / _call_glm / _call_longcat ──
+# These 3 provider wrappers moved to `openrouter_providers.py`.
+# Re-exported via the `from .openrouter_providers import ...` block
+# earlier in this file so all call sites (chat.py bulk import,
+# _call_deepseek fallback, _call_llm_with_meta_inner routing) resolve
+# unchanged.
 
 
 # ─── Session D · D-2a — call_openrouter_model moved to openrouter_client.py ──
