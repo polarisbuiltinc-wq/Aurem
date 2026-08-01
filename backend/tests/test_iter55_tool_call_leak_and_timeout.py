@@ -46,22 +46,44 @@ def test_synthesise_summary_never_returns_raw_tool_call():
 
 def test_synthesise_summary_empty_invocations_still_useful():
     """If we hit the cap before any tool ran, the summary still gives
-    the user a concrete next move — not a silent empty string."""
+    the user a concrete next move — not a silent empty string.
+
+    Iter 212m-208 refactor (founder directive): the fallback tone
+    changed. It must NEVER blame system limits or ask the user to
+    "narrow scope / try one file / pick one pillar". It answers in
+    first person, promising to pick up on the next round using the
+    context already gathered."""
     out = _synthesise_max_iters_summary("audit all four pillars", [])
     assert out.strip()
-    assert "narrow scope" in out or "one file" in out or "one pillar" in out
+    # First-person, "here's what I did" tone (Iter 212m-208).
+    lower = out.lower()
+    assert "i've" in lower or "i'll" in lower, (
+        f"Fallback must be first-person / answer-shaped per Iter "
+        f"212m-208. Got: {out!r}"
+    )
+    # NEGATIVE contract — the old "narrow your ask" tone is banned.
+    for banned in ("narrow scope", "one file", "one pillar",
+                   "please rephrase", "try again with"):
+        assert banned not in lower, (
+            f"Fallback regressed to Iter <212m-208 blame tone "
+            f"(matched {banned!r}). Founder directive: never push "
+            f"work back onto the user."
+        )
 
 
 def test_synthesise_summary_truncates_huge_path_lists():
-    """A very long inspection list must be clamped (we cap at 6
-    visible paths + an overflow indicator)."""
+    """A very long inspection list must be clamped. Iter 212m-208
+    tightened the visible cap from 6 to 4 paths + an overflow
+    indicator, so 20 paths → 4 visible + `(and 16 more)`."""
     invs = [
         {"tool": "read_repo_files",
          "args": {"paths": [f"file_{i}.py" for i in range(20)]}},
     ]
     out = _synthesise_max_iters_summary("everything", invs)
-    # The visible cap is 6, with a `+N more` indicator.
-    assert "+14 more" in out
+    # The visible cap is now 4, with an `(and N more)` indicator.
+    assert "and 16 more" in out, (
+        f"Expected clamp indicator `(and 16 more)` in output, got: {out!r}"
+    )
 
 
 # ─── Tool-loop guard ────────────────────────────────────────────────────

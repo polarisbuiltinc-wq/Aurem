@@ -610,9 +610,24 @@ def test_repo_indexing_router_uses_correct_path():
 
 
 def test_signup_persists_created_at():
+    """Iter 212m-30 wired `created_at` into both the persisted user row
+    (used by 3-day chat-bg tint + founder-offer days_since_signup) and
+    the signup response. Iter 212m-222 later refactored the storage
+    format: DB row now stores a float epoch (`created_at`), while the
+    response payload returns the ISO-8601 string via a pre-computed
+    `created_iso` local. The test guards BOTH surfaces since either
+    one going missing regresses the tint / founder-offer feature."""
     src = open("/app/backend/routers/auth.py").read()
-    assert '"created_at": created_at' in src
-    assert '"created_at": created_at.isoformat()' in src
+    assert '"created_at": created_at' in src, (
+        "signup path must persist created_at into the dev_users row."
+    )
+    assert 'created_iso = datetime.now(timezone.utc).isoformat()' in src, (
+        "signup path must compute created_iso for the response payload."
+    )
+    assert '"created_at": created_iso' in src, (
+        "signup response must return created_at as the ISO-8601 string "
+        "so the frontend tint/founder-offer logic can parse it."
+    )
 
 
 def test_chat_panel_mounts_founder_card_and_tint():

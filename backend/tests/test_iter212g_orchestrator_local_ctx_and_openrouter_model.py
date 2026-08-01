@@ -84,10 +84,28 @@ def test_llm_default_claude_model_uses_openrouter_format():
 
 
 def test_smart_router_uses_openrouter_format():
+    """SSOT refactor (Iter 212m-172): smart_router pulls the Claude
+    model ID from `services.llm._CLAUDE_MODEL` instead of hardcoding
+    a literal. Enforce that both MAXX_CODE and SECURITY entries in
+    the MODEL_MAP resolve to the shared SSOT constant."""
     src = Path("/app/backend/services/smart_router.py").read_text(encoding="utf-8")
-    # Both maxx_code and security defaults use the dotted ID.
-    assert '"MAXX_CODE",    "anthropic/claude-sonnet-4.5"' in src
-    assert '"SECURITY",     "anthropic/claude-sonnet-4.5"' in src
+    # Both maxx_code and security defaults must resolve to _LLM_CLAUDE_MODEL
+    # (imported from services.llm.openrouter_providers._CLAUDE_MODEL SSOT).
+    assert '"MAXX_CODE",    _LLM_CLAUDE_MODEL' in src, (
+        "smart_router.py MAXX_CODE entry must default to the SSOT "
+        "_LLM_CLAUDE_MODEL (from services.llm.openrouter_providers), "
+        "not a hardcoded string literal."
+    )
+    assert '"SECURITY",     _LLM_CLAUDE_MODEL' in src, (
+        "smart_router.py SECURITY entry must default to the SSOT "
+        "_LLM_CLAUDE_MODEL (from services.llm.openrouter_providers)."
+    )
+    # And the SSOT itself must be the OpenRouter dotted ID.
+    ssot_src = Path("/app/backend/services/llm/openrouter_providers.py").read_text(encoding="utf-8")
+    assert '"CLAUDE_MODEL", "anthropic/claude-sonnet-4.5"' in ssot_src, (
+        "SSOT default in openrouter_providers.py must be the "
+        "OpenRouter dotted ID (anthropic/claude-sonnet-4.5)."
+    )
 
 
 def test_vanguard_verify_uses_openrouter_format():
@@ -97,8 +115,13 @@ def test_vanguard_verify_uses_openrouter_format():
 
 def test_no_remaining_dashdate_anthropic_ids_in_runtime_code():
     """No production code path may still default to the dash-date
-    format. Comments / docstrings / tests are exempt."""
-    bad = "anthropic/claude-sonnet-4.5"
+    Anthropic-native format (`claude-sonnet-4-5-20250929`) — OpenRouter
+    rejects it with HTTP 400. Comments / docstrings are exempt.
+
+    Iter 212m-172 SSOT: only the openrouter_providers.py module holds
+    a comment referencing the dash-date name for archaeological
+    context; runtime code must never emit it."""
+    bad = "claude-sonnet-4-5-20250929"    # the actual dash-date format
     runtime_files = [
         "/app/backend/services/llm/__init__.py",
         "/app/backend/services/smart_router.py",
