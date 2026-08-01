@@ -24,6 +24,48 @@ before being called "done".
 
 ## Change Log
 
+### 2026-02-02 — Persona-Diet PR Helper + Session G Batch 4e
+**Persona-Diet Helper** ✅ (founder-approved cheap addition):
+- `scripts/persona_diet_report.py` — 105 LOC, zero deps, prints
+  chars-per-section table sorted by size (or JSON via `--json`).
+- `tests/test_persona_diet_report.py` — 7 tests all pass
+  (JSON shape, section-sum ratio ≥99%, descending order,
+  --top cap, human output flags current warn state, sanity on
+  heaviest section < 50%).
+- Live snapshot: TOP-OF-MIND HARD RULES = 4,336 chars (19.7% of
+  budget), HOW TO RESPOND = 3,889 (17.7%), MODE DETECTION = 2,243
+  (10.2%). Next persona-diet PR should target these three.
+
+**Batch 4e (Session G)** — 14 more nodeids un-quarantined
+(169 → 155, session total 232 → 155 = **-77 nodeids**):
+- Files fully cleared: `test_iter341_predeploy.py` (3 tests),
+  `test_iter79_web_skills.py` (3 tests — real fetch_url calls),
+  `test_iter165_smart_router_agents.py` (2 tests),
+- Files partial-cleared: `test_aurem_backend.py` (3/4 —
+  login/me/token pass; chat_send_with_auth still fails on auth
+  timeout, quarantined), `test_iter86_architecture_health.py`
+  (2/3 — endpoint + summary pass; CLI baseline test still fails,
+  quarantined), `test_iter94_maxx_cap_and_usd_migration.py`
+  (usd_pricing text-drift fix — llms.txt now says `$X/month`
+  not `$X/mo USD`).
+**Deferred (~26 nodeids, 12 files)** — all contract/text-drift
+class: `test_iter37_404_hallucination_guard` (KeyError: 'status'
+tool-bridge return shape), `test_iter69_brain_dump_and_build_hash`
+(build_hash literal moved after refactor), `test_iter76_preview_pane`
+(component paths drifted), `test_iter101_annual_referral_overage`
+(overage math contract changed), `test_iter124_repo_first_and_retry`
+(deepseek now walks fallback chain instead of raising),
+`test_iter165_warm_start` ("WARM CONTEXT" string renamed),
+`test_iter212m66_vanguard_two_round` (2-round endpoint contract),
+`test_iter212m6_tool_reliability_full` (write_repo_file contract),
+`test_iter94::test_maxx_limits_per_tier` + `test_subscription_tiers_have_maxx_field`
+(tier config), `test_aurem_backend::test_chat_send_with_auth`
+(timeout), `test_aurem_rollback` (DB fixture). Same discipline
+as Batch 4d — grouped for a future focused pass.
+
+**Prod verify** — `/api/health`: ok, build ed5b698, dead 0,
+supervised 13.
+
 ### 2026-02-02 — Session G Batch 4d + Item Loop Complete
 **Item 2 · Batch 4d** — 52 nodeids un-quarantined in this session
 (221 → 169 total). Files fully un-quarantined + un-flagged:

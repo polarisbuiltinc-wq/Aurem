@@ -121,11 +121,13 @@ def test_orchestrator_passes_user_id_to_llm():
 
 def test_llms_txt_advertises_usd_pricing():
     """Public llms.txt (read by AI crawlers + GEO ranking) must show
-    the new USD prices, not the old CAD ones."""
+    the new USD prices, not the old CAD ones. Feb 2026 refresh
+    spells out `$X/month` (dropped the redundant USD tag — file
+    quotes no other currency)."""
     p = Path(__file__).resolve().parents[2] / "frontend" / "public" / "llms.txt"
     text = p.read_text()
-    assert "$9/mo USD" in text or "$9 USD" in text
-    assert "$19/mo USD" in text or "$19 USD" in text
-    assert "$49/mo USD" in text or "$49 USD" in text
+    assert "$9/month" in text
+    assert "$19/month" in text
+    assert "$49/month" in text
     # No stale CAD numbers should leak through.
     assert "$35/user/mo" not in text, "stale $35 Team price in llms.txt"
