@@ -24,6 +24,57 @@ before being called "done".
 
 ## Change Log
 
+### 2026-02-02 — Session G Batch 4d + Item Loop Complete
+**Item 2 · Batch 4d** — 52 nodeids un-quarantined in this session
+(221 → 169 total). Files fully un-quarantined + un-flagged:
+`test_aurem_p0_bugs.py` (11), `test_iter212m32_onboarding_nudge.py`
+(6), `test_iter138_execute_bash_tool.py` (5), `test_ship_turn_index.py`
+(5), `test_iter212m17_topup_alerts.py` (4), `test_iter212m3_activation_funnel.py`
+(4), `test_tool_reliability_v2.py` (4), `test_iter212m106_real_ship_and_sanitizer.py`
+(3), `test_iter212m215_mermaid_diagram.py` (3), `test_iter212m159_parliament_v2_routing.py`
+(1 — amended drift scan to allow defensive-fallback pattern +
+docstring/cost-table dict-key usage), `test_iter80_seo_pwa.py` (4).
+**Deferred (~13 nodeids, 4 files)**: test_iter212m110, test_iter212m114,
+test_iter113, test_iter212m237, test_iter124h — all need DB-fixture
+rewrite for the task-quota refactor + vs-devin page linking work
+(same class as the earlier `test_iter212m121_fix_pipeline` deferral).
+
+**Item 3 · SEO test refresh** — `test_iter80_seo_pwa.py` updated
+against LIVE index.html content (verified via grep, not
+hand-typed):
+- Brand: `"Aurem CTO"` (Title Case) not `"AUREM CTO"`
+- Pricing: single Founder-Plan Offer at $9 in JSON-LD
+  SoftwareApplication block (four-tier grid moved to `llms.txt`)
+- No `@graph` wrapper — 4 separate `<script type="application/ld+json">`
+  blocks (Organization / WebSite / SoftwareApplication / FAQPage)
+- Team tier is $49/mo per user (was $35 pre-refresh)
+- Twitter/OG titles start with `"ORA"` (short-tag), Aurem CTO
+  parent brand referenced elsewhere in `<head>` + JSON-LD
+
+**Item 4 · Guard-11 backup cron** — SKIPPED cleanly (Atlas
+continuous-backup enable-state not confirmed by founder; per
+directive, deferred without stalling).
+
+**Item 5 · Persona LOC guardrail** —
+`backend/tests/test_persona_loc_guardrail.py` (7 tests, all pass):
+- **Default mode**: emits `UserWarning` if persona ≥ 20,000 chars
+  (current: 21,559 → warning fires visibly in pytest output). Does
+  NOT block merge — founder-directed behaviour.
+- `PERSONA_GUARDRAIL_HARD=1` env var opts into hard-fail for
+  persona-diet PRs.
+- Boundary + mock-simulation tests prove the guard mechanism itself
+  works at 20k threshold (fires exactly at 20,000; silent at 19,999;
+  respects env-flag mode toggle).
+
+**Item 6 · SSOT drift confirm** — 35/35 pass across
+`test_ssot_model_id_no_drift.py` + `test_iter212m159_parliament_v2_routing.py`
++ `test_ci_env_var_contract.py`. No drift has crept back in
+since the Feb 2026 SSOT-refactor.
+
+**Prod verify** — `/api/health` clean (`build ed5b698`,
+`dead_tasks: 0`, `supervised_count: 13`, `council_a: anthropic/claude-sonnet-4.5`).
+Real E2E chat: 200 status, 7.2s Swift-mode reply.
+
 ### 2026-02-02 — Persona-Dedupe (Focused Session)
 **P1 fix** — `AUREM_CTO_PERSONA` trimmed from 25,687 → 21,559 chars
 (**-4,128 chars, 16% reduction, 441 char headroom under the 22,000
