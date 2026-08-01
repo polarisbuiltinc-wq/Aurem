@@ -35,7 +35,8 @@ async def test_gzip_compresses_real_admin_payload():
         # Login as the test admin (auto-promoted via ADMIN_EMAIL env)
         login = await c.post(
             f"{API_URL}/api/aurem-dev/auth/login",
-            json={"email": "test@aurem.dev", "password": "testpass123"},
+            # Session G · auth-fixture drift fix (was "testpass123").
+            json={"email": "test@aurem.dev", "password": "AuremTest2026!"},
         )
         if login.status_code != 200:
             pytest.skip("test user not seeded — run seed first")

@@ -89,7 +89,17 @@ async def test_trace_llm_call_swallows_langfuse_errors(monkeypatch):
 
 # ─── 4. llm.py wires the tracer at the public entry point ─────────────
 def test_call_llm_with_meta_wraps_inner_with_trace():
-    src = open("/app/backend/services/llm/__init__.py").read()
+    # Session D · D-part-2 — `call_llm_with_meta` + `_call_llm_with_meta_inner`
+    # moved out of `services/llm/__init__.py` into a sibling
+    # `services/llm/_meta.py`. Both names are re-exported from the
+    # package root so `from services.llm import call_llm_with_meta`
+    # still resolves; source-structure lint now reads the new file.
+    src = open("/app/backend/services/llm/_meta.py").read()
+    # Confirm the re-export line in __init__.py still exists so
+    # legacy `from services.llm import _call_llm_with_meta_inner`
+    # keeps working.
+    init_src = open("/app/backend/services/llm/__init__.py").read()
+    assert "from ._meta import call_llm_with_meta, _call_llm_with_meta_inner" in init_src
     # The split into wrapper + _call_llm_with_meta_inner must exist.
     assert "async def _call_llm_with_meta_inner(" in src
     assert "trace_llm_call" in src

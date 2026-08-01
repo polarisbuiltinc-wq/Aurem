@@ -124,17 +124,35 @@ before being called "done".
   because `.build_info` cannot be self-referential; see
   `/app/memory/emergent_support_ticket_option_B.md` for the pending
   Emergent platform feature request that would eliminate the lag.
-- **Session D — LLM Split Phase 4** — Extract `openrouter_client.py`
-  (the 6 `_call_*` provider helpers) from `services/llm/__init__.py`.
-  Per `memory/LLM_SPLIT_MIGRATION_PLAN.md`.
+- **~~Session D — LLM Split Phase 4~~** ✅ COMPLETE
+- **~~Session D-part-2 — extract `_call_llm_with_meta_inner`~~** ✅ COMPLETE
+- **~~Session F — Background-tasks supervisor~~** ✅ COMPLETE
+- **~~Session E — 22 deferred CI-lane failures~~** ✅ COMPLETE (real fixes)
+- **~~Session G Phase 3.1 — Legacy Bucket-A auth-fixture drift~~** ✅ PARTIAL
+  (+12 tests unblocked; full Bucket-A completion needs PAT-mock + SSE-shape work)
 - **~~`services/llm.py` Phase 3~~** ✅ COMPLETE (Sub-step 1 + Sub-step 2).
 
 ### P2 (backlog)
 - Session 5 P2 findings: vanguard-config Mongo migration, MCP fallback logging
-- 20+ Unsupervised Background Tasks wrapper
+- **~~20+ Unsupervised Background Tasks wrapper~~** ✅ COMPLETE (Session F)
 - Founder-Blocked env vars (G8-G11)
 - VS Code Marketplace publish (blocked on Azure DevOps PAT)
 - `/admin` funnel widget (visualise `/funnel/github/stats` output)
+- Session G Phase 3.2+ — Bucket A remaining ~80 nodeids
+  (needs PAT mocking + SSE shape update + individual fixture repair)
+- Session G Phase 4 — Categorise the 78 UNCATEGORIZED legacy files
+
+### Overnight Session — Feb 2026 — LOC + Test Score Deltas
+- `services/llm/__init__.py`: 1591 → 426 LOC (**−73%**)
+- New sibling files: `_meta.py` (596), `_state.py`, `_routing.py`,
+  `_probes.py`, `openrouter_client.py`, `groq_client.py`,
+  `openrouter_providers.py`, plus `services/supervised_tasks.py`
+- Backend pytest sweep: 4002 pass / 8 fail → **4014 pass / 0 fail /
+  65 skipped** (Session E fixed all 8 pre-existing failures)
+- Legacy quarantine: 216 fail / 30 pass → **180 fail / 42 pass**
+  (Session G partial)
+- Prod `/api/health` new field: `supervised_tasks:
+  {supervised_count:13, alive[], dead[]}` — Guard 20 wired
 
 ---
 

@@ -141,6 +141,11 @@ def test_llm_public_surface_reexports_probes_and_routing():
         "reset_last_provider",
         "MAX_TOKENS",
         "TEMPERATURE",
+        # Session D · D-part-2 — call_llm_with_meta + _call_llm_with_meta_inner
+        # live in _meta.py; the public `services.llm` surface must
+        # re-export both.
+        "call_llm_with_meta",
+        "_call_llm_with_meta_inner",
     ):
         assert hasattr(pkg, name), (
             f"services.llm missing expected re-export {name!r} — "

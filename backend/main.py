@@ -78,6 +78,14 @@ from services.codebase_indexer import router as codebase_router
 from services.daily_digest import schedule_daily_digest
 # Iter 328 · #5 — periodic integration_health probe cron
 from services.integration_health_cron import schedule_integration_health_cron
+# Session F — supervised background-task wrapper. Long-lived crons
+# use `supervise(coro, name=..., db_getter=..., long_lived=True)`
+# instead of `_asyncio.create_task(...)` so silent death opens a
+# Guard 20 incident row instead of vanishing.
+from services.supervised_tasks import (
+    supervise as _supervise,
+    health_snapshot as _supervised_tasks_health_snapshot,
+)
 
 
 
@@ -294,13 +302,22 @@ async def lifespan(app: FastAPI):
     import asyncio as _asyncio
 
     # Iter 25 — daily digest scheduler (runs forever, fires at DIGEST_HOUR_UTC)
-    app.state.digest_task = _asyncio.create_task(schedule_daily_digest())
+    # Session F — supervised so silent death → Guard 20 incident.
+    app.state.digest_task = _supervise(
+        schedule_daily_digest(),
+        name="daily_digest",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
+    )
     # Iter 328 · #5 — periodic integration_health cron. Runs every
     # INTEGRATION_HEALTH_INTERVAL_SEC (default 600s) so breakages
     # (Stripe/Tavily/Firecrawl/DeepSeek) surface within ~10 min, not
     # 24h. Env-gated ENABLE_INTEGRATION_HEALTH_CRON default ON.
-    app.state.integration_health_cron_task = _asyncio.create_task(
-        schedule_integration_health_cron()
+    app.state.integration_health_cron_task = _supervise(
+        schedule_integration_health_cron(),
+        name="integration_health_cron",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
     )
 
     # Iter 367 (Item C) — Correction rule 14-day auto-graduation.
@@ -330,8 +347,11 @@ async def lifespan(app: FastAPI):
                 logging.getLogger("correction_rules_graduation").warning(
                     "graduation sweep failed: %r", _e)
             await _asyncio.sleep(interval_s)
-    app.state.correction_rules_graduation_task = _asyncio.create_task(
-        _correction_rules_graduation_cron()
+    app.state.correction_rules_graduation_task = _supervise(
+        _correction_rules_graduation_cron(),
+        name="correction_rules_graduation",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
     )
 
     # Session 4 · Step A — Dedicated monthly Maxx overage billing cron.
@@ -340,8 +360,11 @@ async def lifespan(app: FastAPI):
     # overages are never left un-billed by a founder-forgetting-to-click.
     # Idempotent within a month via `billing_cron_runs` bucket record.
     from services.billing_cron import schedule_maxx_overage_billing
-    app.state.maxx_overage_billing_task = _asyncio.create_task(
-        schedule_maxx_overage_billing(lambda: app.state.db)
+    app.state.maxx_overage_billing_task = _supervise(
+        schedule_maxx_overage_billing(lambda: app.state.db),
+        name="maxx_overage_billing",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
     )
 
     # Session 4 · P1 — Hallucination pattern-classifier cron.
@@ -351,8 +374,11 @@ async def lifespan(app: FastAPI):
     from services.ora_chat.hallucination_classifier import (
         schedule_hallucination_classify_batch,
     )
-    app.state.hallucination_classify_task = _asyncio.create_task(
-        schedule_hallucination_classify_batch()
+    app.state.hallucination_classify_task = _supervise(
+        schedule_hallucination_classify_batch(),
+        name="hallucination_classify",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
     )
 
     # Iter 309 · Phase 0.1 — Merged housekeeping loop.
@@ -433,7 +459,12 @@ async def lifespan(app: FastAPI):
                 logger.warning("G19 heartbeat/resolve failed: %r", _e)
             _first_run = False
             await _asyncio.sleep(60)
-    app.state.loop_housekeeping_task = _asyncio.create_task(_loop_housekeeping())
+    app.state.loop_housekeeping_task = _supervise(
+        _loop_housekeeping(),
+        name="loop_housekeeping",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
+    )
 
     # Iter 362 · Guard 19 — record this boot + detect restart loops.
     try:
@@ -687,7 +718,12 @@ async def lifespan(app: FastAPI):
     if os.environ.get("ENABLE_ONBOARDING_NUDGE", "1").lower() in ("1", "true", "yes"):
         try:
             from services.onboarding_email import nudge_cron
-            app.state.nudge_task = _asyncio.create_task(nudge_cron(3600))
+            app.state.nudge_task = _supervise(
+                nudge_cron(3600),
+                name="onboarding_nudge",
+                db_getter=lambda: app.state.db,
+                long_lived=True,
+            )
             logger.info("📧 onboarding nudge cron enabled (hourly)")
         except Exception as e:
             app.state.nudge_task = None
@@ -700,7 +736,12 @@ async def lifespan(app: FastAPI):
     if os.environ.get("ENABLE_DB_BACKUP", "1").lower() in ("1", "true", "yes"):
         try:
             from services.db_backup import backup_cron
-            app.state.backup_task = _asyncio.create_task(backup_cron())
+            app.state.backup_task = _supervise(
+                backup_cron(),
+                name="db_backup",
+                db_getter=lambda: app.state.db,
+                long_lived=True,
+            )
             logger.info("🗄️ nightly DB backup cron enabled (03:00 UTC, 7-day retention)")
         except Exception as e:
             app.state.backup_task = None
@@ -714,7 +755,12 @@ async def lifespan(app: FastAPI):
     if os.environ.get("ORA_CANARY_ENABLED", "0").lower() in ("1", "true", "yes"):
         try:
             from services.ora_chat.canary import canary_cron
-            app.state.ora_canary_task = _asyncio.create_task(canary_cron())
+            app.state.ora_canary_task = _supervise(
+                canary_cron(),
+                name="ora_canary",
+                db_getter=lambda: app.state.db,
+                long_lived=True,
+            )
             logger.info("🕊️ ORA grounding canary cron enabled")
         except Exception as e:
             app.state.ora_canary_task = None
@@ -733,8 +779,11 @@ async def lifespan(app: FastAPI):
     if os.environ.get("ENABLE_SUPABASE_SWEEPER", "1").lower() in ("1", "true", "yes"):
         try:
             from services.supabase_sweeper import downgrade_sweeper_cron
-            app.state.supabase_sweeper_task = _asyncio.create_task(
+            app.state.supabase_sweeper_task = _supervise(
                 downgrade_sweeper_cron(),
+                name="supabase_sweeper",
+                db_getter=lambda: app.state.db,
+                long_lived=True,
             )
             logger.info("🧹 supabase downgrade sweeper enabled (daily)")
         except Exception as e:                                # noqa: BLE001
@@ -754,7 +803,12 @@ async def lifespan(app: FastAPI):
                 logger.warning("preview sweeper pass errored: %r", e)
             await _asyncio.sleep(300)
     if os.environ.get("ENABLE_PREVIEW_SWEEPER", "1").lower() in ("1", "true", "yes"):
-        app.state.preview_sweeper_task = _asyncio.create_task(_preview_sweeper_cron())
+        app.state.preview_sweeper_task = _supervise(
+            _preview_sweeper_cron(),
+            name="preview_sweeper",
+            db_getter=lambda: app.state.db,
+            long_lived=True,
+        )
         logger.info("🧹 preview-sandbox sweeper enabled (5 min interval)")
     else:
         app.state.preview_sweeper_task = None
@@ -768,7 +822,12 @@ async def lifespan(app: FastAPI):
     # until we move the heavy battery into a separate cron-only sidecar
     # or chunk the prompts across several wakes.
     if os.environ.get("ENABLE_EVAL_CRON", "").lower() in ("1", "true", "yes"):
-        app.state.eval_task = _asyncio.create_task(_schedule_daily_evals())
+        app.state.eval_task = _supervise(
+            _schedule_daily_evals(),
+            name="daily_persona_evals",
+            db_getter=lambda: app.state.db,
+            long_lived=True,
+        )
         logger.info("🧪 daily persona-eval cron enabled (ENABLE_EVAL_CRON=1)")
     else:
         app.state.eval_task = None
@@ -938,8 +997,11 @@ async def lifespan(app: FastAPI):
                 await periodic_longcat_reprobe(interval_seconds=900)
             except Exception as _e:
                 logger.warning("periodic LongCat reprobe crashed: %r", _e)
-        app.state.longcat_reprobe_task = _asyncio.create_task(
-            _periodic_longcat_reprobe()
+        app.state.longcat_reprobe_task = _supervise(
+            _periodic_longcat_reprobe(),
+            name="longcat_reprobe",
+            db_getter=lambda: app.state.db,
+            long_lived=True,
         )
 
     # Iter 212m-172 — Loop Verify linter runtime auto-install.
@@ -1905,6 +1967,10 @@ async def health():
         "council_a_model":  council_a_model,
         "longcat_live":     longcat_live,
         "longcat_enabled":  longcat_enabled,
+        # Session F — supervised background-task health. `dead` is a
+        # list of long-lived crons that terminated unexpectedly since
+        # pod start (each also gets a Guard 20 incident row).
+        "supervised_tasks": _supervised_tasks_health_snapshot(),
     }
 
 

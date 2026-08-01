@@ -34,7 +34,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 API = "http://localhost:8001/api/aurem-dev"
 EMAIL = "test@aurem.dev"
-PASSWORD = "testpass123"
+PASSWORD = "AuremTest2026!"  # Session G · auth-fixture drift fix
 
 
 async def _db():

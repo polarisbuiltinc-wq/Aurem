@@ -119,7 +119,8 @@ async def test_public_regression_non_founder_402_still_works():
     """test@aurem.dev should still hit 402 once exhausted."""
     async with httpx.AsyncClient(timeout=20.0) as c:
         login = await c.post(f"{API}/auth/login", json={
-            "email": "test@aurem.dev", "password": "testpass123",
+            # Session G · auth-fixture drift fix (was "testpass123").
+            "email": "test@aurem.dev", "password": "AuremTest2026!",
         })
         if login.status_code != 200:
             pytest.skip("test@aurem.dev not seeded")

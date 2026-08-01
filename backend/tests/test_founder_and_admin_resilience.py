@@ -153,7 +153,8 @@ async def test_admin_me_rejects_plain_user():
     """A non-founder, non-admin user must still get 403."""
     async with httpx.AsyncClient(timeout=10.0) as c:
         login = await c.post(f"{API}/auth/login", json={
-            "email": "test@aurem.dev", "password": "testpass123",
+            # Session G · auth-fixture drift fix (was "testpass123").
+            "email": "test@aurem.dev", "password": "AuremTest2026!",
         })
         if login.status_code != 200:
             pytest.skip("test user not seeded")

@@ -39,7 +39,7 @@ BASE_URL = BASE_URL.rstrip("/")
 AUREM = f"{BASE_URL}/api/aurem-dev"
 
 SEEDED_EMAIL = "test@aurem.dev"
-SEEDED_PASS = "testpass123"
+SEEDED_PASS = "AuremTest2026!"  # Session G · auth-fixture drift fix
 
 
 @pytest.fixture(scope="session")

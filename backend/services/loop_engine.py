@@ -3133,7 +3133,17 @@ class LoopEngine:
         # Clear the pending payload (contains the GitHub token).
         self.context.pop("ship_pending", None)
         self.state = LoopState.COMPLETED
-        await self._emit("state", {"state": self.state.value})
+        # Iter 367 · P0-1 fix — this used to call `_emit("state", {...})`
+        # which was a leftover from an older API and blew up with
+        # `AttributeError: 'str' object has no attribute 'value'` inside
+        # `_new_event()` because `_emit`'s first arg must be a
+        # `LoopState` enum, not a string. The intent — flush a
+        # COMPLETED frame to SSE listeners BEFORE the (potentially
+        # long) post-ship browser self-test starts — is preserved by
+        # calling `_emit` with proper args. The final terminal frame
+        # with full ship metadata is still emitted at the bottom of
+        # this method (line ~3229) after narration.
+        await self._emit(self.state, "ship")
         await _persist_session(self.db, self._doc())
 
         # ── Iter 367 · Item E · Browser Self-Testing ────────────────

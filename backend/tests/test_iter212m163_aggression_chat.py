@@ -11,7 +11,7 @@ import time
 import pytest
 import requests
 
-BASE = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
+BASE = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 # Override BASE since this test file is run against preview backend
 PREVIEW = "https://launch-pad-237.preview.emergentagent.com"
 BASE = PREVIEW

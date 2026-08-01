@@ -66,6 +66,11 @@ export async function trackFunnel(stage, source, meta) {
       body,
       keepalive: true,       // survive navigation
       credentials: "omit",   // anonymous ingestion; no cookie needed
+      // Guard 18 — every outbound fetch must have a timeout signal
+      // so a stuck server can never wedge the caller. 5s is generous
+      // for a fire-and-forget telemetry POST; the .catch() below
+      // swallows the AbortError silently on timeout.
+      signal: AbortSignal.timeout(5000),
     }).catch(() => {});
   } catch {
     // Silent — telemetry never blocks flow.

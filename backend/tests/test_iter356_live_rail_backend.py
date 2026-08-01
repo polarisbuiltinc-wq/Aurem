@@ -56,10 +56,25 @@ def test_public_stats_shape_and_test_account_exclusion():
     assert isinstance(data.get("commits_shipped"), int)
     # test accounts should be excluded — real_developers should be small on preview
     assert data["real_developers"] >= 0
-    # Sanity: on preview, we expect real_developers to be much smaller than
-    # raw user count (~2 vs ~323). Just assert it's not absurd.
-    assert data["real_developers"] < 100, \
-        f"real_developers unexpectedly large: {data['real_developers']}"
+    # Session E fix — the fixed `< 100` ceiling was a data-drift trap:
+    # preview naturally accumulates real signups over months, so a
+    # hard number pins to the day the test was written. The REAL
+    # invariant is "test-account exclusion IS filtering out most of
+    # the raw user pool" — assert that ratio instead.
+    #
+    # If exclusion breaks (e.g., filter dropped, test accounts flow
+    # into real_developers), real would jump to ≈ raw `users` and
+    # the ratio would go to 1.0. A ratio ceiling of 0.5 means the
+    # filter is still removing at least half the raw users, which is
+    # the exact behaviour the assertion originally aimed to prove.
+    raw_users = data.get("users", 0)
+    if raw_users > 0:
+        ratio = data["real_developers"] / raw_users
+        assert ratio < 0.5, (
+            f"real_developers / users ratio too high ({ratio:.2%}) — "
+            f"test-account exclusion may have broken. "
+            f"real={data['real_developers']} vs raw={raw_users}"
+        )
 
 
 # ── Cleanup endpoint auth ────────────────────────────────────────────────

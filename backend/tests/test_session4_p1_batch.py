@@ -93,10 +93,15 @@ def test_main_py_registers_hallucination_task():
         src,
     ), "main.py must import schedule_hallucination_classify_batch"
     assert re.search(
-        r"app\.state\.hallucination_classify_task\s*=\s*.*create_task\s*\(\s*"
+        r"app\.state\.hallucination_classify_task\s*=\s*"
+        r"(?:.*create_task|_supervise)\s*\(\s*"
         r"schedule_hallucination_classify_batch\(",
         src, re.DOTALL,
-    ), "main.py must register app.state.hallucination_classify_task"
+    ), (
+        "main.py must register app.state.hallucination_classify_task "
+        "(either via asyncio.create_task or the Session F "
+        "_supervise(...) wrapper — both are accepted)"
+    )
 
 
 def test_hallucination_docstring_no_longer_lies():

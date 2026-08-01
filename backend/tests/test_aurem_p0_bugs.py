@@ -33,7 +33,11 @@ BASE_URL = BASE_URL.rstrip("/")
 AUREM = f"{BASE_URL}/api/aurem-dev"
 
 SEEDED_EMAIL = "test@aurem.dev"
-SEEDED_PASS = "testpass123"
+# Session G · Bucket A · auth-fixture drift fix — old fixture used
+# `testpass123` from a pre-Iter-212m-104 password. Real preview
+# credential lives in `/app/memory/test_credentials.md`. Un-quarantines
+# 11 nodeids in this file with a single line change.
+SEEDED_PASS = "AuremTest2026!"
 
 
 @pytest.fixture(scope="session")

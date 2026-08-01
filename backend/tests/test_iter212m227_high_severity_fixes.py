@@ -52,12 +52,16 @@ def test_outbox_dockerfile_has_user_and_healthcheck():
 def test_motor_pool_config_on_scripts():
     """AsyncIOMotorClient() must always pass maxPoolSize + timeouts
     so a burst never starves connections."""
+    # Session E fix — `/app/backend/shared/memory_tiers.py` removed
+    # in the cross-product contamination cleanup (backend/shared/*
+    # was fully deleted; motor client for tiered memory is now
+    # owned by the ora_grounding package). Removed from this list so
+    # the test doesn't reference a file that no longer exists.
     paths = [
         "/app/backend/scripts/cleanup_orphans.py",
         "/app/backend/scripts/migrate_iter34.py",
         "/app/backend/migrations/001_aurem_upgrade_indexes.py",
         "/app/backend/migrations/002_encrypt_pats.py",
-        "/app/backend/shared/memory_tiers.py",
         "/app/infra/outbox/worker.py",
         "/app/qa/simulated-user/seed_qa_user.py",
     ]

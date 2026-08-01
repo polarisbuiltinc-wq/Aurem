@@ -310,7 +310,8 @@ def test_council_a_review_mode_pro_still_falls_back_to_claude(monkeypatch):
     """When the Council A primary (GLM or LongCat) returns empty, Pro
     mode must still fall through to Claude — Iter 212m-18 contract
     preserved by V2."""
-    src = pathlib.Path("/app/backend/services/llm/__init__.py").read_text()
+    # Session D · D-part-2 — routing brain lives in _meta.py now.
+    src = pathlib.Path("/app/backend/services/llm/_meta.py").read_text()
     # The pro branch must still reference _call_claude as a fallback
     assert "primary_caller" in src       # the new variable lives in the swift/pro/maxx block
     assert "_call_claude(" in src        # Claude rescue path unchanged
@@ -340,9 +341,10 @@ def test_no_hardcoded_longcat_string_outside_llm_py():
 
 
 def test_analysis_mode_routing_block_in_llm_py():
-    """The analysis-mode routing block must exist in services/llm/__init__.py
+    """The analysis-mode routing block must exist in services/llm/_meta.py
     (Council B's V2 path)."""
-    src = pathlib.Path("/app/backend/services/llm/__init__.py").read_text()
+    # Session D · D-part-2 — routing brain lives in _meta.py now.
+    src = pathlib.Path("/app/backend/services/llm/_meta.py").read_text()
     assert 'if mode == "analysis":' in src
     assert "COUNCIL_B_GLM_ENABLED" in src
     assert "Council B GLM-5.2 raised" in src

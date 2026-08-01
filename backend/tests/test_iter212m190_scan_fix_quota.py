@@ -79,8 +79,13 @@ def _ensure_seed_users():
                                 "name": "Scope Reg"},
                           timeout=15)
         assert r.status_code in (200, 201), f"seed signup failed: {r.status_code} {r.text[:200]}"
-    except requests.ConnectionError:
-        pytest.skip(f"preview API unreachable at {API} — live-server "
+    except (requests.ConnectionError, requests.Timeout):
+        # Session E fix — `requests.ReadTimeout` was previously not
+        # caught here (only ConnectionError), so a slow preview API
+        # would abort pytest collection instead of gracefully
+        # skipping the module. Broader catch: any RequestException
+        # → skip the live-server suite.
+        pytest.skip(f"preview API unreachable/slow at {API} — live-server "
                     "suite (requires_live_server class)",
                     allow_module_level=True)
 

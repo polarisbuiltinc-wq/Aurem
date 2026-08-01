@@ -235,7 +235,7 @@ async def upsert_alerts_from_snapshot(db, snap: dict) -> list[dict]:
     # integrations that recovered this cycle.
     try:
         from services.incident_log import open_incident, resolve_incident
-        healthy_ids = {r.get("id") for r, sev, _ in classified if not sev}
+        healthy_ids = {r.get("id") for r, sev, _, _ in classified if not sev}
         for hid in healthy_ids:
             await resolve_incident(
                 db, source_key=f"integration:{hid}",

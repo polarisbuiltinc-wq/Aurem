@@ -40,7 +40,8 @@ def test_swift_block_bypasses_analysis_and_write():
     """The swift/pro/maxx routing block must NOT fire for
     mode='analysis' or mode='write' so Council B/C reach their own
     dispatch path."""
-    src = pathlib.Path("/app/backend/services/llm/__init__.py").read_text()
+    # Session D · D-part-2 — routing brain lives in _meta.py now.
+    src = pathlib.Path("/app/backend/services/llm/_meta.py").read_text()
     # The block-entry condition now ANDs `mode not in {"analysis","write"}`.
     assert 'mode not in {"analysis", "write"}' in src
 
@@ -49,7 +50,8 @@ def test_write_mode_routing_block_exists_in_llm_py():
     """The dedicated mode="write" block must dispatch to _call_deepseek
     and tag the provider as 'deepseek-v3-council-c' so dashboards can
     isolate Council C traffic."""
-    src = pathlib.Path("/app/backend/services/llm/__init__.py").read_text()
+    # Session D · D-part-2 — routing brain lives in _meta.py now.
+    src = pathlib.Path("/app/backend/services/llm/_meta.py").read_text()
     assert 'if mode == "write":' in src
     assert "deepseek-v3-council-c" in src
     # Must call _call_deepseek (not _call_glm)
@@ -77,7 +79,8 @@ def test_orchestrator_council_c_uses_write_mode():
 def test_council_b_analysis_block_still_above_legacy_routing():
     """Iter 212m-159's analysis block must remain — Iter 212m-165 only
     ADDED a 'write' block, didn't move analysis."""
-    src = pathlib.Path("/app/backend/services/llm/__init__.py").read_text()
+    # Session D · D-part-2 — routing brain lives in _meta.py now.
+    src = pathlib.Path("/app/backend/services/llm/_meta.py").read_text()
     a_idx = src.find('if mode == "analysis":')
     w_idx = src.find('if mode == "write":')
     legacy_idx = src.find("# ── Legacy mode routing")
@@ -91,7 +94,8 @@ def test_legacy_swift_caller_unaffected():
     """A regression guard: mode='code' + review_mode='swift' (the most
     common production path) must STILL trigger the swift block, only
     'analysis' and 'write' are excluded."""
-    src = pathlib.Path("/app/backend/services/llm/__init__.py").read_text()
+    # Session D · D-part-2 — routing brain lives in _meta.py now.
+    src = pathlib.Path("/app/backend/services/llm/_meta.py").read_text()
     # Confirm the gating set is exactly {analysis, write} — nothing
     # else (especially not "code" or "chat") was accidentally added.
     assert '{"analysis", "write"}' in src

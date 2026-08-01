@@ -309,11 +309,17 @@ def test_main_py_registers_maxx_overage_billing_task():
 
     # Task is created & attached to app.state
     assert re.search(
-        r"app\.state\.maxx_overage_billing_task\s*=\s*.*create_task\s*\(\s*"
+        r"app\.state\.maxx_overage_billing_task\s*=\s*"
+        r"(?:.*create_task|_supervise)\s*\(\s*"
         r"schedule_maxx_overage_billing\(",
         src,
         re.DOTALL,
-    ), "main.py must create app.state.maxx_overage_billing_task = asyncio.create_task(schedule_maxx_overage_billing(...))"
+    ), (
+        "main.py must create app.state.maxx_overage_billing_task "
+        "via asyncio.create_task(schedule_maxx_overage_billing(...)) "
+        "OR the Session F `_supervise(schedule_maxx_overage_billing(...), "
+        "name='maxx_overage_billing', ...)` wrapper — both accepted."
+    )
 
 
 def test_daily_digest_no_longer_calls_billing_cron():
