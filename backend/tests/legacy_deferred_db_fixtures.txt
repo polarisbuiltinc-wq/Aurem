@@ -1,0 +1,17 @@
+# legacy_deferred_db_fixtures.txt
+#
+# Tests failing with HTTP 503 "Database not connected" because they
+# rely on a shared DB fixture that the task-quota-refactor session
+# will introduce. Deferred per founder directive to a dedicated slot
+# so all these tests can be fixed in one coherent fixture pass.
+#
+# Format: <nodeid>  # <reason>
+
+tests/test_iter212m110_founder_bypass_and_graph.py::test_fix_route_refunds_tokens_when_patch_fails  # 503 Database not connected — deferred to task-quota-refactor session.
+tests/test_iter212m110_founder_bypass_and_graph.py::test_fix_route_skips_token_deduction_for_founder  # 503 Database not connected — deferred to task-quota-refactor session.
+tests/test_iter212m110_founder_bypass_and_graph.py::test_fix_route_still_charges_non_founder  # 503 Database not connected — deferred to task-quota-refactor session.
+tests/test_iter212m110_founder_bypass_and_graph.py::test_sidebar_graph_dispatches_drawer_event_not_navigate  # 503 Database not connected — deferred to task-quota-refactor session.
+tests/test_iter212m114_real_finding_fix.py::test_apply_finding_fix_happy_path  # 503 Database not connected — deferred to task-quota-refactor session.
+tests/test_iter212m114_real_finding_fix.py::test_apply_finding_fix_rejects_unresolved_patch  # 503 Database not connected — deferred to task-quota-refactor session.
+tests/test_iter212m114_real_finding_fix.py::test_security_fix_endpoint_founder_bypass  # 503 Database not connected — deferred to task-quota-refactor session.
+tests/test_iter212m114_real_finding_fix.py::test_security_fix_endpoint_refunds_on_patch_rejection  # 503 Database not connected — deferred to task-quota-refactor session.

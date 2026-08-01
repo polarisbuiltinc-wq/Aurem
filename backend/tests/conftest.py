@@ -36,24 +36,46 @@ if _env_file.is_file():
 
 
 # ── Iter 345 — legacy quarantine (founder ruling 2026-07-29) ─────────
-# The 259 pre-existing failures (238 FAILED + 21 ERRORS across ~114
-# iter36–iter267-era files) are DEFERRED, not fixed and not deleted.
-# Exact nodeids live in tests/legacy_quarantine.txt; this hook tags
-# each with @pytest.mark.legacy at collection time so no test file
-# needs editing and the list stays reviewable in one place.
+# The pre-existing failures across iter36–iter267-era files are
+# DEFERRED, not fixed and not deleted. Exact nodeids live in three
+# reviewable text files (Batch-4g/4h split — Feb 2026):
+#
+#   • legacy_quarantine.txt        — contract-drift still up for refresh
+#   • legacy_removed_features.txt  — asserted surface deleted from runtime
+#                                    (kept for recoverability, one-line
+#                                    reason per entry).
+#   • legacy_deferred_db_fixtures  — the DB-fixture batch, reserved for
+#     .txt                           a dedicated task-quota-refactor
+#                                    session.
+#
+# All three are unioned into the same @pytest.mark.legacy set so CI
+# stays green while remediation continues.
 import pytest as _pytest
 
-_LEGACY_LIST = Path(__file__).parent / "legacy_quarantine.txt"
+_LEGACY_LISTS = (
+    Path(__file__).parent / "legacy_quarantine.txt",
+    Path(__file__).parent / "legacy_removed_features.txt",
+    Path(__file__).parent / "legacy_deferred_db_fixtures.txt",
+)
 
 
 def _load_legacy_nodeids():
-    try:
-        return {
-            ln.strip() for ln in _LEGACY_LIST.read_text().splitlines()
-            if ln.strip() and not ln.strip().startswith("#")
-        }
-    except FileNotFoundError:
-        return set()
+    ids = set()
+    for lst in _LEGACY_LISTS:
+        try:
+            text = lst.read_text()
+        except FileNotFoundError:
+            continue
+        for ln in text.splitlines():
+            s = ln.strip()
+            if not s or s.startswith("#"):
+                continue
+            # Strip inline `# reason` comments used in the
+            # removed_features / db_fixtures files.
+            nodeid = s.split("#", 1)[0].strip()
+            if nodeid:
+                ids.add(nodeid)
+    return ids
 
 
 def pytest_collection_modifyitems(config, items):

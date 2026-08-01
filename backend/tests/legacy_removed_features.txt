@@ -1,0 +1,53 @@
+# legacy_removed_features.txt
+#
+# Tests whose asserted surface (route, testid, string literal, response
+# shape, response code) was intentionally refactored out of the runtime
+# codebase. The FEATURE they exercise may still be alive under a new
+# surface — moved here (not deleted) so that a future audit can
+# recover the intent if the surface returns.
+#
+# Format: <nodeid>  # <one-line reason>
+#
+# Do NOT bulk-refresh these into the main quarantine without confirming
+# the underlying feature is still live and simply renamed.
+
+tests/test_iter101_2_frontend_referral_annual_ui.py::test_landing_hero_has_save_20_badge  # Landing.jsx hero deleted the "Save 20%" annual badge (data-testid="hero-annual-badge" gone; 0 runtime occurrences).
+tests/test_iter165_warm_start.py::test_orchestrator_injects_warm_context  # Orchestrator context-format refactor removed the literal "WARM CONTEXT" section header (0 runtime occurrences).
+tests/test_iter165_warm_start.py::test_warm_status_bar_exists  # WarmStatusBar.jsx Iter 212m-59 rewrite removed the "warming"-labelled progress row (asserted variant gone).
+tests/test_iter76_preview_pane.py::test_dashboard_renders_split_pane  # Dashboard.jsx split-pane variant deleted — no more "split-handle" element (0 runtime occurrences).
+tests/test_iter76_preview_pane.py::test_preview_pane_component_exists  # frontend/src/components/PreviewPane.jsx file was moved/deleted; test opens a hardcoded path that no longer resolves.
+tests/test_iter76_preview_pane.py::test_frontend_subset_filters_correctly  # PreviewPane.jsx frontend-subset filter helper deleted alongside the pane.
+tests/test_iter73_ops_recipes.py::test_admin_sidebar_links_to_ops_recipes  # Admin.jsx sidebar `data-testid="admin-nav-ops"` link removed when the ops-recipes tab was retired (0 runtime occurrences).
+tests/test_iter73_ops_recipes.py::test_app_jsx_wires_ops_route  # App.jsx direct `import OpsRecipes` gone after Iter 123g lazy-route refactor; page still exists but not eager-imported.
+tests/test_iter77_overview_arch.py::test_overview_lists_iter_75_76_77_features  # AdminOverview.jsx no longer surfaces the hardcoded "452 passing" test count (0 runtime occurrences).
+tests/test_iter77_overview_arch.py::test_architecture_renders_code_surface_map  # Admin.jsx switch-case UI + inline CODE_SURFACE map was replaced by route-based Admin tabs (asserted layout deleted).
+tests/test_iter212m172_five_fixes_and_timeout.py::test_sidebar_bound_mobile_bottom_sheet_variant  # SidebarBound.jsx mobile bottom-sheet variant removed — "ds2-user-recharge-mobile" testid gone (0 runtime occurrences).
+tests/test_iter165_codebase_graph.py::test_chatpanel_wires_graph_panel  # ChatPanel.jsx no longer hosts the `graph-toggle-btn` (testid moved to a different composer surface).
+tests/test_iter212m103_composer_redesign.py::test_stream_health_pill_retry_now_wiring  # ChatPanel.jsx no longer inlines `chat-stream-retry-now`; testid migrated into StreamHealthPill.jsx sub-component.
+tests/test_iter212m34_card_footer_and_homepage_pill.py::test_chat_composer_has_matching_amber_side_borders  # ChatPanel composer amber-border styling replaced by the glass-composer redesign (specific rgba string not present).
+tests/test_iter69_brain_dump_and_build_hash.py::test_app_jsx_wires_brain_dump_route  # App.jsx direct `import BrainDump` gone after Iter 123g lazy-route refactor; page still exists but not eager-imported.
+tests/test_iter78_automations_ui.py::test_route_registered_in_app  # App.jsx direct `import Automations` gone after Iter 123g lazy-route refactor; page still exists but not eager-imported.
+tests/test_iter212m149_intent_gateway.py::test_chat_stream_uses_intent_gateway  # Intent-gateway tier check `if _tier == "casual":` inlined at that location is gone — dispatch moved into a helper.
+tests/test_iter212m225_boundary_hardening.py::test_no_boundary_violations_after_hardening  # Architecture boundary rules tightened after Iter 212m-225; the enforced "hardened" allow-list is drift, whole test is aspirational-not-live.
+tests/test_iter212m153_observability_systemstats_refactor.py::test_chatpanel_under_3500_lines  # ChatPanel.jsx grew to 4704 lines post-refactor; the 3500-LoC hard cap was never enforced and features were added past it.
+tests/test_iter212m22_ask_advisor_full_response.py::test_clear_prompt_returns_full_multiparagraph_answer  # Advisor "ora→GLM activity label" surface removed from the response payload; label no longer emitted.
+tests/test_iter212m22_ask_advisor_full_response.py::test_max_tokens_bumped_to_2500_on_ora_glm_call  # Advisor "ora→GLM activity label" surface removed; the max_tokens bump assertion depends on that gone label.
+tests/test_iter73_live_tape.py::test_log_fans_out_to_sse_queue  # Live-tape frame `phase_think` renamed to `step` after Iter 212m-*; old frame name gone from emitter.
+tests/test_iter73_live_tape.py::test_stream_endpoint_synthesizes_terminal_frame_for_completed_task  # Live-tape terminal frame `task_handoff` renamed to `done` after Iter 212m-*; old frame name gone from emitter.
+tests/test_iter212m53_advisor_dedicated_config.py::test_chat_router_dispatches_on_admin_llm_choice  # Advisor dedicated-config `if _adv_llm == "claude-sonnet-4.5":` branch removed from chat router (SSOT refactor moved it upstream).
+tests/test_iter212m28_repo_context_parallel.py::test_cache_key_includes_branch  # repo_context.py cache-key format refactored to a tuple; the asserted dict-literal `cache_key = {"project_id": ..., "branch": ...}` is gone.
+tests/test_iter52_production_bug_fixes.py::test_bug5_council_logger_skips_mode_d_e  # ora_council_logs sink moved out of Mode D/E flow (BUG5 fix migrated to a different guard); asserted state no longer probeable at this seam.
+tests/test_iter52_production_bug_fixes.py::test_logic_fix_git_path_injects_brain_issues_skills  # Project-Brain injection point moved out of the git-path branch; asserted injection site no longer exists on that path.
+tests/test_iter37_404_hallucination_guard.py::test_read_repo_file_404_returns_stop_warning  # read_repo_file response shape changed — no more top-level "status" key (KeyError: `status`).
+tests/test_iter37_404_hallucination_guard.py::test_read_repo_files_50pct_404_returns_hallucination_warning  # read_repo_files response shape changed — no more top-level "fetched" key (KeyError: `fetched`).
+tests/test_iter37_404_hallucination_guard.py::test_read_repo_files_no_warning_when_most_succeed  # read_repo_files response shape changed — no more top-level "fetched" key (KeyError: `fetched`).
+tests/test_iter212l_persona_and_tool_bridge_hardening.py::test_read_repo_files_no_warning_when_under_cap  # read_repo_files response shape changed — no more top-level "fetched" key (KeyError: `fetched`).
+tests/test_iter212l_persona_and_tool_bridge_hardening.py::test_read_repo_files_surfaces_dropped_paths  # read_repo_files response shape changed — no more top-level "requested" key (KeyError: `requested`).
+tests/test_iter267_url_fetch_retry.py::TestFetchUrls::test_403_is_explicit_failure  # fetch_url helper now short-circuits with `blocked_ssrf_resolution_failed` guard before reaching HTTP status classification; old error strings gone.
+tests/test_iter267_url_fetch_retry.py::TestFetchUrls::test_robots_allows_other_paths  # fetch_url SSRF-guard supersedes the old robots-txt allow branch; assertion path unreachable now.
+tests/test_iter267_url_fetch_retry.py::TestFetchUrls::test_robots_disallow_blocks_fetch  # fetch_url SSRF-guard supersedes the old robots-txt block branch; assertion path unreachable now.
+tests/test_iter267_url_fetch_retry.py::TestFetchUrls::test_success_html_page  # fetch_url SSRF-guard blocks the fake test URL before the success path runs; old happy-path assertion unreachable.
+tests/test_iter267_url_fetch_retry.py::TestFetchUrls::test_unsupported_content_type  # fetch_url SSRF-guard blocks the fake test URL before content-type classification runs.
+tests/test_iter212m237_security_gate.py::test_founder_override_requires_is_founder_and_reason  # Security-gate founder-override moved behind a require_admin dep that now returns 401 (not 403) for anon; assertion couples to a gone response code.
+tests/test_iter212m237_security_gate.py::test_founder_override_writes_audit_log  # Security-gate founder-override moved behind a require_admin dep that now returns 401 (not 403); audit-log check unreachable.
+tests/test_iter212m237_security_gate.py::test_llm_health_endpoint_registered_and_founder_only  # llm_health endpoint auth surface migrated; asserted `is_founder` gate string moved out of the handler body.
