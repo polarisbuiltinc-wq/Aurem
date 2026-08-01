@@ -45,19 +45,42 @@ ORCH_PY  = os.path.join(ROOT, "services", "orchestrator.py")
 
 def test_chat_send_checks_project_ownership_before_repo_ctx():
     """A user must own the project before we spend a Mongo + GitHub
-    round-trip loading its context. 403 on mismatch — the only safe
-    response, since the path is hot and pid is user-controlled.
+    round-trip loading its context. The ownership check must include
+    `user_id` in the Mongo query so a foreign pid returns no doc.
 
-    Iter 212m-28b fix — must read from `cto_projects` (the real
-    project collection), not the non-existent `projects` collection.
+    Session G · Bucket A — Iter 212m-169/170 changed the response
+    contract from a hard 403 to a graceful silent-degrade (empty
+    repo_ctx) that matches the ORAContext isolation pattern used
+    by tools. The safety invariant — "cto_projects lookup MUST
+    include the caller's user_id so a foreign project returns
+    nothing" — is preserved. The old strict 403 assertion has been
+    replaced with the equivalent negative check (no lookup by
+    project_id ALONE without user_id).
+
+    Also — the reference now uses `get_db().cto_projects.find_one`
+    instead of the older module-level `_db` alias.
     """
     src = open(CHAT_PY).read()
-    assert '_db.cto_projects.find_one(' in src
-    assert '{"project_id": pid, "user_id": user["user_id"]}' in src
+    # cto_projects (the real project collection) — either alias.
+    assert "cto_projects.find_one(" in src
+    # Ownership check MUST include user_id AND project_id.
+    assert '"user_id": user_id' in src or '"user_id": user["user_id"]' in src
+    assert '"project_id":' in src
     # The buggy collection name must NOT be present.
     assert '_db.projects.find_one(' not in src
-    # 403 must be raised on the ownership miss.
-    assert 'status_code=403, detail="Project access denied"' in src
+    assert 'db.projects.find_one({"project_id"' not in src
+    # Safety invariant: no cto_projects lookup by project_id alone —
+    # every read must scope to user_id so cross-user leaks are
+    # impossible.  Grep for any find_one that mentions project_id
+    # but NOT user_id in the same 200-char window.
+    import re
+    for m in re.finditer(r"cto_projects\.find_one\(\s*\{[^}]*\}", src):
+        block = m.group(0)
+        if '"project_id"' in block:
+            assert '"user_id"' in block, (
+                "cto_projects.find_one({project_id: ..}) MUST include "
+                f"user_id in the same filter — leak risk. Block: {block}"
+            )
 
 
 def test_chat_send_wraps_get_repo_context_in_12s_timeout():
@@ -76,16 +99,34 @@ def test_chat_send_wraps_get_repo_context_in_12s_timeout():
 
 def test_chat_send_uses_parameterised_logging_not_fstrings():
     """Vanguard's static guard fails on f-string log lines carrying
-    user-controlled ids. The 212m-27 path must use %s / %r placeholders."""
+    user-controlled ids. The 212m-27 path must use %s / %r placeholders.
+
+    Session G · Bucket A — Iter 212m-169/170 removed the
+    "project ownership lookup failed" log line (that path now
+    silent-degrades to empty repo_ctx instead of logging + raising).
+    The 12s-exceeded log line remains and still uses the required
+    parameterised format. Widened assertion set: every logger.*
+    call in chat.py that mentions pid/user_id MUST use %r/%s
+    placeholders, never f-strings.
+    """
     src = open(CHAT_PY).read()
-    # Specific lines from the new hot-path block.
-    assert (
-        "logger.warning(\n                    "
-        '"project ownership lookup failed for pid=%r user=%r: %r"'
-    ) in src
+    # The 12s-exceeded log line (proof that at least one surviving
+    # hot-path log line uses parameterised format).
     assert (
         '"get_repo_context exceeded 12s for pid=%r user=%r — "'
     ) in src
+    # No logger.<level>(f"...") calls anywhere in chat.py —
+    # Vanguard's static rule.  Grep for the exact anti-pattern.
+    import re
+    fstring_log = re.search(
+        r'logger\.(warning|error|info|debug)\(\s*f["\']',
+        src,
+    )
+    assert fstring_log is None, (
+        "chat.py contains an f-string log call — Vanguard forbids "
+        f"f-string logging on user-controlled ids. Offender: "
+        f"{fstring_log.group(0) if fstring_log else ''}"
+    )
 
 
 # ── B. orchestrator.py — session + tools hardening ────────────────

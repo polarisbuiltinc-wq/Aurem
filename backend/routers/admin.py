@@ -4919,3 +4919,104 @@ async def scope_drift_audit(
             "drift was flagged.",
         ],
     }
+
+
+# ─── Session G · Cron-death simulation (env-gated, admin-only) ──────
+# Founder-only shortcut for VISUAL verification of the /admin/architecture
+# supervised-tasks tile: manually kill one supervised cron so the widget
+# flips red without waiting for a real crash.
+#
+# Safety:
+#   • Route lives on `/admin/*` — inherits `require_admin_dep` (JWT with
+#     is_admin=true OR live-DB founder tier).
+#   • Additionally env-gated on `AUREM_TEST_MODE=1` — production pods
+#     never set the env, so the endpoint returns 404 on prod. This is a
+#     preview/staging-only affordance.
+#   • Kill only injects a postmortem row into `_DEAD` — the underlying
+#     cron is still running normally. This is a DISPLAY simulation, not
+#     a real termination, so a founder click never breaks a cron.
+@router.post("/dev/kill-supervised-task/{name}")
+async def kill_supervised_task_for_ui_test(
+    name: str,
+    reason: str = "exception",
+    authorization: Optional[str] = Header(None),
+):
+    """Simulate a dead supervised task for UI verification.
+
+    Args:
+        name:   The supervised-task name (must match one currently in
+                `supervised_tasks._SUPERVISED`). Case-sensitive.
+        reason: `"exception"` (default) or `"silent_completion"` —
+                shapes the postmortem row so the widget renders the
+                matching red-state description.
+
+    Returns:
+        `{"ok": True, "simulated_dead": <postmortem_row>}` on success.
+        `404` if the task name isn't currently supervised.
+        `404` if `AUREM_TEST_MODE` is not `"1"` (endpoint effectively
+        does not exist on production).
+    """
+    if os.getenv("AUREM_TEST_MODE") != "1":
+        # Behave as 404 on production so the endpoint's existence itself
+        # is invisible.  A founder poking around a prod admin panel gets
+        # a clean "endpoint not found" rather than a "you don't have the
+        # right env var" leak.
+        raise HTTPException(404, "Not Found")
+
+    from services import supervised_tasks
+    import time as _time
+    from datetime import datetime, timezone
+
+    # Confirm the caller is actually the founder (extra belt-and-braces
+    # even though require_admin_dep already gated the route).
+    _ = await _require_admin(authorization)
+
+    reg = supervised_tasks._SUPERVISED
+    dead = supervised_tasks._DEAD
+    if name not in reg and name not in dead:
+        raise HTTPException(
+            404,
+            f"Supervised task '{name}' not found. "
+            f"Current supervised: {sorted(reg.keys())}",
+        )
+
+    now = _time.time()
+    iso = datetime.fromtimestamp(now, tz=timezone.utc).isoformat()
+    if reason == "silent_completion":
+        row = {
+            "died_at":     now,
+            "died_at_iso": iso,
+            "reason":      "silent_completion",
+            "exc_type":    None,
+            "exc_msg":     None,
+            "simulated":   True,
+        }
+    else:
+        row = {
+            "died_at":     now,
+            "died_at_iso": iso,
+            "reason":      "exception",
+            "exc_type":    "SimulatedTaskDeath",
+            "exc_msg":     f"Founder-triggered UI simulation for task '{name}'",
+            "simulated":   True,
+        }
+
+    supervised_tasks._DEAD[name] = row
+    return {"ok": True, "simulated_dead": row, "name": name}
+
+
+@router.post("/dev/clear-supervised-postmortem/{name}")
+async def clear_supervised_postmortem_for_ui_test(
+    name: str,
+    authorization: Optional[str] = Header(None),
+):
+    """Companion of `/dev/kill-supervised-task` — clears a postmortem
+    row so the founder can confirm the widget flips back to green.
+    Same env + admin gates as the kill endpoint."""
+    if os.getenv("AUREM_TEST_MODE") != "1":
+        raise HTTPException(404, "Not Found")
+    from services import supervised_tasks
+    _ = await _require_admin(authorization)
+    removed = supervised_tasks._DEAD.pop(name, None)
+    return {"ok": True, "cleared": removed is not None, "name": name}
+

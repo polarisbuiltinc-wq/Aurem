@@ -146,13 +146,21 @@ async def test_write_repo_file_blocks_broken_python(monkeypatch):
     """End-to-end: write_repo_file must reject broken Python BEFORE
     the GitHub commit call.  Asserts no commit happened (monkeypatched
     commit_files would raise if called)."""
-    # Stub _resolve_project so the function reaches the syntax gate.
-    async def _stub_resolve(uid, pid):
+    # Session G · Bucket A — Iter 212m-169 swapped `_resolve_project`
+    # for `_repo_ctx_from(ctx)` which reads `ctx["bin_ctx"]`.  Old stub
+    # missed the new gate, so the function hit the "No project
+    # selected" branch before ever reaching the syntax gate.  Stubbing
+    # the new resolver + injecting a `bin_ctx` sentinel keeps the
+    # test's INTENT intact: skip the real DB / decrypt path, provide
+    # fake owner/repo/token so control flow reaches the syntax gate.
+    def _stub_repo_ctx(ctx):
         return {
-            "github_owner": "test-owner", "github_repo": "test-repo",
-            "branch": "main", "github_token": "FAKE_TOKEN",
+            "ok": True,
+            "owner": "test-owner", "repo": "test-repo",
+            "branch": "main", "token": "FAKE_TOKEN",
+            "is_founder": False, "bin_id": "u1", "pid": "p1",
         }
-    monkeypatch.setattr(lt, "_resolve_project", _stub_resolve)
+    monkeypatch.setattr(lt, "_repo_ctx_from", _stub_repo_ctx)
 
     # Sentinel: if anyone calls commit_files we know the gate failed.
     commit_called = {"hit": False}
@@ -188,12 +196,15 @@ async def test_write_repo_file_blocks_broken_python(monkeypatch):
 @pytest.mark.asyncio
 async def test_write_repo_file_passes_valid_python(monkeypatch):
     """Sanity: valid Python passes the gate and reaches commit."""
-    async def _stub_resolve(uid, pid):
+    # Session G · Bucket A — same _repo_ctx_from swap as above.
+    def _stub_repo_ctx(ctx):
         return {
-            "github_owner": "test-owner", "github_repo": "test-repo",
-            "branch": "main", "github_token": "FAKE_TOKEN",
+            "ok": True,
+            "owner": "test-owner", "repo": "test-repo",
+            "branch": "main", "token": "FAKE_TOKEN",
+            "is_founder": False, "bin_id": "u1", "pid": "p1",
         }
-    monkeypatch.setattr(lt, "_resolve_project", _stub_resolve)
+    monkeypatch.setattr(lt, "_repo_ctx_from", _stub_repo_ctx)
 
     commit_called = {"hit": False}
     async def _stub_commit(**kwargs):

@@ -66,14 +66,38 @@ def test_sanitizer_strips_xml_style_tool_call_tags():
 
 def test_chatpanel_dispatches_ship_modal_with_real_sha():
     src = _read_fe("components/ChatPanel.jsx")
-    # The dispatch fires only on completed+ship+commit_sha — never
-    # for stub/empty events.
+    # Session G · Bucket A — Iter 328 hotfix replaced the completed+ship
+    # ShipSuccessModal path with an inline LoopLiveFeed "Shipped {sha}"
+    # affordance. The failed+ship modal branch remains (there's no
+    # inline failure UX yet). New invariants:
+    #   • `aurem:open-ship-modal` custom event still exists.
+    #   • It ONLY fires for failed+ship (kind: "failed") — the
+    #     shipped success path no longer emits a modal.
+    #   • `aurem:shipped` event now carries the terminal success.
     assert 'aurem:open-ship-modal' in src
-    assert 'state === "completed" && phase === "ship" && data && data.commit_sha' in src
-    # Failed-ship variant also handled (red error modal).
     assert 'state === "failed" && phase === "ship"' in src
-    assert '"kind: "shipped"' in src or '"shipped"' in src
-    assert '"failed"' in src
+    assert 'kind: "failed"' in src or '"failed"' in src
+    # The inline replacement for the success path must exist.
+    assert 'aurem:shipped' in src, (
+        "Iter 328 hotfix moved the shipped success from a modal to an "
+        "inline LoopLiveFeed row driven by 'aurem:shipped' custom "
+        "event — that event must be dispatched."
+    )
+    # And the LEGACY completed+ship modal branch must be GONE (dead
+    # code is worse than no code — a bug or a merge could reintroduce
+    # a duplicate modal).
+    assert (
+        'state === "completed" && phase === "ship"'
+        not in src
+    ) or (
+        'window.dispatchEvent(new CustomEvent("aurem:open-ship-modal"'
+        not in src.split('state === "completed" && phase === "ship"')[-1].split("if (state ===")[0]
+    ), (
+        "The completed+ship branch that dispatches open-ship-modal "
+        "was intentionally removed in Iter 328 hotfix — a "
+        "reintroduction would cause a duplicate modal on top of the "
+        "inline shipped-row."
+    )
 
 
 def test_ship_modal_handles_post_loop_payloads():
@@ -90,15 +114,38 @@ def test_ship_modal_handles_post_loop_payloads():
 def test_send_button_has_explicit_onclick():
     """BUG 4 — mouse click must reliably trigger send() even when
     the form's implicit submit chain misbehaves (Safari overflow
-    container quirk)."""
+    container quirk).
+
+    Session G · Bucket A — Iter 212m-x cleaned up the defensive
+    `currentTarget.disabled` guard because the button element is
+    always guaranteed to have the disabled attribute via a react
+    prop now; the callsite is `onClick={() => send()}` at line
+    ~4517. Invariant preserved: the send button MUST have an
+    explicit `onClick` calling `send()` so the pointer-driven path
+    is always available."""
     src = _read_fe("components/ChatPanel.jsx")
-    # The defensive onClick handler on the chat-send button.
-    assert "if (e.currentTarget.disabled) return;\n                send(e);" in src
+    # Send button MUST have explicit onClick calling send() — this
+    # is the Safari-overflow workaround, semantically preserved.
+    import re
+    m = re.search(r"onClick=\{\(\)\s*=>\s*send\(\s*[^)]*\)\s*\}", src)
+    assert m is not None, (
+        "The chat-send button must have an explicit onClick={() => "
+        "send()} handler — Safari's overflow-container quirk breaks "
+        "the implicit form-submit chain otherwise (see Iter 212m-106 "
+        "BUG 4 for the original report)."
+    )
 
 
 def test_composer_placeholder_is_unified():
     """BUG 7 — both prompt and loop modes use the same placeholder."""
     src = _read_fe("components/ChatPanel.jsx")
-    assert '"Ask ORA to build, fix, or scan..."' in src
+    # Session G · Bucket A — the exact string was extended from
+    # "Ask ORA to build, fix, or scan..." → "Ask ORA to build, fix,
+    # or scan… (type / for scan commands)" (unicode ellipsis + a
+    # slash-command hint). Same UNIFICATION intent; substring check
+    # tolerates the extension without loosening the "unified across
+    # modes" invariant. The legacy separate-per-mode string must
+    # still be absent.
+    assert "Ask ORA to build, fix, or scan" in src
     # The old "Describe the feature / fix" string is gone.
     assert "Describe the feature / fix" not in src

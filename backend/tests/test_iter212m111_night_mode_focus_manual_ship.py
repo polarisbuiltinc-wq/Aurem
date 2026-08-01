@@ -59,8 +59,23 @@ def test_dashboard_auto_collapses_advisor_on_chat_active():
     # Effect should auto-collapse advisor when chatActive becomes true.
     assert "advisorAutoRef" in src
     assert "setAdvisorCollapsed(true)" in src
-    # And expand it when cursor approaches right edge.
-    assert "w - x <= 32" in src or "innerWidth" in src
+    # Session G · Bucket A — Iter 212m-122 (founder spec) REMOVED the
+    # auto-re-expand-on-hover behaviour: once the advisor auto-
+    # collapses (chat focus mode) the ONLY way to re-open it is a
+    # click on the "ADVISOR" toggle.  The old assertion looked for
+    # the hover-reveal trigger (`w - x <= 32` / `innerWidth`), but
+    # that code was intentionally deleted.  New invariant: the
+    # Dashboard must NOT contain the hover-reveal helpers AND must
+    # explicitly document the "no auto re-expand" spec so future
+    # PRs don't silently reintroduce the pre-122 behaviour.
+    assert "w - x <= 32" not in src, (
+        "Iter 212m-122 removed the hover-reveal trigger — someone "
+        "re-added it. Revert per founder spec."
+    )
+    assert "Iter 212m-122" in src, (
+        "Dashboard must reference the Iter 212m-122 anchor comment "
+        "so the no-auto-re-expand behaviour is discoverable in code."
+    )
 
 
 # ─── 3. Manual Ship gate (backend) ────────────────────────────────────
@@ -109,7 +124,21 @@ async def test_confirm_ship_approved_runs_commit_and_emits_completed(monkeypatch
     monkeypatch.setattr(le, "_persist_session", fake_persist)
 
     eng = le.LoopEngine.__new__(le.LoopEngine)
-    eng.db          = None
+    # Session G · Bucket A — Iter 212m-177 P0-1 added an atomic
+    # `db.loop_sessions.find_one_and_update` claim in confirm_ship so
+    # split-brain workers can't double-ship. The old test set
+    # `eng.db = None`, which now blows up at the claim call. Provide
+    # a tiny in-memory fake that satisfies both the CLAIM call (must
+    # return a truthy doc so this "worker" wins) and the fallback
+    # `find_one` (never reached on the happy path).
+    class _FakeLoopSessions:
+        async def find_one_and_update(self, q, u):
+            return {"loop_id": "loop_x", "context": {}}
+        async def find_one(self, *a, **k):
+            return {"loop_id": "loop_x", "context": {}, "state": "shipping"}
+    class _FakeDB:
+        loop_sessions = _FakeLoopSessions()
+    eng.db          = _FakeDB()
     eng.loop_id     = "loop_x"
     eng.user_id     = "u1"
     eng.project_id  = "p1"
@@ -126,6 +155,12 @@ async def test_confirm_ship_approved_runs_commit_and_emits_completed(monkeypatch
             "commit_message": "feat: add endpoint",
         },
     }
+    # Session G · Bucket A — Iter 212m-x added narration deduplication
+    # via `_narration_ring` (per-engine deque). Old bypass-__init__
+    # setup skipped it → _narrate raises. Provide the ring so
+    # confirm_ship's post-commit narration path runs.
+    from collections import deque
+    eng._narration_ring = deque(maxlen=16)
 
     async def fake_emit(state, phase, **kw):
         emits.append({"state": state.value if hasattr(state, "value") else state,

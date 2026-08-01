@@ -200,7 +200,9 @@ async def _deduct_tokens(user_id: str, reply: str) -> int:
         )
         return int((u or {}).get("tokens_remaining", 0))
     except Exception as e:
-        logger.warning(f"deduct_tokens failed: {e!r}")
+        # Iter 367 · Vanguard hardening — parameterised logging, not
+        # f-strings, on paths that touch user-controlled ids.
+        logger.warning("deduct_tokens failed: %r", e)
         return 0
 
 
@@ -520,7 +522,7 @@ async def _generate_title(first_user_msg: str) -> str:
             title = title[:57].rstrip() + "…"
         return title
     except Exception as e:
-        logger.warning(f"title generation failed: {e!r}")
+        logger.warning("title generation failed: %r", e)
         return ""
 
 
@@ -549,9 +551,9 @@ async def _maybe_set_title(user_id: str, session_id: str,
             {"session_id": session_id, "user_id": user_id},
             {"$set": {"title": title}},
         )
-        logger.info(f"titled session {session_id[:8]}…: {title!r}")
+        logger.info("titled session %s…: %r", session_id[:8], title)
     except Exception as e:
-        logger.warning(f"_maybe_set_title failed: {e!r}")
+        logger.warning("_maybe_set_title failed: %r", e)
 
 
 async def _persist_turn(user_id: str, session_id: str, user_prompt: str,
@@ -622,7 +624,7 @@ async def _persist_turn(user_id: str, session_id: str, user_prompt: str,
             upsert=True,
         )
     except Exception as e:
-        logger.warning(f"persist_turn failed: {e!r}")
+        logger.warning("persist_turn failed: %r", e)
 
 
 @router.post("/send")
@@ -1315,10 +1317,16 @@ async def chat_stream(
         try:
             return await asyncio.wait_for(coro, timeout=timeout_s)
         except asyncio.TimeoutError:
-            logger.warning(f"chat-context: {label} timed out after {timeout_s}s — degrading")
+            logger.warning(
+                "chat-context: %s timed out after %ss — degrading",
+                label, timeout_s,
+            )
             return ""
         except Exception as e:
-            logger.warning(f"chat-context: {label} failed ({e!r}) — degrading")
+            logger.warning(
+                "chat-context: %s failed (%r) — degrading",
+                label, e,
+            )
             return ""
 
     # Iter 212m-23 — URL fetching is NO LONGER done eagerly here.
