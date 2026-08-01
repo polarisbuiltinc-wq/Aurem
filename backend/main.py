@@ -1732,14 +1732,28 @@ def _read_git_head_file(repo_root: str) -> str | None:
 def _persist_build_info(sha: str) -> None:
     """Best-effort write of the resolved SHA to `backend/.build_info`.
 
-    Enables the priority-2 fast-path on subsequent restarts and lets a
-    pre-deploy script bake a known SHA into the image even when the
-    runtime pod has neither git binary nor `.git/` folder.
+    Session C · Sub-step 2 hotfix (2026-02) — this file is NO LONGER
+    gitignored, because prod deploys don't ship `.git/` OR the `git`
+    binary, so the file itself is the ONLY reliable priority-2/4
+    signal. It must ship in the deploy tarball.
+
+    To prevent commit-history noise from dev-pod restart thrash, we
+    only rewrite when the SHA has actually changed — a no-op write
+    would still bump mtime and confuse Emergent's auto-commit.
     """
     try:
         target = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".build_info")
+        new_content = sha.strip() + "\n"
+        # SHA-change guard — skip write if content already matches.
+        if os.path.exists(target):
+            try:
+                with open(target, "r", encoding="utf-8") as fh:
+                    if fh.read() == new_content:
+                        return
+            except Exception:
+                pass  # unreadable file — fall through and overwrite.
         with open(target, "w", encoding="utf-8") as fh:
-            fh.write(sha.strip() + "\n")
+            fh.write(new_content)
     except Exception:
         pass
 
