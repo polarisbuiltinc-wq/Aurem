@@ -33,43 +33,53 @@ LLM_PY = BACKEND / "services" / "llm" / "__init__.py"
 # services/_llm_probes.py. Session C · Sub-step 2 — that module moved
 # again to `services/llm/_probes.py` (the sibling is now a shim).
 LLM_PROBES_PY = BACKEND / "services" / "llm" / "_probes.py"
+# Session D · D-2a — `call_openrouter_model` moved into its own module.
+OR_CLIENT_PY = BACKEND / "services" / "llm" / "openrouter_client.py"
 
 
 # ═════════════════════════════════════════════════════════════════
 # 1) 3 hygiene sites now log at debug
 # ═════════════════════════════════════════════════════════════════
 def test_llm_py_has_three_silent_catch_debug_lines():
-    """Session 5 · Phase 2 update — one of the original 3 hygiene sites
-    (probe_longcat_availability) migrated to `_llm_probes.py`. We now
-    verify the TOTAL sweep is still 3 across the two files."""
-    llm_src = LLM_PY.read_text()
+    """Session 5 · Phase 2 + Session D · D-2a — the 3 hygiene sites
+    now live across THREE files. We verify the TOTAL sweep is still 3."""
+    llm_src    = LLM_PY.read_text()
+    or_src     = OR_CLIENT_PY.read_text()
     probes_src = LLM_PROBES_PY.read_text()
     llm_count    = llm_src.count('"[silent-catch] llm.py:')
+    or_count     = or_src.count('"[silent-catch] llm.py:')
     probes_count = probes_src.count(
         '"[silent-catch] _llm_probes.probe_longcat_availability')
-    total = llm_count + probes_count
+    total = llm_count + or_count + probes_count
     assert total == 3, (
-        f"expected 3 [silent-catch] sites across llm.py + _llm_probes.py, "
-        f"got llm={llm_count} probes={probes_count} total={total}"
+        f"expected 3 [silent-catch] sites across llm.py + openrouter_client.py "
+        f"+ _llm_probes.py, got llm={llm_count} or={or_count} "
+        f"probes={probes_count} total={total}"
     )
-    # Precise pre/post-Phase-2 shape lock so a future refactor that
-    # accidentally MOVES a site back into llm.py breaks this test.
-    assert llm_count == 2 and probes_count == 1, (
-        f"expected llm.py=2 + _llm_probes.py=1 after Phase 2, "
-        f"got llm={llm_count} probes={probes_count}"
+    # Precise post-D-2a shape lock: 1 in __init__.py (_call_deepseek),
+    # 1 in openrouter_client.py (call_openrouter_model), 1 in _probes.py.
+    assert llm_count == 1 and or_count == 1 and probes_count == 1, (
+        f"expected __init__.py=1 + openrouter_client.py=1 + _probes.py=1 "
+        f"after D-2a, got llm={llm_count} or={or_count} probes={probes_count}"
     )
 
 
 def test_llm_py_hygiene_sites_are_the_expected_ones():
     """Locked identifiers of the 3 patched sites so future refactors
-    trip when someone accidentally re-introduces a silent swallow."""
+    trip when someone accidentally re-introduces a silent swallow.
+
+    Session D · D-2a — `call_openrouter_model` moved to
+    `services/llm/openrouter_client.py`. Its silent-catch site
+    relocated with it; scan that file for the marker.
+    """
     llm_src = LLM_PY.read_text()
+    or_src = OR_CLIENT_PY.read_text()
     probes_src = LLM_PROBES_PY.read_text()
-    # 2 sites remaining in llm.py.
+    # 1 site remaining in __init__.py (inside `_call_deepseek`).
     assert '"[silent-catch] llm.py:738 in _call_deepseek' in llm_src
-    assert '"[silent-catch] llm.py:1104 in call_openrouter_model' in llm_src
-    # 1 site migrated to _llm_probes.py during Phase 2 (originally
-    # llm.py:468, now inside _llm_probes.probe_longcat_availability).
+    # 1 site migrated to openrouter_client.py (call_openrouter_model).
+    assert '"[silent-catch] llm.py:1104 in call_openrouter_model' in or_src
+    # 1 site migrated to _llm_probes.py during Phase 2.
     assert (
         '"[silent-catch] _llm_probes.probe_longcat_availability'
         in probes_src
@@ -81,10 +91,11 @@ def test_llm_py_hygiene_fixes_preserve_fail_open_behavior():
     The `except X as _e: logger.debug(...)` block must NOT re-raise
     on the SAME LINE / immediate next line as the debug call."""
     llm_src    = LLM_PY.read_text()
+    or_src     = OR_CLIENT_PY.read_text()
     probes_src = LLM_PROBES_PY.read_text()
     checks = [
         (llm_src,    "llm.py:738"),
-        (llm_src,    "llm.py:1104"),
+        (or_src,     "llm.py:1104"),       # D-2a — moved to openrouter_client.py
         (probes_src, "_llm_probes.probe_longcat_availability"),
     ]
     for src, ln_marker in checks:

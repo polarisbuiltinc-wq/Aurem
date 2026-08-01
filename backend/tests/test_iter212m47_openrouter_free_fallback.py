@@ -95,10 +95,13 @@ def test_call_deepseek_walks_fallback_chain() -> None:
     src = LLM_PY.read_text()
     assert "candidates: list[tuple[str, bool]] = [(_deepseek_model(), True)]" in src
     assert "for fm in _free_fallback_models():" in src
-    # And the corresponding `call_openrouter_model` walks the same chain.
+    # Session D · D-2a — `call_openrouter_model` moved to
+    # services/llm/openrouter_client.py. Its candidate-chain
+    # construction now lives there, not in __init__.py.
+    or_src = (LLM_PY.parent / "openrouter_client.py").read_text()
     assert (
         "candidates = [model] + [m for m in _free_fallback_models() if m != model]"
-        in src
+        in or_src
     )
 
 
