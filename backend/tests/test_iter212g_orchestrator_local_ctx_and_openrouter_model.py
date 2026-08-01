@@ -73,7 +73,7 @@ def test_llm_default_claude_model_uses_openrouter_format():
     """services/llm.py default model must be the dotted OpenRouter ID,
     not the dash-date Anthropic native ID (which returns 400 from
     OpenRouter)."""
-    src = Path("/app/backend/services/llm.py").read_text(encoding="utf-8")
+    src = Path("/app/backend/services/llm/__init__.py").read_text(encoding="utf-8")
     # The default assignment in `os.getenv("CLAUDE_MODEL", "...")`.
     assert '"CLAUDE_MODEL", "anthropic/claude-sonnet-4.5"' in src, (
         "Default Claude model must be OpenRouter's dotted ID "
@@ -100,7 +100,7 @@ def test_no_remaining_dashdate_anthropic_ids_in_runtime_code():
     format. Comments / docstrings / tests are exempt."""
     bad = "anthropic/claude-sonnet-4-5-20250929"
     runtime_files = [
-        "/app/backend/services/llm.py",
+        "/app/backend/services/llm/__init__.py",
         "/app/backend/services/smart_router.py",
         "/app/backend/services/vanguard_verify_agent.py",
     ]

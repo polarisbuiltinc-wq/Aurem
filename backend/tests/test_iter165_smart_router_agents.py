@@ -142,7 +142,7 @@ def test_llm_call_openrouter_model_is_async():
     "services/smart_router.py",
     "services/agents.py",
     "services/orchestrator.py",
-    "services/llm.py",
+    "services/llm/__init__.py",
 ])
 def test_files_parse_clean(relpath: str):
     src = (BACKEND_DIR / relpath).read_text()

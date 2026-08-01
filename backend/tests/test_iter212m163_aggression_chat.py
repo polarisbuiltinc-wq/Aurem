@@ -237,7 +237,7 @@ def test_block_1_3_intent_tier_always_mounted():
 
 # -------- LongCat boot-probe behavior --------
 def test_longcat_live_false_council_a_uses_glm():
-    with open("/app/backend/services/llm.py") as fh:
+    with open("/app/backend/services/llm/__init__.py") as fh:
         src = fh.read()
     assert "council_a_primary_model" in src
     assert 'LONGCAT_LIVE' in src

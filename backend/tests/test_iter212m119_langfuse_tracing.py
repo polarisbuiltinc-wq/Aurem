@@ -89,7 +89,7 @@ async def test_trace_llm_call_swallows_langfuse_errors(monkeypatch):
 
 # ─── 4. llm.py wires the tracer at the public entry point ─────────────
 def test_call_llm_with_meta_wraps_inner_with_trace():
-    src = open("/app/backend/services/llm.py").read()
+    src = open("/app/backend/services/llm/__init__.py").read()
     # The split into wrapper + _call_llm_with_meta_inner must exist.
     assert "async def _call_llm_with_meta_inner(" in src
     assert "trace_llm_call" in src
