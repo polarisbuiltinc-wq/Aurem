@@ -88,7 +88,7 @@ jobs:
       JWT_SECRET: ci-test-secret-32-chars-minimum!!
       OPENROUTER_API_KEY: sk-test-not-real
       EMERGENT_LLM_KEY: test-not-real
-      AUREM_CTO_MASTER_KEY: ci-test-master-key-32-chars-long!!
+      AUREM_MASTER_KEY: ci-test-master-key-32-chars-long!!
       REDIS_URL: ""
       DISABLE_UPSTREAM_TOOLS: "1"
       ENABLE_EVAL_CRON: "0"
@@ -239,7 +239,7 @@ jobs:
       JWT_SECRET:           ci-test-secret-32-chars-minimum!!
       OPENROUTER_API_KEY:   ${{ secrets.OPENROUTER_API_KEY }}
       EMERGENT_LLM_KEY:     ${{ secrets.EMERGENT_LLM_KEY }}
-      AUREM_CTO_MASTER_KEY: ci-test-master-key-32-chars-long!!
+      AUREM_MASTER_KEY: ci-test-master-key-32-chars-long!!
 
     steps:
       - uses: actions/checkout@v4

@@ -1,6 +1,14 @@
 """
 Iter 212m-179 — API-level tests for fix-pipeline preview/bulk cap enforcement
 and summary 404. Uses the live preview backend via REACT_APP_BACKEND_URL.
+
+CI note (Session G · Batch 4c): mirrors the safe-skip pattern from
+`test_iter212m120_vanguard_ci_live_http.py`. When
+`REACT_APP_BACKEND_URL` is unset AND `/app/frontend/.env` is not
+readable (typical CI runner state), we skip the whole module rather
+than raising `Invalid URL '/api/…': No scheme supplied`. This keeps
+the CI blocking-lane green without weakening the assertions the tests
+run against a real preview URL.
 """
 import os
 import requests
@@ -16,6 +24,14 @@ if not BASE_URL:
                     BASE_URL = line.split("=", 1)[1].strip().strip('"').rstrip("/")
     except Exception:
         pass
+
+if not BASE_URL:
+    pytest.skip(
+        "REACT_APP_BACKEND_URL not set and /app/frontend/.env not "
+        "readable — skipping live-URL API-cap tests (CI blocking-lane "
+        "runners without a preview target).",
+        allow_module_level=True,
+    )
 
 CREDS = {"email": "test@aurem.dev", "password": "AuremTest2026!"}
 

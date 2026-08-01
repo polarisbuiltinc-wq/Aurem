@@ -7,9 +7,18 @@
      the normal orchestrator and get a conversational answer.
   2. The CTO persona must contain Rule 8 — ANALYSIS → SPEC CONTRACT —
      forbidding analysis turns that end without a concrete spec.
-  3. The orchestrator budget-hit message must surface real files read
-     and a copy-pasteable next-prompt example (no generic 4-pillar
-     suggestion that user can't act on).
+  3. The orchestrator budget-hit message must be USER-FIRST — never
+     blame system limits and never push work back onto the user with
+     'narrow your ask'. Founder directive Iter 212m-208 explicitly
+     reversed the earlier 'I ran out of time' / 'narrow to one file'
+     wording. The current contract, enforced below:
+       - MUST summarise the surfaces already inspected
+         (via `seen_paths` + `seen_tools`).
+       - MUST offer 'send the same prompt again' continuation so the
+         next round lands the concrete answer.
+       - MUST NOT lead with 'I ran out of time'.
+       - MUST NOT tell the user to 'narrow the ask'.
+       - MUST NOT re-introduce the old '4-pillar sweep' language.
 """
 import re
 from pathlib import Path
@@ -48,24 +57,72 @@ def test_rule_8_lives_in_core_layer():
     )
 
 
-# ── Fix 3 ─────────────────────────────────────────────────────────────
+# ── Fix 3 (post Iter 212m-208 founder directive) ──────────────────────
 
-def test_budget_hit_message_is_actionable():
+def test_budget_hit_message_is_user_first_not_blame():
+    """The synthesised max-iters summary must NEVER blame system limits
+    ('I ran out of time') or tell the user to 'narrow the ask' — those
+    were the Iter 169 wording that Iter 212m-208 explicitly reversed
+    per founder ruling."""
     src = ORCH_PATH.read_text()
-    # Old vague language gone:
-    assert "4-pillar sweep" not in src
+    # Old vague / dead phrases must NOT be present:
+    assert "4-pillar sweep" not in src, (
+        "'4-pillar sweep' — dead Iter 169 wording, must stay removed"
+    )
     assert "the scope of your question is broader" not in src
-    # New actionable language present:
-    assert "ran out of time" in src
-    assert "narrow the ask to one file" in src
-    assert "ship-ready" in src
+    # Blame-tone that Iter 212m-208 reversed:
+    synth_start = src.index("_synthesise_max_iters_summary")
+    # Walk forward to the next top-level def (or 4000 chars, safety).
+    synth_end = src.find("\ndef ", synth_start + 40)
+    synth_body = src[synth_start:synth_end if synth_end != -1 else synth_start + 4000]
+    # The literal "I ran out of time" appears in the DOCSTRING as a
+    # negative example ("NOT 'I ran out of time...'") — we must
+    # therefore assert that NO STRING LITERAL passed to the user
+    # contains that phrase. Simple heuristic: it must not appear
+    # inside a `lines.append("..."|"""...""")` block.
+    #
+    # We look at every string literal appended to `lines` and verify
+    # none of the banned phrases appear.
+    lines_appended = re.findall(
+        r'lines\.append\(\s*[fr]?["\'](.*?)["\']\s*\)',
+        synth_body,
+        re.DOTALL,
+    )
+    banned_phrases = [
+        "I ran out of time",
+        "narrow the ask to one file",
+        "narrow your ask",
+        "please reformulate",
+    ]
+    for phrase in banned_phrases:
+        for text in lines_appended:
+            assert phrase.lower() not in text.lower(), (
+                f"blame-tone phrase {phrase!r} leaked into user-facing "
+                f"summary string: {text[:120]!r}. Iter 212m-208 founder "
+                f"directive forbids this."
+            )
 
 
-def test_budget_hit_example_uses_real_seen_path():
-    """The example next-prompt should be generated from `seen_paths[0]`
-    when available, so the user can copy-paste a file they actually
-    saw the agent read this turn."""
+def test_budget_hit_summary_uses_real_seen_paths():
+    """The user-facing summary MUST cite files the model actually read
+    this turn (via `seen_paths`) — not a generic prompt example."""
     src = ORCH_PATH.read_text()
-    # The string interpolation referencing seen_paths must exist.
-    assert "seen_paths[0].split" in src
-    assert "example_file" in src
+    synth_start = src.index("_synthesise_max_iters_summary")
+    synth_end = src.find("\ndef ", synth_start + 40)
+    synth_body = src[synth_start:synth_end if synth_end != -1 else synth_start + 4000]
+    # Must derive the summary from real invocations, not a canned string.
+    assert "seen_paths" in synth_body, (
+        "budget-hit summary must reference `seen_paths` (files actually "
+        "read this turn) so the follow-up prompt lands in real context"
+    )
+    # Must include a "send the same prompt again" continuation so the
+    # user isn't pushed back but gets a natural retry path.
+    assert (
+        "send the same prompt" in synth_body.lower()
+        or "same prompt again" in synth_body.lower()
+    ), (
+        "budget-hit summary must invite the user to re-send the same "
+        "prompt (context is already loaded on the next round)"
+    )
+    # Must record tools used so the reply is auditable.
+    assert "seen_tools" in synth_body

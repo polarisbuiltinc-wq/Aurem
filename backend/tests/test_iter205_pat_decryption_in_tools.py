@@ -12,6 +12,14 @@ Fix: both files' `_resolve_project()` now decrypt in place and fall back
 to the user's GitHub OAuth `access_token` when no per-project PAT is
 stored (OAuth-only flow).
 
+Iter 212m-225 (boundary refactor) moved the PAT helpers from
+`routers/cto_projects.py` into `services/pat_vault.py` so tools no
+longer reach across the router/service boundary. This test was updated
+to patch the new canonical location (`services.pat_vault.decrypt_pat`
+and `services.pat_vault.get_user_gh_token`) — the old patch target
+still exists as a re-export shim but does NOT intercept the lazy
+`from services.pat_vault import …` inside `_resolve_project`.
+
 These tests cover the contract:
   - decrypts ciphertext stored in proj.github_token
   - falls through to OAuth access_token when project has no PAT
@@ -51,9 +59,9 @@ async def test_local_tools_resolve_decrypts_pat(fake_db):
     }
 
     with patch.object(local_tools, "get_db", return_value=fake_db), \
-         patch("routers.cto_projects._decrypt_pat",
+         patch("services.pat_vault.decrypt_pat",
                new=AsyncMock(return_value="ghp_REAL_DECRYPTED_TOKEN")), \
-         patch("routers.cto_projects._user_gh_token",
+         patch("services.pat_vault.get_user_gh_token",
                new=AsyncMock(return_value=None)):
         proj = await local_tools._resolve_project("u1", "p1")
 
@@ -78,9 +86,9 @@ async def test_local_tools_resolve_falls_back_to_oauth(fake_db):
     }
 
     with patch.object(local_tools, "get_db", return_value=fake_db), \
-         patch("routers.cto_projects._decrypt_pat",
+         patch("services.pat_vault.decrypt_pat",
                new=AsyncMock(return_value=None)), \
-         patch("routers.cto_projects._user_gh_token",
+         patch("services.pat_vault.get_user_gh_token",
                new=AsyncMock(return_value="gho_OAUTH_TOKEN")):
         proj = await local_tools._resolve_project("u1", "p1")
 
@@ -100,10 +108,15 @@ async def test_dev_skills_resolve_decrypts_pat(fake_db):
         "github_repo":  "y",
     }
 
+    # Iter 212m-139 — dev_skills._resolve_project delegates to
+    # local_tools._resolve_project (single-source-of-truth). Patch
+    # local_tools.get_db too since that's where the DB lookup happens.
+    from services import local_tools as _lt
     with patch.object(dev_skills, "get_db", return_value=fake_db), \
-         patch("routers.cto_projects._decrypt_pat",
+         patch.object(_lt, "get_db", return_value=fake_db), \
+         patch("services.pat_vault.decrypt_pat",
                new=AsyncMock(return_value="ghp_DEV_DECRYPTED")), \
-         patch("routers.cto_projects._user_gh_token",
+         patch("services.pat_vault.get_user_gh_token",
                new=AsyncMock(return_value=None)):
         proj = await dev_skills._resolve_project("u1", "p1")
 
