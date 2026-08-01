@@ -230,13 +230,26 @@ def test_chat_stream_sse(token_a):
                 if not line:
                     continue
                 payload = json.loads(line[5:].strip())
+                # Session G · Item 2 — SSE vocabulary evolved since the
+                # original test was written. Non-terminal step / mode /
+                # intent / council frames now carry a `type` field AND
+                # sometimes a boolean `done`.  The test was matching the
+                # step-frame's `done: True` (phase transition) as the
+                # terminal frame and breaking out of the loop before any
+                # `{"token": ...}` frames arrived.  Fix: only accept the
+                # terminal done-frame when it is NOT typed AND contains
+                # the terminal-only `provider` field.
                 if payload.get("meta"):
                     meta_seen = True
                     assert payload["session_id"] == sid
                 elif "token" in payload:
                     tokens_seen += 1
                     full += payload["token"]
-                elif payload.get("done"):
+                elif (
+                    payload.get("done")
+                    and "type" not in payload
+                    and "provider" in payload
+                ):
                     done_payload = payload
                     break
             if done_payload:

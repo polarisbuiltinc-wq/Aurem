@@ -872,42 +872,67 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
     # the PAT BEFORE writing the project doc. If GitHub rejects the
     # token we never persist a broken project. Maps to the same
     # signals as `/projects/{id}/test-pat` (iter 207) for UI symmetry.
+    #
+    # Session G · Item 1 — scoped test-mode bypass.
+    # When AUREM_TEST_MODE=1 AND the PAT matches the magic sentinel
+    # prefix `github_pat_TEST_*`, skip the live GitHub roundtrip so
+    # `tests/test_aurem_p0_bugs.py::test_bug1_*` (P0 regression
+    # coverage of the add/list/patch surface) can run without
+    # requiring a real long-lived test PAT.
+    #
+    # Security note:
+    #   • Bypass is IMPOSSIBLE on production — prod pods never set
+    #     `AUREM_TEST_MODE`. The env var is a preview-only test
+    #     harness switch.
+    #   • Real user PATs (which start with `github_pat_11...` or
+    #     `ghp_...`) are UNAFFECTED — the sentinel-prefix guard
+    #     (`github_pat_TEST_`) is a namespace no real GitHub PAT
+    #     will ever collide with (GitHub PATs after the underscore
+    #     use base62 tokens, never the literal string "TEST_").
+    #   • Even inside preview, only the specific sentinel prefix
+    #     is accepted — a real weak/expired PAT still hits the
+    #     live validation and gets rejected.
+    _test_bypass = (
+        os.getenv("AUREM_TEST_MODE") == "1"
+        and pat.startswith("github_pat_TEST_")
+    )
     import httpx as _httpx
-    try:
-        async with _httpx.AsyncClient(timeout=10.0) as _c:
-            _r = await _c.get(
-                f"https://api.github.com/repos/{owner}/{repo}",
-                headers={
-                    "Accept":              "application/vnd.github+json",
-                    "Authorization":       f"Bearer {pat}",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                },
+    if not _test_bypass:
+        try:
+            async with _httpx.AsyncClient(timeout=10.0) as _c:
+                _r = await _c.get(
+                    f"https://api.github.com/repos/{owner}/{repo}",
+                    headers={
+                        "Accept":              "application/vnd.github+json",
+                        "Authorization":       f"Bearer {pat}",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    },
+                )
+        except _httpx.RequestError as _e:
+            raise HTTPException(
+                502,
+                f"Couldn't reach GitHub to verify the token ({type(_e).__name__}). "
+                "Try again in a moment.",
             )
-    except _httpx.RequestError as _e:
-        raise HTTPException(
-            502,
-            f"Couldn't reach GitHub to verify the token ({type(_e).__name__}). "
-            "Try again in a moment.",
-        )
-    if _r.status_code in (401, 403):
-        raise HTTPException(
-            400,
-            "GitHub rejected the PAT (401/403). Regenerate it with "
-            "Contents: Read and write for this repo, then try again.",
-        )
-    if _r.status_code == 404:
-        raise HTTPException(
-            400,
-            f"Repo not found at github.com/{owner}/{repo} via this PAT. "
-            "The repo may not be in the token's scope — re-pick it when "
-            "generating a fine-grained PAT.",
-        )
-    if _r.status_code != 200:
-        raise HTTPException(
-            502,
-            f"GitHub returned HTTP {_r.status_code} during verification. "
-            "Try a fresh token.",
-        )
+        if _r.status_code in (401, 403):
+            raise HTTPException(
+                400,
+                "GitHub rejected the PAT (401/403). Regenerate it with "
+                "Contents: Read and write for this repo, then try again.",
+            )
+        if _r.status_code == 404:
+            raise HTTPException(
+                400,
+                f"Repo not found at github.com/{owner}/{repo} via this PAT. "
+                "The repo may not be in the token's scope — re-pick it when "
+                "generating a fine-grained PAT.",
+            )
+        if _r.status_code != 200:
+            raise HTTPException(
+                502,
+                f"GitHub returned HTTP {_r.status_code} during verification. "
+                "Try a fresh token.",
+            )
 
     proj_id = f"p_{uuid.uuid4().hex[:10]}"
     encrypted_token = await _encrypt_pat(me["user_id"], pat)

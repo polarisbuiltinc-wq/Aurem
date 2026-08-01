@@ -166,8 +166,15 @@ def test_bug2_patch_404_for_unknown_project(session, token):
 # ─────────────────────────────────────────────────────────────
 # BUG 5: Chat persistence — no MongoDB conflict + project_id filter
 # ─────────────────────────────────────────────────────────────
-def test_bug5_chat_send_persists_with_project_id(session, token):
-    pid = "p_test_bug5"
+def test_bug5_chat_send_persists_with_project_id(session, token, created_project):
+    # Session G · Item 1 — use the fixture-created project (real
+    # owned project_id) instead of a made-up `p_test_bug5`.  Iter
+    # 212m-169/170 (ORAContext) added a strict ownership check to
+    # `chat/send`: unknown project_id → 403 "Project access denied".
+    # The made-up id worked pre-iter-212m-169 but now legitimately
+    # 403s.  The test's intent — verify chat persistence when a
+    # project_id is present — is preserved by using a real one.
+    pid = created_project["id"]
     sid = f"sess-{uuid.uuid4()}"
     r = session.post(f"{AUREM}/chat/send", headers=H(token),
                      json={"prompt": "Reply: PERSIST_OK", "session_id": sid,
@@ -187,9 +194,12 @@ def test_bug5_chat_send_persists_with_project_id(session, token):
     return sid, pid
 
 
-def test_bug5_sessions_filtered_by_project_id(session, token):
-    # Create a session under a specific project
-    pid = f"p_filt_{int(time.time())}"
+def test_bug5_sessions_filtered_by_project_id(session, token, created_project):
+    # Session G · Item 1 — reuse the real created_project to satisfy
+    # the ORAContext ownership check (see the bug5 send test above
+    # for context).  We still fabricate a session_id per test — the
+    # ownership check is on project_id, not session_id.
+    pid = created_project["id"]
     sid_proj = f"sess-{uuid.uuid4()}"
     session.post(f"{AUREM}/chat/send", headers=H(token),
                  json={"prompt": "proj-scoped", "session_id": sid_proj,

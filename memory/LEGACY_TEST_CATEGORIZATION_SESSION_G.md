@@ -1,0 +1,105 @@
+# Legacy Test Categorization — Session G · Feb 2026
+Total files processed: 98
+
+## Bucket A (93 files)
+- `tests/test_iter101_2_frontend_referral_annual_ui.py` — imports resolve, no static/frontend drift
+- `tests/test_iter101_annual_referral_overage.py` — imports resolve, no static/frontend drift
+- `tests/test_iter103_identity_no_fabrication.py` — imports resolve, no static/frontend drift
+- `tests/test_iter109_oauth_cancel.py` — imports resolve, no static/frontend drift
+- `tests/test_iter113_oauth_login_cancel.py` — imports resolve, no static/frontend drift
+- `tests/test_iter123f_external_services_registry.py` — imports resolve, no static/frontend drift
+- `tests/test_iter124_repo_first_and_retry.py` — imports resolve, no static/frontend drift
+- `tests/test_iter124f_project_scoping_isolation.py` — imports resolve, no static/frontend drift
+- `tests/test_iter124g_persona_quality_score.py` — imports resolve, no static/frontend drift
+- `tests/test_iter124h_vs_devin_page.py` — imports resolve, no static/frontend drift
+- `tests/test_iter129_chat_latency_budget.py` — imports resolve, no static/frontend drift
+- `tests/test_iter162_all_modes_audit.py` — imports resolve, no static/frontend drift
+- `tests/test_iter165_brain_v2.py` — imports resolve, no static/frontend drift
+- `tests/test_iter165_codebase_graph.py` — imports resolve, no static/frontend drift
+- `tests/test_iter165_smart_router_agents.py` — imports resolve, no static/frontend drift
+- `tests/test_iter165_warm_start.py` — imports resolve, no static/frontend drift
+- `tests/test_iter169_fix_hallucination_guards.py` — imports resolve, no static/frontend drift
+- `tests/test_iter205_pat_decryption_in_tools.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212g_orchestrator_local_ctx_and_openrouter_model.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212k_force_tool_calls_and_truncation_layers.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212l_persona_and_tool_bridge_hardening.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m103_composer_redesign.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m106_real_ship_and_sanitizer.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m110_founder_bypass_and_graph.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m111_night_mode_focus_manual_ship.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m114_real_finding_fix.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m116_repo_map_and_file_selector.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m127_log_noise_fixes.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m149_intent_gateway.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m150_parliament.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m152_prompt_mode_gaps.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m153_observability_systemstats_refactor.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m158_admin_gate_and_tools_page.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m159_parliament_v2_routing.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m15_warmstart_timeout_and_monaco_overlay.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m160_pre_launch_p0.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m172_five_fixes_and_timeout.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m175_mcp_scoped.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m177_prod_reliability.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m17_topup_alerts.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m20_admin_2fa_and_tabbar.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m225_boundary_hardening.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m231_phase1_blank_slate.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m232_phase2_github_boilerplate.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m233_phase3_4_deploy_managed_db.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m234_phase5_sweeper.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m237_security_gate.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m27_vanguard_hardening.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m28_repo_context_parallel.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m30_pr2_founder_indexing.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m34_card_footer_and_homepage_pill.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m3_activation_funnel.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m53_advisor_dedicated_config.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m66_vanguard_two_round.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m6_tool_reliability_full.py` — imports resolve, no static/frontend drift
+- `tests/test_iter212m6_wiring_audit.py` — imports resolve, no static/frontend drift
+- `tests/test_iter341_predeploy.py` — imports resolve, no static/frontend drift
+- `tests/test_iter37_404_hallucination_guard.py` — imports resolve, no static/frontend drift
+- `tests/test_iter44_vanguard.py` — imports resolve, no static/frontend drift
+- `tests/test_iter52_production_bug_fixes.py` — imports resolve, no static/frontend drift
+- `tests/test_iter54_shipwall_wrapped_overview.py` — imports resolve, no static/frontend drift
+- `tests/test_iter55_tool_call_leak_and_timeout.py` — imports resolve, no static/frontend drift
+- `tests/test_iter58_truncated_tree_rescue.py` — imports resolve, no static/frontend drift
+- `tests/test_iter64_responsive_sweep.py` — imports resolve, no static/frontend drift
+- `tests/test_iter66_design_tokens_lock.py` — imports resolve, no static/frontend drift
+- `tests/test_iter69_brain_dump_and_build_hash.py` — imports resolve, no static/frontend drift
+- `tests/test_iter72_vscode_extension_artifact.py` — imports resolve, no static/frontend drift
+- `tests/test_iter73_live_tape.py` — imports resolve, no static/frontend drift
+- `tests/test_iter73_ops_recipes.py` — imports resolve, no static/frontend drift
+- `tests/test_iter74_gaps.py` — imports resolve, no static/frontend drift
+- `tests/test_iter75_gap_coverage.py` — imports resolve, no static/frontend drift
+- `tests/test_iter76_preview_pane.py` — imports resolve, no static/frontend drift
+- `tests/test_iter76_routing.py` — imports resolve, no static/frontend drift
+- `tests/test_iter77_overview_arch.py` — imports resolve, no static/frontend drift
+- `tests/test_iter78_automations_ui.py` — imports resolve, no static/frontend drift
+- `tests/test_iter78_code_surface.py` — imports resolve, no static/frontend drift
+- `tests/test_iter79_web_skills.py` — imports resolve, no static/frontend drift
+- `tests/test_iter80_seo_pwa.py` — imports resolve, no static/frontend drift
+- `tests/test_iter81_mode_b_council.py` — imports resolve, no static/frontend drift
+- `tests/test_iter82_oauth_signup.py` — imports resolve, no static/frontend drift
+- `tests/test_iter83_handoff_guard.py` — imports resolve, no static/frontend drift
+- `tests/test_iter86_architecture_health.py` — imports resolve, no static/frontend drift
+- `tests/test_iter86_fixes.py` — imports resolve, no static/frontend drift
+- `tests/test_iter89_ship_button_no_reappear.py` — imports resolve, no static/frontend drift
+- `tests/test_iter94_maxx_cap_and_usd_migration.py` — imports resolve, no static/frontend drift
+- `tests/test_iter96_sentry_live.py` — imports resolve, no static/frontend drift
+- `tests/test_iter97_vercel_api_token.py` — imports resolve, no static/frontend drift
+- `tests/test_jwt_revocation.py` — imports resolve, no static/frontend drift
+- `tests/test_regression_iter287_qa_matrix_and_mcp_tools.py` — imports resolve, no static/frontend drift
+- `tests/test_regression_iter289_track1_lane_a.py` — imports resolve, no static/frontend drift
+- `tests/test_subscription_tiers.py` — imports resolve, no static/frontend drift
+- `tests/test_token_enforcement.py` — imports resolve, no static/frontend drift
+- `tests/test_tool_reliability_v2.py` — imports resolve, no static/frontend drift
+
+## Bucket A-live-server (5 files)
+- `tests/test_iter212m211_advisor_tool_leak.py` — network live-server test (needs real API up)
+- `tests/test_iter212m215_mermaid_diagram.py` — network live-server test (needs real API up)
+- `tests/test_iter212m22_ask_advisor_full_response.py` — network live-server test (needs real API up)
+- `tests/test_iter212m_prod_e2e_founder.py` — network live-server test (needs real API up)
+- `tests/test_iter22_live_founder_bypass.py` — network live-server test (needs real API up)
+

@@ -1438,6 +1438,103 @@ function Architecture() {
         Code surface · routers · services · pages
       </h3>
       <CodeSurfaceLive />
+      <SupervisedTasksTile />
+    </div>
+  );
+}
+
+// Session G · Item 3 — Cron-death dashboard tile.
+// Reads `supervised_tasks: {supervised_count, alive[], dead[]}` from
+// the public `/api/health` payload (same field the founder can curl).
+// Green + count when all crons alive; red + list of dead names when
+// any long-lived cron silently terminated since pod boot. Guard 20
+// already opens an incident row for each — this tile just surfaces
+// the postmortem list at a glance instead of requiring a curl.
+export function SupervisedTasksTile() {
+  const [d, setD] = useState(null);
+  useEffect(() => {
+    const load = () =>
+      fetch(`${process.env.REACT_APP_BACKEND_URL}/api/health`, {
+        signal: AbortSignal.timeout(5000),
+      })
+        .then((r) => r.json())
+        .then((j) => setD(j.supervised_tasks || null))
+        .catch(() => {});
+    load();
+    // Refresh every 30s so a fresh death appears without a page reload.
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
+  }, []);
+  if (!d) return null;
+  const dead = d.dead || [];
+  const alive = d.alive || [];
+  const total = d.supervised_count ?? (alive.length + dead.length);
+  const hasDead = dead.length > 0;
+  return (
+    <div data-testid="supervised-tasks-tile" style={{ marginTop: 22 }}>
+      <h3 style={{ fontSize: 12, letterSpacing: "0.1em",
+        textTransform: "uppercase", color: "var(--text-faint)",
+        margin: "0 0 8px" }}>Supervised background tasks</h3>
+      <Card style={{ padding: 16 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 14,
+                       flexWrap: "wrap" }}>
+          <div
+            data-testid="supervised-tasks-status"
+            style={{ fontSize: 22, fontWeight: 700,
+              color: hasDead ? "var(--danger)" : "var(--ok)",
+              fontFamily: "'JetBrains Mono', monospace",
+              textTransform: "uppercase" }}
+          >
+            {alive.length}/{total} alive
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-faint)",
+                          lineHeight: 1.8 }}>
+            {hasDead
+              ? `${dead.length} cron${dead.length === 1 ? "" : "s"} silently terminated since boot — Guard 20 incident row opened for each.`
+              : "every long-lived cron is running normally."}
+          </div>
+        </div>
+        {hasDead && (
+          <div data-testid="supervised-tasks-dead-list"
+                style={{ marginTop: 12, display: "flex",
+                          flexDirection: "column", gap: 6 }}>
+            {dead.map((row) => (
+              <div key={row.name}
+                    data-testid={`supervised-task-dead-${row.name}`}
+                    style={{ display: "flex", alignItems: "center",
+                              gap: 10, flexWrap: "wrap", fontSize: 12,
+                              fontFamily: "'JetBrains Mono', monospace" }}>
+                <Badge color="var(--danger)">DEAD</Badge>
+                <b style={{ color: "var(--danger)" }}>{row.name}</b>
+                <span style={{ color: "var(--text-faint)" }}>
+                  {row.reason === "exception"
+                    ? `${row.exc_type || "Exception"}: ${row.exc_msg || ""}`
+                    : row.reason === "silent_completion"
+                    ? "silent completion (cron returned without looping)"
+                    : row.reason}
+                </span>
+                {row.died_at_iso && (
+                  <span style={{ color: "var(--text-faint)",
+                                    fontSize: 10 }}>
+                    · died {row.died_at_iso}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {!hasDead && alive.length > 0 && (
+          <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap",
+                          gap: 6 }}>
+            {alive.map((name) => (
+              <Badge key={name} color="var(--ok)"
+                      data-testid={`supervised-task-alive-${name}`}>
+                {name}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

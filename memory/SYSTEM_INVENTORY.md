@@ -710,3 +710,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 
 - `DEEPSEEK_API_KEY` — auto-detected in backend/services/llm/__init__.py (verify) (default: unset) [Iter 0, 2026-08-01T02:24:13.620138Z] <!-- inv:envvar:DEEPSEEK_API_KEY -->
 - `GROQ_API_KEY` — auto-detected in backend/services/llm/__init__.py (verify) (default: unset) [Iter 0, 2026-08-01T02:24:13.620166Z] <!-- inv:envvar:GROQ_API_KEY -->
+- `services/supervised_tasks.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-01T16:15:07.448946Z] <!-- inv:service:services/supervised_tasks.py -->
