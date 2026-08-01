@@ -68,12 +68,41 @@ async def _cleanup(db, uid):
 
 
 # ─────────────────────────────────────────────────────────────
+# Per-test uid factory with GUARANTEED cleanup.
+# Wraps the delete_many in a finally so that even if an
+# assertion fails mid-test, no rows leak into real Mongo.
+# Yields a function that generates a unique test-uid.
+# ─────────────────────────────────────────────────────────────
+import pytest_asyncio  # noqa: E402
+
+
+@pytest_asyncio.fixture
+async def uid_factory(db):
+    minted: list[str] = []
+
+    def _mint(prefix: str) -> str:
+        u = f"{prefix}-{int(time.time() * 1000)}-{len(minted)}"
+        minted.append(u)
+        return u
+
+    try:
+        yield _mint
+    finally:
+        # Fail-safe cleanup. Runs even if the test raised, so real
+        # Mongo never accumulates test artefacts.
+        for u in minted:
+            try:
+                await db.ora_learning_logs.delete_many({"user_id": u})
+            except Exception:  # noqa: BLE001 — best-effort teardown
+                pass
+
+
+# ─────────────────────────────────────────────────────────────
 # TEST 1 — happy path writes a real document to Mongo.
 # ─────────────────────────────────────────────────────────────
 @pytest.mark.asyncio
-async def test_maybe_log_writes_real_document_to_mongo(db, monkeypatch):
-    uid = f"qa-hardening-{int(time.time())}"
-    await _cleanup(db, uid)
+async def test_maybe_log_writes_real_document_to_mongo(db, uid_factory, monkeypatch):
+    uid = uid_factory("qa-hardening")
 
     # Stub the live ORA HTTP call (this test targets the DB write,
     # not the aurem.live upstream). Force is_ora_available() -> True.
@@ -117,16 +146,13 @@ async def test_maybe_log_writes_real_document_to_mongo(db, monkeypatch):
     assert row["version"] == 1
     assert isinstance(row["ts"], (int, float))
 
-    await _cleanup(db, uid)
-
 
 # ─────────────────────────────────────────────────────────────
 # TEST 2 — rate-limit lookup path caps writes correctly.
 # ─────────────────────────────────────────────────────────────
 @pytest.mark.asyncio
-async def test_rate_limit_cap_blocks_further_writes(db, monkeypatch):
-    uid = f"qa-hardening-cap-{int(time.time())}"
-    await _cleanup(db, uid)
+async def test_rate_limit_cap_blocks_further_writes(db, uid_factory, monkeypatch):
+    uid = uid_factory("qa-hardening-cap")
 
     async def _fake_call_ora(**kwargs):
         return {"reply": "ora reply", "ok": True}
@@ -152,17 +178,14 @@ async def test_rate_limit_cap_blocks_further_writes(db, monkeypatch):
         f"Rate-limit path in maybe_log_ora_escalation is broken."
     )
 
-    await _cleanup(db, uid)
-
 
 # ─────────────────────────────────────────────────────────────
 # TEST 3 — rate-limit-lookup failure emits [silent-catch] log
 #           AND still writes (fail-open contract preserved).
 # ─────────────────────────────────────────────────────────────
 @pytest.mark.asyncio
-async def test_rate_limit_failure_logs_and_fails_open(db, monkeypatch, caplog):
-    uid = f"qa-hardening-failopen-{int(time.time())}"
-    await _cleanup(db, uid)
+async def test_rate_limit_failure_logs_and_fails_open(db, uid_factory, monkeypatch, caplog):
+    uid = uid_factory("qa-hardening-failopen")
 
     async def _fake_call_ora(**kwargs):
         return {"reply": "ora reply", "ok": True}
@@ -205,13 +228,16 @@ async def test_rate_limit_failure_logs_and_fails_open(db, monkeypatch, caplog):
     )
 
     # 1. The [silent-catch] debug log was emitted -> fix is wired.
+    #    (The catch site now uses a generic annotation so line-number
+    #    drift no longer invalidates the marker — see review LOW #3.)
     matched = [
         rec for rec in caplog.records
-        if "[silent-catch] ora_learning.py:98" in rec.getMessage()
+        if "[silent-catch] ora_learning.maybe_log_ora_escalation "
+           "rate-limit-lookup" in rec.getMessage()
     ]
     assert matched, (
-        "Expected [silent-catch] debug log from ora_learning.py:98 "
-        f"rate-limit lookup catch. Got records: "
+        "Expected [silent-catch] debug log from the rate-limit "
+        "lookup catch. Got records: "
         f"{[r.getMessage() for r in caplog.records]}"
     )
 
@@ -220,8 +246,6 @@ async def test_rate_limit_failure_logs_and_fails_open(db, monkeypatch, caplog):
     assert count == 1, (
         f"Fail-open branch should still insert; got {count} rows."
     )
-
-    await _cleanup(db, uid)
 
 
 # ─────────────────────────────────────────────────────────────

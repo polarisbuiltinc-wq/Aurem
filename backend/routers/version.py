@@ -312,12 +312,15 @@ async def _fetch_last_github_push() -> Optional[dict]:
             _GH_PUSH_CACHE["expires_at"] = now + _GH_PUSH_CACHE_TTL_S
             return None
         c = data[0]
+        # Public /version endpoint — drop `message` and `html_url` so
+        # private-repo commit context (ticket refs, internal naming)
+        # doesn't leak to unauthenticated visitors. `commit_sha` +
+        # `pushed_at` are enough for AdminSystemHealth's Deploy Sync
+        # card to render "Pushed to GitHub …".
         payload = {
             "commit_sha": (c.get("sha") or "")[:12],
             "pushed_at":  ((c.get("commit") or {}).get("committer") or {})
                           .get("date"),
-            "html_url":   c.get("html_url"),
-            "message":    ((c.get("commit") or {}).get("message") or "")[:200],
         }
         _GH_PUSH_CACHE["value"] = payload
         _GH_PUSH_CACHE["expires_at"] = now + _GH_PUSH_CACHE_TTL_S

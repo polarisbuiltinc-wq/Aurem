@@ -100,9 +100,11 @@ async def maybe_log_ora_escalation(
             # Log at debug so this doesn't hide behind silence: during
             # Session 4's live ORA outage we learned that silent skips
             # here mean zero learning samples for hours with no alert.
+            # Annotation uses a STABLE function+role marker (not a
+            # line-number) so refactors don't invalidate log triage.
             logger.debug(
-                "[silent-catch] ora_learning.py:98 in maybe_log_ora_escalation "
-                "— rate-limit lookup failed: %r", _e,
+                "[silent-catch] ora_learning.maybe_log_ora_escalation "
+                "rate-limit-lookup failed: %r", _e,
             )
 
         # Call ORA with the same prompt. system_hint guides ORA to act
@@ -147,8 +149,8 @@ async def maybe_log_ora_escalation(
         # try/except blocks failed unexpectedly — that IS worth ops
         # attention.
         logger.warning(
-            "[silent-catch] ora_learning.py:135 in maybe_log_ora_escalation "
-            "— shadow-logging invariant caught unexpected error: %r", _e,
+            "[silent-catch] ora_learning.maybe_log_ora_escalation "
+            "shadow-logging invariant caught unexpected error: %r", _e,
         )
         return
 

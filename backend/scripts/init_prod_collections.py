@@ -181,6 +181,16 @@ _BOOTSTRAP_SPEC: list[tuple[str, list[tuple[list, dict]]]] = [
         ([("pattern_type", 1), ("ts", -1)], {}),
         ([("user_id", 1)],                   {"sparse": True}),
     ]),
+    # QA-Hardening (Feb 2026) — code-review LOW #4.
+    # maybe_log_ora_escalation runs `count_documents({"user_id":
+    # uid, "ts": {"$gte": cutoff}})` on every low-confidence AUREM
+    # reply to enforce the hourly-cap gate. Without this compound
+    # index the query is a full collection scan that grows linearly
+    # with every logged sample. The cap-check itself bounds writes,
+    # but the READ has no such bound.
+    ("ora_learning_logs", [
+        ([("user_id", 1), ("ts", -1)], {}),
+    ]),
     ("onboarding_emails", [
         # Batched eligibility lookup uses {user_id $in [...], campaign, stage}.
         # Not unique — historic rows have one legitimate duplicate per

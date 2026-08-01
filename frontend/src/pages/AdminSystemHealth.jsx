@@ -262,10 +262,14 @@ export default function AdminSystemHealth() {
                       style={{ fontSize: 10, color: C.faint, marginTop: 2 }}
                     >
                       Pushed to GitHub {new Date(ver.last_github_push.pushed_at).toLocaleString()}
-                      {" · "}
-                      <span style={{ fontFamily: C.mono, color: C.dim }}>
-                        {ver.last_github_push.commit_sha}
-                      </span>
+                      {ver.last_github_push.commit_sha && (
+                        <>
+                          {" · "}
+                          <span style={{ fontFamily: C.mono, color: C.dim }}>
+                            {ver.last_github_push.commit_sha}
+                          </span>
+                        </>
+                      )}
                     </div>
                   )}
                 </>

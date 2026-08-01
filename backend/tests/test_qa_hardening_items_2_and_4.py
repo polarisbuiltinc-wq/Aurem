@@ -13,6 +13,7 @@ Item 4: `/api/aurem-dev/version` MUST include a `last_github_push`
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -26,8 +27,39 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 @pytest.fixture
 def client():
     from main import app   # main FastAPI app (registers both routers)
-    with TestClient(app) as c:
-        yield c
+
+    # Item 2's endpoint sits behind `require_admin_dep` (router-level)
+    # + `_require_admin(authorization)` (per-route). Without a real
+    # founder token, TestClient hits 401/403 and the honest-empty
+    # assertions never run — that's the "tautological test" review
+    # finding. Override BOTH gates so the 200-branch is guaranteed
+    # to execute and the actual behaviour is asserted.
+    #
+    # NOTE: FastAPI inspects the OVERRIDE function's signature to
+    # rebuild dependencies for the request. If we used `(*a, **kw)`
+    # FastAPI would treat `a`/`kw` as required query params and
+    # return 422. The override MUST mirror the original signature.
+    from fastapi import Header
+    from cto_services import auth as _auth_mod
+    from routers import admin_qa as _admin_qa_mod
+
+    async def _ok_admin_dep(authorization: str = Header(default=None)):
+        return {"user_id": "test-admin", "is_admin": True}
+
+    async def _ok_require_admin(authorization=None):
+        # Module-level helper (not a FastAPI dep) — plain call
+        # signature matching the real `_require_admin(authorization)`.
+        return {"user_id": "test-admin", "is_admin": True}
+
+    app.dependency_overrides[_auth_mod.require_admin_dep] = _ok_admin_dep
+    _orig = _admin_qa_mod._require_admin
+    _admin_qa_mod._require_admin = _ok_require_admin
+    try:
+        with TestClient(app) as c:
+            yield c
+    finally:
+        app.dependency_overrides.pop(_auth_mod.require_admin_dep, None)
+        _admin_qa_mod._require_admin = _orig
 
 
 # ─────────────────────────────────────────────────────────────
@@ -93,14 +125,18 @@ def test_last_github_push_populated_when_creds_present(monkeypatch):
 
     monkeypatch.setattr(v.httpx, "AsyncClient", _AC)
 
-    result = asyncio.get_event_loop().run_until_complete(
-        v._fetch_last_github_push()
-    )
+    result = asyncio.run(v._fetch_last_github_push())
     assert result is not None
     assert result["commit_sha"] == "abcdef123456"    # trimmed to 12 chars
     assert result["pushed_at"]  == "2026-01-01T12:00:00Z"
-    assert "commit/abcdef" in result["html_url"]
-    assert result["message"].startswith("fix:")
+    # Public /version payload MUST NOT include commit message or URL —
+    # would leak private-repo context to unauthenticated visitors.
+    assert "message" not in result, (
+        "commit message must not appear in the public /version payload"
+    )
+    assert "html_url" not in result, (
+        "commit html_url must not appear in the public /version payload"
+    )
 
 
 # ─────────────────────────────────────────────────────────────
@@ -109,28 +145,34 @@ def test_last_github_push_populated_when_creds_present(monkeypatch):
 def test_ci_vs_local_drift_honest_empty_without_gh_creds(client, monkeypatch):
     """Without GITHUB_ACTIONS_TOKEN / GITHUB_REPO the endpoint must
     return ci_available=False WITH a reason, and drift_detected=False
-    (can't assert a drift when we can't read CI)."""
+    (can't assert a drift when we can't read CI).
+
+    Both admin gates are stubbed in the client fixture (see review
+    finding: previously this test never reached the 200 branch)."""
     monkeypatch.delenv("GITHUB_ACTIONS_TOKEN", raising=False)
     monkeypatch.delenv("GITHUB_REPO", raising=False)
 
-    # Route is admin-gated. Use the founder header contract the
-    # rest of admin_qa uses (require_admin_dep + _require_admin).
-    r = client.get(
-        "/api/aurem-dev/admin/qa/ci-vs-local-drift",
-        headers={"Authorization": f"Bearer {os.environ.get('AUREM_ADMIN_TOKEN', '')}"},
+    r = client.get("/api/aurem-dev/admin/qa/ci-vs-local-drift")
+    assert r.status_code == 200, (
+        f"Admin gate override did not land — got {r.status_code}: "
+        f"{r.text[:300]}"
     )
-    # If admin gating rejects us in a locked-down test env, at least
-    # confirm the route exists (not a 404). Real drift-check runs
-    # under a real founder session in production.
-    assert r.status_code in (200, 401, 403), (
-        f"Route missing? got {r.status_code}: {r.text[:200]}"
+    data = r.json()
+    assert data["ci_available"] is False, (
+        f"Without GITHUB_ACTIONS_TOKEN, ci_available must be False; "
+        f"got {data['ci_available']!r}"
     )
-
-    if r.status_code == 200:
-        data = r.json()
-        assert data["ci_available"] is False
-        assert data["drift_detected"] is False
-        assert data["ci_reason"], (
-            "Honest-empty must include a reason string so admins "
-            "know the check couldn't run (no fake green)."
-        )
+    assert data["drift_detected"] is False, (
+        f"Cannot assert drift when CI is unreachable; "
+        f"got drift_detected={data['drift_detected']!r}"
+    )
+    assert data["ci_reason"], (
+        "Honest-empty must include a reason string so admins "
+        "know the check couldn't run (no fake green)."
+    )
+    # Key surface for the frontend banner:
+    for key in (
+        "ci_conclusions", "ci_any_failure", "ci_all_success",
+        "local_grand_total_tests", "local_source", "drift_reason",
+    ):
+        assert key in data, f"drift payload missing key: {key}"

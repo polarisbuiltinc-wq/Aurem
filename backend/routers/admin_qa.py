@@ -874,7 +874,10 @@ async def ci_vs_local_drift(authorization: Optional[str] = Header(None)):
         j.get("conclusion") for j in (ci.get("jobs") or {}).values()
         if j.get("conclusion")
     ]
-    any_ci_failure = any(c in ("failure", "timed_out", "cancelled")
+    # Drift means "CI saw a REAL problem that local didn't". A
+    # manually-cancelled run is neither — code-review LOW #5. Only
+    # `failure` and `timed_out` count as divergence signal.
+    any_ci_failure = any(c in ("failure", "timed_out")
                          for c in ci_conclusions)
     all_ci_success = ci_available and ci_conclusions and all(
         c == "success" for c in ci_conclusions

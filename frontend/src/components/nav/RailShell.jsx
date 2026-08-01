@@ -140,7 +140,11 @@ export default function RailShell({
     const onDown = (e) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(null);
     };
-    const onKey = (e) => { if (e.key === "Escape") { setOpen(null); setMobileOpen(false); } };
+    // Code-review Feb 2026: `setMobileOpen` was never defined in
+    // this component — Escape used to raise ReferenceError. RailShell
+    // doesn't own a mobile-nav sheet (SidebarBound does); closing the
+    // flyout via `setOpen(null)` is the only correct behaviour here.
+    const onKey = (e) => { if (e.key === "Escape") setOpen(null); };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
     return () => {
