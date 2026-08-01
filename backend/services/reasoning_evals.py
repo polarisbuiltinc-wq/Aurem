@@ -1,6 +1,15 @@
 """
 services/reasoning_evals.py — Iter 301 (Master QA Track 3)
 
+TEST-INFRASTRUCTURE ONLY — do not delete on zero-live-caller grounds.
+This module has no callers in `routers/`, `services/`, or `main.py`
+BY DESIGN. It is a test-helper library consumed by
+`tests/reasoning/test_verify_verdict_calibration.py`,
+`test_plan_shape_validity.py`, `test_faithfulness_llm_judge.py`, and
+`test_scan_finding_quality.py`. See docstring below for consumer test-
+file details. A discovery audit that greps for live callers will
+correctly find zero — that is expected, not evidence of dead code.
+
 Behavioural evaluators for the three load-bearing AI-output surfaces
 of the self-fix loop:
 

@@ -3,6 +3,13 @@ services/boilerplate_audit.py — Iter 297 (Behavioural upgrade for
 Personal-Track boilerplate security audit tests, Task 2 of Master
 QA Track 1).
 
+TEST-INFRASTRUCTURE ONLY — do not delete on zero-live-caller grounds.
+This module has no callers in `routers/`, `services/`, or `main.py`
+BY DESIGN. It is a test-helper library consumed by
+`tests/test_iter212m238_boilerplate_auth_audit.py` (15 test functions).
+A discovery audit that greps for live callers will correctly find
+zero — that is expected, not evidence of dead code.
+
 Why this exists
 ---------------
 The pre-iter297 boilerplate audit tests (test_iter212m238) were

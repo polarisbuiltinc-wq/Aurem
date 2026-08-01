@@ -114,6 +114,23 @@ REGISTRY: tuple[Service, ...] = (
         env_keys=("E2B_API_KEY",),
         probe_url=None,     # SDK manages connection
     ),
+    # 2026-08-01 — AUREM Org GitHub integration. Deactivate-honestly:
+    # `services/github_org_client.is_configured()` requires all three
+    # env vars set; all three are UNSET in prod → integration surfaces
+    # cleanly return `aurem_org_not_configured` from every entry-point
+    # AND admin dashboard shows "missing". Fixes the Batch-2 finding
+    # that this integration was silently omitted from the /architecture
+    # grid (worse than Supabase/Vercel which at least show as missing).
+    # No behavior change to callers — this only makes the honest state
+    # VISIBLE on the admin dashboard so it can't get quietly enabled
+    # halfway (only 1 of 3 keys set) without the founder noticing.
+    Service(
+        display_name="AUREM Org (GitHub)",
+        integration_id="aurem_org_github",
+        env_keys=("AUREM_ORG_NAME", "AUREM_ORG_GITHUB_APP_TOKEN",
+                  "AUREM_ORG_DEFAULT_BRANCH"),
+        probe_url=None,     # no unauth probe URL — auth-only surface
+    ),
 )
 
 
