@@ -1761,6 +1761,19 @@ def _persist_build_info(sha: str) -> None:
 def _resolve_build_hash() -> str:
     """Compute once at import — short git SHA of the current deploy.
 
+    ⚠️ KNOWN OFF-BY-ONE-COMMIT LAG (Option A workaround, 2026-02):
+        On Emergent prod pods (no `git` binary, no `.git/` folder),
+        resolution comes from priority 2 — the checked-in
+        `backend/.build_info` file. Because this file cannot be
+        self-referential (it must be written BEFORE the commit that
+        includes it is created), the SHA shown in prod is always the
+        PARENT of the actual deploy-commit's SHA. To find the exact
+        deployed commit, run `git log <shown_sha>..HEAD` locally.
+        Long-term fix: Emergent pipeline auto-injecting `BUILD_HASH`
+        env var (Option B — support ticket pending). When that lands,
+        priority 1 takes over and the lag disappears with no code
+        change on our side.
+
     Resolution order:
       1. Explicit env var (BUILD_HASH / GIT_COMMIT / VERCEL_GIT_COMMIT_SHA)
          — set by CI / Emergent / Vercel during deploy.
@@ -1847,6 +1860,20 @@ def _resolve_build_hash() -> str:
 # ── Health ──
 @app.get("/api/health")
 async def health():
+    """Liveness + deploy-identity endpoint.
+
+    Notable field — `build_hash`:
+      • On dev/preview: the 7-char short SHA of the current git HEAD.
+      • On Emergent prod (no `git` binary + no `.git/` folder): the
+        SHA baked into `backend/.build_info` at commit-time, which is
+        the PARENT of the actual deploy-commit's SHA (Option A
+        workaround has an inherent 1-commit lag — see
+        `_resolve_build_hash` docstring). To reconcile:
+            git log <build_hash>..HEAD    # shows what shipped
+      • If both file-based paths fail: `m<hex>` mtime fallback (bad —
+        indicates the `.build_info` file was excluded from the
+        tarball, an explicit regression signal).
+    """
     # Iter 212m-172 — Surface LongCat live status so any UI can pick
     # the right Council A model label without a founder-gated call.
     try:

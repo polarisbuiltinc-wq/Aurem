@@ -119,8 +119,11 @@ before being called "done".
 ### P1 (soon)
 - **Option B `BUILD_HASH` env var (platform-level)** — Deployer_agent
   should auto-inject commit SHA. **Workaround shipped**: `.build_info`
-  file + raw `.git/HEAD` parse ladder (see 2026-02-01 changelog).
-  Founder can also set it manually via Emergent dashboard if desired.
+  file (tracked in git, ships in tarball) + raw `.git/HEAD` parse
+  ladder (see 2026-02-01 changelog). Known 1-commit lag on prod
+  because `.build_info` cannot be self-referential; see
+  `/app/memory/emergent_support_ticket_option_B.md` for the pending
+  Emergent platform feature request that would eliminate the lag.
 - **Session D — LLM Split Phase 4** — Extract `openrouter_client.py`
   (the 6 `_call_*` provider helpers) from `services/llm/__init__.py`.
   Per `memory/LLM_SPLIT_MIGRATION_PLAN.md`.
