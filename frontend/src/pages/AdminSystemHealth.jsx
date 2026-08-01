@@ -242,9 +242,32 @@ export default function AdminSystemHealth() {
                   <div style={{ fontFamily: C.mono, fontSize: 13, color: C.text }}>
                     <span style={{ color: C.amber }}>{ver.commit_sha}</span>
                   </div>
-                  <div style={{ fontSize: 10, color: C.faint }}>
-                    {ver.environment} · built {new Date(ver.built_at).toLocaleString()}
+                  <div
+                    data-testid={`deploy-sync-${label.toLowerCase()}-deployed-at`}
+                    style={{ fontSize: 10, color: C.faint }}
+                  >
+                    {ver.environment} · Deployed {new Date(ver.built_at).toLocaleString()}
                   </div>
+                  {/* QA-Hardening Item 4 — "Pushed to GitHub" is
+                      DISTINCT from "Deployed". Previously both were
+                      the same `built_at` timestamp, letting a stalled
+                      Save-to-GitHub sit unnoticed for days while
+                      deploys kept succeeding. Rendered only when the
+                      backend has GITHUB_ACTIONS_TOKEN + GITHUB_REPO
+                      wired; otherwise omit rather than show a fake
+                      matching value. */}
+                  {ver.last_github_push?.pushed_at && (
+                    <div
+                      data-testid={`deploy-sync-${label.toLowerCase()}-pushed-at`}
+                      style={{ fontSize: 10, color: C.faint, marginTop: 2 }}
+                    >
+                      Pushed to GitHub {new Date(ver.last_github_push.pushed_at).toLocaleString()}
+                      {" · "}
+                      <span style={{ fontFamily: C.mono, color: C.dim }}>
+                        {ver.last_github_push.commit_sha}
+                      </span>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div style={{ fontSize: 12, color: C.faint }}>loading…</div>

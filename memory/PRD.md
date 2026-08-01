@@ -24,6 +24,41 @@ before being called "done".
 
 ## Change Log
 
+### 2026-02-02 — QA-System Hardening + ORA-Learning Functional Verify (this session)
+
+**Item 1: ORA-learning functional verify ✅**
+- New test file `tests/test_ora_learning_functional_verify.py` with 4 tests hitting **real Mongo**:
+  1. Happy path writes a real `ora_learning_logs` document (all fields populated).
+  2. Rate-limit cap correctly blocks writes past `ORA_LEARNING_HOURLY_CAP`.
+  3. `count_documents` failure → `[silent-catch]` DEBUG log fires AND insert still happens (fail-open contract preserved).
+  4. Static assurance `chat.py` still dispatches the coroutine.
+- Live Mongo write proof captured in `/app/memory/QA_HARDENING_REPORT.md`.
+
+**Item 2: CI-vs-local drift endpoint ✅**
+- New endpoint `GET /api/aurem-dev/admin/qa/ci-vs-local-drift` in `routers/admin_qa.py`.
+- Cross-references local pytest count vs latest GitHub Actions quality-gate run.
+- Honest-empty (`ci_available=False` + reason) when `GITHUB_ACTIONS_TOKEN`/`GITHUB_REPO` not wired. No fake green.
+- **Config still needed**: founder must set both env vars in `backend/.env` for the check to become live.
+
+**Item 3: Secret-leak alert gap — RECOMMENDATION ONLY (deferred)**
+- Root cause: trufflehog WAS catching the leak, but no notifier was wired from CI-failure-on-main → `founder_alerts.send_founder_alert()`. Only email GitHub sends is to the pusher (usually off).
+- Two options documented in `/app/memory/QA_HARDENING_REPORT.md`: (A) webhook-receiver + `ci.yml` step, (B) native GitHub → Slack app.
+- Founder decision needed on Resend vs Slack channel before wiring.
+
+**Item 4: Deploy vs GitHub-push conflation ✅**
+- `routers/version.py` — `/api/aurem-dev/version` now returns `last_github_push` (nullable dict with `commit_sha`, `pushed_at`, `html_url`, `message`); 60s cache; honest-empty when creds missing.
+- `pages/AdminSystemHealth.jsx` — Deploy Sync card renders two DISTINCT lines: "Deployed …" (from `built_at`) and "Pushed to GitHub …" (from `last_github_push.pushed_at`).
+- Test-IDs added: `deploy-sync-{preview|production}-{deployed-at|pushed-at}`.
+
+**Files created/modified this session**:
+- New: `backend/tests/test_ora_learning_functional_verify.py`, `backend/tests/test_qa_hardening_items_2_and_4.py`
+- New: `memory/QA_HARDENING_REPORT.md` (full process-gap analysis + live proofs)
+- Modified: `backend/routers/version.py`, `backend/routers/admin_qa.py`, `frontend/src/pages/AdminSystemHealth.jsx`
+
+**Test status**: 7/7 tests passing. Lint clean (Python + JS).
+
+---
+
 ### 2026-02-02 — Persona-Diet Round-2 + Batch 4f + REAL BUG #11
 **Persona-Diet PR** ✅ (founder-approved cheap addition to
 guardrail work):

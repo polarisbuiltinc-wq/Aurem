@@ -838,3 +838,75 @@ async def vscode_marketplace_status(
     _VSCODE_MARKETPLACE_CACHE["ttl_epoch"] = now + _VSCODE_MARKETPLACE_TTL_S
     _VSCODE_MARKETPLACE_CACHE["payload"]   = payload
     return payload
+
+
+# ═══════════════════════════════════════════════════════════════════
+# QA-Hardening Item 2 — CI-vs-Local drift check
+#
+# Purpose: during the audit-arc that produced this hardening pass,
+# our LOCAL pytest runs reported "4014/0 pass" while the REAL GitHub
+# Actions CI was red with 468 failures. Nobody noticed for multiple
+# sessions because the two numbers lived on two different surfaces
+# and no code cross-referenced them.
+#
+# This endpoint is the cross-reference. It's cheap:
+#   - Local: `_harvest_counts()` (already used by /admin/qa/counts)
+#   - CI:    `_harvest_ci_status()` (already used by /admin/qa/status)
+# Then we flag `drift_detected: True` when CI's latest conclusion is
+# "failure" — because that alone is proof that the local "everything
+# passing" claim is wrong. Honest-empty when GITHUB_ACTIONS_TOKEN /
+# GITHUB_REPO aren't configured.
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/ci-vs-local-drift")
+async def ci_vs_local_drift(authorization: Optional[str] = Header(None)):
+    """QA-Hardening Item 2 — cross-reference local pytest counts vs
+    the latest real GitHub Actions quality-gate run so a divergence
+    (green locally, red on CI) can't hide for multiple sessions."""
+    await _require_admin(authorization)
+    t0 = time.time()
+
+    local = _harvest_counts()
+    ci    = await _harvest_ci_status()
+
+    ci_available   = bool(ci.get("available"))
+    ci_conclusions = [
+        j.get("conclusion") for j in (ci.get("jobs") or {}).values()
+        if j.get("conclusion")
+    ]
+    any_ci_failure = any(c in ("failure", "timed_out", "cancelled")
+                         for c in ci_conclusions)
+    all_ci_success = ci_available and ci_conclusions and all(
+        c == "success" for c in ci_conclusions
+    )
+
+    # A drift is confirmed if:
+    #   (a) CI is available (we can trust it), AND
+    #   (b) CI has any failing conclusion, AND
+    #   (c) local believes "grand_total_tests > 0" — i.e. we ARE
+    #       running tests locally. If local also has 0 tests we
+    #       can't call it a drift, just an infra-outage.
+    local_has_tests = (local.get("grand_total_tests") or 0) > 0
+    drift_detected  = ci_available and any_ci_failure and local_has_tests
+
+    return {
+        "generated_at":   time.time(),
+        "took_ms":        int((time.time() - t0) * 1000),
+        "ci_available":   ci_available,
+        "ci_reason":      ci.get("reason"),
+        "ci_run_url":     ci.get("workflow_url"),
+        "ci_commit_sha":  ci.get("commit_sha"),
+        "ci_run_started_at": ci.get("run_started_at"),
+        "ci_conclusions": ci_conclusions,
+        "ci_all_success": bool(all_ci_success),
+        "ci_any_failure": bool(any_ci_failure),
+        "local_grand_total_tests": local.get("grand_total_tests"),
+        "local_source":            local.get("source"),
+        "drift_detected": bool(drift_detected),
+        "drift_reason":   (
+            "CI has one or more failing jobs while local pytest count > 0. "
+            "The local surface is not seeing what CI is seeing — "
+            "investigate the failing GitHub Actions run above."
+            if drift_detected else None
+        ),
+    }
