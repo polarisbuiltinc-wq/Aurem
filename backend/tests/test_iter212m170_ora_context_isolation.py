@@ -435,7 +435,7 @@ async def test_16_loop_mode_ctx_survives(db_and_scratch_users):
 
 
 def _llm_source():
-    return (Path(__file__).resolve().parents[1] / "services" / "llm.py").read_text()
+    return (Path(__file__).resolve().parents[1] / "services" / "llm" / "__init__.py").read_text()
 
 
 def test_17_council_A_no_direct_project_lookup():

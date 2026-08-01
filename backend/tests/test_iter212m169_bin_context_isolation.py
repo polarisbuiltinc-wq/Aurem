@@ -485,7 +485,7 @@ def test_16_council_A_no_direct_project_lookup():
     """Test 16 — Council A (LongCat/GLM) fires through services/llm.py.
     Verify that LLM call functions do not do independent DB lookups
     for the user's project (they receive context from the caller)."""
-    src = Path(__file__).resolve().parents[1] / "services" / "llm.py"
+    src = Path(__file__).resolve().parents[1] / "services" / "llm" / "__init__.py"
     text = src.read_text()
     # LLM call functions must not touch cto_projects directly.
     banned_patterns = [

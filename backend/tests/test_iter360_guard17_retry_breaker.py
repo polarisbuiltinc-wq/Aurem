@@ -183,7 +183,7 @@ class TestMigratedCallers:
 
     def test_llm_py_wired_to_central_breaker(self):
         src = open(os.path.join(os.path.dirname(__file__), "..",
-                                "services", "llm.py")).read()
+                                "services", "llm", "__init__.py")).read()
         assert "retry_guard" in src and "_or_br.record_success()" in src \
             and "_or_br.record_failure" in src
 

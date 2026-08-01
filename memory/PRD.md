@@ -24,6 +24,39 @@ before being called "done".
 
 ## Change Log
 
+### 2026-02-01 — Session C · Sub-step 2 (LLM Package Modularization) + BUILD_HASH file-based fix
+- **BUILD_HASH workaround** — `_resolve_build_hash()` ladder now has 2
+  new file-based steps (priority 2: `backend/.build_info`, priority 4:
+  raw `.git/HEAD` parse — zero git-binary dependency). On successful
+  git resolution, `.build_info` is auto-persisted for subsequent
+  starts. Pre-deploy helper: `backend/scripts/write_build_info.py`.
+  `.build_info` added to `.gitignore`. Tests:
+  `tests/test_build_info_workaround.py` (4 cases).
+- **Session C · Sub-step 2** — moved `_llm_state.py`, `_llm_routing.py`,
+  `_llm_probes.py` from `services/` into `services/llm/` package as
+  `_state.py`, `_routing.py`, `_probes.py`. Old paths retained as
+  backward-compat shims (~20 LOC each) so the ~10 legacy test files
+  that import `services._llm_*` still resolve.
+- **`services/llm/__init__.py`** — absolute → relative imports
+  (`from ._state import ...`, `from ._routing import ...`,
+  `from ._probes import ...`). All 3 lazy imports in `__getattr__` /
+  `_LLMModule.__setattr__` also switched to `from . import _probes`.
+- **Silent Sub-step 1 regression FIXED** —
+  `_GROQ_HOUSE_RULES_PATH` used `dirname(dirname(__file__))` which,
+  after `llm.py` → `llm/__init__.py`, resolved to
+  `services/prompts/…` (non-existent) instead of `backend/prompts/…`.
+  Added third `dirname` hop + regression guard test
+  `tests/test_llm_package_paths.py`.
+- **Test infra updates** — 5+ `importlib.reload(_routing)` sites now
+  reload the real `services.llm._routing` (not just the shim).
+  Stale `services/llm.py` path assertions across ~8 test files
+  updated to `services/llm/__init__.py`.
+- **Verification** — All LLM-domain tests green (192+ passing across
+  Phase 0a/1/2 + Session C guards + no-contamination + build-hash).
+  E2E endpoints: `/api/health` 200, `/api/aurem-dev/chat/agents/list`
+  401, `/api/aurem-dev/admin/architecture` 401. Zero circular imports.
+- **Deploy status**: LOCAL VERIFIED, awaiting founder go-ahead to deploy.
+
 ### 2026-08-01 — GitHub Connect Funnel Telemetry (revenue-item follow-up)
 - **New router**: `backend/routers/github_funnel.py` at
   `/api/aurem-dev/funnel/github/{event,stats}`
@@ -84,11 +117,14 @@ before being called "done".
   point once data reveals it).
 
 ### P1 (soon)
-- **Option B build_hash env var** — Founder to set `BUILD_HASH=$GIT_COMMIT`
-  in Emergent deploy config so frontend-only deploys also shift the
-  fingerprint. (Backend code already reads it.)
-- **`services/llm.py` Phase 3** — convert to a proper package
-  (`llm/__init__.py` + submodules) now that soak is stable.
+- **Option B `BUILD_HASH` env var (platform-level)** — Deployer_agent
+  should auto-inject commit SHA. **Workaround shipped**: `.build_info`
+  file + raw `.git/HEAD` parse ladder (see 2026-02-01 changelog).
+  Founder can also set it manually via Emergent dashboard if desired.
+- **Session D — LLM Split Phase 4** — Extract `openrouter_client.py`
+  (the 6 `_call_*` provider helpers) from `services/llm/__init__.py`.
+  Per `memory/LLM_SPLIT_MIGRATION_PLAN.md`.
+- **~~`services/llm.py` Phase 3~~** ✅ COMPLETE (Sub-step 1 + Sub-step 2).
 
 ### P2 (backlog)
 - Session 5 P2 findings: vanguard-config Mongo migration, MCP fallback logging

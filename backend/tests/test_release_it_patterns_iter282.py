@@ -211,7 +211,7 @@ def test_invariant_governor_retry_ceilings_exist():
     known-critical ones so a silent removal fails CI.
     """
     known = [
-        ("services/llm.py",         "_MAX_RETRIES"),
+        ("services/llm/__init__.py", "_MAX_RETRIES"),
         ("services/loop_engine.py", "MAX_SELF_HEALS"),
         ("services/loop_engine.py", "MAX_PHASE_RESTARTS"),
         ("services/loop_safety.py", "max_retries"),

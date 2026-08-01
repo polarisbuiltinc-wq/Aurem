@@ -23,8 +23,8 @@ ZERO MOCKS. Real live routing exercised.
 """
 from __future__ import annotations
 
-import services._llm_probes as _probes
-import services._llm_state   as _state
+import services.llm._probes as _probes
+import services.llm._state   as _state
 import services.llm          as llm
 
 
@@ -191,8 +191,10 @@ def test_council_a_primary_reflects_longcat_live_flip(monkeypatch):
     `LONGCAT_ENABLED=True`, otherwise the fallback always wins."""
     import importlib
     monkeypatch.setenv("LONGCAT_ENABLED", "true")
-    from services import _llm_routing as _routing
-    importlib.reload(_routing)
+    from services import _llm_routing as _routing_shim
+    from services.llm import _routing as _routing_real
+    importlib.reload(_routing_real)
+    importlib.reload(_routing_shim)
     importlib.reload(llm)
 
     original = _probes.LONGCAT_LIVE

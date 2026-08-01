@@ -28,10 +28,11 @@ import pytest
 
 
 BACKEND = Path(__file__).resolve().parents[1]
-LLM_PY = BACKEND / "services" / "llm.py"
+LLM_PY = BACKEND / "services" / "llm" / "__init__.py"
 # Session 5 · Phase 2 — `probe_longcat_availability()` moved to
-# services/_llm_probes.py, so its hygiene site moved with it.
-LLM_PROBES_PY = BACKEND / "services" / "_llm_probes.py"
+# services/_llm_probes.py. Session C · Sub-step 2 — that module moved
+# again to `services/llm/_probes.py` (the sibling is now a shim).
+LLM_PROBES_PY = BACKEND / "services" / "llm" / "_probes.py"
 
 
 # ═════════════════════════════════════════════════════════════════

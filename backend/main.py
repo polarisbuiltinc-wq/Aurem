@@ -1692,16 +1692,73 @@ async def _global_exc_handler(request: _FastReq, exc: Exception):
 _BUILD_HASH: str | None = None
 
 
+def _read_git_head_file(repo_root: str) -> str | None:
+    """Resolve the current commit SHA by raw-reading `.git/HEAD`.
+
+    Zero dependency on the `git` binary — pure text-file parsing. This
+    is the workaround for Emergent prod pods where the `.git/` folder
+    is copied in during deploy but the `git` binary is absent, so step
+    2 (`subprocess -> git rev-parse`) silently fails. See handoff note
+    'Option B / BUILD_HASH not set on Prod' (2026-02).
+
+    Returns 7-char short SHA, or None if `.git/` layout is unexpected.
+    """
+    try:
+        head_path = os.path.join(repo_root, ".git", "HEAD")
+        with open(head_path, "r", encoding="utf-8") as fh:
+            head = fh.read().strip()
+        if head.startswith("ref:"):
+            ref = head.split(":", 1)[1].strip()
+            ref_path = os.path.join(repo_root, ".git", ref)
+            if os.path.exists(ref_path):
+                with open(ref_path, "r", encoding="utf-8") as fh:
+                    sha = fh.read().strip()
+                return sha[:7] if sha else None
+            # Packed refs fallback — one line per ref.
+            packed = os.path.join(repo_root, ".git", "packed-refs")
+            if os.path.exists(packed):
+                with open(packed, "r", encoding="utf-8") as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if line.endswith(" " + ref):
+                            return line.split()[0][:7]
+            return None
+        # Detached HEAD — HEAD file itself contains the SHA.
+        return head[:7] if head else None
+    except Exception:
+        return None
+
+
+def _persist_build_info(sha: str) -> None:
+    """Best-effort write of the resolved SHA to `backend/.build_info`.
+
+    Enables the priority-2 fast-path on subsequent restarts and lets a
+    pre-deploy script bake a known SHA into the image even when the
+    runtime pod has neither git binary nor `.git/` folder.
+    """
+    try:
+        target = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".build_info")
+        with open(target, "w", encoding="utf-8") as fh:
+            fh.write(sha.strip() + "\n")
+    except Exception:
+        pass
+
+
 def _resolve_build_hash() -> str:
     """Compute once at import — short git SHA of the current deploy.
 
     Resolution order:
       1. Explicit env var (BUILD_HASH / GIT_COMMIT / VERCEL_GIT_COMMIT_SHA)
          — set by CI / Emergent / Vercel during deploy.
-      2. `git rev-parse --short HEAD` — works on dev pods.
-      3. Last-modified time of this file as a deploy fingerprint — so
-         Emergent containers (no git binary) still show SOMETHING the
-         founder can compare across deploys.
+      2. `backend/.build_info` — file-based artifact written by a
+         pre-deploy hook (or previous successful resolution). Works on
+         Emergent prod pods that lack both the `git` binary AND `.git/`.
+      3. `git rev-parse --short HEAD` — works on dev pods.
+      4. Raw read of `.git/HEAD` — works when `.git/` is copied into
+         the container but the `git` binary is missing (Emergent prod).
+      5. Last-modified time of this file as a deploy fingerprint — so
+         Emergent containers with none of the above still show
+         SOMETHING the founder can compare across deploys.
     """
     global _BUILD_HASH
     if _BUILD_HASH is not None:
@@ -1711,19 +1768,38 @@ def _resolve_build_hash() -> str:
     if env_h:
         _BUILD_HASH = env_h[:7]
         return _BUILD_HASH
+    # Priority 2 — `backend/.build_info` (build artifact).
+    try:
+        info_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".build_info")
+        if os.path.exists(info_path):
+            with open(info_path, "r", encoding="utf-8") as fh:
+                baked = fh.read().strip()
+            if baked:
+                _BUILD_HASH = baked[:7]
+                return _BUILD_HASH
+    except Exception:
+        pass
+    repo_root = os.path.dirname(os.path.abspath(__file__)) + "/.."
     try:
         import subprocess
         out = subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
             stderr=subprocess.DEVNULL,
-            cwd=os.path.dirname(os.path.abspath(__file__)) + "/..",
+            cwd=repo_root,
             timeout=2,
         )
         _BUILD_HASH = out.decode().strip()[:7]
         if _BUILD_HASH:
+            _persist_build_info(_BUILD_HASH)
             return _BUILD_HASH
     except Exception:
         pass
+    # Priority 4 — raw `.git/HEAD` read (no git binary needed).
+    raw = _read_git_head_file(repo_root)
+    if raw:
+        _BUILD_HASH = raw
+        _persist_build_info(_BUILD_HASH)
+        return _BUILD_HASH
     # Last resort — max mtime across all backend .py files. Format:
     # m<unix-mins>. Prev impl only looked at main.py's mtime, so any
     # deploy that touched routers/services/etc. but not main.py itself

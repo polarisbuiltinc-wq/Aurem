@@ -151,7 +151,10 @@ async def _call_deepseek_direct(
 # These rules nudge Groq toward the same shape/voice that ORA uses
 # on GLM-5.2 / Claude so the fallback feels seamless to the user.
 _GROQ_HOUSE_RULES_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    # Session C · Sub-step 1 — `__file__` is now
+    # `services/llm/__init__.py` (was `services/llm.py`), so we need
+    # three `dirname` hops to reach `/app/backend/` instead of two.
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "prompts",
     "groq_house_rules.md",
 )
@@ -190,7 +193,7 @@ def _groq_key() -> str:
 # callers (`from services.llm import get_last_provider`, tests
 # doing `llm._LONGCAT_LAST_PROBE["error"]`, etc.) keep working
 # byte-for-byte identically to pre-split behavior.
-from services._llm_state import (
+from ._state import (
     _new_provenance_slot,
     _last_provider_ctx,
     _set_last_provider,
@@ -297,7 +300,7 @@ def _retry_delay(attempt: int) -> float:
 # `council_b_primary_model()` are defined below (re-imported near
 # their previous location) so the ordering — `_call_groq` still
 # references them — stays correct.
-from services._llm_routing import (
+from ._routing import (
     MAX_TOKENS,
     TEMPERATURE,
     _DEEPSEEK_HOSTS,
@@ -340,7 +343,7 @@ _LONGCAT_MODEL  = os.getenv("LONGCAT_MODEL", "anthropic/claude-sonnet-4.5")
 # and lands on the canonical probe module state.
 #
 # Everything else is re-exported for byte-for-byte external compat.
-from services._llm_probes import (
+from ._probes import (
     probe_longcat_availability,
     periodic_longcat_reprobe,
     _deepseek_model,
@@ -353,7 +356,7 @@ from services._llm_probes import (
 
 
 # Session 5 · Phase 2 — `probe_longcat_availability`, `periodic_longcat_reprobe`,
-# and `_deepseek_model` are re-exported via the `from services._llm_probes import
+# and `_deepseek_model` are re-exported via the `from ._probes import
 # ...` block at the top of this file. No wrapper stubs here — a redefinition
 # with the same name would shadow the import and break identity checks
 # (`llm.probe_longcat_availability is _llm_probes.probe_longcat_availability`).
@@ -737,8 +740,8 @@ async def _call_longcat(system: str, user: str,
     and write via `set_longcat_live()` so the mutation is
     single-sourced.
     """
-    from services import _llm_probes as _probes
-    if not _probes.LONGCAT_LIVE:
+    from . import _probes as _p
+    if not _p.LONGCAT_LIVE:
         # Boot probe already detected LongCat is dead — straight to GLM.
         return await _call_glm(
             system=system, user=user,
@@ -1580,7 +1583,7 @@ async def call_emergent_watchdog(text_to_review: str) -> dict:
 #     assignment programmable.
 def __getattr__(name):                                          # noqa: PLE0302
     if name == "LONGCAT_LIVE":
-        from services import _llm_probes as _p
+        from . import _probes as _p
         return _p.LONGCAT_LIVE
     raise AttributeError(f"module 'services.llm' has no attribute {name!r}")
 
@@ -1596,7 +1599,7 @@ class _LLMModule(_types.ModuleType):
 
     def __setattr__(self, name, value):
         if name == "LONGCAT_LIVE":
-            from services import _llm_probes as _p
+            from . import _probes as _p
             _p.LONGCAT_LIVE = bool(value)
             return
         super().__setattr__(name, value)

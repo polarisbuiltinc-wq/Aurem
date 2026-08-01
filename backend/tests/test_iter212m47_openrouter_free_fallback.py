@@ -13,19 +13,27 @@ in CI.
 """
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import os
 import pathlib
+import sys
 
 
-LLM_PY = pathlib.Path(__file__).resolve().parent.parent / "services" / "llm.py"
+LLM_PY = pathlib.Path(__file__).resolve().parent.parent / "services" / "llm" / "__init__.py"
 
 
 def _load_llm_module():
-    spec = importlib.util.spec_from_file_location("llm_module_for_test", LLM_PY)
-    mod = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(mod)
+    """Session C · Sub-step 2 — `services/llm` is now a package. Just
+    return the normally-imported module. Callers here don't require a
+    fresh env-var re-evaluation (constants they read are either bound
+    at package init OR resolved lazily via `os.getenv(...)` inside
+    helper functions), so an unconditional `importlib.reload()` would
+    pollute other tests' module-identity assumptions."""
+    backend = str(pathlib.Path(__file__).resolve().parent.parent)
+    if backend not in sys.path:
+        sys.path.insert(0, backend)
+    import services.llm as mod
     return mod
 
 

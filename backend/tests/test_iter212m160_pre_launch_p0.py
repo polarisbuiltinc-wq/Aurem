@@ -34,8 +34,10 @@ def _reload_llm():
     below that monkeypatch env vars and expect a fresh flag pickup.
     """
     import services.llm as _llm
-    from services import _llm_routing as _routing
-    importlib.reload(_routing)
+    from services import _llm_routing as _routing_shim
+    from services.llm import _routing as _routing_real
+    importlib.reload(_routing_real)
+    importlib.reload(_routing_shim)
     importlib.reload(_llm)
     return _llm
 

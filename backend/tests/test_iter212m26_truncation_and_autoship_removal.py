@@ -21,7 +21,11 @@ from __future__ import annotations
 import os
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
-LLM_PY   = os.path.join(ROOT, "services", "llm.py")
+# Session C · Sub-step 2 — routing constants extracted from `llm/__init__.py`
+# into `llm/_routing.py` (Phase 1). Read both files so the assertion still
+# passes across the split.
+LLM_PY   = os.path.join(ROOT, "services", "llm", "__init__.py")
+LLM_ROUTING_PY = os.path.join(ROOT, "services", "llm", "_routing.py")
 ORCH_PY  = os.path.join(ROOT, "services", "orchestrator.py")
 CHAT_PY  = os.path.join(ROOT, "routers", "chat.py")
 
@@ -31,7 +35,7 @@ CHAT_PY  = os.path.join(ROOT, "routers", "chat.py")
 def test_chat_max_tokens_raised_above_old_1500_cap():
     """MAX_TOKENS['chat'] must default to ≥ 4000 so multi-paragraph
     replies don't truncate. Honors LLM_CHAT_MAX_TOKENS env override."""
-    src = open(LLM_PY).read()
+    src = open(LLM_PY).read() + open(LLM_ROUTING_PY).read()
     # Single-source default + env-override pattern.
     assert 'LLM_CHAT_MAX_TOKENS' in src
     assert '"chat":    int(os.getenv("LLM_CHAT_MAX_TOKENS", "4000"))' in src

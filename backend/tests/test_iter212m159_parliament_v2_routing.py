@@ -47,8 +47,10 @@ def _reload_llm(monkeypatch, **env):
     for k, v in env.items():
         monkeypatch.setenv(k, v)
     import services.llm as llm_mod
-    from services import _llm_routing as _routing
-    importlib.reload(_routing)
+    from services import _llm_routing as _routing_shim
+    from services.llm import _routing as _routing_real
+    importlib.reload(_routing_real)
+    importlib.reload(_routing_shim)
     importlib.reload(llm_mod)
     return llm_mod
 
@@ -160,8 +162,10 @@ def test_ceo_rescue_disabled_uses_single_call(monkeypatch):
     rescue overhead."""
     monkeypatch.setenv("CEO_RESCUE_ENABLED", "false")
     import services.llm as llm
-    from services import _llm_routing as _routing
-    importlib.reload(_routing)
+    from services import _llm_routing as _routing_shim
+    from services.llm import _routing as _routing_real
+    importlib.reload(_routing_real)
+    importlib.reload(_routing_shim)
     importlib.reload(llm)
     from core import parliament
     importlib.reload(parliament)
@@ -193,8 +197,10 @@ def test_ceo_rescue_fires_on_timeout(monkeypatch):
     monkeypatch.setenv("CEO_RESCUE_ENABLED", "true")
     monkeypatch.setenv("CEO_PRIMARY_TIMEOUT_S", "0.05")
     import services.llm as llm
-    from services import _llm_routing as _routing
-    importlib.reload(_routing)
+    from services import _llm_routing as _routing_shim
+    from services.llm import _routing as _routing_real
+    importlib.reload(_routing_real)
+    importlib.reload(_routing_shim)
     importlib.reload(llm)
     from core import parliament
     importlib.reload(parliament)
@@ -234,8 +240,10 @@ def test_ceo_rescue_fires_on_empty_primary(monkeypatch):
     (not just on timeout)."""
     monkeypatch.setenv("CEO_RESCUE_ENABLED", "true")
     import services.llm as llm
-    from services import _llm_routing as _routing
-    importlib.reload(_routing)
+    from services import _llm_routing as _routing_shim
+    from services.llm import _routing as _routing_real
+    importlib.reload(_routing_real)
+    importlib.reload(_routing_shim)
     importlib.reload(llm)
     from core import parliament
     importlib.reload(parliament)
@@ -268,8 +276,10 @@ def test_council_vote_trace_metadata_includes_primary_model(monkeypatch):
     monkeypatch.setenv("LONGCAT_ENABLED", "true")
     monkeypatch.setenv("COUNCIL_B_GLM_ENABLED", "true")
     import services.llm as llm
-    from services import _llm_routing as _routing
-    importlib.reload(_routing)
+    from services import _llm_routing as _routing_shim
+    from services.llm import _routing as _routing_real
+    importlib.reload(_routing_real)
+    importlib.reload(_routing_shim)
     importlib.reload(llm)
     from core import parliament
     importlib.reload(parliament)
@@ -300,7 +310,7 @@ def test_council_a_review_mode_pro_still_falls_back_to_claude(monkeypatch):
     """When the Council A primary (GLM or LongCat) returns empty, Pro
     mode must still fall through to Claude — Iter 212m-18 contract
     preserved by V2."""
-    src = pathlib.Path("/app/backend/services/llm.py").read_text()
+    src = pathlib.Path("/app/backend/services/llm/__init__.py").read_text()
     # The pro branch must still reference _call_claude as a fallback
     assert "primary_caller" in src       # the new variable lives in the swift/pro/maxx block
     assert "_call_claude(" in src        # Claude rescue path unchanged
@@ -309,13 +319,16 @@ def test_council_a_review_mode_pro_still_falls_back_to_claude(monkeypatch):
 
 def test_no_hardcoded_longcat_string_outside_llm_py():
     """The literal string 'meituan/longcat-2.0' must only appear inside
-    services/llm.py (single source of truth) and tests."""
+    the `services/llm/` package (single source of truth) and tests."""
     backend = pathlib.Path("/app/backend")
     offenders = []
     for path in backend.rglob("*.py"):
         if path.name.startswith("test_"):
             continue
-        if path.name == "llm.py" and path.parent.name == "services":
+        # Session C · Sub-step 2 — the package `services/llm/` is the
+        # single source of truth. Skip every file under it (init,
+        # _state, _routing, _probes, future submodules).
+        if "/services/llm/" in str(path):
             continue
         try:
             txt = path.read_text(errors="ignore")
@@ -327,9 +340,9 @@ def test_no_hardcoded_longcat_string_outside_llm_py():
 
 
 def test_analysis_mode_routing_block_in_llm_py():
-    """The analysis-mode routing block must exist in services/llm.py
+    """The analysis-mode routing block must exist in services/llm/__init__.py
     (Council B's V2 path)."""
-    src = pathlib.Path("/app/backend/services/llm.py").read_text()
+    src = pathlib.Path("/app/backend/services/llm/__init__.py").read_text()
     assert 'if mode == "analysis":' in src
     assert "COUNCIL_B_GLM_ENABLED" in src
     assert "Council B GLM-5.2 raised" in src
