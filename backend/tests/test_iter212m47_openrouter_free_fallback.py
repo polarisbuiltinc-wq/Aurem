@@ -92,12 +92,11 @@ def test_call_deepseek_walks_fallback_chain() -> None:
     """The `_call_deepseek` body must build a candidate list that
     prepends the primary model to the free chain — proving the
     fallback is actually wired and not just a dead helper."""
-    src = LLM_PY.read_text()
-    assert "candidates: list[tuple[str, bool]] = [(_deepseek_model(), True)]" in src
-    assert "for fm in _free_fallback_models():" in src
-    # Session D · D-2a — `call_openrouter_model` moved to
-    # services/llm/openrouter_client.py. Its candidate-chain
-    # construction now lives there, not in __init__.py.
+    # Session D · D-2d — `_call_deepseek` moved to openrouter_providers.py.
+    op_src = (LLM_PY.parent / "openrouter_providers.py").read_text()
+    assert "candidates: list[tuple[str, bool]] = [(_deepseek_model(), True)]" in op_src
+    assert "for fm in _free_fallback_models():" in op_src
+    # Session D · D-2a — `call_openrouter_model` in openrouter_client.py.
     or_src = (LLM_PY.parent / "openrouter_client.py").read_text()
     assert (
         "candidates = [model] + [m for m in _free_fallback_models() if m != model]"

@@ -35,32 +35,39 @@ LLM_PY = BACKEND / "services" / "llm" / "__init__.py"
 LLM_PROBES_PY = BACKEND / "services" / "llm" / "_probes.py"
 # Session D · D-2a — `call_openrouter_model` moved into its own module.
 OR_CLIENT_PY = BACKEND / "services" / "llm" / "openrouter_client.py"
+# Session D · D-2c/D-2d — providers file (Claude/GLM/LongCat + DeepSeek).
+OR_PROVIDERS_PY = BACKEND / "services" / "llm" / "openrouter_providers.py"
 
 
 # ═════════════════════════════════════════════════════════════════
 # 1) 3 hygiene sites now log at debug
 # ═════════════════════════════════════════════════════════════════
 def test_llm_py_has_three_silent_catch_debug_lines():
-    """Session 5 · Phase 2 + Session D · D-2a — the 3 hygiene sites
-    now live across THREE files. We verify the TOTAL sweep is still 3."""
+    """Session 5 · Phase 2 + Session D (D-2a/D-2d) — the 3 hygiene sites
+    now live across FOUR possible files. We verify the TOTAL sweep is
+    still 3 across the LLM package."""
     llm_src    = LLM_PY.read_text()
     or_src     = OR_CLIENT_PY.read_text()
+    op_src     = OR_PROVIDERS_PY.read_text()
     probes_src = LLM_PROBES_PY.read_text()
     llm_count    = llm_src.count('"[silent-catch] llm.py:')
     or_count     = or_src.count('"[silent-catch] llm.py:')
+    op_count     = op_src.count('"[silent-catch] llm.py:')
     probes_count = probes_src.count(
         '"[silent-catch] _llm_probes.probe_longcat_availability')
-    total = llm_count + or_count + probes_count
+    total = llm_count + or_count + op_count + probes_count
     assert total == 3, (
-        f"expected 3 [silent-catch] sites across llm.py + openrouter_client.py "
-        f"+ _llm_probes.py, got llm={llm_count} or={or_count} "
-        f"probes={probes_count} total={total}"
+        f"expected 3 [silent-catch] sites across the LLM package, got "
+        f"llm={llm_count} or={or_count} op={op_count} probes={probes_count} "
+        f"total={total}"
     )
-    # Precise post-D-2a shape lock: 1 in __init__.py (_call_deepseek),
-    # 1 in openrouter_client.py (call_openrouter_model), 1 in _probes.py.
-    assert llm_count == 1 and or_count == 1 and probes_count == 1, (
-        f"expected __init__.py=1 + openrouter_client.py=1 + _probes.py=1 "
-        f"after D-2a, got llm={llm_count} or={or_count} probes={probes_count}"
+    # Post-D-2d shape lock: 0 in __init__.py (_call_deepseek moved),
+    # 1 in openrouter_client.py (call_openrouter_model), 1 in
+    # openrouter_providers.py (_call_deepseek), 1 in _probes.py.
+    assert llm_count == 0 and or_count == 1 and op_count == 1 and probes_count == 1, (
+        f"expected __init__.py=0 + openrouter_client.py=1 + "
+        f"openrouter_providers.py=1 + _probes.py=1 after D-2d, "
+        f"got llm={llm_count} or={or_count} op={op_count} probes={probes_count}"
     )
 
 
@@ -68,18 +75,19 @@ def test_llm_py_hygiene_sites_are_the_expected_ones():
     """Locked identifiers of the 3 patched sites so future refactors
     trip when someone accidentally re-introduces a silent swallow.
 
-    Session D · D-2a — `call_openrouter_model` moved to
-    `services/llm/openrouter_client.py`. Its silent-catch site
-    relocated with it; scan that file for the marker.
+    Session D — sites now live across the LLM package:
+      • openrouter_providers.py holds `_call_deepseek` (D-2d)
+      • openrouter_client.py holds `call_openrouter_model` (D-2a)
+      • _probes.py holds `probe_longcat_availability`
     """
-    llm_src = LLM_PY.read_text()
+    op_src = OR_PROVIDERS_PY.read_text()
     or_src = OR_CLIENT_PY.read_text()
     probes_src = LLM_PROBES_PY.read_text()
-    # 1 site remaining in __init__.py (inside `_call_deepseek`).
-    assert '"[silent-catch] llm.py:738 in _call_deepseek' in llm_src
-    # 1 site migrated to openrouter_client.py (call_openrouter_model).
+    # 1 site in openrouter_providers.py (_call_deepseek).
+    assert '"[silent-catch] llm.py:738 in _call_deepseek' in op_src
+    # 1 site in openrouter_client.py (call_openrouter_model).
     assert '"[silent-catch] llm.py:1104 in call_openrouter_model' in or_src
-    # 1 site migrated to _llm_probes.py during Phase 2.
+    # 1 site in _probes.py (probe_longcat_availability).
     assert (
         '"[silent-catch] _llm_probes.probe_longcat_availability'
         in probes_src
@@ -92,10 +100,11 @@ def test_llm_py_hygiene_fixes_preserve_fail_open_behavior():
     on the SAME LINE / immediate next line as the debug call."""
     llm_src    = LLM_PY.read_text()
     or_src     = OR_CLIENT_PY.read_text()
+    op_src     = OR_PROVIDERS_PY.read_text()
     probes_src = LLM_PROBES_PY.read_text()
     checks = [
-        (llm_src,    "llm.py:738"),
-        (or_src,     "llm.py:1104"),       # D-2a — moved to openrouter_client.py
+        (op_src,     "llm.py:738"),       # D-2d — _call_deepseek moved to openrouter_providers.py
+        (or_src,     "llm.py:1104"),      # D-2a — moved to openrouter_client.py
         (probes_src, "_llm_probes.probe_longcat_availability"),
     ]
     for src, ln_marker in checks:

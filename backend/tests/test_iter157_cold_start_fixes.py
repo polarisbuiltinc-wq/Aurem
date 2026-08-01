@@ -66,9 +66,15 @@ def test_llm_http_timeout_capped_under_60s():
     import services.llm as llm
     importlib.reload(llm)
     # Read the source to verify the literal constant is in place.
-    src = open(llm.__file__).read()
+    # Session D · D-2d — LLM_HTTP_TIMEOUT_S is referenced inside
+    # `_call_deepseek` which moved to openrouter_providers.py, and
+    # inside `call_openrouter_model` in openrouter_client.py.
+    base = os.path.dirname(llm.__file__)
+    src = (open(os.path.join(base, "__init__.py")).read()
+           + open(os.path.join(base, "openrouter_client.py")).read()
+           + open(os.path.join(base, "openrouter_providers.py")).read())
     assert "LLM_HTTP_TIMEOUT_S" in src, (
-        "Expected LLM_HTTP_TIMEOUT_S env hook (iter 157) in services/llm.py"
+        "Expected LLM_HTTP_TIMEOUT_S env hook (iter 157) in the LLM package"
     )
     assert "35.0" in src or "35" in src, (
         "Expected default LLM HTTP timeout of 35s"

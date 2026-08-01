@@ -182,8 +182,11 @@ class TestMigratedCallers:
         assert get_breaker_state() == get_breaker("openrouter").state
 
     def test_llm_py_wired_to_central_breaker(self):
+        # Session D · D-2d — the OpenRouter chain (which owns the
+        # breaker integration) moved with `_call_deepseek` into
+        # `services/llm/openrouter_providers.py`.
         src = open(os.path.join(os.path.dirname(__file__), "..",
-                                "services", "llm", "__init__.py")).read()
+                                "services", "llm", "openrouter_providers.py")).read()
         assert "retry_guard" in src and "_or_br.record_success()" in src \
             and "_or_br.record_failure" in src
 

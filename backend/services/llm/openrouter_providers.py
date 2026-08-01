@@ -224,3 +224,330 @@ async def _call_longcat(system: str, user: str,
             logger.error("_call_longcat: GLM-5.2 fallback also failed: %r", e)
             return ""
     return content
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Session D · D-2d — DeepSeek (primary OpenRouter route + direct fallback)
+# ═══════════════════════════════════════════════════════════════════
+# Founder direction (Feb 2026): DeepSeek's PRIMARY path is also OpenRouter,
+# so `_call_deepseek` belongs in this file alongside Claude/GLM/LongCat.
+# `_call_deepseek_direct` is a fallback-only bypass — co-located because
+# `_call_deepseek`'s ladder invokes it as an inner hop.
+
+import asyncio
+import json
+import httpx
+
+# ─── DeepSeek direct API config ──────────────────────────────────────
+# Iter 212m-51 — DeepSeek direct API as second-hop fallback.
+# Independent vendor (api.deepseek.com, separate billing account from
+# OpenRouter) — covers the case where the user's OpenRouter credits
+# are exhausted but they still want PAID quality before dropping to
+# the free tier.
+_DEEPSEEK_DIRECT_URL   = "https://api.deepseek.com/chat/completions"
+_DEEPSEEK_DIRECT_MODEL = os.getenv("DEEPSEEK_DIRECT_MODEL", "deepseek-v4-flash")
+
+
+def _deepseek_direct_key() -> str:
+    return os.environ.get("DEEPSEEK_API_KEY", "")
+
+
+async def _call_deepseek_direct(
+    messages: list,
+    system: str = "",
+    max_tokens: int = 1500,
+    temperature: float = 0.7,
+) -> str:
+    """Call DeepSeek's own API directly (NOT via OpenRouter).
+
+    Used as the second hop in the fallback chain. Raises on any error
+    so the caller (`_call_deepseek` / `call_openrouter_model`) can
+    decide whether to walk forward to the next hop. Returns "" only
+    if the API responds 200 with empty content (treat as soft fail
+    so we walk forward).
+    """
+    key = _deepseek_direct_key()
+    if not key:
+        raise RuntimeError("DEEPSEEK_API_KEY not set — direct fallback unavailable")
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+    msgs = ([{"role": "system", "content": system}] + messages) if system else messages
+    payload = {
+        "model": _DEEPSEEK_DIRECT_MODEL,
+        "messages": msgs,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    # Playbook-prescribed timeout (30s standard; 120s only for reasoning).
+    timeout_s = float(os.getenv("DEEPSEEK_DIRECT_TIMEOUT_S", "30.0"))
+    async with httpx.AsyncClient(timeout=timeout_s) as c:
+        r = await c.post(_DEEPSEEK_DIRECT_URL, headers=headers, json=payload)
+        r.raise_for_status()
+        data = r.json()
+    return (data["choices"][0]["message"].get("content") or "").strip()
+
+
+async def _call_deepseek(messages: list, system: str = "",
+                         max_tokens: int = 1500,
+                         temperature: float = 0.7) -> str:
+    # Session D · D-2d — lazy imports for sibling-module symbols.
+    # Module-level imports here would create a circular chain because
+    # the parent `services/llm/__init__.py` imports THIS module at
+    # load time (see the D-2d re-export block there).
+    from services.llm import _openrouter_key
+    from ._state import _set_last_provider
+    from ._probes import _deepseek_model
+    from ._routing import _DEEPSEEK_HOSTS
+    from .openrouter_client import (
+        OPENROUTER_URL, _MAX_RETRIES,
+        _free_fallback_models, _retryable, _retry_delay, _is_fallback_worthy,
+    )
+    from .groq_client import _call_groq, _groq_key, _GROQ_MODEL
+
+    api_key = _openrouter_key()
+    if not api_key:
+        raise RuntimeError("OPENROUTER_API_KEY not set")
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "HTTP-Referer": os.getenv("APP_URL", "https://auremcto.com"),
+        "X-Title": "AUREM Dev",
+        "X-No-Cache": "true",
+    }
+    msgs = ([{"role": "system", "content": system}] + messages) if system else messages
+
+    def _build_payload(model: str, with_provider_block: bool) -> dict:
+        p: dict = {
+            "model": model,
+            "messages": msgs,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if with_provider_block:
+            # The host-routing block is OpenRouter-paid-tier specific; the
+            # `:free` models live on different infra and 400-out on unknown
+            # provider hosts. Only attach it for the primary call.
+            p["provider"] = {
+                "data_collection": "deny",
+                "order": _DEEPSEEK_HOSTS,
+                "allow_fallbacks": False,
+            }
+        return p
+
+    _LLM_TIMEOUT_S = float(os.getenv("LLM_HTTP_TIMEOUT_S", "25.0"))
+
+    # Iter 212m-47 — Try primary DeepSeek model first; if that fails on
+    # 402/429/5xx/network, walk the free-model chain. Returns content
+    # from whichever model succeeded.
+    candidates: list[tuple[str, bool]] = [(_deepseek_model(), True)]
+    for fm in _free_fallback_models():
+        candidates.append((fm, False))
+
+    # Iter 360 · Guard 17 — central breaker for the OpenRouter chain.
+    # When OPEN we skip the whole candidates walk (no hammering) and
+    # drop straight into the vendor-independent fallbacks below.
+    from services.retry_guard import get_breaker as _rg_breaker
+    _or_br = _rg_breaker("openrouter")
+    _or_attempted = _or_br.allow()
+    if not _or_attempted:
+        logger.warning(
+            "[G17] openrouter breaker OPEN (retry in ~%.0fs) — skipping "
+            "OpenRouter chain, going straight to fallbacks",
+            _or_br.retry_after_s(),
+        )
+        candidates = []
+
+    last_exc: Exception | None = None
+    data: dict | None = None
+    served_by: str | None = None
+    for ci, (cand_model, with_provider) in enumerate(candidates):
+        payload = _build_payload(cand_model, with_provider)
+        try:
+            async with httpx.AsyncClient(timeout=_LLM_TIMEOUT_S) as c:
+                # Per-model: 1 retry on transient errors (unchanged
+                # legacy behaviour for the primary).
+                for attempt in range(1, _MAX_RETRIES + 2):
+                    try:
+                        r = await c.post(OPENROUTER_URL, headers=headers, json=payload)
+                        r.raise_for_status()
+                        data = r.json()
+                        served_by = cand_model
+                        # Iter 309 · Pre-Phase-1 — loop-token accounting.
+                        # If this call is happening inside a loop (see
+                        # loop_engine._with_budget's contextvars scope),
+                        # tag the token usage against loop_id + phase.
+                        # No-op for regular chat/scaffold callers.
+                        try:
+                            from services.loop_token_ledger import log_llm_usage
+                            await log_llm_usage(
+                                cand_model,
+                                (data or {}).get("usage") or {},
+                                temperature=temperature,
+                            )
+                        except Exception as _e:
+                            # Ledger failure is non-fatal for chat/scaffold
+                            # (fail-open), but should surface at debug so
+                            # ops can diagnose a broken loop-token track.
+                            logger.debug(
+                                "[silent-catch] llm.py:738 in _call_deepseek "
+                                "— loop_token_ledger.log_llm_usage failed: %r",
+                                _e,
+                            )
+                        break
+                    except Exception as e:
+                        retryable, status = _retryable(e)
+                        if not retryable or attempt > _MAX_RETRIES:
+                            raise
+                        delay = _retry_delay(attempt)
+                        logger.warning(
+                            "OpenRouter transient failure on %s (status=%s, attempt %d/%d) — "
+                            "retrying in %.2fs: %r",
+                            cand_model, status, attempt, _MAX_RETRIES + 1, delay, e,
+                        )
+                        await asyncio.sleep(delay)
+            # Success — stop walking the fallback chain.
+            if ci > 0:
+                logger.warning(
+                    "DeepSeek primary %r failed, served by free fallback %r",
+                    _deepseek_model(), cand_model,
+                )
+            break
+        except Exception as e:
+            last_exc = e
+            if not _is_fallback_worthy(e):
+                logger.error(
+                    "OpenRouter call (%s) failed non-retryably: %r", cand_model, e,
+                )
+                raise
+            logger.warning(
+                "OpenRouter %s failed (fallback-worthy, %d/%d): %r — walking chain",
+                cand_model, ci + 1, len(candidates), e,
+            )
+            # Iter 212m-51 — after the PRIMARY OpenRouter model fails
+            # (and before we walk the OpenRouter free chain), try the
+            # DeepSeek direct API. Independent vendor / billing →
+            # bypasses OpenRouter credit exhaustion entirely while
+            # still delivering paid-tier quality. Only attempted once
+            # per call; if it ALSO fails we silently continue down
+            # the free chain.
+            if ci == 0 and _deepseek_direct_key():
+                try:
+                    logger.warning(
+                        "OpenRouter primary failed, trying DeepSeek direct (model=%s)…",
+                        _DEEPSEEK_DIRECT_MODEL,
+                    )
+                    ds_content = await _call_deepseek_direct(
+                        messages=messages,
+                        system=system,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                    )
+                    if ds_content:
+                        logger.warning(
+                            "DeepSeek call served by DeepSeek-direct model=%s",
+                            _DEEPSEEK_DIRECT_MODEL,
+                        )
+                        _set_last_provider("deepseek_direct", _DEEPSEEK_DIRECT_MODEL)
+                        return ds_content
+                    logger.warning(
+                        "DeepSeek direct returned empty content — walking free chain"
+                    )
+                except Exception as dse:
+                    if isinstance(dse, httpx.HTTPStatusError) and \
+                       dse.response.status_code in (400, 422):
+                        # GENUINE prompt-level error from DeepSeek
+                        # (request shape / parameters bad). Burning
+                        # the free chain on the same broken prompt
+                        # is pointless — abort.
+                        logger.warning(
+                            "DeepSeek direct rejected request (%d) — aborting chain",
+                            dse.response.status_code,
+                        )
+                        raise
+                    # 401 = bad key (config drift), 402 = balance,
+                    # 429 = throttle, 5xx = vendor issue. None of
+                    # these are the user's fault — keep walking the
+                    # OR free chain so they still get a response.
+                    logger.warning(
+                        "DeepSeek direct failed (%r) — walking OpenRouter free chain",
+                        dse,
+                    )
+            continue
+
+    if data is None:
+        # Iter 360 · Guard 17 — whole OpenRouter chain exhausted.
+        if _or_attempted:
+            _or_br.record_failure(repr(last_exc))
+        # All OpenRouter candidates exhausted — try the Groq emergency
+        # net as the absolute final link. This is the vendor-
+        # independent safety hop (different infra, different account).
+        if _groq_key():
+            try:
+                logger.warning(
+                    "OpenRouter chain exhausted (%d candidates). "
+                    "Trying Groq emergency fallback (model=%s)…",
+                    len(candidates), _GROQ_MODEL,
+                )
+                content = await _call_groq(
+                    messages=msgs,
+                    system="",  # already prepended above
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
+                if content:
+                    logger.warning(
+                        "DeepSeek call served by Groq fallback model=%s",
+                        _GROQ_MODEL,
+                    )
+                    # Stash provenance on a module-global so the SSE
+                    # pipeline can surface a "⚡ free mode" pill to
+                    # the frontend on this turn.
+                    _set_last_provider("groq", _GROQ_MODEL)
+                    return content
+            except Exception as ge:
+                logger.error(
+                    "Groq emergency fallback ALSO failed: %r — chain is "
+                    "now fully exhausted",
+                    ge,
+                )
+        logger.error(
+            "OpenRouter exhausted all %d candidates. Last error: %r",
+            len(candidates), last_exc,
+        )
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("OpenRouter call failed: no candidate models returned")
+    # Stash the served-by model in a logger context line; the data dict
+    # itself is returned through legacy code paths so we don't change
+    # the call contract — provenance is in the logs.
+    if _or_attempted:
+        _or_br.record_success()
+    if served_by:
+        logger.info("DeepSeek call served by model=%s", served_by)
+        _set_last_provider("openrouter", served_by)
+    try:
+        msg = data["choices"][0]["message"]
+        # If DeepSeek returned native tool_calls, serialize them back to
+        # markdown fence so extract_tool_calls() in tools_bridge.py can
+        # parse them with its existing Shape-1/2/3 logic.
+        tool_calls = msg.get("tool_calls") or []
+        if tool_calls and not msg.get("content"):
+            parts = []
+            for tc in tool_calls:
+                fn = tc.get("function", {})
+                name = fn.get("name", "")
+                try:
+                    args = json.loads(fn.get("arguments", "{}"))
+                except json.JSONDecodeError:
+                    args = {}
+                parts.append(
+                    "```tool_call\n"
+                    + json.dumps({"tool": name, "args": args})
+                    + "\n```"
+                )
+            return "\n".join(parts)
+        return msg.get("content") or ""
+    except (KeyError, IndexError, TypeError) as e:
+        raise RuntimeError(f"OpenRouter malformed response: {e}: {data!r}")

@@ -51,7 +51,9 @@ async def test_call_claude_routes_via_openrouter(monkeypatch):
         captured["user"] = user
         return "claude-says-hi"
 
-    with patch.object(llm, "call_openrouter_model", side_effect=fake_or):
+    with patch.object(llm, "call_openrouter_model", side_effect=fake_or), \
+         patch("services.llm.openrouter_client.call_openrouter_model", side_effect=fake_or), \
+         patch("services.llm.openrouter_providers.call_openrouter_model", create=True, side_effect=fake_or):
         out = await llm._call_claude("sys", "usr", max_tokens=500, temperature=0.1)
 
     assert out == "claude-says-hi"
