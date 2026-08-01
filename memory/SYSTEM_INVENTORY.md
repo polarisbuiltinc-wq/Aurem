@@ -705,3 +705,8 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `services/_llm_routing.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-31T18:42:10.924626Z] <!-- inv:service:services/_llm_routing.py -->
 - `services/_llm_probes.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-07-31T19:43:22.002604Z] <!-- inv:service:services/_llm_probes.py -->
 | `routers/github_funnel.py` | `/funnel/github` | 2 | auto-detected new router (verify) (Iter 0, 2026-07-31T23:04:33.691480Z) | <!-- inv:router:routers/github_funnel.py -->
+
+### Iter 0 · 2026-08-01
+
+- `DEEPSEEK_API_KEY` — auto-detected in backend/services/llm/__init__.py (verify) (default: unset) [Iter 0, 2026-08-01T02:24:13.620138Z] <!-- inv:envvar:DEEPSEEK_API_KEY -->
+- `GROQ_API_KEY` — auto-detected in backend/services/llm/__init__.py (verify) (default: unset) [Iter 0, 2026-08-01T02:24:13.620166Z] <!-- inv:envvar:GROQ_API_KEY -->

@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-LLM_FILE = pathlib.Path(__file__).parent.parent / "services" / "llm.py"
+LLM_FILE = pathlib.Path(__file__).parent.parent / "services" / "llm" / "__init__.py"
 SRC = LLM_FILE.read_text()
 
 
