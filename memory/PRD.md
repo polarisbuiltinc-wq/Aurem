@@ -460,13 +460,14 @@ Prevents future copy-paste drift when Council A swaps primary models.
   standardised on `getToken()` (was reading a never-set legacy
   `aurem_admin_token` key first).
 - **Batch 4h remediation** (contract-drift quarantine):
-  - `legacy_quarantine.txt`: 72 → 46 (**−36%**)
-  - 13 un-quarantined (already passing); 1 contract-drift fixed
-    (test_iter54 cockpit-first update); 12 moved to
-    `legacy_removed_features.txt` with cited gone-surfaces.
-  - 46 remaining need per-test RCA (KeyErrors, auth drift,
-    integration probes) — not moved without individual proof.
-  - Zero regressions on the 14 newly-active tests.
+  - Round 1: 72 → 46 (13 un-quarantined, 1 fixed, 12 moved).
+  - Round 2 (this session): 46 → **22** (**−69% total**). 24 more
+    dead-surface moves after per-marker grep verification. Every
+    remaining quarantine entry is now a real functional regression
+    (KeyErrors, auth drift, LLM fallback, tier tokens), not stale
+    contract-drift. Ready for per-test RCA in a future dedicated
+    session.
+  - Zero regressions on the 14 previously-un-quarantined tests.
 
 ---
 

@@ -5546,3 +5546,50 @@ scan (see `/app/memory/QA_HARDENING_REPORT.md` for full detail):
   - Per-row mark-read touches only the target row (real Mongo).
   - Legacy composite-id fallback still works (backwards-compat).
   - GET /notifications synthesises `notif_id` for legacy rows.
+
+## 2026-02 · Batch 4h Round 2 — 24 more dead-surface moves
+
+Second remediation pass on `tests/legacy_quarantine.txt`.  Ran the 46
+remaining nodeids from Round 1's carry-over with a strict 20s per-test
+`--timeout` (bypasses the earlier-run hang).  Result: **45 failed + 1
+error** — every current entry is genuinely failing, so no more auto
+un-quarantine deltas.
+
+### Categorised via per-file grep against the asserted marker:
+- **24 moves → `legacy_removed_features.txt`** (zero runtime occurrences of
+  the asserted string/import/testid).  Each row carries a one-line
+  reason citing the exact gone-surface (see file for detail).  Bulk
+  themes: OAuth-cancel redirect target moved, Vanguard endpoint
+  response-shape refactor, orchestrator system-prompt copy rewrite,
+  admin.py architecture-endpoint literal probe list dropped, VS Code
+  extension endpoint changed, `pyotp` removed from
+  `backend/requirements.txt`, WarmStart timeout wrapper refactored,
+  Parliament scope expanded by design.
+- **22 kept in `legacy_quarantine.txt`** — real functional bugs (not
+  drift): fix-pipeline `KeyError: 'tokens_cost'` / `'job_id'` (5
+  tests), `test_iter212m177_prod_reliability` loop_stream signature
+  drift, admin-sweep auth-gate assertion, LLM provider fallback (2),
+  subscription pro tier assertion (300 tokens vs unlimited),
+  `test_iter212m121_fix_pipeline` 403 vs 402 code drift,
+  `test_aurem_rollback` (2), `test_integration_health_cron`,
+  `test_iter101_annual_referral_overage`, `test_iter124_repo_first_and_retry` (2),
+  `test_iter162_all_modes_audit`, `test_iter212m127_log_noise_fixes` (2),
+  `test_iter22_live_founder_bypass` (needs live GitHub PAT),
+  `test_iter212m116_repo_map_and_file_selector` IndexError.
+
+### Regression proof
+- All 24 moves still auto-skip in the default CI lane via
+  conftest.py's marker injection (`24 deselected` on collect-only).
+- 22 remaining still fail as expected (baseline preserved).
+- Zero un-quarantined tests broke.
+
+### Totals across Batch 4h (Round 1 + Round 2)
+| List | Before | After R1 | After R2 |
+|---|---|---|---|
+| `legacy_quarantine.txt` | 72 | 46 | **22** (−69%) |
+| `legacy_removed_features.txt` | 59 | 71 | **100** |
+| Fast-lane un-quarantined | 0 | 14 | 14 |
+
+Every remaining quarantine entry now represents a genuine functional
+regression worth per-test root-cause analysis — the batch is no
+longer polluted by stale contract-drift.

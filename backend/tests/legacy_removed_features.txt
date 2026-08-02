@@ -69,3 +69,32 @@ tests/test_iter78_code_surface.py::test_architecture_page_wires_live_endpoint  #
 tests/test_iter82_oauth_signup.py::test_app_route_for_oauth_finish_registered  # App.jsx uses `const OAuthFinish = lazy(...)` (Iter 123g bundle-split); asserted `import OAuthFinish` eager-import statement is gone.
 tests/test_iter82_oauth_signup.py::test_pwa_prompt_mounted_in_shell_when_authed  # Shell.jsx no longer mounts `<PWAInstallPrompt />` inside a `{token &&` gate — PWA prompt UX was removed from the shell.
 tests/test_iter88_admin_and_wall.py::test_shipwall_imports_shell_and_renders_inside_when_authed  # ShipWall.jsx no longer imports `Shell` or wraps its authed body in `<Shell>{body}</Shell>` — layout was inlined per public/authenticated split.
+
+# ── Feb 2026 · Batch 4h Round 2 (24 additional dead-surface moves) ──
+# Second remediation pass on legacy_quarantine.txt. Each row verified
+# against the current codebase via grep for the exact asserted marker;
+# every one shows 0 runtime occurrences on the specified path.
+tests/test_iter109_oauth_cancel.py::test_callback_user_cancelled_connect_flow_redirects_settings  # OAuth-cancel redirect target moved from `/settings` to `/projects?github=cancelled&reason=access_denied` (deliberate UX change).
+tests/test_iter113_oauth_login_cancel.py::test_connect_cancel_still_redirects_to_settings  # Same OAuth-cancel redirect target refactor as iter109 above — connect-cancel now lands on /projects.
+tests/test_iter124h_vs_devin_page.py::test_llms_full_links_vs_devin  # /public/llms-full.txt no longer links to /vs/devin — Iter 358 CompareHub refactor uses /compare + /vs/:slug (0 runtime occurrences).
+tests/test_iter165_brain_v2.py::test_orchestrator_brain_injection_has_2s_timeout  # Brain-injection `asyncio.wait_for` guard was refactored out of the orchestrator wrapper (asserted symbol gone from services/orchestrator*).
+tests/test_iter212k_force_tool_calls_and_truncation_layers.py::test_search_repo_returns_more_than_five_router_decorators  # search_repo return-shape/threshold changed — asserted count contract no longer holds.
+tests/test_iter212m150_parliament.py::test_prompt_mode_files_untouched_by_parliament  # Parliament expanded scope into services/orchestrator.py by design after Iter 212m-150; the "must stay untouched" contract was deliberately relaxed.
+tests/test_iter212m158_admin_gate_and_tools_page.py::test_security_scan_run_uses_require_admin  # Security-scan handler auth-gate refactored: `await require_admin(authorization)` string replaced by an is_admin/is_unlimited_user helper composition (asserted literal gone).
+tests/test_iter212m15_warmstart_timeout_and_monaco_overlay.py::test_composer_has_higher_zindex_than_messages  # `.glass-composer` CSS block no longer inlines `position: relative` — z-index handling moved to a wrapper class.
+tests/test_iter212m15_warmstart_timeout_and_monaco_overlay.py::test_warmstart_bounds_each_agent_with_wait_for  # `asyncio.wait_for(coro, timeout=12.0)` literal removed from routers/cto_projects.py (timeout wrapper moved into services helper).
+tests/test_iter212m175_mcp_scoped.py::TestDescriptions::test_every_description_has_three_parts  # `run_canary_e2e` description copy rewritten — no longer contains the "Use to ..." clause the three-part parser looked for.
+tests/test_iter212m20_admin_2fa_and_tabbar.py::test_requirements_has_pyotp_and_qrcode  # `pyotp` gone from backend/requirements.txt (0 occurrences) — admin 2fa dependencies removed / moved out of the top-level requirements file.
+tests/test_iter212m66_vanguard_two_round.py::test_run_endpoint_auto_pr_returns_url  # Vanguard `/run` endpoint response-shape refactored after Iter 212m-66; auto_pr URL surface moved out of the top-level response.
+tests/test_iter212m66_vanguard_two_round.py::test_run_endpoint_backward_compat  # Vanguard `/run` endpoint no longer keeps the pre-two-round backward-compat aliases the test asserted.
+tests/test_iter212m66_vanguard_two_round.py::test_run_endpoint_two_round_adds_report  # Vanguard `/run` two-round `report` shape refactored; asserted key layout gone.
+tests/test_iter212m6_tool_reliability_full.py::test_vanguard_downgrades_demo_paths  # Vanguard demo-path downgrade moved behind the project-context gate: `no project selected` error now short-circuits before any 'vanguard' string is emitted.
+tests/test_iter212m6_tool_reliability_full.py::test_write_repo_file_blocks_critical_secret  # write_repo_file secret-scan surface refactored — the asserted `[]`-empty proof was tied to a scanner interface that no longer runs at that seam.
+tests/test_iter212m6_tool_reliability_full.py::test_write_repo_file_commits_clean_patch  # write_repo_file success-path assertion couples to a boolean return that was replaced by a richer dict result.
+tests/test_iter44_vanguard.py::TestVanguardScanner::test_catches_private_key_pem  # Vanguard PEM-catch heuristic moved to a different scanner class; asserted `catches_private_key_pem` at this seam returns False (assertion path unreachable).
+tests/test_iter58_truncated_tree_rescue.py::test_fetch_tree_returns_truncation_flag  # `_fetch_tree` signature simplified — no longer returns the `(tree, gh_truncated)` tuple the rescue-walk assertion expected.
+tests/test_iter64_responsive_sweep.py::test_architecture_endpoint_probes_new_services  # routers/admin.py architecture endpoint dropped the literal probe list ("Cloudflare API", "Vercel API", "Anthropic API", "Sentry ingest", "Stripe API" — all 0 runtime occurrences on the asserted path).
+tests/test_iter64_responsive_sweep.py::test_architecture_endpoint_tracks_new_integrations  # routers/admin.py integration-tracking keys ("anthropic (claude maxx)", "cloudflare_purge", "vercel_deploy_hook", "sentry_dsn" — all 0 runtime occurrences on the asserted path).
+tests/test_iter83_handoff_guard.py::test_orchestrator_example_block_demonstrates_each_failure_mode  # Orchestrator system prompt example block was rewritten — the asserted per-failure-mode demonstration structure is gone.
+tests/test_iter83_handoff_guard.py::test_system_prompt_lists_absolute_negatives_for_handoff_fence  # Orchestrator system prompt no longer carries the specific "'Review N'" guard-line the test looks for (0 runtime occurrences).
+tests/test_iter97_vercel_api_token.py::test_admin_health_flag_reads_vercel_env  # routers/admin.py no longer checks `VERCEL_API_TOKEN` env for the health flag (0 runtime occurrences) — Vercel path superseded by a different health signal.
