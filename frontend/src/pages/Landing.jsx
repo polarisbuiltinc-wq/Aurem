@@ -1326,7 +1326,7 @@ export default function Landing() {
         <section className="section" id="pricing">
           <div className="section-label">Pricing</div>
           <h2 className="section-title">Flat pricing. No surprises.</h2>
-          <p className="section-sub">No token billing. Same price whether you ship 5 or 500 tasks. Annual plans save 20%.</p>
+          <p className="section-sub">One flat monthly price for your plan's task allotment. No token meters, no per-request billing. Annual plans save 20%.</p>
           <PricingCards />
         </section>
 

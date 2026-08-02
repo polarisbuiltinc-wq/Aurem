@@ -40,7 +40,7 @@ export default function Pricing() {
             Flat pricing. No token meters.
           </h1>
           <p style={{ color: "var(--text-dim)", marginTop: 8 }}>
-            Ship 5 tasks or 500 — same price.
+            One flat monthly price. No token meters — pay for your plan's task allotment, not per-request.
           </p>
         </div>
         <PricingCards currentTier={currentTier} />
