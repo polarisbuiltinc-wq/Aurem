@@ -440,14 +440,37 @@ async def test_p1_7_stream_replays_mongo_last_event_without_local_engine(monkeyp
     monkeypatch.setattr(loop_router.eng, "lookup", lambda _lid: None)
     monkeypatch.setattr(asyncio, "sleep", _async_none)
 
-    resp = await loop_router.loop_stream("loop_x", authorization="Bearer t")
+    # Iter 309 · Batch-2 Item 6 added a required `request: Request`
+    # positional to loop_stream so it can read `last_event_id` from the
+    # query string on SSE reconnect. FastAPI's dependency-injection
+    # supplies this on real HTTP calls; unit-invoking the handler
+    # bypasses DI, so we build the minimum stub the body reads
+    # (`request.query_params.get("last_event_id")`).
+    class _StubRequest:
+        query_params = {}
+    resp = await loop_router.loop_stream(
+        "loop_x", request=_StubRequest(),
+        authorization="Bearer t", last_event_id=None,
+    )
     frames = []
     async for chunk in resp.body_iterator:
         frames.append(chunk)
         if len(frames) > 20:
             break
-    data_frames = [json.loads(f[5:]) for f in frames
-                   if isinstance(f, str) and f.startswith("data:")]
+    # Iter 309 · Batch-2 Item 6 introduced SSE `id: <loop_id>:<seq>` lines
+    # ahead of every `data:` line (for Last-Event-ID replay). Extract the
+    # data payload regardless of whether the frame is a bare
+    # "data: …\n\n" or the newer "id: …\ndata: …\n\n" shape.
+    data_frames = []
+    for f in frames:
+        if not isinstance(f, str):
+            continue
+        for line in f.split("\n"):
+            if line.startswith("data:"):
+                try:
+                    data_frames.append(json.loads(line[5:].strip()))
+                except (ValueError, TypeError):
+                    pass
     kinds = [(d.get("state"), (d.get("data") or {}).get("kind"))
              for d in data_frames]
     assert ("paused_for_user", "awaiting_ship") in kinds, kinds

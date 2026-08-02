@@ -98,3 +98,21 @@ tests/test_iter64_responsive_sweep.py::test_architecture_endpoint_tracks_new_int
 tests/test_iter83_handoff_guard.py::test_orchestrator_example_block_demonstrates_each_failure_mode  # Orchestrator system prompt example block was rewritten — the asserted per-failure-mode demonstration structure is gone.
 tests/test_iter83_handoff_guard.py::test_system_prompt_lists_absolute_negatives_for_handoff_fence  # Orchestrator system prompt no longer carries the specific "'Review N'" guard-line the test looks for (0 runtime occurrences).
 tests/test_iter97_vercel_api_token.py::test_admin_health_flag_reads_vercel_env  # routers/admin.py no longer checks `VERCEL_API_TOKEN` env for the health flag (0 runtime occurrences) — Vercel path superseded by a different health signal.
+
+# ── Feb 2026 · Batch 4h Round 3 — fix-pipeline family (all 5) ────────
+# EXPLICIT outdated-contract move.  Iter 212m-190 replaced the fix-pipeline
+# billing model from per-token metering to a per-task quota (1 fix = 1 task).
+# The endpoint response no longer carries `tokens_cost`, `usd_cost`,
+# `balance`, or an `insufficient_tokens` error shape — those were replaced
+# by `tasks_needed`, `tasks_remaining`, `monthly_task_limit`, and
+# `insufficient_tasks`.  All 5 tests assert the deleted fields.  Additionally,
+# `test_summary_owner_check` has a fixture-collision bug (two fixtures both
+# call `cto_db.set_db(...)` on the same global, second one wins) — even a
+# contract-refresh wouldn't fix that without a fixture rewrite.  Fresh test
+# coverage against the task-quota model should land in a new iter file, not
+# a batch-4h remediation.
+tests/test_iter212m121_fix_pipeline.py::test_preview_paying_user_returns_tokens_and_usd  # Asserts `body["tokens_cost"]` (KeyError) — 212m-190 removed the field.
+tests/test_iter212m121_fix_pipeline.py::test_preview_founder_shows_zero_cost  # Same — asserts `tokens_cost` == 0.
+tests/test_iter212m121_fix_pipeline.py::test_preview_insufficient_shortfall  # Asserts `body["shortfall"] == 10 - 3` — the numeric depends on removed `tokens_cost`; new quota-based shortfall arithmetic is task-count not token-count.
+tests/test_iter212m121_fix_pipeline.py::test_bulk_paying_user_insufficient_tokens  # Asserts 402 with `detail = {"error": "insufficient_tokens", "needed": 10, "balance": 4}` — new response uses `insufficient_tasks` and `tasks_needed / tasks_remaining` semantics.
+tests/test_iter212m121_fix_pipeline.py::test_summary_owner_check  # Sequential use of `client_founder` + `client_paying` fixtures both call `cto_db.set_db(...)` on the same global; the second one clobbers the first, causing the founder's /bulk call to look up the founder user in the paying user's fake DB → `KeyError: 'job_id'`.  Fixture-collision bug on top of the tokens-model drift.

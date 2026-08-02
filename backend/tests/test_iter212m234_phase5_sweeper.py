@@ -330,10 +330,19 @@ def test_cron_wired_into_main():
 
 
 def test_admin_endpoints_require_founder_or_admin():
-    """Static — every admin route must guard on founder/admin."""
+    """Static — every admin route must guard on founder/admin.
+
+    Iter 309 · Batch-2 Item 8 refactored the inline `is_founder`
+    checks into a shared `require_admin(authorization)` helper.  The
+    guard is still there (raises 403 for non-admins) — just spelled
+    differently.  This assertion tracks the current pattern."""
     src = open("/app/backend/routers/supabase.py").read()
     # Extract only the admin section (starts after the second "Founder-scoped" comment)
     admin_section = src[src.index("Founder-scoped admin widget"):]
-    assert admin_section.count('user.get("is_founder")') >= 3, (
-        "Each admin endpoint (list/sweep/rearm) must check founder flag"
+    n_new = admin_section.count("await require_admin(authorization)")
+    n_old = admin_section.count('user.get("is_founder")')
+    assert (n_new + n_old) >= 3, (
+        "Each admin endpoint (list/sweep/rearm) must guard on founder/admin — "
+        f"got {n_new} `await require_admin(...)` + {n_old} inline `is_founder` = "
+        f"{n_new + n_old} (need ≥3)"
     )

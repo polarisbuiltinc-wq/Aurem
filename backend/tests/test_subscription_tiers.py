@@ -20,12 +20,22 @@ def test_starter_tier():
     assert can_use_feature("starter", "parallel_agents") is False
 
 
-def test_pro_tier_unlimited():
+def test_pro_tier_capped_at_300():
+    """Feb 2026 · repricing — Pro tier was originally unlimited but
+    now carries a 300 task/mo cap with a 100 Maxx-task/mo allowance
+    (overage billed at $0.50/task). Only the Founder tier remains
+    truly unlimited. Pro's `modes` list is `["swift", "pro"]` — full
+    Maxx mode is Team/Founder only, so `can_use_feature("pro",
+    "maxx_mode")` is False; Pro accesses Maxx through the metered
+    overage path, not the unrestricted feature-gate."""
     from services.subscription_tiers import get_limit, can_use_feature
-    assert get_limit("pro", "tasks_per_month") is None
-    assert can_use_feature("pro", "maxx_mode") is True
+    assert get_limit("pro", "tasks_per_month") == 300
+    assert get_limit("pro", "maxx_tasks_per_month") == 100
+    assert can_use_feature("pro", "maxx_mode") is False
     assert can_use_feature("pro", "parallel_agents") is True
-    assert can_use_feature("pro", "tasks_per_month") is True  # unlimited == allowed
+    # Non-None limit is still "allowed" (can_use_feature is a
+    # boolean gate, not a quantitative check).
+    assert can_use_feature("pro", "tasks_per_month") is True
 
 
 def test_team_tier_priority():

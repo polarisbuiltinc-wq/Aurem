@@ -84,6 +84,11 @@ async def test_probe_persist_fails_open(monkeypatch):
     from services import integration_health as ih
     async def _boom():
         raise RuntimeError("network unreachable")
+    # Iter refactor swapped the call site from `run_all_probes` to
+    # `run_all_probes_serial` (1.5s gap between probes to avoid rate
+    # limits).  Patch the CURRENT symbol so the boom fires; patching
+    # the old symbol did nothing → real probes ran → 10s timeout.
+    monkeypatch.setattr(ih, "run_all_probes_serial", _boom)
     monkeypatch.setattr(ih, "run_all_probes", _boom)
 
     db = MagicMock()

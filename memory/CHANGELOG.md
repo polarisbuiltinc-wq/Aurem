@@ -5627,3 +5627,29 @@ GET /admin/pulse       → HTTP 200 · 0.15s
 - `test_sync_blocking_check_does_not_hang_aggregator` — registers a check that does `asyncio.to_thread(time.sleep, 30s)`; asserts per-check 8s guard cancels within 12s and returns red.
 - `test_aggregator_outer_timeout_returns_partial_snapshot` — registers a truly-blocking check (bare `time.sleep(25)`); asserts the outer 20s aggregator timeout still returns a red-partial payload with `aggregator_timeout=true`.
 Both PASS (33.5s total, dominated by the deliberately-slow test bodies).
+
+## 2026-02 · Batch 4h Round 3 — fix-pipeline family + 5 individual real-bug RCA
+
+### Fix-pipeline family (5 tests, all outdated-contract)
+- Root cause: Iter 212m-190 replaced fix-pipeline per-token billing (`tokens_cost`, `usd_cost`, `balance`, `insufficient_tokens`) with per-task quota (`tasks_needed`, `tasks_remaining`, `monthly_task_limit`, `insufficient_tasks`).
+- Per founder's rule ("say so if outdated contract"), all 5 moved to `legacy_removed_features.txt` with explicit business-model-change reason.
+- `test_summary_owner_check` also has a fixture-collision bug on top (two fixtures both call `cto_db.set_db(...)` on the same global → second one clobbers first) — noted in the removed-features reason.
+
+### 5 individual test RCAs (one at a time, each verified)
+| # | Test | Real root cause | Fix location |
+|---|---|---|---|
+| 1 | `test_iter212m177::test_p1_7_stream_replays_mongo_last_event_without_local_engine` | Iter 309 · Batch-2 Item 6 added required `request: Request` param + swapped SSE frame format to `id: <loop_id>:<seq>\ndata: <json>` | Test: stub Request, explicit `last_event_id=None`, parser handles both shapes |
+| 2 | `test_iter212m234::test_admin_endpoints_require_founder_or_admin` | Iter 309 · Batch-2 Item 8 refactored inline `is_founder` guard → shared `require_admin(authorization)` — **auth still present** (3× on supabase.py admin section) | Test: accept either pattern (`await require_admin(...)` OR inline `is_founder`), sum ≥ 3 |
+| 3a | `test_llm_provider::test_no_silent_fallback_on_network_error` | Not a code bug — passes individually + together (2 passed) | Un-quarantined; batch pollution to isolate later |
+| 3b | `test_llm_provider::test_no_silent_fallback_on_openrouter_5xx` | Same as 3a | Un-quarantined |
+| 4 | `test_subscription_tiers::test_pro_tier_unlimited` | Pro tier intentionally repriced from unlimited → 300 tasks/mo + 100 Maxx-overage tasks; only Founder is `None` now | Test renamed → `test_pro_tier_capped_at_300`, real values (`300`, `100`, `maxx_mode: False`) |
+| 5 | `test_integration_health_cron::test_probe_persist_fails_open` | Iter refactored call site `run_all_probes` → `run_all_probes_serial` (1.5s inter-probe gap); test patched old symbol → no-op → real probes → 10s timeout | Test: patch both symbols |
+
+### Totals across Batch 4h (all rounds)
+| List | Before (Round 1 start) | After Round 1 | After Round 2 | **After Round 3** |
+|---|---|---|---|---|
+| `legacy_quarantine.txt` | 72 | 46 | 22 | **11** (**−85%**) |
+| `legacy_removed_features.txt` | 59 | 71 | 100 | **105** |
+| Fast-lane un-quarantined | 0 | 14 | 14 | **20** |
+
+6 more tests unlocked into the default CI lane in Round 3 (`6 passed in 3.03s`). Zero regressions.  11 remaining quarantine entries are all narrower per-test RCAs (rollback DB fixtures, repo-map ranking IndexError, log-noise persist logic, live-founder GitHub-PAT dependency, etc).
