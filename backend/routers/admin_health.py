@@ -36,6 +36,13 @@ from services.health_registry import all_checks, get_check, run_check_safely
 # Import triggers registration of every adapter.
 import services.health_checks  # noqa: F401  — side-effect registration
 
+
+def __import_env_stamp():
+    """Lazy import so the helper is picked up whenever it's called
+    without introducing a hard load-order dependency."""
+    from services.env_context import env_stamp
+    return env_stamp()
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
@@ -183,6 +190,10 @@ async def status_all():
         "took_ms":      int((time.time() - t0) * 1000),
         "counts":       counts,
         "checks":       rows,
+        # Env identification — same helper as /admin/pulse. Prevents
+        # the "is this preview or prod data?" confusion the cockpit
+        # audit surfaced in Feb 2026.
+        **__import_env_stamp(),
     }
     _STATUS_CACHE["payload"]    = payload
     _STATUS_CACHE["expires_at"] = now + _STATUS_CACHE_TTL_S

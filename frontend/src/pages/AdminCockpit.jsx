@@ -263,6 +263,37 @@ function Chip({ label, mono }) {
   );
 }
 
+function EnvBadge({ env, dbHost }) {
+  // Big loud badge on preview so a founder never reads preview
+  // metrics thinking they're production. Production stays subtle.
+  const isPreview = env === "preview";
+  const isProd    = env === "production";
+  const bg  = isPreview ? "rgba(245,165,36,0.15)"
+            : isProd    ? "rgba(34,197,94,0.15)"
+            : "rgba(255,255,255,0.05)";
+  const bd  = isPreview ? C.amber
+            : isProd    ? C.green
+            : C.border;
+  const txt = isPreview ? C.amber
+            : isProd    ? C.green
+            : C.dim;
+  return (
+    <span data-testid="env-badge"
+      data-env={env}
+      title={`db: ${dbHost}`}
+      style={{
+        padding: "3px 9px", borderRadius: 999,
+        border: `1px solid ${bd}`,
+        background: bg,
+        color: txt,
+        fontFamily: C.mono, fontSize: 10, fontWeight: 700,
+        letterSpacing: "0.14em",
+      }}>
+      {isPreview ? "PREVIEW DATA" : env.toUpperCase()}
+    </span>
+  );
+}
+
 function BusinessPulse() {
   const [d, setD] = useState(null);
   const [p, setP] = useState(null);
@@ -321,6 +352,8 @@ export default function AdminCockpit() {
   const { payload, err, loading, refresh } = useCockpitData();
   const checks = useMemo(() => payload?.checks || [], [payload]);
   const counts = payload?.counts || {};
+  const envName = payload?.env || null;
+  const dbHost  = payload?.db_host || "";
 
   const handleAck = async (checkId, hours) => {
     try {
@@ -328,7 +361,6 @@ export default function AdminCockpit() {
         const until = new Date(Date.now() + hours * 3600 * 1000).toISOString();
         await api.post(`/admin/status/${checkId}/ack?until=${encodeURIComponent(until)}`);
       } else {
-        // Clear ack.
         await api.post(`/admin/status/${checkId}/ack?until=`);
       }
       refresh();
@@ -346,8 +378,10 @@ export default function AdminCockpit() {
                       alignItems: "flex-start" }}>
           <div>
             <div style={{ fontFamily: C.mono, fontSize: 11,
-                          letterSpacing: "0.18em", color: C.faint, marginBottom: 12 }}>
-              COCKPIT · LIVE
+                          letterSpacing: "0.18em", color: C.faint, marginBottom: 12,
+                          display: "flex", gap: 10, alignItems: "center" }}>
+              <span>COCKPIT · LIVE</span>
+              {envName && <EnvBadge env={envName} dbHost={dbHost} />}
             </div>
             <div style={{ fontSize: 24, marginBottom: 20 }}>System Overview</div>
           </div>

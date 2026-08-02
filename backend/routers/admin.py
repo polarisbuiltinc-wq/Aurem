@@ -171,42 +171,74 @@ async def dashboard(authorization: Optional[str] = Header(None)):
 
 @router.get("/pulse")
 async def business_pulse(authorization: Optional[str] = Header(None)):
-    """Feb 2026 — cockpit Business Pulse endpoint. Two new metrics
-    on top of /dashboard: GitHub-connect % and paid-tier upgrades
-    (paid = anything above 'free'). All numbers computed live from
-    dev_users; no cache."""
+    """Feb 2026 — cockpit Business Pulse endpoint. Returns BOTH raw
+    and organic-only counts, plus explicit env tag so a preview
+    reading is never mistaken for a production reading again.
+
+    Organic filter uses services.synthetic_filter (single source of
+    truth also consumed by G2 marketing-truth guard). Env tag comes
+    from services.env_context — same helper backs the cockpit
+    'PREVIEW DATA' badge."""
     await _require_admin(authorization)
     db = require_db()
+    from services.synthetic_filter import synthetic_mongo_filter
+    from services.env_context import env_stamp
 
-    total_users = await db.dev_users.count_documents({})
-    # A user is "GitHub-connected" iff they have a stored access token
-    # under `github.access_token` (real OAuth grant). Placeholder /
-    # empty strings do NOT count.
-    gh_connected = await db.dev_users.count_documents({
-        "github.access_token": {"$exists": True, "$nin": [None, ""]}
-    })
-    gh_pct = round(100.0 * gh_connected / total_users, 1) if total_users else 0.0
+    total_users_raw     = await db.dev_users.count_documents({})
+    total_users_organic = await db.dev_users.count_documents(synthetic_mongo_filter())
 
-    # Paid-tier upgrade count — anything above `free` OR explicitly
-    # marked `is_founder`. Uses the same tier taxonomy that
-    # subscription_tiers.py already defines.
+    gh_filter = {"github.access_token": {"$exists": True, "$nin": [None, ""]}}
+    gh_raw     = await db.dev_users.count_documents(gh_filter)
+    gh_organic = await db.dev_users.count_documents(
+        {**synthetic_mongo_filter(), **gh_filter}
+    )
+
     paid_tiers = ["basic", "pro", "maxx", "founder"]
-    paid_users = await db.dev_users.count_documents({"tier": {"$in": paid_tiers}})
-    # Paid signups in the last 30d — a real momentum signal (not just
-    # a stock count).
+    paid_raw_filter = {"tier": {"$in": paid_tiers}}
+    paid_users_raw     = await db.dev_users.count_documents(paid_raw_filter)
+    paid_users_organic = await db.dev_users.count_documents(
+        {**synthetic_mongo_filter(), **paid_raw_filter}
+    )
+
     from datetime import datetime, timezone, timedelta
     since = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
-    paid_new_30d = await db.dev_users.count_documents({
-        "tier": {"$in": paid_tiers},
-        "created_at": {"$gte": since},
-    })
+    paid_new_raw_filter = {**paid_raw_filter, "created_at": {"$gte": since}}
+    paid_new_30d_raw     = await db.dev_users.count_documents(paid_new_raw_filter)
+    paid_new_30d_organic = await db.dev_users.count_documents(
+        {**synthetic_mongo_filter(), **paid_new_raw_filter}
+    )
+
+    def _pct(num, denom):
+        return round(100.0 * num / denom, 1) if denom else 0.0
 
     return {
-        "total_users":       total_users,
-        "github_connected":  gh_connected,
-        "github_connect_pct": gh_pct,
-        "paid_users":        paid_users,
-        "paid_new_30d":      paid_new_30d,
+        # Environment identification — added Feb 2026 after
+        # preview/prod denominator confusion audit.
+        **env_stamp(),
+        # Raw (unfiltered) — same as before.
+        "raw": {
+            "total_users":         total_users_raw,
+            "github_connected":    gh_raw,
+            "github_connect_pct":  _pct(gh_raw, total_users_raw),
+            "paid_users":          paid_users_raw,
+            "paid_new_30d":        paid_new_30d_raw,
+        },
+        # Organic — synthetic test/bot rows excluded. This is the
+        # denominator the cockpit renders.
+        "organic": {
+            "total_users":         total_users_organic,
+            "github_connected":    gh_organic,
+            "github_connect_pct":  _pct(gh_organic, total_users_organic),
+            "paid_users":          paid_users_organic,
+            "paid_new_30d":        paid_new_30d_organic,
+        },
+        # Convenience mirror for the current cockpit code that reads
+        # top-level fields; will migrate to explicit organic.* soon.
+        "total_users":         total_users_organic,
+        "github_connected":    gh_organic,
+        "github_connect_pct":  _pct(gh_organic, total_users_organic),
+        "paid_users":          paid_users_organic,
+        "paid_new_30d":        paid_new_30d_organic,
     }
 
 
