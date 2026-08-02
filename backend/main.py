@@ -930,6 +930,24 @@ async def lifespan(app: FastAPI):
         except Exception as _e:
             logger.warning("repo_context_timings TTL index failed: %r", _e)
 
+        # Feb 2026 · Bell TTL — auto-purge health_notifications older
+        # than 90 days so the bell history never grows unbounded.  The
+        # notifier writes both `created_at` (ISO string, for the UI)
+        # and `created_at_dt` (native BSON Date, for TTL).  Rows
+        # written before this ship don't have `created_at_dt` and
+        # simply won't expire — safe fallback, no historical rows
+        # lost.  Idempotent; safe to re-run on every boot.
+        try:
+            await app.state.db.health_notifications.create_index(
+                "created_at_dt",
+                expireAfterSeconds=90 * 24 * 60 * 60,
+                background=True,
+                name="created_at_dt_ttl_90d",
+            )
+            logger.info("🔔 health_notifications TTL index ensured (90d)")
+        except Exception as _e:
+            logger.warning("health_notifications TTL index failed: %r", _e)
+
         # Iter 307 — JWT revocation store. TTL on expires_at auto-drops
         # entries once the underlying JWT would have expired anyway
         # (7 days), so the collection is size-bounded. See

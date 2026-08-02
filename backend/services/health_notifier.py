@@ -71,7 +71,8 @@ async def _fire_notification(db, check_id: str, name: str, category: str,
     """Do all three writes atomically (as much as Mongo affords):
     notification row + founder-alert + state upsert."""
     import uuid
-    now_iso = _iso_now()
+    now_dt  = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
     row = {
         # Feb 2026 · Bell-1 fix — stable per-row identifier so the UI
         # can mark ONE specific notification read (previously the only
@@ -86,6 +87,13 @@ async def _fire_notification(db, check_id: str, name: str, category: str,
         "to_state":   new,
         "detail":     detail[:400],
         "created_at": now_iso,
+        # Feb 2026 · Bell TTL — Mongo's TTL monitor requires a native
+        # BSON Date field, ISO strings won't work.  Store a parallel
+        # `created_at_dt` (same instant, native type) so the 90-day
+        # TTL index in main.py can auto-purge old rows.  Existing rows
+        # written before this fix don't have `created_at_dt`; those
+        # simply won't expire (safe fallback, no data loss).
+        "created_at_dt": now_dt,
         "read":       False,
     }
     try:
