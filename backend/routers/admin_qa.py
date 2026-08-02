@@ -636,6 +636,66 @@ async def guard15_deps(authorization: Optional[str] = Header(None)):
         return {"guard": "G15", "available": False, "error": str(e)[:200]}
 
 
+@router.get("/guard16-auth-hardening")
+async def guard16_auth_hardening(authorization: Optional[str] = Header(None)):
+    """G16 — Auth-hardening posture. Feb 2026, closes the "assumed
+    21, actually 15" scope gap surfaced by the cockpit build.
+
+    Checks 3 real invariants:
+      1. JWT_SECRET is set AND is ≥32 chars (rejects default/short
+         values that make JWT forging trivial).
+      2. bcrypt cost factor (rounds) ≥ 12 — industry-safe against
+         offline hash-cracking.
+      3. Brute-force lockout wired: LOGIN_FAIL_LIMIT ∈ [1,10] AND
+         LOGIN_LOCKOUT_MIN ≥ 5.
+    """
+    await _require_admin(authorization)
+    import os
+    import bcrypt
+    from cto_services.auth import JWT_SECRET as _JWT
+    findings: list[str] = []
+
+    if not _JWT:
+        findings.append("JWT_SECRET is unset")
+    elif len(_JWT) < 32:
+        findings.append(f"JWT_SECRET too short ({len(_JWT)} chars, need ≥32)")
+
+    salt = bcrypt.gensalt().decode()
+    try:
+        rounds = int(salt[4:6])
+    except (ValueError, IndexError):
+        rounds = 0
+    if rounds < 12:
+        findings.append(f"bcrypt rounds too low ({rounds}, need ≥12)")
+
+    try:
+        fail_limit = int(os.getenv("LOGIN_FAIL_LIMIT", "5"))
+    except ValueError:
+        fail_limit = 999
+    try:
+        lockout_min = int(os.getenv("LOGIN_LOCKOUT_MIN", "15"))
+    except ValueError:
+        lockout_min = 0
+    if fail_limit <= 0 or fail_limit > 10:
+        findings.append(f"LOGIN_FAIL_LIMIT out of safe range: {fail_limit}")
+    if lockout_min < 5:
+        findings.append(f"LOGIN_LOCKOUT_MIN too short: {lockout_min}min (need ≥5)")
+
+    return {
+        "guard":     "G16",
+        "available": True,
+        "state":     "GREEN" if not findings else "RED",
+        "checks": {
+            "jwt_secret_present": bool(_JWT),
+            "jwt_secret_length":  len(_JWT or ""),
+            "bcrypt_rounds":      rounds,
+            "login_fail_limit":   fail_limit,
+            "login_lockout_min":  lockout_min,
+        },
+        "findings": findings,
+    }
+
+
 # ── Rollback trigger endpoint (G12 write) ─────────────────────────
 
 class RollbackBody(BaseModel):

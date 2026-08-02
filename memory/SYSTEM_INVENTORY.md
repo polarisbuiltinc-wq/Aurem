@@ -713,3 +713,13 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `services/supervised_tasks.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-01T16:15:07.448946Z] <!-- inv:service:services/supervised_tasks.py -->
 - `GH_PUSH_CACHE_TTL_S` — auto-detected in backend/routers/version.py (verify) (default: unset) [Iter 0, 2026-08-01T22:45:47.584484Z] <!-- inv:envvar:GH_PUSH_CACHE_TTL_S -->
 - `AUREM_ADMIN_TOKEN` — auto-detected in backend/tests/test_qa_hardening_items_2_and_4.py (verify) (default: unset) [Iter 0, 2026-08-01T22:45:47.584555Z] <!-- inv:envvar:AUREM_ADMIN_TOKEN -->
+
+### Iter 0 · 2026-08-02
+
+| `routers/admin_health.py` | `/aurem-dev/admin/status` | 4 | auto-detected new router (verify) (Iter 0, 2026-08-02T02:57:29.828143Z) | <!-- inv:router:routers/admin_health.py -->
+- `HEALTH_STATUS_CACHE_TTL_S` — auto-detected in backend/routers/admin_health.py (verify) (default: unset) [Iter 0, 2026-08-02T02:57:29.828175Z] <!-- inv:envvar:HEALTH_STATUS_CACHE_TTL_S -->
+- `services/health_checks.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-02T02:57:29.828188Z] <!-- inv:service:services/health_checks.py -->
+- `services/health_notifier.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-02T02:57:29.828232Z] <!-- inv:service:services/health_notifier.py -->
+- `HEALTH_NOTIFIER_INTERVAL_S` — auto-detected in backend/services/health_notifier.py (verify) (default: unset) [Iter 0, 2026-08-02T02:57:29.828247Z] <!-- inv:envvar:HEALTH_NOTIFIER_INTERVAL_S -->
+- `HEALTH_RE_ALERT_COOLDOWN_S` — auto-detected in backend/services/health_notifier.py (verify) (default: unset) [Iter 0, 2026-08-02T02:57:29.828261Z] <!-- inv:envvar:HEALTH_RE_ALERT_COOLDOWN_S -->
+- `services/health_registry.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-02T02:57:29.828274Z] <!-- inv:service:services/health_registry.py -->

@@ -169,6 +169,49 @@ async def dashboard(authorization: Optional[str] = Header(None)):
     }
 
 
+@router.get("/pulse")
+async def business_pulse(authorization: Optional[str] = Header(None)):
+    """Feb 2026 — cockpit Business Pulse endpoint. Two new metrics
+    on top of /dashboard: GitHub-connect % and paid-tier upgrades
+    (paid = anything above 'free'). All numbers computed live from
+    dev_users; no cache."""
+    await _require_admin(authorization)
+    db = require_db()
+
+    total_users = await db.dev_users.count_documents({})
+    # A user is "GitHub-connected" iff they have a stored access token
+    # under `github.access_token` (real OAuth grant). Placeholder /
+    # empty strings do NOT count.
+    gh_connected = await db.dev_users.count_documents({
+        "github.access_token": {"$exists": True, "$nin": [None, ""]}
+    })
+    gh_pct = round(100.0 * gh_connected / total_users, 1) if total_users else 0.0
+
+    # Paid-tier upgrade count — anything above `free` OR explicitly
+    # marked `is_founder`. Uses the same tier taxonomy that
+    # subscription_tiers.py already defines.
+    paid_tiers = ["basic", "pro", "maxx", "founder"]
+    paid_users = await db.dev_users.count_documents({"tier": {"$in": paid_tiers}})
+    # Paid signups in the last 30d — a real momentum signal (not just
+    # a stock count).
+    from datetime import datetime, timezone, timedelta
+    since = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
+    paid_new_30d = await db.dev_users.count_documents({
+        "tier": {"$in": paid_tiers},
+        "created_at": {"$gte": since},
+    })
+
+    return {
+        "total_users":       total_users,
+        "github_connected":  gh_connected,
+        "github_connect_pct": gh_pct,
+        "paid_users":        paid_users,
+        "paid_new_30d":      paid_new_30d,
+    }
+
+
+
+
 
 # ─── Iter 212m-153 — Production observability endpoint ────────────────
 # Reads LIVE from the existing collections — no mock, no cache.  Mongo

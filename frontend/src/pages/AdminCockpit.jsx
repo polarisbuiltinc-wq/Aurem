@@ -55,6 +55,7 @@ function useCockpitData() {
   const [payload, setPayload] = useState(null);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancel = false;
@@ -71,9 +72,10 @@ function useCockpitData() {
     fetchNow();
     const t = setInterval(fetchNow, POLL_MS);
     return () => { cancel = true; clearInterval(t); };
-  }, []);
+  }, [refreshKey]);
 
-  return { payload, err, loading };
+  const refresh = () => setRefreshKey((k) => k + 1);
+  return { payload, err, loading, refresh };
 }
 
 function HealthDonut({ counts }) {
@@ -122,13 +124,14 @@ function HealthDonut({ counts }) {
   );
 }
 
-function CheckRow({ c, expanded, onToggle }) {
+function CheckRow({ c, expanded, onToggle, onAck }) {
   const dot = c.status;
   const link = (
     c.category === "guard"       ? "/admin/qa" :
     c.category === "integration" ? "/admin/integrations" :
     "/admin/system-health"
   );
+  const canAck = c.status === "red" && !c.ack_active;
   return (
     <div data-testid={`cockpit-check-${c.id}`}
       style={{ padding: "10px 12px", borderBottom: `1px solid ${C.border}` }}>
@@ -147,17 +150,48 @@ function CheckRow({ c, expanded, onToggle }) {
             checked_at: {c.checked_at}
             {c.red_since ? ` · red since ${c.red_since}` : ""}
           </div>
-          <Link to={link}
-            style={{ fontSize: 11, color: C.amber, marginTop: 4, display: "inline-block" }}>
-            View full →
-          </Link>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 6 }}>
+            <Link to={link}
+              data-testid={`cockpit-view-full-${c.id}`}
+              style={{ fontSize: 11, color: C.amber }}>
+              View full →
+            </Link>
+            {canAck && (
+              <button
+                data-testid={`cockpit-ack-${c.id}`}
+                onClick={(e) => { e.stopPropagation(); onAck(c.id, 24); }}
+                title="Mute this check for 24 hours"
+                style={{
+                  fontSize: 11, background: "transparent",
+                  border: `1px solid ${C.border}`, color: C.dim,
+                  padding: "2px 8px", borderRadius: 4, cursor: "pointer",
+                  fontFamily: C.mono,
+                }}>
+                Ack 24h
+              </button>
+            )}
+            {c.ack_active && (
+              <button
+                data-testid={`cockpit-unack-${c.id}`}
+                onClick={(e) => { e.stopPropagation(); onAck(c.id, 0); }}
+                title="Clear acknowledgement"
+                style={{
+                  fontSize: 11, background: "transparent",
+                  border: `1px solid ${C.border}`, color: C.dim,
+                  padding: "2px 8px", borderRadius: 4, cursor: "pointer",
+                  fontFamily: C.mono,
+                }}>
+                Un-ack
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function CheckList({ title, filterFn, checks, testid }) {
+function CheckList({ title, filterFn, checks, testid, onAck }) {
   const [expanded, setExpanded] = useState(null);
   const rows = (checks || []).filter(filterFn);
   return (
@@ -177,7 +211,8 @@ function CheckList({ title, filterFn, checks, testid }) {
       {rows.map((c) => (
         <CheckRow key={c.id} c={c}
           expanded={expanded === c.id}
-          onToggle={() => setExpanded(expanded === c.id ? null : c.id)} />
+          onToggle={() => setExpanded(expanded === c.id ? null : c.id)}
+          onAck={onAck} />
       ))}
     </div>
   );
@@ -230,12 +265,16 @@ function Chip({ label, mono }) {
 
 function BusinessPulse() {
   const [d, setD] = useState(null);
+  const [p, setP] = useState(null);
   useEffect(() => {
     api.get("/admin/dashboard").then(r => setD(r.data)).catch(() => {});
+    api.get("/admin/pulse").then(r => setP(r.data)).catch(() => {});
   }, []);
-  const users = d?.total_users || d?.users_total || 0;
+  const users = d?.total_users || p?.total_users || 0;
   const dau   = d?.dau || d?.dau_today || 0;
   const rev   = d?.revenue_30d || d?.mrr || 0;
+  const ghPct = p?.github_connect_pct;
+  const paidNew = p?.paid_new_30d;
   return (
     <div data-testid="cockpit-business-pulse"
          style={{ display: "grid",
@@ -244,11 +283,21 @@ function BusinessPulse() {
       <MetricCard label="TOTAL USERS" value={users.toLocaleString()} />
       <MetricCard label="DAU (today)" value={dau.toLocaleString()} />
       <MetricCard label="REVENUE 30d" value={`$${Number(rev).toLocaleString()}`} />
+      {ghPct != null && (
+        <MetricCard label="GITHUB CONNECT %"
+                    value={`${ghPct}%`}
+                    sub={`${p?.github_connected || 0} of ${p?.total_users || 0}`} />
+      )}
+      {paidNew != null && (
+        <MetricCard label="PAID UPGRADES 30d"
+                    value={paidNew.toLocaleString()}
+                    sub={`${p?.paid_users || 0} paid total`} />
+      )}
     </div>
   );
 }
 
-function MetricCard({ label, value }) {
+function MetricCard({ label, value, sub }) {
   return (
     <div style={{
       background: C.panel, border: `1px solid ${C.border}`,
@@ -259,14 +308,35 @@ function MetricCard({ label, value }) {
         {label}
       </div>
       <div style={{ color: C.text, fontSize: 22, fontWeight: 600 }}>{value}</div>
+      {sub && (
+        <div style={{ color: C.faint, fontSize: 10, marginTop: 3, fontFamily: C.mono }}>
+          {sub}
+        </div>
+      )}
     </div>
   );
 }
 
 export default function AdminCockpit() {
-  const { payload, err, loading } = useCockpitData();
+  const { payload, err, loading, refresh } = useCockpitData();
   const checks = useMemo(() => payload?.checks || [], [payload]);
   const counts = payload?.counts || {};
+
+  const handleAck = async (checkId, hours) => {
+    try {
+      if (hours > 0) {
+        const until = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+        await api.post(`/admin/status/${checkId}/ack?until=${encodeURIComponent(until)}`);
+      } else {
+        // Clear ack.
+        await api.post(`/admin/status/${checkId}/ack?until=`);
+      }
+      refresh();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("ack failed", e);
+    }
+  };
 
   return (
     <div data-testid="admin-cockpit-page"
@@ -294,19 +364,23 @@ export default function AdminCockpit() {
             <CheckList title="NEEDS ATTENTION (real failures)"
                        filterFn={(c) => c.status === "red" && !c.ack_active}
                        checks={checks}
-                       testid="cockpit-needs-attention" />
+                       testid="cockpit-needs-attention"
+                       onAck={handleAck} />
             <CheckList title="ACKED (muted, still tracked)"
                        filterFn={(c) => c.ack_active}
                        checks={checks}
-                       testid="cockpit-acked" />
+                       testid="cockpit-acked"
+                       onAck={handleAck} />
             <CheckList title="SETUP PENDING (gray — config missing)"
                        filterFn={(c) => c.status === "gray"}
                        checks={checks}
-                       testid="cockpit-setup-pending" />
+                       testid="cockpit-setup-pending"
+                       onAck={handleAck} />
             <CheckList title="ALL GREEN"
                        filterFn={(c) => c.status === "green" && !c.ack_active}
                        checks={checks}
-                       testid="cockpit-all-green" />
+                       testid="cockpit-all-green"
+                       onAck={handleAck} />
 
             <ModeBoard />
             <BusinessPulse />

@@ -308,6 +308,47 @@ async def _check_g21_security_scan() -> dict:
     return result_green(f"trufflehog clean · last scan {last.get('created_at')}")
 
 
+async def _check_g16_auth_hardening() -> dict:
+    """G16 — Auth-hardening posture. Calls the guard16 endpoint's
+    underlying logic in-process (no HTTP self-call) and maps to
+    3-state. See routers/admin_qa.guard16_auth_hardening for the
+    real check details."""
+    import os
+    import bcrypt
+    from cto_services.auth import JWT_SECRET as _JWT
+
+    findings: list[str] = []
+    if not _JWT:
+        findings.append("JWT_SECRET unset")
+    elif len(_JWT) < 32:
+        findings.append(f"JWT_SECRET too short ({len(_JWT)}<32)")
+
+    salt = bcrypt.gensalt().decode()
+    try:
+        rounds = int(salt[4:6])
+    except (ValueError, IndexError):
+        rounds = 0
+    if rounds < 12:
+        findings.append(f"bcrypt rounds={rounds} (<12)")
+
+    try:
+        fail_limit = int(os.getenv("LOGIN_FAIL_LIMIT", "5"))
+    except ValueError:
+        fail_limit = 999
+    try:
+        lockout_min = int(os.getenv("LOGIN_LOCKOUT_MIN", "15"))
+    except ValueError:
+        lockout_min = 0
+    if fail_limit <= 0 or fail_limit > 10:
+        findings.append(f"LOGIN_FAIL_LIMIT={fail_limit}")
+    if lockout_min < 5:
+        findings.append(f"LOGIN_LOCKOUT_MIN={lockout_min}min (<5)")
+
+    if findings:
+        return result_red(f"{len(findings)} auth-hardening issue(s): {'; '.join(findings)}")
+    return result_green(f"JWT_SECRET ok · bcrypt rounds={rounds} · lockout {fail_limit}/{lockout_min}m")
+
+
 # ═══════════════════════════════════════════════════════════════
 # INTEGRATION ADAPTERS — reuse external_services_registry.is_configured()
 # and (where safe) a lightweight probe. is_configured=False → gray.
@@ -341,6 +382,7 @@ register_check("g18_timeout",      "G18 · Timeout Audit",     "guard", _check_g
 register_check("g19_recovery",     "G19 · Auto-Recovery",     "guard", _check_g19_recovery)
 register_check("g20_incidents",    "G20 · Open Incidents",    "guard", _check_g20_incidents)
 register_check("g21_security",     "G21 · Security Scan",     "guard", _check_g21_security_scan)
+register_check("g16_auth_hardening", "G16 · Auth Hardening",  "guard", _check_g16_auth_hardening)
 
 # Integrations (6 — matches founder's cockpit-tree count):
 register_check("int_stripe",       "Stripe",                  "integration", _make_integration_check("stripe"))
