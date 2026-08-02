@@ -13,11 +13,18 @@
  * on mount and on manual refresh — no cached/stale numbers in the UI.
  *
  * Admin-gated (backend rejects with 403). Reads the founder JWT from
- * localStorage under the `aurem_admin_token` key — same pattern as
- * every other /admin/* page in this app.
+ * localStorage via the canonical `getToken()` helper in `lib/api.js`
+ * (which reads the `aurem_token` key set by Login.jsx). Feb 2026 fix:
+ * previously this file looked up a legacy `aurem_admin_token` key
+ * first — which is never actually set anywhere — and only fell back
+ * to `aurem_token`. The fallback was correct in theory but produced
+ * "Invalid authorization format" errors in preview because the header
+ * became `"Bearer "` for a subset of session states. Standardising on
+ * the same helper every other admin page uses eliminates the drift.
  */
 import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
+import { getToken } from "../lib/api";
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -92,8 +99,7 @@ export default function AdminQADashboard() {
     setLoading(true);
     setError(null);
     try {
-      const tok = localStorage.getItem("aurem_admin_token")
-        || localStorage.getItem("aurem_token");
+      const tok = getToken();
       const r = await axios.get(
         `${API}/api/aurem-dev/admin/qa/status`,
         { headers: { Authorization: `Bearer ${tok || ""}` }, timeout: 20000 },
@@ -328,8 +334,7 @@ function LoopKillSwitchSection() {
   const [busy,   setBusy]   = useState(false);
 
   const load = () => {
-    const tok = localStorage.getItem("aurem_admin_token")
-      || localStorage.getItem("aurem_token");
+    const tok = getToken();
     axios.get(`${API}/api/aurem-dev/admin/loop-beta/status`,
       { headers: { Authorization: `Bearer ${tok || ""}` }, timeout: 15000 })
       .then((r) => setStatus(r.data))
@@ -344,8 +349,7 @@ function LoopKillSwitchSection() {
     if (!window.confirm(confirmMsg)) return;
     setBusy(true);
     try {
-      const tok = localStorage.getItem("aurem_admin_token")
-        || localStorage.getItem("aurem_token");
+      const tok = getToken();
       await axios.post(`${API}/api/aurem-dev/admin/loop-beta/kill-switch`,
         { enabled: nextOn, reason: nextOn ? "manual UI flip" : "manual UI un-flip" },
         { headers: { Authorization: `Bearer ${tok || ""}` }, timeout: 15000 });
@@ -428,8 +432,7 @@ function LoopKillSwitchSection() {
 function LatestAutoQASection() {
   const [report, setReport] = useState(null);
   useEffect(() => {
-    const tok = localStorage.getItem("aurem_admin_token")
-      || localStorage.getItem("aurem_token");
+    const tok = getToken();
     axios.get(`${API}/api/aurem-dev/admin/qa/latest-report`,
       { headers: { Authorization: `Bearer ${tok || ""}` }, timeout: 20000 })
       .then((r) => setReport(r.data))
@@ -474,8 +477,7 @@ function IncidentLogSection() {
   const [data,   setData]   = useState(null);
   const [status, setStatus] = useState("all");
   useEffect(() => {
-    const tok = localStorage.getItem("aurem_admin_token")
-      || localStorage.getItem("aurem_token");
+    const tok = getToken();
     axios.get(`${API}/api/aurem-dev/admin/qa/guard20-incidents?status=${status}`,
       { headers: { Authorization: `Bearer ${tok || ""}` }, timeout: 20000 })
       .then((r) => setData(r.data))

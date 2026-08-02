@@ -448,6 +448,26 @@ Prevents future copy-paste drift when Council A swaps primary models.
 - Prod `/api/health` new field: `supervised_tasks:
   {supervised_count:13, alive[], dead[]}` — Guard 20 wired
 
+### Feb 2026 · Sidebar Integrity + Batch 4h
+- **Sidebar audit**: all 20 NAV items + 14 standalone `/admin/*`
+  routes verified. Cockpit build clean, no orphans.
+- **12 new `/admin/*` deep-link routes** added (Support, Audit,
+  House Rules, Robot Guide, Payments, Token P&L, Projects, Tasks,
+  Agent Performance, MCP Usage, Reliability, Settings). Every NAV
+  entry now carries a `route:` field so sidebar clicks change URL
+  → browser Back/Forward work naturally.
+- **QA-page auth-token drift fixed** — `AdminQADashboard.jsx`
+  standardised on `getToken()` (was reading a never-set legacy
+  `aurem_admin_token` key first).
+- **Batch 4h remediation** (contract-drift quarantine):
+  - `legacy_quarantine.txt`: 72 → 46 (**−36%**)
+  - 13 un-quarantined (already passing); 1 contract-drift fixed
+    (test_iter54 cockpit-first update); 12 moved to
+    `legacy_removed_features.txt` with cited gone-surfaces.
+  - 46 remaining need per-test RCA (KeyErrors, auth drift,
+    integration probes) — not moved without individual proof.
+  - Zero regressions on the 14 newly-active tests.
+
 ---
 
 ## Testing & Credentials

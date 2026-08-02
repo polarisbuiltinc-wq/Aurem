@@ -5420,3 +5420,59 @@ Shipped 9 more guards in one session. Uses existing infra everywhere
 - G11: Atlas backup + restore-test config
 - G13: LLM_COST_CAP_HOURLY / DAILY / PER_LOOP overrides if defaults ($2/$10/$0.50) are wrong
 
+
+## 2026-02 · Sidebar Integrity + Batch 4h Contract-Drift Remediation
+
+### Sidebar Integrity Fixes (P0/P1)
+- **Discovery audit**: mapped all 20 sidebar NAV items + 14 standalone
+  `/admin/*` routes against the user's checklist. Cockpit build was
+  clean — nothing broken. Three pre-existing bugs surfaced.
+- **Fix 1 (P1)**: `AdminQADashboard.jsx` — standardised token lookup
+  to `getToken()` from `lib/api.js` (5 occurrences replaced). Was
+  reading a never-set `aurem_admin_token` key first, producing
+  intermittent "Invalid authorization format" 401s in preview.
+- **Fix 2 (P3)**: `App.jsx` — `<Route path="/admin/dashboard">` now
+  passes `initialTab="dash"` so direct URLs land on the Dashboard tab
+  (previously fell through to Overview default).
+- **Fix 3 (P1 · NEW)**: closed the back-navigation gap surfaced during
+  discovery. All 20 sidebar items now have real deep-linkable URLs
+  (12 new `/admin/*` routes added), and every NAV entry carries a
+  `route:` field so sidebar clicks navigate via react-router instead
+  of flipping internal state. Also:
+  - `useLocation()` drives the active-highlight (was reading
+    `window.location.pathname` directly, stale on route change).
+  - `useEffect(() => setPage(initialTab), [initialTab])` syncs prop
+    → state so URL changes update the rendered tab.
+  - `/admin/overview` now renders inside the Admin shell
+    (`<Admin initialTab="overview" />`) instead of standalone
+    `AdminOverview` so the sidebar chrome is present on deep-links
+    too. Removed the dead `AdminOverview` import from `App.jsx`.
+- **Live proof**: Support → Payments (sidebar click) → browser Back
+  → Support restored (URL, active-highlight, page body all correct).
+  Screenshots captured.
+
+### Batch 4h · Contract-Drift Quarantine Remediation
+Started with 72 nodeids in `tests/legacy_quarantine.txt`. Baseline
+scan (see `/app/memory/QA_HARDENING_REPORT.md` for full detail):
+- **13 un-quarantined** — were already passing without changes; the
+  quarantine list was 18% stale.
+- **1 contract-drift fixed + un-quarantined**:
+  `test_iter54::test_admin_page_wires_overview_as_first_tab` updated
+  to accept `cockpit` OR `overview` as first NAV id (Feb 2026 Cockpit
+  refactor is the new intended contract).
+- **12 moved to `legacy_removed_features.txt`** — each verified
+  against current codebase; the asserted surface has 0 runtime
+  occurrences (design tokens, PWA prompt in Shell, ShipWall Shell
+  wrap, VS Code extension endpoint, orchestrator prompt phrase, etc).
+- **46 remaining** in `legacy_quarantine.txt` — real contract-drift
+  needing per-test investigation (KeyErrors, auth code changes,
+  GitHub-PAT-dependent, integration probes). Deferred to a future
+  batch, not lumped into removed_features without individual proof.
+- Zero regressions: 14 newly-active nodeids all pass in the default
+  (non-legacy) CI lane.
+
+### Tests
+- 46 legacy quarantine (was 72, -36%)
+- 71 legacy removed_features (was 59, +12)
+- 17 legacy deferred_db_fixtures (unchanged)
+- 14 tests re-entered the fast CI lane (13 + 1 fixed)

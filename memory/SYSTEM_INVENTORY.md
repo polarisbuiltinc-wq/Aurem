@@ -723,3 +723,6 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `HEALTH_NOTIFIER_INTERVAL_S` — auto-detected in backend/services/health_notifier.py (verify) (default: unset) [Iter 0, 2026-08-02T02:57:29.828247Z] <!-- inv:envvar:HEALTH_NOTIFIER_INTERVAL_S -->
 - `HEALTH_RE_ALERT_COOLDOWN_S` — auto-detected in backend/services/health_notifier.py (verify) (default: unset) [Iter 0, 2026-08-02T02:57:29.828261Z] <!-- inv:envvar:HEALTH_RE_ALERT_COOLDOWN_S -->
 - `services/health_registry.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-02T02:57:29.828274Z] <!-- inv:service:services/health_registry.py -->
+- `services/env_context.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-02T04:12:09.424498Z] <!-- inv:service:services/env_context.py -->
+- `AUREM_ENV` — auto-detected in backend/services/env_context.py (verify) (default: unset) [Iter 0, 2026-08-02T04:12:09.424526Z] <!-- inv:envvar:AUREM_ENV -->
+- `services/synthetic_filter.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-02T04:12:09.424565Z] <!-- inv:service:services/synthetic_filter.py -->

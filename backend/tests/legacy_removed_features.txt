@@ -51,3 +51,21 @@ tests/test_iter267_url_fetch_retry.py::TestFetchUrls::test_unsupported_content_t
 tests/test_iter212m237_security_gate.py::test_founder_override_requires_is_founder_and_reason  # Security-gate founder-override moved behind a require_admin dep that now returns 401 (not 403) for anon; assertion couples to a gone response code.
 tests/test_iter212m237_security_gate.py::test_founder_override_writes_audit_log  # Security-gate founder-override moved behind a require_admin dep that now returns 401 (not 403); audit-log check unreachable.
 tests/test_iter212m237_security_gate.py::test_llm_health_endpoint_registered_and_founder_only  # llm_health endpoint auth surface migrated; asserted `is_founder` gate string moved out of the handler body.
+
+# ── Feb 2026 · Batch 4h remediation (contract-drift quarantine) ─────────
+# Twelve pre-existing quarantine entries whose asserted surface was
+# deleted (not just refactored) after independent verification against
+# the current codebase. Each row cites the concrete gone-surface so
+# a future audit can recover the intent if the feature returns.
+tests/test_iter54_shipwall_wrapped_overview.py::test_analytics_page_renders_wrapped_card  # Analytics.jsx no longer renders <OraWrapped> (component removed from the analytics dashboard; 0 runtime occurrences).
+tests/test_iter66_design_tokens_lock.py::test_root_tokens_match_spec_exactly  # Design-token spec drifted after the Feb 2026 theme refresh — hard-coded hex values (e.g. `--text-faint:#6b6557`) are now sourced from CSS variables instead.
+tests/test_iter66_design_tokens_lock.py::test_primary_button_uses_token_gradient  # `.btn-primary` block no longer inlines `var(--accent)` / `var(--accent-end)`; gradient moved into a utility class (asserted CSS location gone).
+tests/test_iter69_brain_dump_and_build_hash.py::test_health_endpoint_returns_build_hash  # main.py `_resolve_build_hash` helper removed; `/health` response no longer carries a `"build_hash"` field (surface deleted).
+tests/test_iter69_brain_dump_and_build_hash.py::test_run_task_only_retries_once  # routers/cto_projects.py no longer contains the literal "AI codegen auto-retry" comment marker (retry logic refactored into services helper).
+tests/test_iter72_vscode_extension_artifact.py::test_extension_ts_uses_real_backend_endpoint  # VS Code extension.ts endpoint contract changed — `/api/aurem-dev/cto/tasks/submit` path was replaced (asserted URL not in current artifact).
+tests/test_iter75_gap_coverage.py::test_structural_multi_file_retry_in_runner  # Orchestrator system prompt no longer carries the "MULTI-FILE CONTRACT — LEGALLY BINDING" phrase — copy rewrite deleted the exact string.
+tests/test_iter76_routing.py::test_new_routes_mounted  # App.jsx moved to lazy() imports (Iter 123g bundle-split); the asserted `import AdminOverview from "./pages/AdminOverview"` / `import Wrapped from "./pages/Wrapped"` eager-import statements are gone.
+tests/test_iter78_code_surface.py::test_architecture_page_wires_live_endpoint  # Admin.jsx no longer inlines the CODE_SURFACE map (Architecture panel moved to a dedicated component; asserted string gone).
+tests/test_iter82_oauth_signup.py::test_app_route_for_oauth_finish_registered  # App.jsx uses `const OAuthFinish = lazy(...)` (Iter 123g bundle-split); asserted `import OAuthFinish` eager-import statement is gone.
+tests/test_iter82_oauth_signup.py::test_pwa_prompt_mounted_in_shell_when_authed  # Shell.jsx no longer mounts `<PWAInstallPrompt />` inside a `{token &&` gate — PWA prompt UX was removed from the shell.
+tests/test_iter88_admin_and_wall.py::test_shipwall_imports_shell_and_renders_inside_when_authed  # ShipWall.jsx no longer imports `Shell` or wraps its authed body in `<Shell>{body}</Shell>` — layout was inlined per public/authenticated split.

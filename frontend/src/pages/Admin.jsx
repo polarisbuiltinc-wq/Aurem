@@ -4,7 +4,7 @@
  * All data lives under /api/aurem-dev/admin/*.
  */
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, MessageCircle, Folder, ListChecks,
   Cpu, CreditCard, Network as SitemapIcon, Settings as SettingsIcon,
@@ -2379,10 +2379,15 @@ const NAV = [
   // one click from any tab returns to the live-status overview.
   { id: "cockpit", label: "Cockpit", Icon: Eye, route: "/admin/cockpit" },
   // Iter 212m-171 — sidebar grouped by responsibility.
+  // Feb 2026 · Sidebar Integrity fix — every entry now has a real
+  // `route:` so browser Back / Forward work naturally across tab
+  // switches (previously 12 items were internal-state-only and the
+  // URL never changed, breaking browser back). The App.jsx <Route>
+  // table has matching paths for each id.
   { group: "MONITOR" },
-  { id: "overview", label: "Overview", Icon: Eye },
-  { id: "llm_credits", label: "LLM Credits", Icon: DollarSign },
-  { id: "parliament_live", label: "Parliament Live", Icon: Cpu },
+  { id: "overview", label: "Overview", Icon: Eye, route: "/admin/overview" },
+  { id: "llm_credits", label: "LLM Credits", Icon: DollarSign, route: "/admin/llm-credits" },
+  { id: "parliament_live", label: "Parliament Live", Icon: Cpu, route: "/admin/parliament-live" },
   // Iter 307 — QA Health dashboard is a separate route (/admin/qa),
   // so `route:` short-circuits the internal setPage(id) switch and
   // uses react-router's navigate(...) instead. Same visual pattern
@@ -2392,35 +2397,49 @@ const NAV = [
   // Iter 331 — Architecture() (learning-health + persona-quality +
   // code-surface tiles) was defined but never wired into renderPage;
   // /admin/architecture silently fell through to Overview.
-  { id: "arch", label: "Architecture", Icon: Cpu },
+  { id: "arch", label: "Architecture", Icon: Cpu, route: "/admin/architecture" },
   { group: "USERS" },
-  { id: "bin_tracker", label: "BIN Tracker", Icon: Users },
-  { id: "users", label: "Users (Legacy)", Icon: Users },
-  { id: "support", label: "Support", Icon: Mail },
-  { id: "suggestions", label: "Suggestions", Icon: MessageCircle },   // Iter 212m-193
-  { id: "audit", label: "Audit Log", Icon: ShieldAlert },
+  { id: "bin_tracker", label: "BIN Tracker", Icon: Users, route: "/admin/bin-tracker" },
+  { id: "users", label: "Users (Legacy)", Icon: Users, route: "/admin/users" },
+  { id: "support", label: "Support", Icon: Mail, route: "/admin/support" },
+  { id: "suggestions", label: "Suggestions", Icon: MessageCircle, route: "/admin/suggestions" },   // Iter 212m-193
+  { id: "audit", label: "Audit Log", Icon: ShieldAlert, route: "/admin/audit" },
   { group: "CONFIG" },
-  { id: "feature_flags", label: "Feature Flags", Icon: Zap },
-  { id: "house_rules", label: "House Rules V2", Icon: ShieldCheck },
-  { id: "robot_guide", label: "Robot Guide", Icon: MessageCircle },
+  { id: "feature_flags", label: "Feature Flags", Icon: Zap, route: "/admin/feature-flags" },
+  { id: "house_rules", label: "House Rules V2", Icon: ShieldCheck, route: "/admin/house-rules" },
+  { id: "robot_guide", label: "Robot Guide", Icon: MessageCircle, route: "/admin/robot-guide" },
   { group: "BUSINESS" },
-  { id: "payments", label: "Payments & Revenue", Icon: DollarSign },
-  { id: "tokens", label: "Token P&L", Icon: Cpu },
+  { id: "payments", label: "Payments & Revenue", Icon: DollarSign, route: "/admin/payments" },
+  { id: "tokens", label: "Token P&L", Icon: Cpu, route: "/admin/token-pnl" },
   { group: "SYSTEM" },
-  { id: "dash", label: "Dashboard", Icon: LayoutDashboard },
-  { id: "projects", label: "Projects", Icon: Folder },
-  { id: "tasks", label: "Tasks", Icon: ListChecks },
-  { id: "agent_perf", label: "Agent Performance", Icon: Activity },
-  { id: "mcp", label: "MCP Usage", Icon: Plug },
-  { id: "reliability", label: "Reliability", Icon: ShieldAlert },
-  { id: "settings", label: "Settings", Icon: SettingsIcon },
+  { id: "dash", label: "Dashboard", Icon: LayoutDashboard, route: "/admin/dashboard" },
+  { id: "projects", label: "Projects", Icon: Folder, route: "/admin/projects" },
+  { id: "tasks", label: "Tasks", Icon: ListChecks, route: "/admin/tasks" },
+  { id: "agent_perf", label: "Agent Performance", Icon: Activity, route: "/admin/agent-performance" },
+  { id: "mcp", label: "MCP Usage", Icon: Plug, route: "/admin/mcp-usage" },
+  { id: "reliability", label: "Reliability", Icon: ShieldAlert, route: "/admin/reliability" },
+  { id: "settings", label: "Settings", Icon: SettingsIcon, route: "/admin/settings" },
 ];
 
 export default function Admin({ initialTab = "overview" }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [page, setPage] = useState(initialTab);
   const [selectedUser, setSelectedUser] = useState(null);
   const [me, setMe] = useState(null);
+
+  // Feb 2026 · Sidebar Integrity fix — when the URL changes because
+  // the user clicked a sidebar item that carries a `route:` field (or
+  // hit browser Back/Forward), react-router hands us a fresh
+  // `initialTab` prop but useState above only reads it on FIRST mount.
+  // Without this sync the sidebar highlight moves to the new URL but
+  // the page body still shows the previous tab's component. Also
+  // clear any per-user drilldown state so /admin/users → /admin/tasks
+  // doesn't leak a selected user into the new page.
+  useEffect(() => {
+    setPage(initialTab);
+    setSelectedUser(null);
+  }, [initialTab]);
 
   useEffect(() => {
     // Guard order matters: NO token at all → bounce to /login with a
@@ -2565,7 +2584,7 @@ export default function Admin({ initialTab = "overview" }) {
             );
           }
           const { id, label, Icon, route } = item;
-          const active = route ? window.location.pathname === route : page === id;
+          const active = route ? location.pathname === route : page === id;
           return (
             <button
               key={id}

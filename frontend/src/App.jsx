@@ -61,7 +61,10 @@ const Analytics         = lazy(() => import("./pages/Analytics"));
 const Projects          = lazy(() => import("./pages/Projects"));
 const Integrations      = lazy(() => import("./pages/Integrations")); // Iter 212m-174
 const Admin             = lazy(() => import("./pages/Admin"));
-const AdminOverview     = lazy(() => import("./pages/AdminOverview"));
+// Feb 2026 · AdminOverview no longer imported here — /admin/overview
+// now renders inside the Admin shell via <Admin initialTab="overview" />
+// so sidebar chrome is present. AdminOverview is still imported by
+// Admin.jsx's renderPage() switch.
 const AdminCockpit      = lazy(() => import("./pages/AdminCockpit"));
 const AdminIntegrations = lazy(() => import("./pages/AdminIntegrations"));
 const AdminFinancials   = lazy(() => import("./pages/AdminFinancials"));
@@ -227,10 +230,28 @@ export default function App() {
           <Route path="/projects"        element={<Projects />} />
           <Route path="/admin"           element={<AdminCockpit />} />
           <Route path="/admin/cockpit"   element={<AdminCockpit />} />
-          <Route path="/admin/dashboard" element={<Admin />} />
+          <Route path="/admin/dashboard" element={<Admin initialTab="dash" />} />
           <Route path="/admin/users"       element={<Admin initialTab="users" />} />
           <Route path="/admin/suggestions" element={<Admin initialTab="suggestions" />} />
-          <Route path="/admin/overview"  element={<AdminOverview />} />
+          <Route path="/admin/overview"  element={<Admin initialTab="overview" />} />
+          {/* Feb 2026 · Sidebar Integrity fix — every in-shell sidebar
+              item now has a real deep-linkable URL so browser Back /
+              Forward and shareable links work.  The route: field in
+              NAV points at the same paths (see Admin.jsx) so a
+              sidebar click also updates window.location, closing the
+              "internal-state-switch" back-navigation gap. */}
+          <Route path="/admin/support"        element={<Admin initialTab="support" />} />
+          <Route path="/admin/audit"          element={<Admin initialTab="audit" />} />
+          <Route path="/admin/house-rules"    element={<Admin initialTab="house_rules" />} />
+          <Route path="/admin/robot-guide"    element={<Admin initialTab="robot_guide" />} />
+          <Route path="/admin/payments"       element={<Admin initialTab="payments" />} />
+          <Route path="/admin/token-pnl"      element={<Admin initialTab="tokens" />} />
+          <Route path="/admin/projects"       element={<Admin initialTab="projects" />} />
+          <Route path="/admin/tasks"          element={<Admin initialTab="tasks" />} />
+          <Route path="/admin/agent-performance" element={<Admin initialTab="agent_perf" />} />
+          <Route path="/admin/mcp-usage"      element={<Admin initialTab="mcp" />} />
+          <Route path="/admin/reliability"    element={<Admin initialTab="reliability" />} />
+          <Route path="/admin/settings"       element={<Admin initialTab="settings" />} />
           <Route path="/admin/integrations" element={<AdminIntegrations />} />
           <Route path="/admin/financials"   element={<AdminFinancials />} />
           <Route path="/admin/vanguard"     element={<AdminVanguard />} />

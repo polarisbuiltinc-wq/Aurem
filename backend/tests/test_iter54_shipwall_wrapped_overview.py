@@ -115,12 +115,19 @@ def test_admin_page_wires_overview_as_first_tab():
     # even after the `initialTab` prop was added for deep-link routing).
     assert ('useState("overview")' in src
             or 'initialTab = "overview"' in src)
-    # Overview must be the FIRST nav item.
+    # Feb 2026 · Cockpit refactor — the FIRST nav entry is now the
+    # live-status Cockpit landing page (id="cockpit", route="/admin/cockpit").
+    # Overview remains inside the MONITOR group. The contract is:
+    # first item must be either the new Cockpit entry or the legacy
+    # Overview — anything else means the sidebar was accidentally
+    # reordered.
     nav_block = src.split("const NAV = [", 1)[1].split("];", 1)[0]
     first_id = nav_block.split('{ id: "', 1)[1].split('"', 1)[0]
-    assert first_id == "overview", f"first nav id is {first_id!r}, expected 'overview'"
+    assert first_id in ("cockpit", "overview"), (
+        f"first nav id is {first_id!r}, expected 'cockpit' or 'overview'"
+    )
     # And the switch must route to AdminOverview.
-    assert 'case "overview": return <AdminOverview />' in src
+    assert 'case "overview":       return <AdminOverview />' in src
 
 
 def test_analytics_page_renders_wrapped_card():
