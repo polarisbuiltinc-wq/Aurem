@@ -772,10 +772,82 @@ table { max-width: 100%; }
   border: none;
   box-shadow: none;
 }
+
+/* Feb 2026 — bottom-left vertical "SIDEBAR" tab that mirrors the
+   bottom-right "ADVISOR" launcher (AskAdvisorReal) exactly. Same
+   96×26 dimensions, same bottom-6 offset, same orange tint. Appears
+   only when the sidebar has auto-hidden after chat typing. */
+.aurem-sidebar-peek-tab {
+  position: fixed;
+  bottom: 24px;
+  left: 0;
+  z-index: 95;
+  width: 26px;
+  height: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #0A0A0A;
+  border: 1px solid var(--border-strong);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  padding: 12px 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  color: var(--accent-2);
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+.aurem-sidebar-peek-tab:hover { background: #141414; }
+.aurem-sidebar-peek-tab > span {
+  writing-mode: vertical-rl;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.75);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Feb 2026 — manual auto-hide toggle. Slim chevron button pinned to
+   the sidebar's right edge so the founder can hide it on demand
+   (matches the "Ask Advisor" collapse toggle pattern on the right). */
+.aurem-sidebar-autohide-toggle {
+  position: fixed;
+  top: 50%;
+  left: 208px;
+  transform: translateY(-50%);
+  z-index: 60;
+  width: 22px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(13, 16, 24, 0.75);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 160ms ease, color 160ms ease, background 160ms ease;
+}
+.aurem-sidebar-autohide-toggle:hover {
+  opacity: 1;
+  color: var(--accent-2);
+  background: rgba(20, 24, 36, 0.9);
+}
+.aurem-app-shell[data-collapsed="true"] .aurem-sidebar-autohide-toggle {
+  left: 72px;
+}
 @media (max-width: 900px) {
   /* On mobile, the existing menu pill already serves as the
      re-open handle — skip the hot-zone strip and let drawer rule. */
   .aurem-side-hotzone { display: none !important; }
+  .aurem-sidebar-peek-tab { display: none !important; }
+  .aurem-sidebar-autohide-toggle { display: none !important; }
   .aurem-app-shell[data-typing-hidden="true"] {
     grid-template-columns: 1fr !important;
   }
@@ -894,6 +966,28 @@ table { max-width: 100%; }
   .aurem-admin-shell[data-drawer-open="true"] > aside.glass-sidebar {
     transform: translateX(0);
   }
+  .aurem-admin-backdrop {
+    position: fixed; inset: 0; z-index: 70;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+  }
+}
+
+/* Feb 2026 · Admin sidebar hamburger — desktop toggle behaviour.
+   When the founder clicks the hamburger, we collapse the 220px column
+   to 0 and slide the aside off the viewport. Data attribute is set
+   on the shell root so pure-CSS drives the transitions. */
+@media (min-width: 901px) {
+  .aurem-admin-shell > aside.glass-sidebar {
+    transition: transform 240ms cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 200ms ease;
+  }
+  .aurem-admin-shell[data-sidebar-open="false"] > aside.glass-sidebar {
+    transform: translateX(-105%);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .aurem-admin-backdrop { display: none !important; }
 }
 
 /* 8. PageHeader title shrinks on phone so it never overflows. */

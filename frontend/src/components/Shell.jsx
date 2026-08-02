@@ -442,15 +442,49 @@ export default function Shell({ children, requireAuth, chromeless = false }) {
       >
         {/* Iter 146 — desktop hot-zone strip. Visible only when the
             sidebar has slid off after the user started typing. Hovering
-            brings the sidebar back; clicking is also accepted. */}
+            brings the sidebar back; clicking is also accepted.
+            Feb 2026 — added a bottom-left vertical "SIDEBAR" tab that
+            mirrors the bottom-right "ADVISOR" launcher exactly (same
+            96×26 dimensions, same bottom-6 offset, same orange tint)
+            so the founder always has a clear tap target. */}
         {!isMobile && hiddenForTyping && (
-          <div
-            data-testid="sidebar-hotzone"
-            className="aurem-side-hotzone"
-            onMouseEnter={onHotZoneEnter}
-            onClick={onHotZoneEnter}
-            title="Show sidebar"
-          />
+          <>
+            <div
+              data-testid="sidebar-hotzone"
+              className="aurem-side-hotzone"
+              onMouseEnter={onHotZoneEnter}
+              onClick={onHotZoneEnter}
+              title="Show sidebar"
+            />
+            <button
+              type="button"
+              data-testid="sidebar-peek-pill"
+              className="aurem-sidebar-peek-tab"
+              onClick={onHotZoneEnter}
+              aria-label="Open sidebar"
+              title="Open sidebar"
+            >
+              <Menu size={12} strokeWidth={2.5} />
+              <span>Sidebar</span>
+            </button>
+          </>
+        )}
+        {/* Feb 2026 — persistent manual auto-hide toggle. Sits on the
+            left edge like "Ask Advisor" sits on the right, so the
+            founder can hide the sidebar on demand (not just when
+            typing) and re-open it any time. Hidden on mobile since the
+            mobile hamburger already covers that flow. */}
+        {!isMobile && token && !hiddenForTyping && (
+          <button
+            type="button"
+            data-testid="sidebar-auto-hide-toggle"
+            className="aurem-sidebar-autohide-toggle"
+            onClick={() => setHiddenForTyping(true)}
+            aria-label="Auto-hide sidebar"
+            title="Auto-hide sidebar"
+          >
+            <ChevronsLeft size={14} />
+          </button>
         )}
         {/* Mobile hamburger — visible only <=900px via CSS */}
         <button

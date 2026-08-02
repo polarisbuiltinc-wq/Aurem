@@ -23,7 +23,7 @@ import {
   MessageSquare, Rocket, BarChart3, Settings as Cog, ShieldCheck,
   Plus, FolderGit2, Globe, Zap, Trophy, Coins, Gift,
   Receipt, User as UserIcon, Plug, Lock, KeyRound, LayoutDashboard,
-  Users as UsersIcon, Lightbulb, Landmark, X,
+  Users as UsersIcon, Lightbulb, Landmark, X, Menu,
 } from "lucide-react";
 import { api, getToken, newSessionId } from "../../lib/api";
 import { useChatSession } from "../Shell";
@@ -87,6 +87,45 @@ export default function RailShell({
   const [sessions, setSessions] = useState([]);
   const [isFounder, setIsFounder] = useState(false);
   const wrapRef = useRef(null);
+
+  // Feb 2026 · Auto-hide rail on chat typing.
+  // Mirrors the existing Shell.jsx `hiddenForTyping` pattern:
+  // ChatPanel dispatches `aurem:chat-session-started` when the user
+  // first sends a message and `aurem:chat-session-reset` when they
+  // switch sessions / create a new chat. We slide the 56px rail off
+  // to the left when typing so the founder gets a distraction-free
+  // chat window. A floating pill button (like "Ask Advisor") on the
+  // left edge is the manual way back. Founder can also toggle it
+  // anytime via the little chevron pinned to the rail's edge.
+  const AUTO_HIDE_KEY = "aurem_rail_autohide";
+  const [hiddenForTyping, setHiddenForTyping] = useState(false);
+  const [autoHideEnabled, setAutoHideEnabled] = useState(() => {
+    try {
+      const v = localStorage.getItem(AUTO_HIDE_KEY);
+      return v == null ? true : v === "1";
+    } catch { return true; }
+  });
+  useEffect(() => {
+    const onStart = () => { if (autoHideEnabled) { setHiddenForTyping(true); setOpen(null); } };
+    const onReset = () => setHiddenForTyping(false);
+    window.addEventListener("aurem:chat-session-started", onStart);
+    window.addEventListener("aurem:chat-session-reset", onReset);
+    return () => {
+      window.removeEventListener("aurem:chat-session-started", onStart);
+      window.removeEventListener("aurem:chat-session-reset", onReset);
+    };
+  }, [autoHideEnabled]);
+  // If the user disables auto-hide mid-session, re-show the rail.
+  useEffect(() => {
+    if (!autoHideEnabled) setHiddenForTyping(false);
+  }, [autoHideEnabled]);
+  const toggleAutoHide = useCallback(() => {
+    setAutoHideEnabled((v) => {
+      const next = !v;
+      try { localStorage.setItem(AUTO_HIDE_KEY, next ? "1" : "0"); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
 
   useEffect(() => { if (reposProp) setRepos(reposProp); }, [reposProp]);
 
@@ -353,12 +392,20 @@ export default function RailShell({
 
   const rail = (
     <div ref={wrapRef} data-testid="rail-shell"
+      data-hidden-typing={hiddenForTyping ? "true" : "false"}
       style={{ position: "relative", display: "flex", flexShrink: 0, zIndex: 1200 }}>
-      <nav aria-label="Primary" style={{
+      <nav aria-label="Primary"
+        data-testid="rail-nav"
+        style={{
         width: 56, background: BG, borderRight: `1px solid ${BORDER}`,
         display: "flex", flexDirection: "column", alignItems: "center",
         padding: "14px 0 16px", gap: 6, height: "100vh",
         position: "sticky", top: 0,
+        transform: hiddenForTyping ? "translateX(-105%)" : "translateX(0)",
+        opacity: hiddenForTyping ? 0 : 1,
+        pointerEvents: hiddenForTyping ? "none" : "auto",
+        marginLeft: hiddenForTyping ? -56 : 0,
+        transition: "transform 240ms cubic-bezier(0.4,0,0.2,1), opacity 200ms ease, margin-left 240ms cubic-bezier(0.4,0,0.2,1)",
       }}>
         <button type="button" data-testid="ds2-sidebar-logo"
           onClick={onLogoClick}
@@ -398,7 +445,77 @@ export default function RailShell({
           );
         })}
         <div style={{ flex: 1 }} />
+        {/* Feb 2026 · Sidebar auto-hide manual toggle. Small chevron
+            pinned at the bottom of the rail so the founder can hide
+            the rail on demand (matches "Ask Advisor" collapse toggle
+            pattern). Persists via localStorage. */}
+        <button
+          type="button"
+          data-testid="rail-autohide-toggle"
+          aria-label={autoHideEnabled ? "Disable rail auto-hide" : "Enable rail auto-hide"}
+          title={autoHideEnabled ? "Auto-hide ON — click to disable" : "Auto-hide OFF — click to enable"}
+          onClick={toggleAutoHide}
+          style={{
+            width: 32, height: 24, borderRadius: 6,
+            border: `1px solid ${BORDER}`,
+            background: autoHideEnabled ? "rgba(255,138,42,0.14)" : "transparent",
+            color: autoHideEnabled ? ACCENT : "rgba(148,163,184,0.65)",
+            cursor: "pointer",
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            fontFamily: "'JetBrains Mono', monospace", fontSize: 9, fontWeight: 700,
+            letterSpacing: "0.08em",
+          }}
+        >
+          {autoHideEnabled ? "AUTO" : "OFF"}
+        </button>
       </nav>
+
+      {/* Feb 2026 · Bottom-left vertical NAV tab — mirrors the
+          bottom-right "ADVISOR" launcher (AskAdvisorReal) exactly:
+          same 96×26 dimensions, same bottom-6 offset, same orange
+          primary tint, same vertical writing-mode label. Only visible
+          when the rail has slid off after chat typing. */}
+      {hiddenForTyping && (
+        <button
+          type="button"
+          data-testid="rail-peek-pill"
+          onClick={() => setHiddenForTyping(false)}
+          aria-label="Open navigation rail"
+          title="Open navigation rail"
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: 0,
+            zIndex: 1300,
+            width: 26, height: 96,
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center", gap: 6,
+            background: "#0A0A0A",
+            border: `1px solid ${BORDER}`,
+            borderLeft: "none",
+            borderRadius: "0 8px 8px 0",
+            padding: "12px 6px",
+            boxShadow: "0 6px 20px rgba(0,0,0,0.45)",
+            color: ACCENT,
+            cursor: "pointer",
+            transition: "background 160ms ease",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "#141414"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "#0A0A0A"; }}
+        >
+          <Menu size={12} strokeWidth={2.5} />
+          <span style={{
+            writingMode: "vertical-rl",
+            fontSize: 9, fontWeight: 700,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "rgba(148,163,184,0.75)",
+            fontFamily: "'JetBrains Mono', monospace",
+          }}>
+            Sidebar
+          </span>
+        </button>
+      )}
 
       {open && (
         <div data-testid="rail-flyout" role="menu"

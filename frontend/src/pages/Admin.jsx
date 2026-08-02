@@ -10,6 +10,7 @@ import {
   Cpu, CreditCard, Network as SitemapIcon, Settings as SettingsIcon,
   LogOut, ExternalLink, ArrowLeft, Loader2, Brain, Eye, Terminal,
   Mail, Activity, Plug, GitBranch, Zap, ShieldAlert, DollarSign, ShieldCheck,
+  Menu, X,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { toast } from "../components/Toast";
@@ -17,6 +18,7 @@ import AuremAdminPanel from "../components/AuremAdminPanel";
 import OraChatDrawer from "../components/OraChatDrawer";        // Iter 212m-238
 import NotificationBell from "../components/NotificationBell";   // Feb 2026 · cockpit bell
 import AdminOverview from "./AdminOverview";
+import AdminCockpit from "./AdminCockpit";                        // Feb 2026 · sidebar-in-cockpit
 import AdminSuggestions from "./AdminSuggestions";              // Iter 212m-193
 import AgentTokenPanel from "../components/AgentTokenPanel";
 import AdminThinkingHints from "../components/AdminThinkingHints";
@@ -2428,6 +2430,36 @@ export default function Admin({ initialTab = "overview" }) {
   const [selectedUser, setSelectedUser] = useState(null);
   const [me, setMe] = useState(null);
 
+  // Feb 2026 · Sidebar Toggle — hamburger-controlled sidebar visibility.
+  // Persisted per-device via localStorage so the founder's preference
+  // survives reloads. Defaults: OPEN on desktop, CLOSED on mobile so
+  // the drawer overlay doesn't block the initial view on small screens.
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try {
+      const v = localStorage.getItem("aurem_admin_sidebar_open");
+      if (v === "1") return true;
+      if (v === "0") return false;
+    } catch { /* ignore */ }
+    if (typeof window === "undefined") return true;
+    return window.matchMedia("(min-width: 901px)").matches;
+  });
+  const toggleSidebar = useCallback(() => {
+    setSidebarOpen((v) => {
+      const next = !v;
+      try { localStorage.setItem("aurem_admin_sidebar_open", next ? "1" : "0"); }
+      catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+  // Close drawer whenever route/tab changes on mobile so the newly
+  // rendered page isn't hidden behind the drawer.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      setSidebarOpen(false);
+    }
+  }, [page, location.pathname]);
+
   // Feb 2026 · Sidebar Integrity fix — when the URL changes because
   // the user clicked a sidebar item that carries a `route:` field (or
   // hit browser Back/Forward), react-router hands us a fresh
@@ -2511,6 +2543,7 @@ export default function Admin({ initialTab = "overview" }) {
     }
     switch (page) {
       case "overview":       return <AdminOverview />;
+      case "cockpit":        return <AdminCockpit />;
       case "arch":           return <Architecture />;
       case "llm_credits":    return <div style={{ padding: "24px 20px", maxWidth: 900 }}>
                                        <h1 style={{ fontSize: 20, fontWeight: 600, margin: "0 0 16px", color: "var(--text)" }}>LLM Credits</h1>
@@ -2542,12 +2575,24 @@ export default function Admin({ initialTab = "overview" }) {
   };
 
   return (
-    <div className="aurem-admin-shell" style={{
+    <div className="aurem-admin-shell"
+         data-sidebar-open={sidebarOpen ? "true" : "false"}
+         data-drawer-open={sidebarOpen ? "true" : "false"}
+         style={{
       height: "100vh", maxHeight: "100vh", overflow: "hidden",
       display: "grid",
-      gridTemplateColumns: "220px 1fr",
+      gridTemplateColumns: sidebarOpen ? "220px 1fr" : "0 1fr",
+      transition: "grid-template-columns 240ms cubic-bezier(0.4, 0, 0.2, 1)",
       background: "transparent",
     }}>
+      {/* Feb 2026 · Sidebar backdrop — mobile only, taps close the drawer. */}
+      {sidebarOpen && (
+        <div
+          className="aurem-admin-backdrop"
+          data-testid="admin-sidebar-backdrop"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
       <aside
         className="glass-sidebar"
         style={{
@@ -2647,10 +2692,29 @@ export default function Admin({ initialTab = "overview" }) {
         {/* Feb 2026 — sticky top bar for the bell. Positioned so it
             doesn't overlap page content; page renders below.  */}
         <div style={{
-          display: "flex", justifyContent: "flex-end",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
           padding: "12px 20px 0", position: "sticky", top: 0,
           zIndex: 10, background: "transparent", pointerEvents: "none",
         }}>
+          <button
+            type="button"
+            data-testid="admin-sidebar-toggle"
+            aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            onClick={toggleSidebar}
+            style={{
+              pointerEvents: "auto",
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              width: 36, height: 36, borderRadius: 6,
+              background: "rgba(13,16,24,0.78)",
+              backdropFilter: "blur(8px)",
+              border: "1px solid var(--border-strong)",
+              color: "var(--accent-2)", cursor: "pointer",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.35)",
+            }}
+          >
+            {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
+          </button>
           <div style={{ pointerEvents: "auto" }}>
             <NotificationBell />
           </div>

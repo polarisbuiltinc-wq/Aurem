@@ -228,8 +228,8 @@ export default function App() {
           <Route path="/tokens"          element={<Tokens />} />
           <Route path="/analytics"       element={<Analytics />} />
           <Route path="/projects"        element={<Projects />} />
-          <Route path="/admin"           element={<AdminCockpit />} />
-          <Route path="/admin/cockpit"   element={<AdminCockpit />} />
+          <Route path="/admin"           element={<Admin initialTab="cockpit" />} />
+          <Route path="/admin/cockpit"   element={<Admin initialTab="cockpit" />} />
           <Route path="/admin/dashboard" element={<Admin initialTab="dash" />} />
           <Route path="/admin/users"       element={<Admin initialTab="users" />} />
           <Route path="/admin/suggestions" element={<Admin initialTab="suggestions" />} />

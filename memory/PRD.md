@@ -24,7 +24,24 @@ before being called "done".
 
 ## Change Log
 
-### 2026-02-02 — QA-System Hardening + ORA-Learning Functional Verify (this session)
+### 2026-02-02 — Admin & User Sidebar Toggles (this session)
+
+**Feature 1: Admin hamburger sidebar toggle ✅**
+- `/app/frontend/src/pages/Admin.jsx` — added `sidebarOpen` state (persisted via `localStorage["aurem_admin_sidebar_open"]`), a hamburger button (`data-testid="admin-sidebar-toggle"`) in the sticky top bar, and a grid-column transition (`220px 1fr` ↔ `0 1fr`).
+- `/app/frontend/src/index.css` — added desktop `data-sidebar-open="false"` transform + `.aurem-admin-backdrop` for mobile drawer overlay.
+- `/app/frontend/src/App.jsx` — routes `/admin` and `/admin/cockpit` now render `<Admin initialTab="cockpit" />` so the cockpit inherits the sidebar chrome (previously it was chrome-less).
+- `/app/frontend/src/pages/Admin.jsx` — added `case "cockpit"` in `renderPage()` importing `AdminCockpit`.
+- `/app/frontend/src/pages/AdminCockpit.jsx` — removed the duplicate `NotificationBell` (Admin shell already renders one).
+- Verified via screenshots: hamburger click hides/shows sidebar; state persists.
+
+**Feature 2: User chat rail auto-hide + floating pill ✅**
+- `/app/frontend/src/components/nav/RailShell.jsx` — added `hiddenForTyping` state that listens for `aurem:chat-session-started` / `aurem:chat-session-reset` events (same pattern as `Shell.jsx`). When triggered, the 56px rail slides off `translateX(-105%)`.
+- Added floating peek pill (`data-testid="rail-peek-pill"`, `<Menu>` icon on left edge, 40×40 rounded button) that mirrors the "Ask Advisor" launcher and restores the rail.
+- Added `data-testid="rail-autohide-toggle"` compact `AUTO`/`OFF` badge at the bottom of the rail so the founder can disable auto-hide (persisted via `localStorage["aurem_rail_autohide"]`).
+- Also added `data-testid="sidebar-peek-pill"`, `sidebar-auto-hide-toggle` in `/app/frontend/src/components/Shell.jsx` for the legacy Shell sidebar so pages still using `Shell` (non-chromeless) get the same floating pill pattern.
+- Verified via screenshots: firing `aurem:chat-session-started` hides the rail + shows the pill; pill click restores; AUTO toggle → OFF disables the behaviour.
+
+### 2026-02-02 — QA-System Hardening + ORA-Learning Functional Verify (previous session)
 
 **Item 1: ORA-learning functional verify ✅**
 - New test file `tests/test_ora_learning_functional_verify.py` with 4 tests hitting **real Mongo**:

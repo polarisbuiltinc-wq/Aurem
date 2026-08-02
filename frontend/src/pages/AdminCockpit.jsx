@@ -18,7 +18,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
-import NotificationBell from "../components/NotificationBell";
 
 const C = {
   bg:     "#0a0a0a",
@@ -413,7 +412,10 @@ export default function AdminCockpit() {
             </div>
             <div style={{ fontSize: 24, marginBottom: 20 }}>System Overview</div>
           </div>
-          <NotificationBell />
+          {/* Feb 2026 · Sidebar-in-cockpit — Admin shell already renders
+              the NotificationBell in its sticky top bar, so we skip it
+              here to avoid a duplicate bell when this page is rendered
+              inside <Admin>. */}
         </div>
 
         {/* Feb 2026 · prod-hang fix — the System Health section (which
