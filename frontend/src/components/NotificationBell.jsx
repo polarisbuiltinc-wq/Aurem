@@ -1,10 +1,23 @@
 /**
- * NotificationBell.jsx — Cockpit-Bell UI (Feb 2026)
+ * NotificationBell.jsx — Cockpit-Bell UI (Feb 2026 · Bell-1 + Bell-2 pass)
  *
  * Short-polls /admin/status/notifications every 12s (env-tunable via
  * REACT_APP_BELL_POLL_MS). Renders a badge with the unread count and
  * a dropdown listing newest-first transitions. RED-only badge — gray
  * transitions never touch this UI per the founder's 3-state discipline.
+ *
+ * Feb 2026 · Bell-1: clicking a specific notification row now marks
+ * THAT row as read (previously only "Mark all read" worked). Badge
+ * updates optimistically before the POST completes, then reconciles
+ * with the authoritative server unread_count returned in the same
+ * response — no waiting for the next 12s poll cycle to see the drop.
+ *
+ * Feb 2026 · Bell-2: plays a short beep on the FIRST poll cycle where
+ * unread_count genuinely increased vs the last known value. Never
+ * fires on repeat polls while a notification stays unread (no spam).
+ * Browsers block autoplay until a user gesture; sound is gated behind
+ * a one-click "🔊 enable alerts" toggle in the dropdown that also
+ * plays a test beep to unlock the AudioContext.
  *
  * Zero mocks — everything from the real /admin/status/* endpoints.
  */
@@ -12,6 +25,7 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import { api } from "../lib/api";
 
 const POLL_MS = Number(import.meta?.env?.REACT_APP_BELL_POLL_MS || 12000);
+const SOUND_ENABLED_KEY = "aurem_bell_sound_enabled";
 
 const C = {
   border: "rgba(255,255,255,0.10)",
@@ -25,23 +39,92 @@ const C = {
   mono:   "SFMono-Regular, Menlo, Consolas, monospace",
 };
 
+// ── Bell-2 · sound helper ───────────────────────────────────────────
+// Single shared AudioContext — created lazily on first user gesture so
+// the browser autoplay policy doesn't block it.  A 700Hz sine for 90ms
+// with a quick attack-release envelope; short enough to be non-
+// intrusive, distinct enough to catch attention across an admin room.
+let _audioCtx = null;
+function _getAudioCtx() {
+  if (_audioCtx) return _audioCtx;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    _audioCtx = new Ctx();
+    return _audioCtx;
+  } catch { return null; }
+}
+function playBellBeep() {
+  const ctx = _getAudioCtx();
+  if (!ctx) return false;
+  try {
+    // Resume if the tab was backgrounded (browsers auto-suspend).
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(700, now);
+    // Attack-hold-release envelope so it doesn't click.
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.18, now + 0.010);
+    gain.gain.setValueAtTime(0.18, now + 0.070);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.150);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.160);
+    return true;
+  } catch { return false; }
+}
+
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    try { return localStorage.getItem(SOUND_ENABLED_KEY) === "1"; }
+    catch { return false; }
+  });
   const dropdownRef = useRef(null);
+
+  // Bell-2 tracking — previous unread count so we only beep on genuine
+  // increase, not on every poll or on the initial mount. `null` on first
+  // mount means "no baseline yet — don't play, just record".
+  const prevUnreadRef = useRef(null);
+
+  const applyFetchResult = useCallback((d) => {
+    const list = Array.isArray(d?.notifications) ? d.notifications : [];
+    const newUnread = Number(d?.unread_count || 0);
+
+    // Bell-2 · genuine-increase beep gate.  Only when:
+    //   (1) a baseline exists (skip the very first fetch), AND
+    //   (2) unread strictly increased, AND
+    //   (3) sound is enabled.
+    // Read the CURRENT localStorage flag inside the closure so a fresh
+    // toggle within this tab takes effect immediately, without waiting
+    // for a re-render.
+    const prev = prevUnreadRef.current;
+    if (prev !== null && newUnread > prev) {
+      let live = false;
+      try { live = localStorage.getItem(SOUND_ENABLED_KEY) === "1"; }
+      catch { live = false; }
+      if (live) playBellBeep();
+    }
+    prevUnreadRef.current = newUnread;
+
+    setItems(list);
+    setUnread(newUnread);
+  }, []);
 
   const fetchNow = useCallback(async () => {
     try {
       const r = await api.get("/admin/status/notifications?limit=30");
-      const d = r.data || {};
-      setItems(Array.isArray(d.notifications) ? d.notifications : []);
-      setUnread(Number(d.unread_count || 0));
+      applyFetchResult(r.data || {});
     } catch {
       // silent — bell must never crash the admin surface
     }
-  }, []);
+  }, [applyFetchResult]);
 
   useEffect(() => {
     fetchNow();
@@ -63,12 +146,59 @@ export default function NotificationBell() {
 
   const markAllRead = async () => {
     setLoading(true);
+    // Optimistic — flip every item + zero the badge before the server
+    // round-trip so the click feels instant. Reconcile after.
+    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnread(0);
+    prevUnreadRef.current = 0;
     try {
       await api.post("/admin/status/notifications/mark-read");
       await fetchNow();
     } finally {
       setLoading(false);
     }
+  };
+
+  const markOneRead = async (notifId) => {
+    if (!notifId) return;
+    // Optimistic — flip this one row + decrement the badge immediately
+    // (only if it was actually unread — clicking an already-read row
+    // must not underflow the counter).
+    let wasUnread = false;
+    setItems((prev) => prev.map((n) => {
+      if (n.notif_id === notifId && !n.read) { wasUnread = true; return { ...n, read: true }; }
+      return n;
+    }));
+    if (wasUnread) {
+      setUnread((u) => Math.max(0, u - 1));
+      prevUnreadRef.current = Math.max(0, (prevUnreadRef.current ?? 0) - 1);
+    }
+    try {
+      const r = await api.post(
+        `/admin/status/notifications/${encodeURIComponent(notifId)}/mark-read`
+      );
+      // Reconcile with authoritative count from the server so we never
+      // drift from Mongo (covers the edge case of a concurrent bell
+      // poll racing this write).
+      const auth = Number(r?.data?.unread_count);
+      if (Number.isFinite(auth)) {
+        setUnread(auth);
+        prevUnreadRef.current = auth;
+      }
+    } catch {
+      // If the POST failed, fetchNow will re-sync from server on next
+      // poll — the optimistic flip will get corrected then.
+    }
+  };
+
+  const toggleSound = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    try { localStorage.setItem(SOUND_ENABLED_KEY, next ? "1" : "0"); }
+    catch { /* private-mode / storage-full — ignore */ }
+    // Play a test beep on ENABLE — this doubles as the mandatory
+    // user-gesture that unlocks the AudioContext for future auto-plays.
+    if (next) playBellBeep();
   };
 
   return (
@@ -138,19 +268,33 @@ export default function NotificationBell() {
             }}>
               NOTIFICATIONS · {items.length}
             </div>
-            {unread > 0 && (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <button
-                data-testid="mark-all-read-btn"
-                onClick={markAllRead}
-                disabled={loading}
+                data-testid="notification-sound-toggle"
+                onClick={toggleSound}
+                title={soundEnabled ? "Sound on — click to mute" : "Sound off — click to enable & test"}
                 style={{
                   background: "transparent",
                   border: `1px solid ${C.border}`,
-                  color: C.dim, fontFamily: C.mono, fontSize: 11,
+                  color: soundEnabled ? C.green : C.faint,
+                  fontFamily: C.mono, fontSize: 11,
                   padding: "3px 8px", borderRadius: 5, cursor: "pointer",
                 }}
-              >Mark all read</button>
-            )}
+              >{soundEnabled ? "🔊 on" : "🔈 off"}</button>
+              {unread > 0 && (
+                <button
+                  data-testid="mark-all-read-btn"
+                  onClick={markAllRead}
+                  disabled={loading}
+                  style={{
+                    background: "transparent",
+                    border: `1px solid ${C.border}`,
+                    color: C.dim, fontFamily: C.mono, fontSize: 11,
+                    padding: "3px 8px", borderRadius: 5, cursor: "pointer",
+                  }}
+                >Mark all read</button>
+              )}
+            </div>
           </div>
 
           {items.length === 0 && (
@@ -162,14 +306,20 @@ export default function NotificationBell() {
           {items.map((n, i) => {
             const dot = n.to_state === "red" ? "🔴" : n.to_state === "green" ? "🟢" : "⚪";
             const ageMin = n.created_at ? Math.max(0, Math.round((Date.now() - new Date(n.created_at)) / 60000)) : 0;
+            const rowKey = n.notif_id || `${n.check_id}|${n.created_at}|${i}`;
+            const clickable = !n.read;
             return (
               <div
-                key={i}
+                key={rowKey}
                 data-testid={`notification-row-${n.check_id}`}
+                onClick={clickable ? () => markOneRead(n.notif_id) : undefined}
+                title={clickable ? "Click to mark as read" : "Already read"}
                 style={{
                   padding: "10px 14px",
                   borderBottom: `1px solid ${C.border}`,
                   background: n.read ? "transparent" : "rgba(239,68,68,0.05)",
+                  cursor: clickable ? "pointer" : "default",
+                  transition: "background 0.15s ease",
                 }}
               >
                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 3 }}>

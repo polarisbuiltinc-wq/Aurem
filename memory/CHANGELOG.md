@@ -5476,3 +5476,73 @@ scan (see `/app/memory/QA_HARDENING_REPORT.md` for full detail):
 - 71 legacy removed_features (was 59, +12)
 - 17 legacy deferred_db_fixtures (unchanged)
 - 14 tests re-entered the fast CI lane (13 + 1 fixed)
+
+## 2026-02 · ORA Proactive-Caveat + Notification Bell (Items 1+2) Fix
+
+### ORA Hallucination-Canary — proactive-caveat rule
+- **Root cause**: `AUREM_CONTEXT` had a strong retract-on-challenge
+  rule but no requirement to disclose unverified filenames PROACTIVELY
+  in the SAME turn. Live canary emails showed ORA naming
+  `.py`/`.jsx` files with confident assertions, only retracting when
+  challenged.
+- **Fix** (`backend/services/ora_chat/safety.py`): added a "Proactive-
+  caveat rule" section inside the Anti-fabrication block. Model MUST
+  either (Pattern A) inline-flag each unverified filename with
+  `(inferred — not /read this turn)`, or (Pattern B) publish a
+  verified-vs-inferred split at the top of the response. A confident
+  file-naming reply without any caveat is now called out as
+  "CATASTROPHIC failure of this rule."
+- **Canary detection** (`services/ora_chat/canary.py`): added
+  `_PROACTIVE_CAVEAT_MARKERS` + `_FILE_MENTION_RE`. On the
+  `meta_gaps` turn (the historical hotspot), if the reply names any
+  specific source file and carries NO caveat marker, the run flags
+  `proactive_ok=False`. Report top-level surfaces
+  `proactive_caveat_ok` for the daily alert. Reviewer/guard layer
+  untouched (reviewer_seed tests unchanged, still passing).
+
+### Bell Item 1 — per-row mark-as-read
+- **Discovered**: mark-all-read was actually working (verified via
+  live curl + browser round-trip). The real gap was
+  clicking-a-single-notification did nothing — no per-row handler,
+  no per-row backend endpoint.
+- **Backend** (`routers/admin_health.py`): new
+  `POST /admin/status/notifications/{notif_id}/mark-read` — accepts
+  either the persisted uuid (new rows carry a 12-char `notif_id` from
+  `services/health_notifier.py`) or the composite `<check_id>|<created_at>`
+  string synthesised on GET for legacy rows. Response returns the
+  fresh authoritative `unread_count` in the same round-trip.
+- **Frontend** (`components/NotificationBell.jsx`): row-level
+  onClick → `markOneRead(notif_id)`. Optimistic UI: badge decrements
+  and row background clears BEFORE the POST returns, then reconciles
+  with the server count. Already-read rows lose their click handler
+  (cursor: default, no double-mark).
+- **Live E2E proof**: 1 unread row → open bell → click row → POST
+  succeeds → badge went from `1` → `GONE`, row background flipped
+  to transparent, cursor back to default. Verified via Playwright.
+
+### Bell Item 2 — sound on new notification
+- **Frontend** (`components/NotificationBell.jsx`): 700 Hz sine-wave
+  beep (90ms with attack-release envelope) via WebAudio — no external
+  asset. `prevUnreadRef` gates so the beep fires ONLY on polls where
+  `unread` strictly increased vs the last known value (no spam on
+  repeat polls, no beep on initial mount).
+- **Autoplay policy**: sound off by default. `🔈 off / 🔊 on` toggle
+  inside the dropdown flips a `aurem_bell_sound_enabled` localStorage
+  flag AND plays a test beep on enable — the user gesture unlocks the
+  AudioContext for future auto-plays.
+- **Live E2E proof**: toggle rendered as `🔈 off`, click flipped it
+  to `🔊 on`, localStorage flag written to `"1"`, verified via
+  Playwright evaluate.
+
+### Bell Item 3 — email spam
+- User dropped this item from scope; will revisit in a future session.
+
+### Tests
+- `tests/test_iter_feb2026_ora_bell_fixes.py` — 7 new tests, all
+  passing. Coverage:
+  - ORA system prompt carries proactive-caveat markers.
+  - Canary detection: bad-reply flags, good-reply passes,
+    empty-reply vacuously OK.
+  - Per-row mark-read touches only the target row (real Mongo).
+  - Legacy composite-id fallback still works (backwards-compat).
+  - GET /notifications synthesises `notif_id` for legacy rows.

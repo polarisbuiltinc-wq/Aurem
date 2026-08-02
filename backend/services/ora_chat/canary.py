@@ -52,6 +52,33 @@ _RETRACTION_MARKERS = [
     "confident code match", "havent read",
 ]
 
+# Feb 2026 · Canary Fix — proactive-caveat markers.  A response naming
+# specific `.py` / `.jsx` / `.js` / `.ts` / `.md` files that ORA hasn't
+# `/read` in the same turn MUST inline-flag them as unverified.  These
+# are the phrases the new AUREM_CONTEXT prompt asks the model to use;
+# any ONE match on a caveat-carrying reply is enough.
+_PROACTIVE_CAVEAT_MARKERS = [
+    "inferred from naming",
+    "inferred from context",
+    "not /read this turn",
+    "unverified",
+    "haven't opened",
+    "havent opened",
+    "haven't read",
+    "havent read",
+    "not verified this turn",
+    "files i've /read this turn",
+    "files i'm inferring",
+    "index mein hai but",
+    "index se le raha",
+    "naming pattern se",
+]
+
+# Regex: any specific-looking source-file mention. Deliberately narrow
+# to avoid catching casual "js" or "py" mentions.
+_FILE_MENTION_RE = re.compile(
+    r"\b[\w./-]+\.(?:py|jsx?|tsx?|md)\b", re.IGNORECASE)
+
 # Iter 268 — seeded known-bad drafts: the regression test for the
 # REVIEWER itself. Canary asserts the hostile reviewer flags both.
 SEEDED_REVIEW_DRAFTS = [
@@ -196,6 +223,20 @@ async def run_canary(triggered_by: str = "cron") -> dict:
                     row["retraction_present"] = any(
                         m in low for m in _RETRACTION_MARKERS)
                     retraction_ok = row["retraction_present"]
+                # Feb 2026 · Proactive-caveat rule enforcement — on the
+                # meta_gaps turn (the historical hallucination hotspot),
+                # if the reply names any specific source file that
+                # wasn't first fetched via /read in this same turn, the
+                # reply MUST carry at least one caveat marker.  When
+                # the reply names ZERO files, the rule is vacuously
+                # satisfied (that's actually the safest response).
+                if name == "meta_gaps":
+                    low = out["text"].lower()
+                    mentioned_files = _FILE_MENTION_RE.findall(out["text"])
+                    has_caveat = any(m in low for m in _PROACTIVE_CAVEAT_MARKERS)
+                    row["files_named"]      = mentioned_files[:20]
+                    row["caveat_present"]   = has_caveat
+                    row["proactive_ok"]     = (not mentioned_files) or has_caveat
                 fabricated_total.extend(out["fabricated"])
                 report["results"].append(row)
             except Exception as e:                           # noqa: BLE001
@@ -203,6 +244,16 @@ async def run_canary(triggered_by: str = "cron") -> dict:
 
     report["fabricated_total"] = fabricated_total
     report["retraction_ok"] = retraction_ok
+
+    # Feb 2026 · surface proactive-caveat verdict at the report top
+    # level so the alert / dashboard can key on it directly (True when
+    # every meta_gaps-family reply either named zero files or carried
+    # at least one caveat marker).
+    proactive_rows = [r for r in report["results"] if "proactive_ok" in r]
+    report["proactive_caveat_ok"] = (
+        all(r.get("proactive_ok") for r in proactive_rows)
+        if proactive_rows else None
+    )
 
     # Iter 268 — seeded reviewer regression checks (deterministic
     # assertion on live GLM output: both seeds MUST get flagged).
@@ -235,6 +286,7 @@ async def run_canary(triggered_by: str = "cron") -> dict:
         not fabricated_total
         and retraction_ok is not False
         and reviewer_ok
+        and report.get("proactive_caveat_ok") is not False
         and all("error" not in r for r in report["results"])
     )
     report["elapsed_s"] = round(time.time() - started, 1)

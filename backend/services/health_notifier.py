@@ -70,8 +70,15 @@ async def _fire_notification(db, check_id: str, name: str, category: str,
                               old: str, new: str, detail: str) -> None:
     """Do all three writes atomically (as much as Mongo affords):
     notification row + founder-alert + state upsert."""
+    import uuid
     now_iso = _iso_now()
     row = {
+        # Feb 2026 · Bell-1 fix — stable per-row identifier so the UI
+        # can mark ONE specific notification read (previously the only
+        # supported operation was "mark all read" — clicking a single
+        # row had no target ID). Uuid4 hex (12 chars) is enough to
+        # avoid collisions across the ~1k-rows-per-90d expected volume.
+        "notif_id":   uuid.uuid4().hex[:12],
         "check_id":   check_id,
         "name":       name,
         "category":   category,

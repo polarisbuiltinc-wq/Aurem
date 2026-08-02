@@ -243,6 +243,13 @@ async def list_notifications(limit: int = 30):
         .sort("created_at", -1).limit(limit).to_list(None)
     for r in rows:
         r.pop("_id", None)
+        # Feb 2026 · Bell-1 · per-row mark-read support.  Give every row
+        # a stable client-side identifier: prefer the persisted
+        # `notif_id` (written by health_notifier on new rows), fall back
+        # to the composite `<check_id>|<created_at>` for legacy rows
+        # from before Feb 2026 — the per-row endpoint accepts either.
+        if not r.get("notif_id"):
+            r["notif_id"] = f"{r.get('check_id')}|{r.get('created_at')}"
     unread = await db.health_notifications.count_documents({"read": False})
     return {
         "available":    True,
@@ -263,6 +270,36 @@ async def mark_notifications_read():
         {"read": False}, {"$set": {"read": True}}
     )
     return {"ok": True, "modified": r.modified_count}
+
+
+@router.post("/notifications/{notif_id}/mark-read")
+async def mark_one_notification_read(notif_id: str):
+    """Bell UI per-row 'mark this read' — targets a single notification
+    by its stable `notif_id`.  Legacy rows written before Feb 2026 don't
+    have `notif_id`; for those we fall back to matching on the composite
+    (check_id, created_at) that the client passes as the `notif_id` string
+    (format: `<check_id>|<created_at>`).  Never touches history — read=True
+    only."""
+    from cto_services.db import get_db
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "database unavailable")
+
+    q: dict
+    if "|" in notif_id:
+        cid, ts = notif_id.split("|", 1)
+        q = {"check_id": cid, "created_at": ts}
+    else:
+        q = {"notif_id": notif_id}
+
+    r = await db.health_notifications.update_one(q, {"$set": {"read": True}})
+    if not getattr(r, "matched_count", 0):
+        raise HTTPException(404, "notification not found")
+    # Return the fresh unread count so the UI can update its badge
+    # from the authoritative server number in the same round-trip
+    # (avoids a follow-up GET).
+    unread = await db.health_notifications.count_documents({"read": False})
+    return {"ok": True, "modified": r.modified_count, "unread_count": unread}
 
 
 __all__ = ["router"]
