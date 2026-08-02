@@ -259,8 +259,16 @@ async def _check_g15_deps() -> dict:
 
 
 async def _check_g18_timeout_audit() -> dict:
+    # Feb 2026 · prod-hang fix — `run_audit()` is a SYNC function that
+    # scans the entire codebase (heavy file I/O + regex parse). Called
+    # bare from an async context it BLOCKS the event loop, which then
+    # freezes every other in-flight request on the same worker
+    # (including /admin/pulse which only does Mongo queries). Wrap in
+    # asyncio.to_thread so the scan runs off-loop and the per-check
+    # asyncio.wait_for timeout can actually enforce cancellation.
+    import asyncio
     from scripts.timeout_audit import run_audit
-    r = run_audit() or {}
+    r = (await asyncio.to_thread(run_audit)) or {}
     unbounded = int(r.get("unbounded_count") or r.get("violations") or 0)
     if unbounded > 0:
         return result_red(f"{unbounded} unbounded I/O sites detected")
@@ -425,8 +433,17 @@ async def _check_ci_vs_local_drift() -> dict:
     """Reuses admin_qa.ci_vs_local_drift logic (no HTTP self-call).
     gray when GITHUB_ACTIONS_TOKEN missing (honest); red when CI
     has failing jobs; green otherwise."""
+    # Feb 2026 · prod-hang fix — `_harvest_counts` is a SYNC function
+    # that runs `analyze_suite()` (AST parse of every backend test file)
+    # + several `rglob(...)` scans across the frontend tree + regex
+    # matches over every match. Called bare from async context it
+    # BLOCKS the event loop, freezing sibling requests (real
+    # production incident traced here). Run off-loop via
+    # asyncio.to_thread. `_harvest_ci_status` is already async
+    # (httpx.AsyncClient) so it's fine as-is.
+    import asyncio
     from routers.admin_qa import _harvest_counts, _harvest_ci_status
-    local = _harvest_counts() or {}
+    local = (await asyncio.to_thread(_harvest_counts)) or {}
     ci    = await _harvest_ci_status()
     if not ci.get("available"):
         return result_gray(f"CI unreachable — {ci.get('reason','GITHUB_ACTIONS_TOKEN unset')}")

@@ -61,10 +61,21 @@ function useCockpitData() {
     let cancel = false;
     const fetchNow = async () => {
       try {
-        const r = await api.get("/admin/status/all");
+        // Feb 2026 · prod-hang fix — cap the aggregator fetch at 15s
+        // so a stalled backend never leaves the cockpit body spinning
+        // forever.  The backend itself now enforces a 20s outer
+        // timeout (defence in depth), but the UI must fail-fast on
+        // its own too so the user gets a visible error state instead
+        // of an indefinite skeleton.
+        const r = await api.get("/admin/status/all", { timeout: 15000 });
         if (!cancel) { setPayload(r.data); setErr(null); }
       } catch (e) {
-        if (!cancel) setErr(e?.message || "fetch failed");
+        if (!cancel) {
+          const isTimeout = e?.code === "ECONNABORTED" || /timeout/i.test(e?.message || "");
+          setErr(isTimeout
+            ? "status/all timed out after 15s — backend aggregator is slow or a check is blocking"
+            : (e?.message || "fetch failed"));
+        }
       } finally {
         if (!cancel) setLoading(false);
       }
@@ -297,9 +308,18 @@ function EnvBadge({ env, dbHost }) {
 function BusinessPulse() {
   const [d, setD] = useState(null);
   const [p, setP] = useState(null);
+  const [err, setErr] = useState(null);
   useEffect(() => {
-    api.get("/admin/dashboard").then(r => setD(r.data)).catch(() => {});
-    api.get("/admin/pulse").then(r => setP(r.data)).catch(() => {});
+    // Feb 2026 · prod-hang fix — bound each fetch with a per-request
+    // timeout so a slow /admin/pulse never leaves the Business Pulse
+    // section blank forever.  Errors are captured and rendered so
+    // the founder sees a visible failure instead of an empty grid.
+    api.get("/admin/dashboard", { timeout: 12000 })
+       .then(r => setD(r.data))
+       .catch(e => setErr(prev => prev || `dashboard: ${e?.message || "failed"}`));
+    api.get("/admin/pulse", { timeout: 12000 })
+       .then(r => setP(r.data))
+       .catch(e => setErr(prev => prev || `pulse: ${e?.message || "failed"}`));
   }, []);
   const users = d?.total_users || p?.total_users || 0;
   const dau   = d?.dau || d?.dau_today || 0;
@@ -323,6 +343,14 @@ function BusinessPulse() {
         <MetricCard label="PAID UPGRADES 30d"
                     value={paidNew.toLocaleString()}
                     sub={`${p?.paid_users || 0} paid total`} />
+      )}
+      {err && (
+        <div data-testid="cockpit-pulse-error"
+             style={{ gridColumn: "1 / -1", color: C.amber, fontSize: 11,
+                      fontFamily: C.mono, padding: "6px 10px",
+                      border: `1px solid ${C.border}`, borderRadius: 8 }}>
+          Business Pulse partial — {err}
+        </div>
       )}
     </div>
   );
@@ -388,38 +416,69 @@ export default function AdminCockpit() {
           <NotificationBell />
         </div>
 
-        {loading && <div style={{ color: C.faint }}>loading live status…</div>}
-        {err && <div style={{ color: C.red }} data-testid="cockpit-error">{err}</div>}
+        {/* Feb 2026 · prod-hang fix — the System Health section (which
+            depends on the /admin/status/all aggregator) is now
+            DECOUPLED from the rest of the page.  Even when the
+            aggregator hangs or errors, ModeBoard + BusinessPulse
+            below still fetch their own data and render.  This keeps
+            the cockpit useful in a degraded state instead of
+            trapping the founder on an indefinite skeleton. */}
+        <section data-testid="cockpit-system-health-section"
+                 style={{ marginBottom: 32 }}>
+          {loading && (
+            <div data-testid="cockpit-status-loading"
+                 style={{ color: C.faint, padding: "12px 0" }}>
+              loading system-health checks…
+            </div>
+          )}
+          {err && (
+            <div data-testid="cockpit-error"
+                 style={{ color: C.amber, fontFamily: C.mono, fontSize: 12,
+                          padding: "10px 14px", border: `1px solid ${C.border}`,
+                          borderRadius: 8, marginBottom: 16 }}>
+              System Health unavailable — {err}
+              <button data-testid="cockpit-error-retry"
+                      onClick={refresh}
+                      style={{ marginLeft: 12, background: "transparent",
+                               border: `1px solid ${C.border}`, color: C.dim,
+                               fontFamily: C.mono, fontSize: 11,
+                               padding: "3px 8px", borderRadius: 5,
+                               cursor: "pointer" }}>
+                retry
+              </button>
+            </div>
+          )}
+          {!loading && !err && (
+            <>
+              <HealthDonut counts={counts} />
+              <CheckList title="NEEDS ATTENTION (real failures)"
+                         filterFn={(c) => c.status === "red" && !c.ack_active}
+                         checks={checks}
+                         testid="cockpit-needs-attention"
+                         onAck={handleAck} />
+              <CheckList title="ACKED (muted, still tracked)"
+                         filterFn={(c) => c.ack_active}
+                         checks={checks}
+                         testid="cockpit-acked"
+                         onAck={handleAck} />
+              <CheckList title="SETUP PENDING (gray — config missing)"
+                         filterFn={(c) => c.status === "gray"}
+                         checks={checks}
+                         testid="cockpit-setup-pending"
+                         onAck={handleAck} />
+              <CheckList title="ALL GREEN"
+                         filterFn={(c) => c.status === "green" && !c.ack_active}
+                         checks={checks}
+                         testid="cockpit-all-green"
+                         onAck={handleAck} />
+            </>
+          )}
+        </section>
 
-        {!loading && !err && (
-          <>
-            <HealthDonut counts={counts} />
-
-            <CheckList title="NEEDS ATTENTION (real failures)"
-                       filterFn={(c) => c.status === "red" && !c.ack_active}
-                       checks={checks}
-                       testid="cockpit-needs-attention"
-                       onAck={handleAck} />
-            <CheckList title="ACKED (muted, still tracked)"
-                       filterFn={(c) => c.ack_active}
-                       checks={checks}
-                       testid="cockpit-acked"
-                       onAck={handleAck} />
-            <CheckList title="SETUP PENDING (gray — config missing)"
-                       filterFn={(c) => c.status === "gray"}
-                       checks={checks}
-                       testid="cockpit-setup-pending"
-                       onAck={handleAck} />
-            <CheckList title="ALL GREEN"
-                       filterFn={(c) => c.status === "green" && !c.ack_active}
-                       checks={checks}
-                       testid="cockpit-all-green"
-                       onAck={handleAck} />
-
-            <ModeBoard />
-            <BusinessPulse />
-          </>
-        )}
+        {/* ModeBoard + BusinessPulse render UNCONDITIONALLY so a
+            slow status/all can't block the business surfaces below. */}
+        <ModeBoard />
+        <BusinessPulse />
       </div>
     </div>
   );

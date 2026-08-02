@@ -178,35 +178,52 @@ async def business_pulse(authorization: Optional[str] = Header(None)):
     Organic filter uses services.synthetic_filter (single source of
     truth also consumed by G2 marketing-truth guard). Env tag comes
     from services.env_context — same helper backs the cockpit
-    'PREVIEW DATA' badge."""
+    'PREVIEW DATA' badge.
+
+    Feb 2026 · prod-hang fix — original implementation ran 8 sequential
+    `count_documents(...)` calls; if any one query stalled (missing
+    index on a large collection) the whole endpoint hung forever.
+    Now runs them concurrently via asyncio.gather with a hard 10s
+    outer timeout so a slow query surfaces as a fast error, not a
+    permanently pending request."""
     await _require_admin(authorization)
     db = require_db()
+    import asyncio
     from services.synthetic_filter import synthetic_mongo_filter
     from services.env_context import env_stamp
 
-    total_users_raw     = await db.dev_users.count_documents({})
-    total_users_organic = await db.dev_users.count_documents(synthetic_mongo_filter())
-
-    gh_filter = {"github.access_token": {"$exists": True, "$nin": [None, ""]}}
-    gh_raw     = await db.dev_users.count_documents(gh_filter)
-    gh_organic = await db.dev_users.count_documents(
-        {**synthetic_mongo_filter(), **gh_filter}
-    )
-
+    org_filter = synthetic_mongo_filter()
+    gh_filter  = {"github.access_token": {"$exists": True, "$nin": [None, ""]}}
     paid_tiers = ["basic", "pro", "maxx", "founder"]
     paid_raw_filter = {"tier": {"$in": paid_tiers}}
-    paid_users_raw     = await db.dev_users.count_documents(paid_raw_filter)
-    paid_users_organic = await db.dev_users.count_documents(
-        {**synthetic_mongo_filter(), **paid_raw_filter}
-    )
 
     from datetime import datetime, timezone, timedelta
     since = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
     paid_new_raw_filter = {**paid_raw_filter, "created_at": {"$gte": since}}
-    paid_new_30d_raw     = await db.dev_users.count_documents(paid_new_raw_filter)
-    paid_new_30d_organic = await db.dev_users.count_documents(
-        {**synthetic_mongo_filter(), **paid_new_raw_filter}
-    )
+
+    try:
+        (
+            total_users_raw, total_users_organic,
+            gh_raw, gh_organic,
+            paid_users_raw, paid_users_organic,
+            paid_new_30d_raw, paid_new_30d_organic,
+        ) = await asyncio.wait_for(
+            asyncio.gather(
+                db.dev_users.count_documents({}),
+                db.dev_users.count_documents(org_filter),
+                db.dev_users.count_documents(gh_filter),
+                db.dev_users.count_documents({**org_filter, **gh_filter}),
+                db.dev_users.count_documents(paid_raw_filter),
+                db.dev_users.count_documents({**org_filter, **paid_raw_filter}),
+                db.dev_users.count_documents(paid_new_raw_filter),
+                db.dev_users.count_documents({**org_filter, **paid_new_raw_filter}),
+            ),
+            timeout=10.0,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            504, "business pulse timed out after 10s — check Mongo indexes on dev_users"
+        )
 
     def _pct(num, denom):
         return round(100.0 * num / denom, 1) if denom else 0.0

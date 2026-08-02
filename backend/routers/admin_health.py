@@ -135,17 +135,56 @@ def _ack_active(acked_until: Optional[str]) -> bool:
 @router.get("/all")
 async def status_all():
     """Run every registered check_fn in parallel, return the
-    combined status snapshot. Short-TTL cached (default 8s)."""
+    combined status snapshot. Short-TTL cached (default 8s).
+
+    Feb 2026 · prod-hang fix — the individual `run_check_safely`
+    wrapper already carries an 8s asyncio.wait_for guard, but that
+    guard can't cancel a check_fn that blocks the event loop with
+    sync I/O (asyncio.wait_for needs a yield point).  Defence-in-
+    depth: wrap the whole aggregator in a 20s outer timeout so a
+    misbehaving check can never leave the client hanging forever,
+    AND record per-check wall-time so future regressions surface
+    immediately in the response detail."""
     now = time.time()
     if _STATUS_CACHE["payload"] and now < _STATUS_CACHE["expires_at"]:
         return _STATUS_CACHE["payload"]
 
     t0 = time.time()
     checks = all_checks()
-    results = await asyncio.gather(
-        *[run_check_safely(c) for c in checks],
-        return_exceptions=False,
-    )
+
+    async def _timed(c):
+        _t = time.time()
+        res = await run_check_safely(c)
+        res["check_ms"] = int((time.time() - _t) * 1000)
+        return res
+
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(*[_timed(c) for c in checks],
+                           return_exceptions=False),
+            timeout=20.0,
+        )
+    except asyncio.TimeoutError:
+        # Aggregator itself timed out — one or more check_fns are
+        # blocking the event loop.  Return a red overall snapshot so
+        # the UI can render immediately instead of spinning forever.
+        logger.error("[status/all] AGGREGATOR TIMED OUT after 20s — "
+                     "one or more check_fns are blocking the event loop")
+        return {
+            "generated_at": _iso_now(),
+            "took_ms":      int((time.time() - t0) * 1000),
+            "counts": {"green": 0, "red": len(checks), "gray": 0,
+                       "total": len(checks), "health_pct": 0.0},
+            "checks": [{
+                "id": c.id, "name": c.name, "category": c.category,
+                "status": "red", "detail": "aggregator timed out",
+                "checked_at": _iso_now(), "red_since": None,
+                "acked_until": None, "ack_active": False,
+                "check_ms": 20000,
+            } for c in checks],
+            **__import_env_stamp(),
+            "aggregator_timeout": True,
+        }
 
     rows: list[dict] = []
     now_iso = _iso_now()
@@ -169,6 +208,7 @@ async def status_all():
             "status":     status,
             "detail":     res.get("detail", ""),
             "checked_at": res.get("checked_at"),
+            "check_ms":   res.get("check_ms"),
             "red_since":  red_since,
             "acked_until": state["acked_until"],
             "ack_active":  _ack_active(state["acked_until"]),

@@ -5593,3 +5593,37 @@ un-quarantine deltas.
 Every remaining quarantine entry now represents a genuine functional
 regression worth per-test root-cause analysis — the batch is no
 longer polluted by stale contract-drift.
+
+## 2026-02 · PROD BUG · /admin/status/all + /admin/pulse hang fix
+
+### Real repro on auremcto.com
+Founder captured live: browser network tab showed
+`GET /api/aurem-dev/admin/status/all` and `GET /api/aurem-dev/admin/pulse`
+PENDING FOREVER after login → `/admin/cockpit` stuck on
+"loading live status…" indefinitely.
+
+### Root cause (proven via per-check timing)
+Two check_fns ran SYNC-BLOCKING work inside async coroutines:
+1. `_check_g18_timeout_audit` → `scripts.timeout_audit.run_audit()` — full-codebase file scan + regex parse (2+ seconds of blocking I/O).
+2. `_check_ci_vs_local_drift` → `_harvest_counts()` — `analyze_suite()` AST-parses every backend test file + `rglob("*.test.jsx")` over the whole frontend tree + `_count_matches` regex over every hit.
+Since both run inside `async def` with no `to_thread`, they BLOCK the event loop.  `asyncio.wait_for(check_fn(), timeout=8.0)` cannot cancel sync code without a yield point.  While the loop is blocked, EVERY sibling coroutine on the worker (including `/admin/pulse` which only wanted to run `count_documents`) stalls too — hence "both hanging".
+
+### Fix
+1. **health_checks.py** — both offending check_fns now off-load their sync work via `await asyncio.to_thread(fn)` so the per-check 8s guard can actually cancel them.
+2. **admin_health.py `/all`** — added a 20s OUTER `asyncio.wait_for` wrapping the whole `asyncio.gather` so any future sync-blocking regression can't hang the endpoint indefinitely; returns a red-heavy partial snapshot with `aggregator_timeout: true` when it trips. Also records per-check `check_ms` in every row so slow checks surface directly in the response (no more "guess which check").
+3. **admin.py `/pulse`** — 8 sequential `count_documents` calls are now a single `asyncio.gather` (parallel), wrapped in a 10s outer `asyncio.wait_for` that raises HTTP 504 with an actionable "check Mongo indexes on dev_users" hint.
+4. **AdminCockpit.jsx** — sections are DECOUPLED. `useCockpitData` carries a 15s per-request axios timeout. Even when `status/all` errors or times out, `ModeBoard` + `BusinessPulse` still render (unconditionally mounted below the health section). System-health section shows its own error banner with a retry button. Business Pulse fetches carry their own 12s timeouts.
+
+### Preview proof (real, before deploy)
+```
+GET /admin/status/all  → HTTP 200 · 2.12s · took_ms=2119 · counts={green:17, red:1, gray:7}
+  Slowest checks (in parallel):
+    2106ms  infra_ci_vs_local      gray  · CI unreachable (GITHUB_ACTIONS_TOKEN unset)
+    2102ms  g18_timeout            green · all I/O sites have a timeout budget
+GET /admin/pulse       → HTTP 200 · 0.15s
+```
+
+### Regression test (`tests/test_iter_feb2026_cockpit_hang_guard.py`)
+- `test_sync_blocking_check_does_not_hang_aggregator` — registers a check that does `asyncio.to_thread(time.sleep, 30s)`; asserts per-check 8s guard cancels within 12s and returns red.
+- `test_aggregator_outer_timeout_returns_partial_snapshot` — registers a truly-blocking check (bare `time.sleep(25)`); asserts the outer 20s aggregator timeout still returns a red-partial payload with `aggregator_timeout=true`.
+Both PASS (33.5s total, dominated by the deliberately-slow test bodies).
