@@ -15,6 +15,7 @@ import { api } from "../lib/api";
 import { toast } from "../components/Toast";
 import AuremAdminPanel from "../components/AuremAdminPanel";
 import OraChatDrawer from "../components/OraChatDrawer";        // Iter 212m-238
+import NotificationBell from "../components/NotificationBell";   // Feb 2026 · cockpit bell
 import AdminOverview from "./AdminOverview";
 import AdminSuggestions from "./AdminSuggestions";              // Iter 212m-193
 import AgentTokenPanel from "../components/AgentTokenPanel";
@@ -2374,6 +2375,9 @@ const td = { padding: "7px 10px" };
 
 //   • Warm Start + Post-scan Issues: merged into one "Reliability" tab.
 const NAV = [
+  // Feb 2026 — Cockpit is the new admin landing page. Kept at top so
+  // one click from any tab returns to the live-status overview.
+  { id: "cockpit", label: "Cockpit", Icon: Eye, route: "/admin/cockpit" },
   // Iter 212m-171 — sidebar grouped by responsibility.
   { group: "MONITOR" },
   { id: "overview", label: "Overview", Icon: Eye },
@@ -2621,6 +2625,17 @@ export default function Admin({ initialTab = "overview" }) {
         </div>
       </aside>
       <main style={{ overflow: "auto", height: "100vh", maxHeight: "100vh", minWidth: 0 }}>
+        {/* Feb 2026 — sticky top bar for the bell. Positioned so it
+            doesn't overlap page content; page renders below.  */}
+        <div style={{
+          display: "flex", justifyContent: "flex-end",
+          padding: "12px 20px 0", position: "sticky", top: 0,
+          zIndex: 10, background: "transparent", pointerEvents: "none",
+        }}>
+          <div style={{ pointerEvents: "auto" }}>
+            <NotificationBell />
+          </div>
+        </div>
         {renderPage()}
       </main>
       {/* Iter 212m-238 — floating ORA Chat drawer, available on every admin tab */}

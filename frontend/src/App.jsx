@@ -62,6 +62,7 @@ const Projects          = lazy(() => import("./pages/Projects"));
 const Integrations      = lazy(() => import("./pages/Integrations")); // Iter 212m-174
 const Admin             = lazy(() => import("./pages/Admin"));
 const AdminOverview     = lazy(() => import("./pages/AdminOverview"));
+const AdminCockpit      = lazy(() => import("./pages/AdminCockpit"));
 const AdminIntegrations = lazy(() => import("./pages/AdminIntegrations"));
 const AdminFinancials   = lazy(() => import("./pages/AdminFinancials"));
 const AdminVanguard     = lazy(() => import("./pages/AdminVanguard"));
@@ -224,7 +225,9 @@ export default function App() {
           <Route path="/tokens"          element={<Tokens />} />
           <Route path="/analytics"       element={<Analytics />} />
           <Route path="/projects"        element={<Projects />} />
-          <Route path="/admin"           element={<Admin />} />
+          <Route path="/admin"           element={<AdminCockpit />} />
+          <Route path="/admin/cockpit"   element={<AdminCockpit />} />
+          <Route path="/admin/dashboard" element={<Admin />} />
           <Route path="/admin/users"       element={<Admin initialTab="users" />} />
           <Route path="/admin/suggestions" element={<Admin initialTab="suggestions" />} />
           <Route path="/admin/overview"  element={<AdminOverview />} />

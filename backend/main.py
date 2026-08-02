@@ -39,6 +39,7 @@ from routers.upload import router as upload_router
 from routers.admin import router as admin_router
 from routers.admin_public import router as admin_public_router  # Iter 358 — public /admin/errors/report sink
 from routers.admin_qa import router as admin_qa_router          # Iter 303 (/admin/qa dashboard)
+from routers.admin_health import router as admin_health_router  # Feb 2026 — unified health registry aggregator
 from routers.support import router as support_router
 from routers.payments import router as payments_router
 from routers.mcp import router as mcp_router, mcp_discovery_root
@@ -377,6 +378,17 @@ async def lifespan(app: FastAPI):
     app.state.hallucination_classify_task = _supervise(
         schedule_hallucination_classify_batch(),
         name="hallucination_classify",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
+    )
+
+    # Feb 2026 — Cockpit Bell notifier. Long-lived poller diffing
+    # health_registry state and firing founder alerts on real red-
+    # transitions. See services/health_notifier.py.
+    from services.health_notifier import notifier_loop
+    app.state.health_notifier_task = _supervise(
+        notifier_loop(),
+        name="health_notifier",
         db_getter=lambda: app.state.db,
         long_lived=True,
     )
@@ -2204,6 +2216,7 @@ app.include_router(upload_router,        prefix="/api/aurem-dev")
 app.include_router(admin_router,         prefix="/api/aurem-dev")
 app.include_router(admin_public_router,  prefix="/api/aurem-dev")  # Iter 358 — un-gated /admin/errors/report
 app.include_router(admin_qa_router,      prefix="/api/aurem-dev")  # Iter 303 — /admin/qa dashboard
+app.include_router(admin_health_router,  prefix="/api")             # Feb 2026 — /api/aurem-dev/admin/status/*
 app.include_router(support_router,       prefix="/api/aurem-dev")
 app.include_router(payments_router,      prefix="/api/aurem-dev")
 app.include_router(usage_router,         prefix="/api/aurem-dev")
