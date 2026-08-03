@@ -499,7 +499,19 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   // whether to render the PlanApprovalCard. `retryCount` is reserved
   // for future verify-loop auto-retry UX (max 3).
   const [loopPhase, setLoopPhase] = useState("idle");
+  // Feb 2026 · Retry counter semantics. Historically this tracked the
+  // INNER self-heal attempt (1-2), but the LoopStepBar's chip renders
+  // it as "N/3 retries" — a mismatched display that led to founder
+  // report "UI shows 1/3 retries but actually on 3rd" (the outer
+  // verify retry). We now split cleanly:
+  //   • `loopRetryCount`      → inner self-heal attempt (0..2)
+  //   • `loopVerifyRetryCount`→ OUTER verify retry (0..3), sourced
+  //                             from the backend `verify_retry_count`
+  //                             field in paused_for_user events.
+  // LoopStepBar consumes the outer one for its "N/3" chip so the
+  // number always matches what the user experiences.
   const [loopRetryCount, setLoopRetryCount] = useState(0);
+  const [loopVerifyRetryCount, setLoopVerifyRetryCount] = useState(0);
 
   // ── Iter 309 · Live Narration state ────────────────────────────────
   // `loopStepTones` — derived from real backend narration events with
@@ -592,6 +604,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       setLoopStepTones({});
       setLoopErrorPhase(null);
       setLoopRetryCount(0);
+      setLoopVerifyRetryCount(0);
     }, CHIP_RESET_DELAY_MS);
     return () => clearTimeout(t);
   }, [loopTerminal, loopPhase]);
@@ -2379,6 +2392,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     setSelfHeal({ visible: false, attempt: 1, max: 3, errorPreview: "" });
     setUserAction(null);
     setLoopRetryCount(0);
+    setLoopVerifyRetryCount(0);
     setLoopPhase("plan_pending");
     // Iter 309 · Reset per-step tones on a fresh loop kick-off so
     // stale success/danger colours from the previous run don't leak
@@ -3057,10 +3071,24 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           : (Array.isArray(data.findings)
               ? data.findings.map((f) => `${f.severity}: ${f.path || ""} — ${f.title || f.message || ""}`)
               : []);
+        // Feb 2026 · Verify-retry counter sync — backend emits
+        // `verify_retry_count` (0..3) in the paused_for_user payload
+        // for verify-phase pauses. Mirror it into local state so the
+        // LoopStepBar chip renders the CURRENT outer retry count
+        // instead of the stale inner self-heal counter.
+        if (phase === "verify"
+            && typeof data.verify_retry_count === "number") {
+          setLoopVerifyRetryCount(data.verify_retry_count);
+        }
         setUserAction({
           phase,
           message: ev.message || "Loop paused — your input needed.",
           errors,
+          verifyRetryCount: (phase === "verify")
+            ? (typeof data.verify_retry_count === "number"
+                ? data.verify_retry_count : 0)
+            : undefined,
+          maxVerifyRetries: 3,
         });
       }
     } else if (!requiresAction && state !== "paused_for_user") {
@@ -4007,6 +4035,8 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         <LoopStepBar
           phase={loopPhase}
           retryCount={loopRetryCount}
+          verifyRetryCount={loopVerifyRetryCount}
+          maxVerifyRetries={3}
           errorStep={loopPhase === "error"
             ? ({plan:1, execute:2, verify:3, security:4, scan:4, ship:5}[
                 (loopErrorPhase || "").toLowerCase()] || 2)

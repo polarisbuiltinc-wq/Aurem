@@ -590,6 +590,62 @@ async def pause_response(loop_id: str, body: PauseResponseBody,
                     "verifier_retry_count": current,
                     "max_verifier_retries": MAX_VERIFIER_RETRIES,
                 }
+            # Feb 2026 · Verify-phase retry hard-cap — founder report:
+            # loop stuck in an infinite verify-fail cycle. Trace:
+            #   1. execute → verify (2 self-heal rounds fail)
+            #   2. paused_for_user (verify) → founder hits "retry"
+            #   3. loop resumes from EXECUTE → re-runs SAME plan
+            #   4. same lint/type errors → verify fails again
+            #   5. paused again → GOTO 2. Forever.
+            # We now cap outer verify retries at 3 total, mirroring the
+            # verifier_retry_count pattern above. On each retry we also
+            # inject the failing files + top errors into the feedback
+            # string so the executor gets a materially different context
+            # (which combined with loop_engine.py's per-file
+            # per_file_attempt_history makes each round diverge).
+            if engine.phase == "verify":
+                current = int(engine.context.get("verify_retry_count", 0)) + 1
+                engine.context["verify_retry_count"] = current
+                MAX_VERIFY_RETRIES = 3
+                if current > MAX_VERIFY_RETRIES:
+                    raise HTTPException(
+                        429,
+                        {"error": "verify_retry_cap_exceeded",
+                         "message": (
+                             f"Verify has failed on {current - 1} outer "
+                             f"retries (each with {2} self-heal rounds). "
+                             f"Refusing a {current}th attempt — the plan "
+                             f"isn't converging. Cancel this loop, revise "
+                             f"the brief with concrete file/API guidance, "
+                             f"and start fresh."
+                         ),
+                         "verify_retry_count": current - 1,
+                         "max_verify_retries": MAX_VERIFY_RETRIES},
+                    )
+                # Pull the failing files + top errors from context set
+                # by _do_verify when the pause was emitted, so the
+                # feedback carries concrete signal, not a bare
+                # "resume:retry".
+                _failed = (engine.context.get("verify_failed_files") or [])[:6]
+                _errs = (engine.context.get("verify_last_errors") or [])[:5]
+                _err_str = " | ".join(str(e)[:120] for e in _errs)
+                engine.state = eng.LoopState.AWAITING_CONFIRMATION
+                await engine.confirm(
+                    True,
+                    feedback=(
+                        f"resume:retry "
+                        f"[verify_retry {current}/{MAX_VERIFY_RETRIES}] "
+                        f"failed_files={_failed} "
+                        f"prev_errors={_err_str}"
+                    ),
+                )
+                return {
+                    "loop_id": loop_id,
+                    "state":   engine.state.value,
+                    "phase":   engine.phase,
+                    "verify_retry_count": current,
+                    "max_verify_retries": MAX_VERIFY_RETRIES,
+                }
         engine.state = eng.LoopState.AWAITING_CONFIRMATION
         await engine.confirm(True, feedback=f"resume:{body.action}")
     return {

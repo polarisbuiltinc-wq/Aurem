@@ -173,7 +173,15 @@ function ECGStrip({ variant, testid }) {
 /**
  * @param {object} props
  * @param {string} props.phase                — current SSE-derived phase
- * @param {number} props.retryCount           — self-heal retry pill
+ * @param {number} props.retryCount           — INNER self-heal retry (0-2)
+ * @param {number} [props.verifyRetryCount]   — OUTER verify retry (0-3),
+ *                                              sourced from the backend
+ *                                              `verify_retry_count` field
+ *                                              on paused_for_user events.
+ *                                              When present, this drives
+ *                                              the retry pill instead of
+ *                                              the inner counter.
+ * @param {number} [props.maxVerifyRetries=3] — hard cap for outer retries
  * @param {number} props.errorStep            — 1-5, step that failed
  * @param {object} [props.stepTones]          — { plan, execute, verify, scan, ship } →
  *                                              "pending" | "success" | "warning" | "danger" | null
@@ -181,7 +189,8 @@ function ECGStrip({ variant, testid }) {
  *                                              null / missing key = future step (untouched).
  */
 export default function LoopStepBar({
-  phase, retryCount = 0, errorStep = 0, stepTones = {},
+  phase, retryCount = 0, verifyRetryCount, maxVerifyRetries = 3,
+  errorStep = 0, stepTones = {},
 }) {
   if (!phase) return null;
 
@@ -354,10 +363,15 @@ export default function LoopStepBar({
         })}
       </div>
 
-      {retryCount > 0 && (
+      {(verifyRetryCount > 0 || retryCount > 0) && (
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <span
             data-testid="loop-retry-pill"
+            title={
+              verifyRetryCount > 0
+                ? `Outer verify retry ${verifyRetryCount} of ${maxVerifyRetries}`
+                : `Self-heal round ${retryCount} of 2`
+            }
             style={{
               padding: "3px 9px", borderRadius: 999,
               fontSize: 10, fontWeight: 700,
@@ -365,7 +379,11 @@ export default function LoopStepBar({
               background: "rgba(251,146,60,0.10)",
               border: "1px solid rgba(251,146,60,0.32)",
             }}
-          >{retryCount}/3 retries</span>
+          >
+            {verifyRetryCount > 0
+              ? `${verifyRetryCount}/${maxVerifyRetries} retries`
+              : `heal ${retryCount}/2`}
+          </span>
         </div>
       )}
 

@@ -2057,6 +2057,15 @@ class LoopEngine:
 
         # MAX_SELF_HEALS exhausted with files still failing — pause
         # for user input (G1 — no silent failures).
+        # Feb 2026 · Verify-phase retry cap — store failing files + top
+        # errors in context so pause_response(retry) can inject them
+        # into the executor feedback for the next outer attempt, and
+        # so each subsequent retry sees genuinely different context.
+        _failing_files = [
+            r["path"] for r in report["results"] if not r["ok"]
+        ]
+        self.context["verify_failed_files"] = _failing_files
+        self.context["verify_last_errors"]  = report["errors"][:25]
         self.state = LoopState.PAUSED_FOR_USER
         await _persist_session(self.db, self._doc())
         await self._emit(
@@ -2067,9 +2076,11 @@ class LoopEngine:
                 "attempts. Your input needed."
             ),
             data={"errors": report["errors"][:25],
-                  "failed_files": [
-                      r["path"] for r in report["results"] if not r["ok"]
-                  ]},
+                  "failed_files": _failing_files,
+                  "verify_retry_count": int(
+                      self.context.get("verify_retry_count", 0)
+                  ),
+                  "max_verify_retries": 3},
             requires_user_action=True,
         )
         # Iter 309 · Narration — DANGER as the FINAL narration for the
