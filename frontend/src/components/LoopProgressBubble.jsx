@@ -38,12 +38,27 @@ export default function LoopProgressBubble({ text, streaming, children }) {
   const [open, setOpen] = useState(false);
   const expanded = streaming || open;
   const { stepCount, status, color } = summarize(text || "", streaming);
+  // Feb 2026 — Founder repro: expanding a completed loop's collapsed
+  // "Loop run · N step events [Aborted/Finished]" bubble silently
+  // reset the composer's tier indicator (CASUAL → AGENTIC) AND the
+  // Loop toggle (LOOP ON → LOOP OFF). Root cause turned out to be
+  // click-event bubbling up from this button to an ancestor handler
+  // in the chat scroller. Stopping propagation on the toggle click
+  // isolates this READ-ONLY historical view from any composer-state
+  // mutations upstream — LoopProgressBubble is display-only, its
+  // click MUST not touch composer state.
+  const onToggle = (e) => {
+    if (e && typeof e.stopPropagation === "function") e.stopPropagation();
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    setOpen((v) => !v);
+  };
   return (
     <div data-testid="loop-progress-bubble" data-expanded={expanded ? "true" : "false"}>
       <button
         type="button"
         data-testid="loop-progress-toggle"
-        onClick={() => setOpen((v) => !v)}
+        onClick={onToggle}
+        onPointerDown={(e) => { if (e && typeof e.stopPropagation === "function") e.stopPropagation(); }}
         disabled={streaming}
         aria-expanded={expanded}
         style={{
