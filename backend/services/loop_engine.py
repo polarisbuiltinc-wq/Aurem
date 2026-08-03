@@ -1872,6 +1872,19 @@ class LoopEngine:
         # Up to MAX_SELF_HEALS healing rounds.  Each round only
         # touches the files that failed in the PREVIOUS report —
         # passing files stay locked in so we don't re-lint them.
+        #
+        # Feb 2026 · Retry-genuinely-different bug — founder report:
+        # "when the independent verifier rejects a diff, the retry
+        # produces the identical failed attempt". Root cause: the
+        # `all_attempts` list passed to `parliament.SelfHeal.heal()`
+        # was built fresh every iteration with ONLY the current
+        # broken state, so the healer's "PRIOR FAILED ATTEMPTS"
+        # history block (which explicitly instructs "Do NOT repeat
+        # the same fix") never fired past `len > 1`. Now we
+        # accumulate per-file history across all heal rounds so
+        # every retry sees every prior failed output + error, and
+        # the "Do NOT repeat" prompt actually engages.
+        per_file_attempt_history: dict[str, list[dict]] = {}
         for heal_attempt in range(1, MAX_SELF_HEALS + 1):
             if self._cancelled:
                 return
@@ -1935,14 +1948,22 @@ class LoopEngine:
                         + "\n--- END ERRORS ---"
                     )
                     last_err = (r.get("stdout") or r.get("stderr") or "") + "\n" + "\n".join(report["errors"][:8])
+                    # Feb 2026 · Retry-genuinely-different — append the
+                    # current failing state to this file's cumulative
+                    # history BEFORE calling the healer, so round N
+                    # sees rounds 1..N-1 as prior failures and the
+                    # healer's "Do NOT repeat the same fix" instruction
+                    # can actually diverge from earlier attempts.
+                    file_hist = per_file_attempt_history.setdefault(f["path"], [])
+                    file_hist.append({
+                        "output": f["content"],
+                        "score":  0.0,
+                        "error":  last_err,
+                    })
                     heal_result = await asyncio.wait_for(
                         _parl.healer.heal(
                             task=heal_task,
-                            all_attempts=[{
-                                "output": f["content"],
-                                "score":  0.0,
-                                "error":  last_err,
-                            }],
+                            all_attempts=list(file_hist),
                             round_num=heal_attempt,
                             max_rounds=MAX_SELF_HEALS,
                         ),

@@ -240,14 +240,35 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
   // synthesise one so the Preview tab opens on the Live Site
   // instead of falling through to README.md (the alphabetical-first
   // file in the codebase tree).
+  //
+  // Feb 2026 · Preview-Live-Site-shows-raw-text fix — founder report:
+  // Preview tab showed the raw URL string instead of an embedded
+  // iframe. Root cause: this synthesizer only checked
+  // `activeProject.preview_url` (user-supplied), but for Personal
+  // Track builds Vercel auto-populates `activeProject.live_url`
+  // (routers/scaffold.py line 878) and never sets `preview_url`. So
+  // the synthetic block was never created, no live_url tab existed,
+  // and the panel fell through to a codebase file (or raw text).
+  // Now we fall back through both fields, trim whitespace, and
+  // require a valid http(s) scheme so we never hand the iframe a
+  // half-typed value that renders as text.
   const hasLiveBlock = realBlocks.some(
     (b) => (b?.lang || "").toLowerCase() === "live_url"
   );
-  const syntheticLive = (!hasLiveBlock && activeProject?.preview_url)
+  const _rawLiveUrl = (
+    activeProject?.preview_url
+    || activeProject?.live_url
+    || ""
+  );
+  const _cleanLiveUrl = String(_rawLiveUrl).trim();
+  const _validLiveUrl = /^https?:\/\/[^\s]+$/i.test(_cleanLiveUrl)
+    ? _cleanLiveUrl
+    : "";
+  const syntheticLive = (!hasLiveBlock && _validLiveUrl)
     ? [{
         lang: "live_url",
         label: "Live Site",
-        code: activeProject.preview_url,
+        code: _validLiveUrl,
         synthetic: true,
       }]
     : [];
@@ -498,7 +519,7 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
           <iframe
             key={`liveurl-${block.code}-${refreshKey}`}
             data-testid="preview-iframe-live"
-            src={block.code}
+            src={String(block.code || "").trim()}
             title="live-site"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
             style={{

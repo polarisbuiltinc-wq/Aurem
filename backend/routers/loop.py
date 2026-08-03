@@ -536,6 +536,60 @@ async def pause_response(loop_id: str, body: PauseResponseBody,
         # Iter 212m-176 — confirm() guards on AWAITING_CONFIRMATION and
         # raised ValueError when we pre-set EXECUTING (every retry/skip
         # 499'd in PROD). Set the state confirm() expects instead.
+        #
+        # Feb 2026 · Retry-hard-cap + genuinely-different feedback —
+        # founder report: "'try a different approach' should generate
+        # a genuinely different diff, not repeat the identical failed
+        # attempt". When the loop is paused because the independent
+        # verifier rejected the diff (context.independent_verifier
+        # verdict == 'no'), we:
+        #   (1) Count retries in `verifier_retry_count`. After 3 total
+        #       verifier-rejection retries we fail cleanly instead of
+        #       looping forever (founder-directed hard cap).
+        #   (2) Inject the verifier's rejection reason into the
+        #       `feedback` string so the next EXECUTE pass sees WHY
+        #       the previous diff was rejected. Combined with the
+        #       per-file attempt history in _do_verify's self-heal
+        #       (loop_engine.py), this ensures the retry doesn't
+        #       re-emit the same failing diff.
+        if body.action == "retry":
+            ver_ctx = engine.context.get("independent_verifier") or {}
+            if ver_ctx.get("verdict") == "no":
+                current = int(engine.context.get("verifier_retry_count", 0)) + 1
+                engine.context["verifier_retry_count"] = current
+                MAX_VERIFIER_RETRIES = 3
+                if current > MAX_VERIFIER_RETRIES:
+                    raise HTTPException(
+                        429,
+                        {"error": "verifier_retry_cap_exceeded",
+                         "message": (
+                             f"Independent verifier has rejected this "
+                             f"loop's diff {current - 1} times. Refusing "
+                             f"a {current}th retry — the approach isn't "
+                             f"converging. Cancel and start a fresh loop "
+                             f"with a narrower brief."
+                         ),
+                         "verifier_retry_count": current - 1,
+                         "max_verifier_retries": MAX_VERIFIER_RETRIES,
+                         "verifier_reason": ver_ctx.get("reason", "")},
+                    )
+                # Pass the verifier reason into the executor so it
+                # can produce a genuinely different approach.
+                _reason = (ver_ctx.get("reason") or "")[:600]
+                engine.state = eng.LoopState.AWAITING_CONFIRMATION
+                await engine.confirm(
+                    True,
+                    feedback=(f"resume:retry "
+                              f"[verifier_retry {current}/{MAX_VERIFIER_RETRIES}] "
+                              f"prev_reject_reason={_reason}"),
+                )
+                return {
+                    "loop_id": loop_id,
+                    "state":   engine.state.value,
+                    "phase":   engine.phase,
+                    "verifier_retry_count": current,
+                    "max_verifier_retries": MAX_VERIFIER_RETRIES,
+                }
         engine.state = eng.LoopState.AWAITING_CONFIRMATION
         await engine.confirm(True, feedback=f"resume:{body.action}")
     return {
