@@ -746,27 +746,37 @@ export default function LoopLiveFeed({ loopId, event, terminal, phase, projectId
             {emptyLine}
           </div>
         )}
-        {/* Iter 329 · Task 2 · Fix A — persistent inline Shipped row
-            on ship completion. Gate is `shipInfo` alone (not
-            `shipInfo && terminal`). Rationale: extractShipInfo
-            already requires state=completed + phase=ship +
-            data.commit_sha; the server-side invariant (loop_engine.py
-            2823-2944) guarantees commit_sha is populated ONLY after
-            a real GitHub push, so shipInfo being truthy IS the
-            terminal signal. The previous dual-gate coupled ShippedRow
-            to the parent's `terminal` prop which could flicker false
-            on unrelated re-renders (openLoopStream reset,
-            heartbeats), unmounting the row and losing internal state
-            (phase="confirming", timers). That was Bug X behind the
-            confirm-click never firing on production. */}
-        {shipInfo && (
-          <ShippedRow
-            loopId={loopId}
-            ship={shipInfo}
-            onRollbackStarted={onRollbackStarted}
-          />
-        )}
       </div>
+      )}
+
+      {/* Iter 329 · Task 2 · Fix A — persistent inline Shipped row
+          on ship completion. Gate is `shipInfo` alone (not
+          `shipInfo && terminal`). Rationale: extractShipInfo
+          already requires state=completed + phase=ship +
+          data.commit_sha; the server-side invariant (loop_engine.py
+          2823-2944) guarantees commit_sha is populated ONLY after
+          a real GitHub push, so shipInfo being truthy IS the
+          terminal signal. The previous dual-gate coupled ShippedRow
+          to the parent's `terminal` prop which could flicker false
+          on unrelated re-renders (openLoopStream reset,
+          heartbeats), unmounting the row and losing internal state
+          (phase="confirming", timers). That was Bug X behind the
+          confirm-click never firing on production.
+
+          Feb 2026 · Rollback-visibility bug — the row USED to live
+          INSIDE the `!collapsed` scroller, so when a founder
+          collapsed the feed panel (chevron toggle in the header),
+          the Shipped label + Rollback button vanished with it.
+          Founder report: "rollback not showing after successfully
+          shipping" on production. Moved OUTSIDE the collapse gate
+          so ship-success + Rollback stay visible regardless of
+          panel state — the whole point of a persistent row. */}
+      {shipInfo && (
+        <ShippedRow
+          loopId={loopId}
+          ship={shipInfo}
+          onRollbackStarted={onRollbackStarted}
+        />
       )}
 
       {/* Iter 339l — OperationHistory REMOVED from inside the feed.
