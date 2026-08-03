@@ -569,6 +569,32 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   // failed/aborted so the pulsing indicator turns steady.
   const [loopFeedEvent, setLoopFeedEvent] = useState(null);
   const [loopTerminal, setLoopTerminal] = useState(false);
+
+  // Feb 2026 · Founder request — "loop chip fir se refresh honi
+  // chahiye, no green": after a loop completes/fails/aborts, the
+  // 5-step LoopStepBar (PLAN·EXECUTE·VERIFY·SCAN·SHIP) currently
+  // stays frozen green forever. Users want it to refresh to idle
+  // so the next loop starts on a clean chip. We hold the terminal
+  // state visible for `CHIP_RESET_DELAY_MS` (long enough to read
+  // the outcome), then null out loopPhase + stepTones — which
+  // makes LoopStepBar return null (line 186) and unmount cleanly.
+  // The next `openLoopStream` re-renders it from scratch when the
+  // next loop kicks off.
+  //
+  // We intentionally keep `loopId` alive so LoopLiveFeed's persistent
+  // Shipped row (with the Rollback button) survives past this reset —
+  // that's a permanent affordance, not a chip transient.
+  const CHIP_RESET_DELAY_MS = 8000;
+  useEffect(() => {
+    if (!loopTerminal || !loopPhase) return;
+    const t = setTimeout(() => {
+      setLoopPhase(null);
+      setLoopStepTones({});
+      setLoopErrorPhase(null);
+      setLoopRetryCount(0);
+    }, CHIP_RESET_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [loopTerminal, loopPhase]);
   // Iter 288 — synchronous guard against late/out-of-order SSE frames
   // (heartbeats or per-file "executing" events from parallel tasks
   // whose queue.put() awaited across `_fail`'s _emit). State updates
