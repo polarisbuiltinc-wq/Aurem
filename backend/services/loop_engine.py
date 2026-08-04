@@ -2072,6 +2072,20 @@ class LoopEngine:
                     # bumps temperature slightly per round.
                     from core.parliament import Parliament as _P
                     _parl = _P(db=self.db)
+                    # Iter 362 · Bug — reproducible self-heal failure
+                    # on files where the LLM introduced a
+                    # structural violation (e.g. import inside a
+                    # function body → E402). The heal prompt didn't
+                    # tell the healer WHERE constraints matter, so
+                    # each attempt reshuffled things in a fresh way
+                    # that still tripped the same rule.
+                    #
+                    # Fix: inject explicit structural-preservation +
+                    # import-placement guidance into `heal_task`.
+                    # These rules are LANGUAGE-AGNOSTIC (any healer
+                    # picking up a Python or JS file needs them) —
+                    # the healer already sees the LINT ERRORS block
+                    # so it can decide which rules apply.
                     heal_task = (
                         f"Original user request:\n{self.user_message}\n\n"
                         f"File path: {f['path']}\n\n"
@@ -2080,7 +2094,36 @@ class LoopEngine:
                             ([r.get("stdout") or r.get("stderr") or ""]
                              + report["errors"])[:25]
                         )
-                        + "\n--- END ERRORS ---"
+                        + "\n--- END ERRORS ---\n\n"
+                        "STRUCTURAL RULES (obey ALL of these while healing):\n"
+                        " 1. Preserve every existing function/class "
+                        "signature and top-level constant unless the "
+                        "user request explicitly asks to change them. "
+                        "Do NOT rename, reorder, or drop existing symbols.\n"
+                        " 2. All `import` / `from ... import` "
+                        "statements MUST live at the TOP of the file "
+                        "(after the module docstring, before any code). "
+                        "Never place an import inside a function body — "
+                        "that emits E402. If a needed import is missing, "
+                        "add it at the top; if one is already inside a "
+                        "function, MOVE it to the top.\n"
+                        " 3. When adding validation, error handling, or "
+                        "auth checks: insert the new lines at the FIRST "
+                        "logical position inside the target function "
+                        "(after any existing preamble like secret / auth "
+                        "checks, BEFORE the main side-effect call). "
+                        "Do NOT wrap the entire function body in a new "
+                        "try/if that changes indentation of untouched "
+                        "lines.\n"
+                        " 4. Preserve import ordering: stdlib → third-"
+                        "party → local, with a blank line between "
+                        "groups. Do NOT alphabetize or reorder groups "
+                        "the user didn't ask you to touch.\n"
+                        " 5. Do NOT introduce unused variables (F841) "
+                        "or unused imports (F401). If your fix leaves "
+                        "one behind, remove it before returning.\n"
+                        " 6. Return the COMPLETE final file body — "
+                        "no fences, no elision markers, no summaries.\n"
                     )
                     last_err = (r.get("stdout") or r.get("stderr") or "") + "\n" + "\n".join(report["errors"][:8])
                     # Feb 2026 · Retry-genuinely-different — append the
@@ -3755,7 +3798,8 @@ class LoopEngine:
         except Exception:                               # noqa: BLE001
             pass
 
-    async def _fail(self, phase: str, reason: str) -> None:
+    async def _fail(self, phase: str, reason: str,
+                     data: Optional[dict] = None) -> None:
         self.state = LoopState.FAILED
         self.phase = phase
         self.context["errors_encountered"].append(
@@ -3780,8 +3824,33 @@ class LoopEngine:
             )
         except Exception as e:                              # noqa: BLE001
             logger.debug("safety hooks on _fail failed: %r", e)
+        # Iter 362 · Bug — surface actual verify lint/type errors to
+        # the user (founder-directed). Previously the terminal FAILED
+        # event only carried the `reason` string; the chat UI rendered
+        # a generic "Verify failed after 2 attempts" narration with
+        # zero actionable detail. Now callers can pass structured
+        # `data` (failed_files + errors) that the frontend renders in
+        # a dedicated LoopFailureCard so the user can either fix
+        # manually or give ORA a more specific follow-up.
+        _emit_data: dict = {"kind": "terminal_fail",
+                            "phase": phase,
+                            "reason": reason}
+        # For verify-phase terminal fails we already persisted rich
+        # context (verify_failed_files + verify_last_errors). Inject
+        # them into the FAILED emit as first-class fields so the
+        # frontend LoopFailureCard doesn't need a second HTTP round-trip.
+        if phase == "verify":
+            _emit_data["failed_files"] = list(
+                self.context.get("verify_failed_files") or [])[:12]
+            _emit_data["errors"] = list(
+                self.context.get("verify_last_errors") or [])[:25]
+            _emit_data["max_self_heals"] = MAX_SELF_HEALS
+        if isinstance(data, dict):
+            _emit_data.update(data)
         await self._emit(LoopState.FAILED, phase,
-                         message=reason, requires_user_action=True)
+                         message=reason,
+                         data=_emit_data,
+                         requires_user_action=True)
 
 
 _TERMINAL = {LoopState.COMPLETED, LoopState.FAILED, LoopState.ABORTED}

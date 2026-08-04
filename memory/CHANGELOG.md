@@ -5,6 +5,75 @@ statement and historical context; this file captures recent feature
 work in date-stamped chunks so PRD.md stays focused.
 
 
+## 2026-02-04 18:32 UTC — Iter 362.1 · Verify-fail surfacing + heal-prompt hardening (P1)
+
+Founder-repro (P1, 2/2 identical runs on `uptime_webhook_router.py`):
+Execute succeeded → Verify failed → self-heal 1/2 failed → self-heal
+2/2 failed → terminal fail with a generic "Verify failed after 2
+attempts" message. **User had zero information to act on** — no
+lint/type errors surfaced in the chat UI.
+
+### Part A · Heal-prompt hardening (root-cause reduction)
+Investigation: the previous heal prompt handed over the lint errors
++ file content and said "fix". No structural constraints. Each
+round's temperature bump (0.1 → 0.2 → 0.3) explored
+different-but-equally-broken diffs — the classic
+"an-import-inside-a-function" (ruff E402) trap the founder's Prompt
+Mode analysis had already flagged for this exact file.
+
+Fix — `backend/services/loop_engine.py::_do_verify` heal prompt now
+carries 6 explicit structural rules:
+1. Preserve every existing signature / top-level constant.
+2. Imports at the TOP of the file — never inside a function body
+   (E402). Move existing offenders up.
+3. Insert new validation at the **first logical position** inside
+   the target function (after preamble, before the main side-effect
+   call). Do NOT rewrap the entire body.
+4. Preserve stdlib → 3rd-party → local import ordering.
+5. No unused variables (F841) / unused imports (F401).
+6. Return the COMPLETE final file body (no fences, no elision).
+
+Tests — `test_iter_feb2026_heal_prompt_structural_rules.py` (5
+contracts). Locks in every rule so a future refactor can't silently
+drop them.
+
+### Part B · Surface actual lint/type errors to the user (UX)
+`_fail("verify", ...)` now emits the terminal FAILED event with a
+structured `data` payload:
+- `kind: "terminal_fail"`, `phase`, `reason`
+- `failed_files` (from `context.verify_failed_files`, up to 12)
+- `errors` (from `context.verify_last_errors`, top-25 lint output)
+- `max_self_heals` (drives the card title)
+
+New frontend component `LoopFailureCard.jsx` renders the payload:
+- Phase-appropriate title ("Verify failed after 2 self-heal attempts").
+- Failing files list with monospace paths.
+- Scrollable error panel (raw ruff/eslint output).
+- Copy-details button so the user can paste into a follow-up ORA
+  prompt like "add the validation right after the existing secret
+  check on line 42".
+- Graceful degradation when older engines emit FAILED without the
+  new payload keys.
+
+Wired into `ChatPanel.jsx`:
+- `loopFailure` state captures the FAILED event's data on arrival.
+- Card renders below `SelfHealIndicator` on terminal failure.
+- Resets cleanly on fresh loop start + auto-clears via chip-reset delay.
+
+Tests:
+- Backend: `test_iter_feb2026_verify_fail_surfaces_errors.py` (3
+  contracts — verify emits payload; non-verify still tags
+  `terminal_fail`; caller-supplied data merges cleanly).
+- Frontend: `LoopFailureCard.test.jsx` (6 contracts — renders title
+  + reason + files + errors; collapse toggle; graceful degradation;
+  copy button; error truncation).
+
+### Total tests green
+Backend: **42/42** (5 new + 3 new + 34 prior)
+Frontend: **6/6** new + all prior rollback/self-heal tests passing.
+
+
+
 ## 2026-02-04 07:00 UTC — Iter 362 · Post-Retest Bug Fixes (Bugs A/B/C)
 
 Founder's regression retest (Aug 4, 2026) confirmed 3 real bugs

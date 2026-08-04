@@ -49,6 +49,7 @@ import PlanApprovalCard from "./PlanApprovalCard";
 // User Action card (powered by the real /loop/* SSE stream).
 import { SelfHealIndicator, UserActionCard } from "./LoopActionCards";
 import ShipPendingCard from "./ShipPendingCard";
+import LoopFailureCard from "./LoopFailureCard";
 // Iter 328 hotfix v3 — pure mappers for the two ship-pending ingress
 // paths. Extracted here (and unit-tested at src/lib/__tests__) after
 // the founder's fiber-trace found one path had silently reverted its
@@ -535,6 +536,12 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   // ship-time or verify-time failure would incorrectly paint EXECUTE
   // red. Now we remember the phase from the failed SSE frame.
   const [loopErrorPhase, setLoopErrorPhase] = useState(null);
+  // Iter 362 · Bug — captured payload from the terminal FAILED SSE
+  // event so LoopFailureCard can surface the actual lint / type-check
+  // errors + failing files to the user. Previously the chat UI only
+  // showed a generic "Verify failed after 2 attempts" narration with
+  // zero actionable detail.
+  const [loopFailure, setLoopFailure] = useState(null);
   // The pending plan message id — once the user approves, we continue
   // the same session with a `LOOP_PHASE:execute` follow-up.
   const pendingPlanRef = useRef(null);
@@ -609,6 +616,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       setLoopPhase(null);
       setLoopStepTones({});
       setLoopErrorPhase(null);
+      setLoopFailure(null);        // Iter 362 · clear terminal-fail card
       setLoopRetryCount(0);
       setLoopVerifyRetryCount(0);
     }, CHIP_RESET_DELAY_MS);
@@ -3036,6 +3044,25 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       setLoopErrorPhase(phase);
       setBusy(false);           // stop the "Agent is running…" bar immediately
       setLoopTerminal(true);    // stop the heartbeat / gap-fallback line
+      // Iter 362 · Bug — capture the FAILED event's structured
+      // payload (failed_files + errors) so LoopFailureCard can
+      // render the actual lint / type-check output for the user.
+      // Falls back gracefully if the backend on the other end of
+      // this SSE hasn't been upgraded yet.
+      const _failedFiles = Array.isArray(data?.failed_files)
+        ? data.failed_files
+        : [];
+      const _failedErrors = Array.isArray(data?.errors)
+        ? data.errors
+        : [];
+      setLoopFailure({
+        phase,
+        reason: ev.message || data?.reason || "",
+        failedFiles: _failedFiles,
+        errors: _failedErrors,
+        maxSelfHeals: (typeof data?.max_self_heals === "number")
+          ? data.max_self_heals : undefined,
+      });
     }
 
     // Iter 212m-106 → Iter 329 · Task 2 — Ship modal suppression.
@@ -3237,6 +3264,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     // second run in the same session actually accepts events again.
     loopTerminalRef.current = false;
     setLoopErrorPhase(null);
+    setLoopFailure(null);           // Iter 362 · reset terminal-fail card
     // Iter 280 P0 — SSE event-chain tracing. Explicit console.debug
     // at every stage so a real (human-driven) browser session can
     // confirm whether events actually reach the frontend, and if so
@@ -4128,6 +4156,20 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         errorPreview={selfHeal.errorPreview}
         startedAt={selfHeal.startedAt}
       />
+      {/* Iter 362 · Bug (Part B) — surface actual verify lint/type
+          errors on terminal FAILED. Was previously just a generic
+          "Verify failed after 2 attempts" narration with zero detail. */}
+      {loopFailure && (
+        <div className="chat-inline-card">
+          <LoopFailureCard
+            phase={loopFailure.phase}
+            reason={loopFailure.reason}
+            failedFiles={loopFailure.failedFiles}
+            errors={loopFailure.errors}
+            maxSelfHeals={loopFailure.maxSelfHeals}
+          />
+        </div>
+      )}
       {userAction && (
         <UserActionCard
           phase={userAction.phase}
