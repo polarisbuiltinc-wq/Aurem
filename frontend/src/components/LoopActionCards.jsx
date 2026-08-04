@@ -6,7 +6,7 @@
  *   <SelfHealIndicator>
  *     Slim inline strip that lights up while the engine is rewriting
  *     a file that failed ruff/eslint.  Animates a self-heal "spinning
- *     wrench" + "attempt n/3" copy.  Hidden when state isn't
+ *     wrench" + "attempt n/2" copy.  Hidden when state isn't
  *     self-healing.
  *
  *   <UserActionCard>
