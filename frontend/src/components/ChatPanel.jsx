@@ -2860,6 +2860,27 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       setLoopStepTones((prev) => ({ ...prev, [step]: tone }));
     }
 
+    // Feb 2026 · Founder repro — "heal X/2 chip stuck at 1/2 across
+    // 4+ verify failures". Every "Verify failed after 2 attempts"
+    // narration is an OUTER retry event — the inner self-heal
+    // counter (retryCount 1..2) resets each round, but the OUTER
+    // cycle count (verifyRetryCount) should climb. Backend used to
+    // only include verify_retry_count on the FIRST paused-response
+    // retry path; the auto-retries from independent-verifier
+    // rejection + Ship-blocked re-executes never touched it →
+    // frontend counter stayed at 0 → chip fell back to "heal 1/2"
+    // forever. We now increment client-side on every terminal
+    // "Verify failed after N attempts" narration (or verify-phase
+    // paused_for_user with data.errors), keyed by loop_id to reset
+    // cleanly on a fresh loop.
+    if (data && data.type === "narration"
+        && String(data.narration_step || "") === "verify"
+        && String(data.tone || "") === "danger"
+        && /verify failed after \d+ attempts/i.test(
+             String(ev.message || data.narration_text || data.text || ""))) {
+      setLoopVerifyRetryCount((prev) => Math.min(prev + 1, 99));
+    }
+
     // Drive the existing LoopStepBar phase enum.
     // Iter 308 v2 — EVERY backend LoopState.value is now mapped so
     // the step bar renders correctly regardless of the engine's

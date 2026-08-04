@@ -1,0 +1,43 @@
+{
+  "verdict": "fixed",
+  "user_reported_bug": "Bug: Self-heal retry counter UI mein stale hai\nLocation: Loop status bar → \"heal X/2\" chip (bottom-right of loop progress bar, near VERIFY step)\nSteps to reproduce:\n1. Loop run jisme VERIFY step fail ho aur self-heal trigger ho\n2. Chat log mein multiple 'Verify failed after 2 attempts' events aa rahe hain (4+ dikhe is run mein)\n3. Lekin 'heal X/2' chip hamesha 'heal 1/2' pe stuck reh raha hai, chahe backend mein actual retry count usse zyada ho chuka ho\nExpected: Chip ka number backend ke actual current self-heal attempt count ke saath live sync hona chahiye (1/2, phir 2/2, etc.)\nActual: Chip UI state backend event stream se desync ho raha hai — shayad frontend state sirf pehli baar set ho raha hai aur baad ke SSE events pe update nahi ho raha.\nSuspected area: Jahan bhi 'heal X/2' chip render hota hai (Loop status bar component) — check karo woh kis event/state pe subscribe hai vs jahan se actual retry count aata hai (self_healing_router.py ya jahan bhi self-heal attempt counter maintain hota hai backend mein).\nPriority: Medium",
+  "summary": "No relevant testing skill found. Inspected the uncommitted ChatPanel.jsx fix, LoopStepBar.jsx rendering, backend _narrate event shape, and ran focused Vitest coverage. Then logged into preview and verified the user-visible pill behavior with a frontend-only synthetic SSE UI test: fresh kickoff hid data-testid=\"loop-retry-pill\", two verify-danger 'Verify failed after 2 attempts' narration events updated it to '2/3 retries' (not stale 'heal 1/2'), and a second fresh kickoff reset it hidden. The preview login/dashboard were real; loop start/stream were MOCKED synthetic SSE to isolate the frontend state-sync bug as requested.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/bug_verification_artifacts/verify_retry_counter_playwright_script.py",
+    "/app/test_reports/bug_verification_artifacts/verify_retry_counter_runtime_result.log",
+    "/app/test_reports/frontend/verify_retry_counter_vitest.log"
+  ],
+  "action_items": [
+    "No fix action required for the reported frontend stale retry-pill symptom. Optional: run a full real LoopEngine verify-failure scenario later if backend/GitHub execution cost and setup are acceptable."
+  ],
+  "critical_code_review_comments": [
+    "ChatPanel.jsx now increments loopVerifyRetryCount on every SSE narration where type='narration', narration_step='verify', tone='danger', and text/message matches /verify failed after \\d+ attempts/i.",
+    "LoopStepBar.jsx prioritizes verifyRetryCount > 0 and renders '<N>/3 retries', so it no longer falls back to stale inner 'heal 1/2' after repeated outer verify failures.",
+    "backend/services/loop_engine.py _narrate emits message plus data.narration_text with the matching 'Verify failed after 2 attempts' text, so the frontend handler matches the real backend event shape."
+  ],
+  "updated_files": [
+    "/app/test_reports/bug_verification_artifacts/verify_retry_counter_playwright_script.py",
+    "/app/test_reports/bug_verification_artifacts/verify_retry_counter_runtime_result.log",
+    "/app/test_reports/frontend/verify_retry_counter_vitest.log",
+    "/app/test_reports/bug_verification_358.json",
+    "/app/test_reports/iteration_358.json"
+  ],
+  "success_rate": {
+    "backend": "N/A - frontend-only verification; backend code shape inspected",
+    "frontend": "100% focused checks passed"
+  },
+  "seed_data_creation": "No persistent seed data created. Preview chat received two QA messages during the focused UI test; loop APIs were MOCKED in the browser route layer.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Use data-testid=\"loop-retry-pill\" on /dashboard. The focused runtime proof used real login plus MOCKED /api/aurem-dev/loop/start and /loop/*/stream to inject two backend-shaped verify-danger narration frames; a real full LoopEngine run was not executed.",
+  "rca_of_the_issue": "The stale UI was caused by loopVerifyRetryCount only mirroring verify_retry_count from paused_for_user paths, while automatic outer verify-failure cycles emitted narration events without updating that state. The fix increments the outer retry counter from each terminal verify-danger narration and resets it at fresh loop kickoff."
+}
