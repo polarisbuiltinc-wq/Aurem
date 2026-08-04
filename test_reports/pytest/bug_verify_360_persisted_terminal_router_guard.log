@@ -1,0 +1,47 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-8.3.0, pluggy-1.6.0 -- /root/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /app
+plugins: timeout-2.4.0, cov-7.1.0, anyio-4.13.0, asyncio-0.24.0
+asyncio: mode=Mode.STRICT, default_loop_scope=None
+collecting ... collected 1 item
+
+../test_reports/bug_verification_artifacts/iter360_persisted_terminal_router_guard_test.py::test_pause_response_retry_on_persisted_terminal_loop_returns_409 FAILED [100%]
+
+=================================== FAILURES ===================================
+_______ test_pause_response_retry_on_persisted_terminal_loop_returns_409 _______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0xfc73165c00d0>
+
+    @pytest.mark.asyncio
+    async def test_pause_response_retry_on_persisted_terminal_loop_returns_409(monkeypatch):
+        from routers import loop as loop_router
+        from services import loop_engine as le
+    
+        le._LIVE.pop("iter360_persisted_failed", None)
+    
+        async def fake_current_dev(_authorization):
+            return {"user_id": "qa_user"}
+    
+        db = _DB()
+        monkeypatch.setattr(loop_router, "current_dev", fake_current_dev)
+        monkeypatch.setattr(loop_router, "get_db", lambda: db)
+    
+        with pytest.raises(HTTPException) as excinfo:
+            await loop_router.pause_response(
+                "iter360_persisted_failed",
+                loop_router.PauseResponseBody(action="retry"),
+                authorization="Bearer qa",
+            )
+    
+>       assert excinfo.value.status_code == 409
+E       AssertionError: assert 404 == 409
+E        +  where 404 = HTTPException(status_code=404, detail='Loop not found').status_code
+E        +    where HTTPException(status_code=404, detail='Loop not found') = <ExceptionInfo HTTPException(status_code=404, detail='Loop not found') tblen=2>.value
+
+../test_reports/bug_verification_artifacts/iter360_persisted_terminal_router_guard_test.py:57: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  services.loop_engine:loop_engine.py:4191 [loop iter360_persisted_failed] refused rehydration in state failed (not paused); caller will get 404
+=========================== short test summary info ============================
+FAILED ../test_reports/bug_verification_artifacts/iter360_persisted_terminal_router_guard_test.py::test_pause_response_retry_on_persisted_terminal_loop_returns_409
+============================== 1 failed in 0.31s ===============================

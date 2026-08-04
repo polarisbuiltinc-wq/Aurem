@@ -1,0 +1,16 @@
+yarn run v1.22.22
+$ /app/frontend/node_modules/.bin/vitest run src/components/__tests__/SelfHealIndicator.live_timer_bug_verify.test.jsx src/components/__tests__/ChatPanel.verify_retry_counter_live_sync.test.jsx --environment jsdom --reporter verbose
+
+ RUN  v3.2.7 /app/frontend
+
+ ✓ src/components/__tests__/ChatPanel.verify_retry_counter_live_sync.test.jsx > ChatPanel — verify retry counter live-sync > increments loopVerifyRetryCount on every verify-danger narration 1ms
+ ✓ src/components/__tests__/ChatPanel.verify_retry_counter_live_sync.test.jsx > ChatPanel — verify retry counter live-sync > also reads verify_retry_count from paused_for_user (existing path) 0ms
+ ✓ src/components/__tests__/ChatPanel.verify_retry_counter_live_sync.test.jsx > ChatPanel — verify retry counter live-sync > checks all three text fields for the failed-attempts pattern 0ms
+ ✓ src/components/__tests__/SelfHealIndicator.live_timer_bug_verify.test.jsx > SelfHealIndicator — backend counter + per-attempt timer > renders 1/2 then 2/2 and resets a live seconds timer for the new attempt 64ms
+
+ Test Files  2 passed (2)
+      Tests  4 passed (4)
+   Start at  06:21:10
+   Duration  1.21s (transform 57ms, setup 113ms, collect 222ms, tests 68ms, environment 723ms, prepare 418ms)
+
+Done in 1.55s.

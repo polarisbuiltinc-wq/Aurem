@@ -1,0 +1,5 @@
+1
+765:        `data.sub_step="heartbeat"` and `data.elapsed_s` populated.
+804:            async def _heartbeat_loop():
+842:                            data={"sub_step":  "heartbeat",
+1200:                            # emitter of `sub_step: "heartbeat"`

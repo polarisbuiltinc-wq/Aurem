@@ -1,0 +1,23 @@
+
+# BACKEND-1 curl: POST /loop/start (async default, project_id=null)
+{"detail":"No project selected. Please select a project from the sidebar before running this action."}
+HTTP_STATUS:400
+TIME_TOTAL:0.091199
+
+Captured loop_id= project_id=null
+
+# BACKEND-2 curl: immediate second POST /loop/start same no-project lock should 409
+{"detail":{"error":"loop_already_running","existing_loop_id":"loop_9622917bd61943","message":"Another loop is already running for this project. Wait for it to finish or cancel it."}}
+HTTP_STATUS:409
+TIME_TOTAL:0.094355
+
+# BACKEND-3 curl: GET /loop/active immediately after async start
+{"ok":true,"active":null}
+HTTP_STATUS:200
+TIME_TOTAL:0.108913
+
+# Poll active until plan/terminal (max 180s)
+[poll 01] {"ok":true,"active":null}
+
+# Cleanup: cancel loop if still active
+{"detail":"Not Found"}

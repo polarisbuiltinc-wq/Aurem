@@ -1,0 +1,14 @@
+yarn run v1.22.22
+$ vitest run src/components/__tests__/iter323_bug_verification.test.jsx
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90m/app/frontend[39m
+
+ [32m✓[39m src/components/__tests__/iter323_bug_verification.test.jsx [2m([22m[2m4 tests[22m[2m)[22m[90m 114[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m   Start at [22m 06:33:48
+[2m   Duration [22m 1.07s[2m (transform 59ms, setup 41ms, collect 175ms, tests 114ms, environment 250ms, prepare 144ms)[22m
+
+Done in 1.35s.

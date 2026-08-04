@@ -1,0 +1,16 @@
+login 200 {"ok":true,"token":"***REDACTED_JWT***","user
+loop/start 200 {"loop_id":"loop_5bcc168504b641","state":"failed","phase":"plan","plan":null,"requires_user_action":false}
+synthetic status before 200 {"loop_id":"loop_iter308_periodic_probe","user_id":"test_admin_001","project_id":"p_norepotest","state":"executing","phase":"execute","context":{},"updated_at":"2026-07-25T21:17:06.430000","last_event":{"loop_id":"loop_iter308_periodic_probe","state":"executing","phase":"execute","message":"EXECUTE 
+poll 0 {'state': 'executing', 'updated_at': datetime.datetime(2026, 7, 25, 21, 17, 6, 430000)}
+poll 1 {'state': 'executing', 'updated_at': datetime.datetime(2026, 7, 25, 21, 17, 6, 430000)}
+poll 2 {'state': 'executing', 'updated_at': datetime.datetime(2026, 7, 25, 21, 17, 6, 430000)}
+poll 3 {'state': 'executing', 'updated_at': datetime.datetime(2026, 7, 25, 21, 17, 6, 430000)}
+poll 4 {'state': 'executing', 'updated_at': datetime.datetime(2026, 7, 25, 21, 17, 6, 430000)}
+poll 5 {'state': 'executing', 'updated_at': datetime.datetime(2026, 7, 25, 21, 17, 6, 430000)}
+poll 6 {'state': 'executing', 'updated_at': datetime.datetime(2026, 7, 25, 21, 17, 6, 430000)}
+poll 7 {'state': 'executing', 'updated_at': datetime.datetime(2026, 7, 25, 21, 17, 6, 430000)}
+poll 8 {'state': 'executing', 'updated_at': datetime.datetime(2026, 7, 25, 21, 17, 6, 430000)}
+poll 9 {'state': 'executing', 'updated_at': datetime.datetime(2026, 7, 25, 21, 17, 6, 430000)}
+poll 10 {'state': 'executing', 'updated_at': datetime.datetime(2026, 7, 25, 21, 17, 6, 430000)}
+poll 11 {'state': 'paused_for_user', 'updated_at': datetime.datetime(2026, 7, 25, 21, 33, 6, 93000), 'resume_reason': 'server_restart_mid_loop'}
+synthetic status after 200 {"loop_id":"loop_iter308_periodic_probe","user_id":"test_admin_001","project_id":"p_norepotest","state":"paused_for_user","phase":"execute","context":{},"updated_at":"2026-07-25T21:33:06.093000","last_event":{"loop_id":"loop_iter308_periodic_probe","state":"executing","phase":"execute","message":"EXECUTE START synthetic stale probe","data":{},"timestamp":"2026-07-25T21:32:06.430479+00:00"},"resume_reason":"server_restart_mid_loop"}

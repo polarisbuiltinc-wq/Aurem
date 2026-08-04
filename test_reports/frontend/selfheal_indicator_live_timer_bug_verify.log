@@ -1,0 +1,13 @@
+yarn run v1.22.22
+$ /app/frontend/node_modules/.bin/vitest run src/components/__tests__/SelfHealIndicator.live_timer_bug_verify.test.jsx
+
+ RUN  v3.2.7 /app/frontend
+
+ ✓ src/components/__tests__/SelfHealIndicator.live_timer_bug_verify.test.jsx (1 test) 61ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  05:57:22
+   Duration  1.03s (transform 39ms, setup 42ms, collect 150ms, tests 61ms, environment 272ms, prepare 138ms)
+
+Done in 1.42s.

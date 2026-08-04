@@ -1,0 +1,100 @@
+Es.....F................................................................ [ 19%]
+........................................................................ [ 38%]
+....F.E......F...sss.................................................... [ 58%]
+........................................................................ [ 77%]
+........................................................................ [ 97%]
+..........                                                               [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of TestSubmitTaskRegression.test_submit_task_creates_doc_without_rollback_fields _
+tests/test_aurem_rollback.py:58: in auth_headers
+    assert r.status_code == 200, f"login failed: {r.status_code} {r.text}"
+E   AssertionError: login failed: 429 {"detail":"Too many failed logins from this IP. Try again in ~13 minute(s)."}
+E   assert 429 == 200
+E    +  where 429 = <Response [429]>.status_code
+____________ ERROR at setup of TestPreview.test_bulk_cap_regression ____________
+tests/test_iter212m190_scan_fix_quota.py:88: in reg_ctx
+    tok, uid = _login(REG_EMAIL, REG_PASS)
+tests/test_iter212m190_scan_fix_quota.py:57: in _login
+    assert r.status_code == 200, f"login failed {r.status_code}: {r.text[:200]}"
+E   AssertionError: login failed 429: {"detail":"Too many failed logins from this IP. Try again in ~13 minute(s)."}
+E   assert 429 == 200
+E    +  where 429 = <Response [429]>.status_code
+=================================== FAILURES ===================================
+___________________ test_checkout_does_not_block_event_loop ____________________
+routers/payments.py:243: in create_checkout
+    await _stripe_call(stripe.Price.retrieve, price_id)
+routers/payments.py:81: in _stripe_call
+    return await asyncio.wait_for(
+/usr/local/lib/python3.11/asyncio/tasks.py:489: in wait_for
+    return fut.result()
+/usr/local/lib/python3.11/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+/usr/local/lib/python3.11/concurrent/futures/thread.py:58: in run
+    result = self.fn(*self.args, **self.kwargs)
+/root/.venv/lib/python3.11/site-packages/sentry_sdk/integrations/threading.py:175: in wrapped_fn
+    return fn(*args, **kwargs)
+/root/.venv/lib/python3.11/site-packages/stripe/_price.py:378: in retrieve
+    instance.refresh()
+/root/.venv/lib/python3.11/site-packages/stripe/_api_resource.py:38: in refresh
+    return self._request_and_refresh("get", self.instance_url())
+/root/.venv/lib/python3.11/site-packages/stripe/_api_resource.py:128: in _request_and_refresh
+    obj = StripeObject._request(
+/root/.venv/lib/python3.11/site-packages/stripe/_stripe_object.py:424: in _request
+    return self._requestor.request(
+/root/.venv/lib/python3.11/site-packages/stripe/_api_requestor.py:211: in request
+    resp = requestor._interpret_response(rbody, rcode, rheaders, api_mode)
+/root/.venv/lib/python3.11/site-packages/stripe/_api_requestor.py:897: in _interpret_response
+    self.handle_error_response(
+/root/.venv/lib/python3.11/site-packages/stripe/_api_requestor.py:352: in handle_error_response
+    raise err
+E   stripe._error.AuthenticationError: Invalid API Key provided: sk_live_test
+
+During handling of the above exception, another exception occurred:
+tests/test_iter124d_stripe_async_offload.py:69: in test_checkout_does_not_block_event_loop
+    result = await pay.create_checkout(
+routers/payments.py:266: in create_checkout
+    raise HTTPException(
+E   fastapi.exceptions.HTTPException: 503: Stripe price `starter` is misconfigured — Stripe says: Invalid API Key provided: sk_live_test. Admin: rotate STRIPE_STARTER_PRICE_ID.
+------------------------------ Captured log call -------------------------------
+WARNING  routers.payments:payments.py:262 stripe price.retrieve raised for plan=starter price_id=price_starter: AuthenticationError(message='Invalid API Key provided: sk_live_test', http_status=401, request_id=None)
+________________ TestAuthRegression.test_login_case_insensitive ________________
+tests/test_iter212m190_scan_fix_quota.py:110: in test_login_case_insensitive
+    assert r.status_code == 200, r.text[:200]
+E   AssertionError: {"detail":"Too many failed logins from this IP. Try again in ~13 minute(s)."}
+E   assert 429 == 200
+E    +  where 429 = <Response [429]>.status_code
+__________ TestMiddlewareRegression.test_login_good_creds_returns_200 __________
+tests/test_iter212m55_e2e_regression.py:59: in test_login_good_creds_returns_200
+    assert r.status_code == 200, f"Expected 200 for seeded test user, got {r.status_code}: {r.text[:200]}"
+E   AssertionError: Expected 200 for seeded test user, got 429: {"detail":"Too many failed logins from this IP. Try again in ~13 minute(s)."}
+E   assert 429 == 200
+E    +  where 429 = <Response [429]>.status_code
+=============================== warnings summary ===============================
+routers/chat.py:264
+  /app/backend/routers/chat.py:264: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.9/migration/
+    @validator("prompt")
+
+routers/chat.py:268
+  /app/backend/routers/chat.py:268: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.9/migration/
+    @validator("task_type")
+
+../../root/.venv/lib/python3.11/site-packages/pydantic/_internal/_fields.py:172
+  /root/.venv/lib/python3.11/site-packages/pydantic/_internal/_fields.py:172: UserWarning: Field name "schema" in "InsertBody" shadows an attribute in parent "BaseModel"
+    warnings.warn(
+
+tests/test_iter212m144_loop_cross_worker_rehydrate.py::test_loop_router_uses_rehydrate_on_confirm
+  tests/test_iter212m144_loop_cross_worker_rehydrate.py:165: PytestWarning: The test <Function test_loop_router_uses_rehydrate_on_confirm> is marked with '@pytest.mark.asyncio' but it is not an async function. Please remove the asyncio mark. If the test is not marked explicitly, check for global marks applied via 'pytestmark'.
+    def test_loop_router_uses_rehydrate_on_confirm():
+
+tests/test_iter212m178_prod_perf.py::test_bulk_loop_paces_github_mutations
+  tests/test_iter212m178_prod_perf.py:181: PytestWarning: The test <Function test_bulk_loop_paces_github_mutations> is marked with '@pytest.mark.asyncio' but it is not an async function. Please remove the asyncio mark. If the test is not marked explicitly, check for global marks applied via 'pytestmark'.
+    def test_bulk_loop_paces_github_mutations():
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_iter124d_stripe_async_offload.py::test_checkout_does_not_block_event_loop
+FAILED tests/test_iter212m190_scan_fix_quota.py::TestAuthRegression::test_login_case_insensitive
+FAILED tests/test_iter212m55_e2e_regression.py::TestMiddlewareRegression::test_login_good_creds_returns_200
+ERROR tests/test_aurem_rollback.py::TestSubmitTaskRegression::test_submit_task_creates_doc_without_rollback_fields
+ERROR tests/test_iter212m190_scan_fix_quota.py::TestPreview::test_bulk_cap_regression
+3 failed, 361 passed, 4 skipped, 3312 deselected, 5 warnings, 2 errors in 24.45s

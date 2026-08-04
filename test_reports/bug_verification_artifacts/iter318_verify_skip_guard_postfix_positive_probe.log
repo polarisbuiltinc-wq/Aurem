@@ -1,0 +1,2 @@
+{'final_report_ok': False, 'final_row_ok': False, 'final_linter': 'skip', 'integrity_rule': 'elision_marker', 'submitted_file_still_contains_elision': True, 'self_heals_performed_count': 2, 'final_state': 'paused_for_user', 'final_phase': 'verify', 'errors': ['README.md: integrity_guard:elision_marker']}
+PASS: post-heal subset reverify merge did not restore .md skip row to ok:true

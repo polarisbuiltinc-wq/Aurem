@@ -1,0 +1,29 @@
+MAX_SELF_HEALS= 2
+final_state= paused_for_user
+final_phase= verify
+total_heal_attempts= 2
+events=
+{'state': 'verifying', 'phase': 'verify', 'message': 'Verifying changes…', 'data': {}, 'requires_user_action': False}
+{'state': 'verifying', 'phase': 'verify', 'message': 'Running lint and type checks', 'data': {'type': 'narration', 'tone': 'pending', 'narration_step': 'verify', 'narration_text': 'Running lint and type checks', 'correlation_id': 'verify:pass_1', 'ts_epoch': 1785823003.682384}, 'requires_user_action': False}
+{'state': 'self_healing', 'phase': 'self_heal', 'message': 'Self-heal attempt 1/2 — rewriting 1 file(s)…', 'data': {'errors_preview': ['bad.py: E999 synthetic lint failure'], 'failing_count': 1, 'total_heal_attempts': 1, 'max_heal_attempts': 2}, 'requires_user_action': False}
+{'state': 'self_healing', 'phase': 'self_heal', 'message': 'Self-heal attempt 1/2 — rewriting 1 file(s)', 'data': {'type': 'narration', 'tone': 'warning', 'narration_step': 'verify', 'narration_text': 'Self-heal attempt 1/2 — rewriting 1 file(s)', 'correlation_id': 'verify:heal_1', 'ts_epoch': 1785823003.6839008}, 'requires_user_action': False}
+{'state': 'self_healing', 'phase': 'self_heal', 'message': 'Self-heal attempt 2/2 — rewriting 1 file(s)…', 'data': {'errors_preview': ['bad.py: E999 synthetic lint failure'], 'failing_count': 1, 'total_heal_attempts': 2, 'max_heal_attempts': 2}, 'requires_user_action': False}
+{'state': 'self_healing', 'phase': 'self_heal', 'message': 'Self-heal attempt 2/2 — rewriting 1 file(s)', 'data': {'type': 'narration', 'tone': 'warning', 'narration_step': 'verify', 'narration_text': 'Self-heal attempt 2/2 — rewriting 1 file(s)', 'correlation_id': 'verify:heal_2', 'ts_epoch': 1785823003.6840148}, 'requires_user_action': False}
+{'state': 'paused_for_user', 'phase': 'verify', 'message': 'Verify failed after 2 self-heal attempts. Your input needed.', 'data': {'errors': ['bad.py: E999 synthetic lint failure'], 'failed_files': ['bad.py'], 'verify_retry_count': 0, 'max_verify_retries': 3}, 'requires_user_action': True}
+{'state': 'paused_for_user', 'phase': 'verify', 'message': 'Verify failed after 2 attempts', 'data': {'type': 'narration', 'tone': 'danger', 'narration_step': 'verify', 'narration_text': 'Verify failed after 2 attempts', 'correlation_id': 'verify:final', 'ts_epoch': 1785823003.6841042}, 'requires_user_action': False}
+Traceback (most recent call last):
+  File "/app/test_reports/bug_verification_artifacts/iter_global_heal_runtime_probe.py", line 118, in <module>
+    asyncio.run(main())
+  File "/usr/local/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/app/test_reports/bug_verification_artifacts/iter_global_heal_runtime_probe.py", line 111, in main
+    assert engine.state == LoopState.FAILED, (
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: BUG STILL PRESENT: after exactly MAX_SELF_HEALS failed heals, expected FAILED but got paused_for_user

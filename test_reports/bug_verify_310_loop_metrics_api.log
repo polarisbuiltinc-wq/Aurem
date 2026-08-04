@@ -1,0 +1,4 @@
+anon_status 401
+admin_status 200
+keys ['current', 'delta_failed_ratio', 'note', 'ok', 'previous', 'window_days']
+shape_ok

@@ -1,0 +1,11 @@
+[2026-07-27T06:43:45.540157Z] iter309 SSE harness — run_id=fc88973ff285, target=1560s, gap_max=10.0s
+[2026-07-27T06:43:45.797936Z] logged in
+[2026-07-27T06:43:45.826242Z] probe started — loop_id=iter309probe_0e67b04abeca
+[2026-07-27T06:43:45.826373Z] attempt 1 — Last-Event-ID=None
+[2026-07-27T07:03:45.879424Z] attempt 1 closed — reason=stream_capped elapsed=1200.1s last_event_id=iter309probe_0e67b04abeca:79
+[2026-07-27T07:03:46.882927Z] attempt 2 — Last-Event-ID=iter309probe_0e67b04abeca:79
+[2026-07-27T07:13:46.922468Z] attempt 2 closed — reason=terminal:completed elapsed=600.0s last_event_id=iter309probe_0e67b04abeca:120
+[2026-07-27T07:13:46.924890Z] terminal reached — harness done
+[2026-07-27T07:13:46.952853Z] report written: /app/test_reports/iter309_reconnect/report_fc88973ff285.json
+[2026-07-27T07:13:46.952866Z] VERDICT: PASS
+[2026-07-27T07:13:46.952872Z]   PASS: all reconnects recovered cleanly, no dup / no gap, 1 natural 20-min cap(s) exercised.

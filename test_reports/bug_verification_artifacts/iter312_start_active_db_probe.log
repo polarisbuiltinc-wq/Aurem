@@ -1,0 +1,6 @@
+START_STATUS 200 TIME 0.115 BODY {"loop_id": "loop_ccb0f94804b042", "state": "planning", "phase": "plan", "plan": null, "async_start": true}
+ACTIVE_IMMEDIATE 200 {"ok": true, "active": null}
+DB_SESSION_IMMEDIATE {"loop_id": "loop_ccb0f94804b042", "last_event": {"loop_id": "loop_ccb0f94804b042", "state": "failed", "phase": "plan", "step": 0, "total_steps": 0, "message": "GitHub PAT preflight failed: pat_invalid_or_expired. Reconnect your repo before running the loop.", "data": {}, "timestamp": "2026-07-27T01:01:03.693624+00:00", "requires_user_action": true}, "phase": "plan", "project_id": "p_norepotest", "state": "failed", "updated_at": "2026-07-27T01:01:03.693000"}
+ACTIVE_AFTER_2S 200 {"ok": true, "active": null}
+DB_SESSION_AFTER_2S {"loop_id": "loop_ccb0f94804b042", "last_event": {"loop_id": "loop_ccb0f94804b042", "state": "failed", "phase": "plan", "step": 0, "total_steps": 0, "message": "GitHub PAT preflight failed: pat_invalid_or_expired. Reconnect your repo before running the loop.", "data": {}, "timestamp": "2026-07-27T01:01:03.693624+00:00", "requires_user_action": true}, "phase": "plan", "project_id": "p_norepotest", "state": "failed", "updated_at": "2026-07-27T01:01:03.693000"}
+CLEANUP_CANCEL 200 {"loop_id": "loop_ccb0f94804b042", "state": "failed", "lock_force_released": true}

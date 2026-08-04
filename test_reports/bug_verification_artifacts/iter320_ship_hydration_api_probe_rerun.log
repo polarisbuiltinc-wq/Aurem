@@ -1,0 +1,36 @@
+login_status 200
+active_status 200
+active_body {
+  "ok": true,
+  "active": {
+    "loop_id": "loop_bugverify_shiphydrate_1785131659",
+    "state": "paused_for_user",
+    "phase": "ship",
+    "project_id": "p_norepotest",
+    "plan": {
+      "title": "Synthetic plan",
+      "files_to_change": [
+        "README.md"
+      ],
+      "bullets": [
+        "edit readme"
+      ]
+    },
+    "ship_pending": {
+      "owner": "aurem-labs",
+      "repo": "ora-testkit",
+      "branch": "main",
+      "files": {
+        "README.md": "# README\nsynthetic ship hydration check\n"
+      },
+      "commit_message": "feat(ora): synthetic ship hydrate check [loop-verified]"
+    },
+    "files_changed": [
+      {
+        "path": "README.md"
+      }
+    ],
+    "updated_at": 1785131659.2102559
+  }
+}
+PASS: /loop/active rehydrates paused ship loop with ship_pending/commit/files and scrubbed token

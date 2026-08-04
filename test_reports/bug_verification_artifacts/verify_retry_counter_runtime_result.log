@@ -1,0 +1,17 @@
+Focused runtime UI verification for loop retry counter live-sync
+
+Preview URL: https://launch-pad-237.preview.emergentagent.com/login
+Credential source: /app/memory/test_credentials.md (preview test account)
+Route coverage: login/dashboard real; LOOP_START and LOOP_STREAM were MOCKED with synthetic SSE frames to isolate the frontend-only SSE state-sync bug.
+
+Result:
+- Logged in to dashboard successfully.
+- Toggled LOOP ON.
+- First fresh loop kickoff: data-testid="loop-retry-pill" count was 0 before verify failures.
+- Injected two SSE narration events matching backend shape:
+  data.type="narration", narration_step="verify", tone="danger", message/text="Verify failed after 2 attempts".
+- Pill text updated to "2/3 retries" and did not show stale "heal 1/2".
+- Second fresh loop kickoff: data-testid="loop-retry-pill" reset hidden (count 0).
+- No page error messages found through .error/[class*=error]/[id*=error] selectors.
+
+Verdict evidence: PASS.

@@ -1,0 +1,35 @@
+
+==================================== ERRORS ====================================
+___________ ERROR collecting tests/test_iter138_acceptance_seven.py ____________
+tests/test_iter138_acceptance_seven.py:29: in <module>
+    assert result['ok'] is True, 'echo should work'
+E   AssertionError: echo should work
+E   assert False is True
+------------------------------- Captured stdout --------------------------------
+PASS Test 1: execute_bash in TOOL_SPECS
+PASS Test 2: dangerous command blocked  ->  error="execute_bash is restricted to founder/admin accounts. For the user's connected 
+__________ ERROR collecting tests/test_iter212m163_aggression_chat.py __________
+tests/test_iter212m163_aggression_chat.py:14: in <module>
+    BASE = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
+<frozen os>:679: in __getitem__
+    ???
+E   KeyError: 'REACT_APP_BACKEND_URL'
+=============================== warnings summary ===============================
+routers/chat.py:264
+  /app/backend/routers/chat.py:264: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.9/migration/
+    @validator("prompt")
+
+routers/chat.py:268
+  /app/backend/routers/chat.py:268: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.9/migration/
+    @validator("task_type")
+
+../../root/.venv/lib/python3.11/site-packages/pydantic/_internal/_fields.py:172
+  /root/.venv/lib/python3.11/site-packages/pydantic/_internal/_fields.py:172: UserWarning: Field name "schema" in "InsertBody" shadows an attribute in parent "BaseModel"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/test_iter138_acceptance_seven.py - AssertionError: echo should work
+ERROR tests/test_iter212m163_aggression_chat.py - KeyError: 'REACT_APP_BACKEN...
+!!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!!
+3471 deselected, 3 warnings, 2 errors in 3.43s

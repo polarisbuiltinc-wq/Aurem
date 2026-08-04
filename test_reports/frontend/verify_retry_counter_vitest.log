@@ -1,0 +1,14 @@
+yarn run v1.22.22
+$ vitest run --run src/components/__tests__/ChatPanel.verify_retry_counter_live_sync.test.jsx src/components/__tests__/LoopStepBar.test.jsx
+
+ RUN  v3.2.7 /app/frontend
+
+ ✓ src/components/__tests__/ChatPanel.verify_retry_counter_live_sync.test.jsx (3 tests) 2ms
+ ✓ src/components/__tests__/LoopStepBar.test.jsx (3 tests) 84ms
+
+ Test Files  2 passed (2)
+      Tests  6 passed (6)
+   Start at  05:47:48
+   Duration  1.23s (transform 66ms, setup 102ms, collect 241ms, tests 86ms, environment 699ms, prepare 382ms)
+
+Done in 1.57s.

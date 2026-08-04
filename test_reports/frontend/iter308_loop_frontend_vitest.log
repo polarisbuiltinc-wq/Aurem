@@ -1,0 +1,13 @@
+yarn run v1.22.22
+$ vitest run src/components/__tests__/loop_iter308.test.jsx
+
+ RUN  v2.1.9 /app/frontend
+
+ ✓ src/components/__tests__/loop_iter308.test.jsx (20 tests) 161ms
+
+ Test Files  1 passed (1)
+      Tests  20 passed (20)
+   Start at  21:30:22
+   Duration  2.31s (transform 79ms, setup 221ms, collect 386ms, tests 161ms, environment 900ms, prepare 66ms)
+
+Done in 2.76s.

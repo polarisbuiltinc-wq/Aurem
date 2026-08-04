@@ -1,0 +1,206 @@
+/root/.venv/lib/python3.11/site-packages/pytest_asyncio/plugin.py:208: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+Es.....F................................................................ [ 19%]
+........................................................................ [ 38%]
+....F.E......F...sss.F..F.....FF.....FFF................................ [ 58%]
+........................................................................ [ 77%]
+........................................................................ [ 97%]
+..........                                                               [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of TestSubmitTaskRegression.test_submit_task_creates_doc_without_rollback_fields _
+tests/test_aurem_rollback.py:58: in auth_headers
+    assert r.status_code == 200, f"login failed: {r.status_code} {r.text}"
+E   AssertionError: login failed: 401 {"detail":"Invalid credentials"}
+E   assert 401 == 200
+E    +  where 401 = <Response [401]>.status_code
+____________ ERROR at setup of TestPreview.test_bulk_cap_regression ____________
+tests/test_iter212m190_scan_fix_quota.py:88: in reg_ctx
+    tok, uid = _login(REG_EMAIL, REG_PASS)
+tests/test_iter212m190_scan_fix_quota.py:57: in _login
+    assert r.status_code == 200, f"login failed {r.status_code}: {r.text[:200]}"
+E   AssertionError: login failed 401: {"detail":"Invalid credentials"}
+E   assert 401 == 200
+E    +  where 401 = <Response [401]>.status_code
+=================================== FAILURES ===================================
+___________________ test_checkout_does_not_block_event_loop ____________________
+routers/payments.py:243: in create_checkout
+    await _stripe_call(stripe.Price.retrieve, price_id)
+routers/payments.py:81: in _stripe_call
+    return await asyncio.wait_for(
+/usr/local/lib/python3.11/asyncio/tasks.py:489: in wait_for
+    return fut.result()
+/usr/local/lib/python3.11/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+/usr/local/lib/python3.11/concurrent/futures/thread.py:58: in run
+    result = self.fn(*self.args, **self.kwargs)
+/root/.venv/lib/python3.11/site-packages/sentry_sdk/integrations/threading.py:175: in wrapped_fn
+    return fn(*args, **kwargs)
+/root/.venv/lib/python3.11/site-packages/stripe/_price.py:378: in retrieve
+    instance.refresh()
+/root/.venv/lib/python3.11/site-packages/stripe/_api_resource.py:38: in refresh
+    return self._request_and_refresh("get", self.instance_url())
+/root/.venv/lib/python3.11/site-packages/stripe/_api_resource.py:128: in _request_and_refresh
+    obj = StripeObject._request(
+/root/.venv/lib/python3.11/site-packages/stripe/_stripe_object.py:424: in _request
+    return self._requestor.request(
+/root/.venv/lib/python3.11/site-packages/stripe/_api_requestor.py:211: in request
+    resp = requestor._interpret_response(rbody, rcode, rheaders, api_mode)
+/root/.venv/lib/python3.11/site-packages/stripe/_api_requestor.py:897: in _interpret_response
+    self.handle_error_response(
+/root/.venv/lib/python3.11/site-packages/stripe/_api_requestor.py:352: in handle_error_response
+    raise err
+E   stripe._error.AuthenticationError: Invalid API Key provided: sk_live_test
+
+During handling of the above exception, another exception occurred:
+tests/test_iter124d_stripe_async_offload.py:69: in test_checkout_does_not_block_event_loop
+    result = await pay.create_checkout(
+routers/payments.py:266: in create_checkout
+    raise HTTPException(
+E   fastapi.exceptions.HTTPException: 503: Stripe price `starter` is misconfigured — Stripe says: Invalid API Key provided: sk_live_test. Admin: rotate STRIPE_STARTER_PRICE_ID.
+------------------------------ Captured log call -------------------------------
+WARNING  routers.payments:payments.py:262 stripe price.retrieve raised for plan=starter price_id=price_starter: AuthenticationError(message='Invalid API Key provided: sk_live_test', http_status=401, request_id=None)
+________________ TestAuthRegression.test_login_case_insensitive ________________
+tests/test_iter212m190_scan_fix_quota.py:110: in test_login_case_insensitive
+    assert r.status_code == 200, r.text[:200]
+E   AssertionError: {"detail":"Invalid credentials"}
+E   assert 401 == 200
+E    +  where 401 = <Response [401]>.status_code
+__________ TestMiddlewareRegression.test_login_good_creds_returns_200 __________
+tests/test_iter212m55_e2e_regression.py:59: in test_login_good_creds_returns_200
+    assert r.status_code == 200, f"Expected 200 for seeded test user, got {r.status_code}: {r.text[:200]}"
+E   AssertionError: Expected 200 for seeded test user, got 429: {"detail":"Too many failed logins from this IP. Try again in ~15 minute(s)."}
+E   assert 429 == 200
+E    +  where 429 = <Response [429]>.status_code
+_________________ test_confirm_yes_runs_pipeline_to_completion _________________
+tests/test_iter212m60_loop_engine.py:134: in test_confirm_yes_runs_pipeline_to_completion
+    assert engine.state == eng.LoopState.COMPLETED
+E   AssertionError: assert <LoopState.FAILED: 'failed'> == <LoopState.CO...: 'completed'>
+E     
+E     - completed
+E     + failed
+------------------------------ Captured log call -------------------------------
+WARNING  services.loop_engine:loop_engine.py:501 [loop loop_a318fba93a0e4d] PAT preflight skipped: AttributeError("'_DB' object has no attribute 'cto_projects'")
+WARNING  services.loop_engine:loop_engine.py:542 [loop loop_a318fba93a0e4d] PLAN grounding — 2/2 paths not in repo map (may be new files or hallucinations): ['a.py', 'b.py']
+WARNING  services.loop_engine:loop_engine.py:595 [loop loop_a318fba93a0e4d] task spec freeze failed: TypeError("'_DB' object is not subscriptable")
+WARNING  services.loop_audit_log:loop_audit_log.py:68 loop_audit_log.log failed for loop_a318fba93a0e4d (plan/task_spec_freeze): TypeError("'_DB' object is not subscriptable")
+WARNING  services.loop_engine:loop_engine.py:965 [loop loop_a318fba93a0e4d] EXECUTE — bin_ctx is None, falling back to DB fetch
+WARNING  services.loop_audit_log:loop_audit_log.py:68 loop_audit_log.log failed for loop_a318fba93a0e4d (execute/silent_exception_swallowed): TypeError("'_DB' object is not subscriptable")
+WARNING  aurem-dev.loop_safety:loop_safety.py:243 loop_failures insert failed: AttributeError("'_DB' object has no attribute 'loop_failures'")
+WARNING  aurem-dev.loop_safety:loop_safety.py:207 loop_lock release failed: AttributeError("'_DB' object has no attribute 'loop_locks'")
+______________________ test_resume_stale_flips_to_paused _______________________
+tests/test_iter212m60_loop_engine.py:175: in test_resume_stale_flips_to_paused
+    assert rescued == 1
+E   assert 0 == 1
+________________ test_commit_message_carries_loop_verified_tag _________________
+tests/test_iter212m60_loop_engine.py:245: in test_commit_message_carries_loop_verified_tag
+    assert engine.state == eng.LoopState.COMPLETED
+E   AssertionError: assert <LoopState.FAILED: 'failed'> == <LoopState.CO...: 'completed'>
+E     
+E     - completed
+E     + failed
+------------------------------ Captured log call -------------------------------
+WARNING  services.loop_engine:loop_engine.py:501 [loop loop_99e2847c50fd4d] PAT preflight skipped: AttributeError("'_DB' object has no attribute 'cto_projects'")
+WARNING  services.loop_engine:loop_engine.py:542 [loop loop_99e2847c50fd4d] PLAN grounding — 2/2 paths not in repo map (may be new files or hallucinations): ['a.py', 'b.py']
+WARNING  services.loop_engine:loop_engine.py:595 [loop loop_99e2847c50fd4d] task spec freeze failed: TypeError("'_DB' object is not subscriptable")
+WARNING  services.loop_audit_log:loop_audit_log.py:68 loop_audit_log.log failed for loop_99e2847c50fd4d (plan/task_spec_freeze): TypeError("'_DB' object is not subscriptable")
+WARNING  services.loop_engine:loop_engine.py:965 [loop loop_99e2847c50fd4d] EXECUTE — bin_ctx is None, falling back to DB fetch
+WARNING  services.loop_audit_log:loop_audit_log.py:68 loop_audit_log.log failed for loop_99e2847c50fd4d (execute/silent_exception_swallowed): TypeError("'_DB' object is not subscriptable")
+WARNING  aurem-dev.loop_safety:loop_safety.py:243 loop_failures insert failed: AttributeError("'_DB' object has no attribute 'loop_failures'")
+WARNING  aurem-dev.loop_safety:loop_safety.py:207 loop_lock release failed: AttributeError("'_DB' object has no attribute 'loop_locks'")
+________________________ test_no_silent_failure_in_scan ________________________
+tests/test_iter212m60_loop_engine.py:265: in test_no_silent_failure_in_scan
+    assert engine.state == eng.LoopState.COMPLETED
+E   AssertionError: assert <LoopState.FAILED: 'failed'> == <LoopState.CO...: 'completed'>
+E     
+E     - completed
+E     + failed
+------------------------------ Captured log call -------------------------------
+WARNING  services.loop_engine:loop_engine.py:501 [loop loop_cef681279c3b4d] PAT preflight skipped: AttributeError("'_DB' object has no attribute 'cto_projects'")
+WARNING  services.loop_engine:loop_engine.py:542 [loop loop_cef681279c3b4d] PLAN grounding — 2/2 paths not in repo map (may be new files or hallucinations): ['a.py', 'b.py']
+WARNING  services.loop_engine:loop_engine.py:595 [loop loop_cef681279c3b4d] task spec freeze failed: TypeError("'_DB' object is not subscriptable")
+WARNING  services.loop_audit_log:loop_audit_log.py:68 loop_audit_log.log failed for loop_cef681279c3b4d (plan/task_spec_freeze): TypeError("'_DB' object is not subscriptable")
+WARNING  services.loop_engine:loop_engine.py:965 [loop loop_cef681279c3b4d] EXECUTE — bin_ctx is None, falling back to DB fetch
+WARNING  services.loop_audit_log:loop_audit_log.py:68 loop_audit_log.log failed for loop_cef681279c3b4d (execute/silent_exception_swallowed): TypeError("'_DB' object is not subscriptable")
+WARNING  aurem-dev.loop_safety:loop_safety.py:243 loop_failures insert failed: AttributeError("'_DB' object has no attribute 'loop_failures'")
+WARNING  aurem-dev.loop_safety:loop_safety.py:207 loop_lock release failed: AttributeError("'_DB' object has no attribute 'loop_locks'")
+______________________ test_self_heal_fixes_broken_python ______________________
+tests/test_iter212m62_loop_verify.py:148: in test_self_heal_fixes_broken_python
+    assert engine.state == eng.LoopState.COMPLETED, \
+E   AssertionError: expected COMPLETED, got LoopState.FAILED
+E   assert <LoopState.FAILED: 'failed'> == <LoopState.CO...: 'completed'>
+E     
+E     - completed
+E     + failed
+------------------------------ Captured log call -------------------------------
+WARNING  services.loop_engine:loop_engine.py:595 [loop loop_78ffaa0cc34648] task spec freeze failed: TypeError("'_DB' object is not subscriptable")
+WARNING  services.loop_audit_log:loop_audit_log.py:68 loop_audit_log.log failed for loop_78ffaa0cc34648 (plan/task_spec_freeze): TypeError("'_DB' object is not subscriptable")
+WARNING  services.loop_engine:loop_engine.py:965 [loop loop_78ffaa0cc34648] EXECUTE — bin_ctx is None, falling back to DB fetch
+WARNING  services.loop_audit_log:loop_audit_log.py:68 loop_audit_log.log failed for loop_78ffaa0cc34648 (execute/silent_exception_swallowed): TypeError("'_DB' object is not subscriptable")
+WARNING  aurem-dev.loop_safety:loop_safety.py:243 loop_failures insert failed: AttributeError("'_DB' object has no attribute 'loop_failures'")
+WARNING  aurem-dev.loop_safety:loop_safety.py:207 loop_lock release failed: AttributeError("'_DB' object has no attribute 'loop_locks'")
+___________________ test_self_heal_exhausted_pauses_for_user ___________________
+tests/test_iter212m62_loop_verify.py:177: in test_self_heal_exhausted_pauses_for_user
+    assert engine.state == eng.LoopState.PAUSED_FOR_USER
+E   AssertionError: assert <LoopState.FAILED: 'failed'> == <LoopState.PA...sed_for_user'>
+E     
+E     - paused_for_user
+E     + failed
+------------------------------ Captured log call -------------------------------
+WARNING  services.loop_engine:loop_engine.py:595 [loop loop_bade1e3651954c] task spec freeze failed: TypeError("'_DB' object is not subscriptable")
+WARNING  services.loop_audit_log:loop_audit_log.py:68 loop_audit_log.log failed for loop_bade1e3651954c (plan/task_spec_freeze): TypeError("'_DB' object is not subscriptable")
+WARNING  services.loop_engine:loop_engine.py:965 [loop loop_bade1e3651954c] EXECUTE — bin_ctx is None, falling back to DB fetch
+WARNING  services.loop_audit_log:loop_audit_log.py:68 loop_audit_log.log failed for loop_bade1e3651954c (execute/silent_exception_swallowed): TypeError("'_DB' object is not subscriptable")
+WARNING  aurem-dev.loop_safety:loop_safety.py:243 loop_failures insert failed: AttributeError("'_DB' object has no attribute 'loop_failures'")
+WARNING  aurem-dev.loop_safety:loop_safety.py:207 loop_lock release failed: AttributeError("'_DB' object has no attribute 'loop_locks'")
+_________________ test_verify_skipped_when_no_files_submitted __________________
+tests/test_iter212m62_loop_verify.py:194: in test_verify_skipped_when_no_files_submitted
+    assert engine.state == eng.LoopState.COMPLETED
+E   AssertionError: assert <LoopState.FAILED: 'failed'> == <LoopState.CO...: 'completed'>
+E     
+E     - completed
+E     + failed
+------------------------------ Captured log call -------------------------------
+WARNING  services.loop_engine:loop_engine.py:595 [loop loop_d077e1f6308546] task spec freeze failed: TypeError("'_DB' object is not subscriptable")
+WARNING  services.loop_audit_log:loop_audit_log.py:68 loop_audit_log.log failed for loop_d077e1f6308546 (plan/task_spec_freeze): TypeError("'_DB' object is not subscriptable")
+WARNING  services.loop_engine:loop_engine.py:965 [loop loop_d077e1f6308546] EXECUTE — bin_ctx is None, falling back to DB fetch
+WARNING  services.loop_audit_log:loop_audit_log.py:68 loop_audit_log.log failed for loop_d077e1f6308546 (execute/silent_exception_swallowed): TypeError("'_DB' object is not subscriptable")
+WARNING  aurem-dev.loop_safety:loop_safety.py:243 loop_failures insert failed: AttributeError("'_DB' object has no attribute 'loop_failures'")
+WARNING  aurem-dev.loop_safety:loop_safety.py:207 loop_lock release failed: AttributeError("'_DB' object has no attribute 'loop_locks'")
+=============================== warnings summary ===============================
+routers/chat.py:264
+  /app/backend/routers/chat.py:264: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.9/migration/
+    @validator("prompt")
+
+routers/chat.py:268
+  /app/backend/routers/chat.py:268: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.9/migration/
+    @validator("task_type")
+
+../../root/.venv/lib/python3.11/site-packages/pydantic/_internal/_fields.py:172
+  /root/.venv/lib/python3.11/site-packages/pydantic/_internal/_fields.py:172: UserWarning: Field name "schema" in "InsertBody" shadows an attribute in parent "BaseModel"
+    warnings.warn(
+
+tests/test_iter212m144_loop_cross_worker_rehydrate.py::test_loop_router_uses_rehydrate_on_confirm
+  tests/test_iter212m144_loop_cross_worker_rehydrate.py:165: PytestWarning: The test <Function test_loop_router_uses_rehydrate_on_confirm> is marked with '@pytest.mark.asyncio' but it is not an async function. Please remove the asyncio mark. If the test is not marked explicitly, check for global marks applied via 'pytestmark'.
+    def test_loop_router_uses_rehydrate_on_confirm():
+
+tests/test_iter212m178_prod_perf.py::test_bulk_loop_paces_github_mutations
+  tests/test_iter212m178_prod_perf.py:181: PytestWarning: The test <Function test_bulk_loop_paces_github_mutations> is marked with '@pytest.mark.asyncio' but it is not an async function. Please remove the asyncio mark. If the test is not marked explicitly, check for global marks applied via 'pytestmark'.
+    def test_bulk_loop_paces_github_mutations():
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_iter124d_stripe_async_offload.py::test_checkout_does_not_block_event_loop
+FAILED tests/test_iter212m190_scan_fix_quota.py::TestAuthRegression::test_login_case_insensitive
+FAILED tests/test_iter212m55_e2e_regression.py::TestMiddlewareRegression::test_login_good_creds_returns_200
+FAILED tests/test_iter212m60_loop_engine.py::test_confirm_yes_runs_pipeline_to_completion
+FAILED tests/test_iter212m60_loop_engine.py::test_resume_stale_flips_to_paused
+FAILED tests/test_iter212m60_loop_engine.py::test_commit_message_carries_loop_verified_tag
+FAILED tests/test_iter212m60_loop_engine.py::test_no_silent_failure_in_scan
+FAILED tests/test_iter212m62_loop_verify.py::test_self_heal_fixes_broken_python
+FAILED tests/test_iter212m62_loop_verify.py::test_self_heal_exhausted_pauses_for_user
+FAILED tests/test_iter212m62_loop_verify.py::test_verify_skipped_when_no_files_submitted
+ERROR tests/test_aurem_rollback.py::TestSubmitTaskRegression::test_submit_task_creates_doc_without_rollback_fields
+ERROR tests/test_iter212m190_scan_fix_quota.py::TestPreview::test_bulk_cap_regression
+10 failed, 354 passed, 4 skipped, 3312 deselected, 5 warnings, 2 errors in 25.16s

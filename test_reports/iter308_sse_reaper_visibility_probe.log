@@ -1,0 +1,3 @@
+resume_stale rescued 1
+doc after reaper {"state": "paused_for_user", "last_event": {"loop_id": "loop_iter308_sse_reaper_probe", "state": "executing", "phase": "execute", "message": "EXECUTE START stale event should not remain visible after reaper", "data": {"sub_step": "start"}, "timestamp": "2026-07-25T21:33:59.336127+00:00"}, "resume_reason": "server_restart_mid_loop"}
+stream status 200

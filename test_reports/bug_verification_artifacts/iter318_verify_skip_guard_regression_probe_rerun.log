@@ -1,0 +1,17 @@
+{'final_report_ok': False, 'final_row': {'path': 'README.md', 'ok': False, 'linter': 'skip', 'stderr': '\nintegrity_guard: elision_marker (path=README.md)', 'integrity_guard': {'rule_fired': 'elision_marker', 'offending_path': 'README.md', 'marker_pattern': 'bracket_rest_of', 'marker_text': '[Rest of existing README content remains unchanged...]'}}, 'submitted_file_still_contains_elision': True, 'self_heals_performed': [{'phase': 'verify', 'attempt': 1, 'file': 'README.md', 'applied': False, 'ts': '2026-07-27T05:53:35.041260+00:00'}, {'phase': 'verify', 'attempt': 2, 'file': 'README.md', 'applied': False, 'ts': '2026-07-27T05:53:35.041345+00:00'}], 'final_state': 'paused_for_user', 'final_phase': 'verify'}
+Traceback (most recent call last):
+  File "/app/test_reports/bug_verification_artifacts/iter318_verify_skip_guard_regression_probe.py", line 65, in <module>
+    if __name__=='__main__': asyncio.run(main())
+                             ^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/app/test_reports/bug_verification_artifacts/iter318_verify_skip_guard_regression_probe.py", line 63, in main
+    raise AssertionError('Expected to reproduce verify skip guard regression, but did not')
+AssertionError: Expected to reproduce verify skip guard regression, but did not

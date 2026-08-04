@@ -726,3 +726,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `services/env_context.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-02T04:12:09.424498Z] <!-- inv:service:services/env_context.py -->
 - `AUREM_ENV` — auto-detected in backend/services/env_context.py (verify) (default: unset) [Iter 0, 2026-08-02T04:12:09.424526Z] <!-- inv:envvar:AUREM_ENV -->
 - `services/synthetic_filter.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-02T04:12:09.424565Z] <!-- inv:service:services/synthetic_filter.py -->
+
+### Iter 0 · 2026-08-04
+
+- `loop_run_log kind='executor_file_too_large'` — auto-detected in backend/services/loop_engine.py (verify) [Iter 0, 2026-08-04T08:08:10.696781Z] <!-- inv:loop_run_log_kind:executor_file_too_large -->

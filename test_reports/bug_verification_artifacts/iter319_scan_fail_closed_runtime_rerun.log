@@ -1,0 +1,10 @@
+[loop loop_bugverify_iter319_scan] SCAN CRASHED — fail-closed: RuntimeError('synthetic scanner crash')
+Traceback (most recent call last):
+  File "/app/backend/services/loop_engine.py", line 1842, in _do_scan
+    results = await _run_diff_security_scan(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/test_reports/bug_verification_artifacts/iter319_scan_fail_closed_runtime.py", line 39, in boom
+    raise RuntimeError('synthetic scanner crash')
+RuntimeError: synthetic scanner crash
+{'engine_state': 'failed', 'engine_phase': 'scan', 'scan_results': {'error': "RuntimeError('synthetic scanner crash')", 'fail_closed': True}, 'errors': [{'phase': 'scan', 'error': "scan_exception: RuntimeError: RuntimeError('synthetic scanner crash')", 'ts': '2026-07-27T05:53:50.937781+00:00'}], 'last_event_state': 'failed', 'last_event_phase': 'scan', 'last_event_kind': 'scan_exception', 'persisted_state': 'failed'}
+PASS: scan exception fails closed and does not proceed to ship

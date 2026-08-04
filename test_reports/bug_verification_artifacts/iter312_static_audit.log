@@ -1,0 +1,47 @@
+timeout_detection True
+active_poll True
+recovery_banner True
+failure_card True
+open_stream_in_recovery False
+handle_plan_ready_event_sets_loopPlan False
+showPlanCard_allows_awaiting_confirmation False
+showPlanCard_requires_plan_pending True
+
+RECOVERY_BLOCK:
+ // ── Iter 312 · Class 3 — Timeout-recovery reconciliation ──────
+      // If axios raised a client-side timeout (60s cap in api.js),
+      // the backend session was almost certainly created (lock write
+      // happens BEFORE any long LLM/Council work in /loop/start).
+      // Poll /loop/active to confirm — if we find our own session in
+      // a non-terminal state, bind SSE to it and show a "still
+      // working" indicator instead of a hard failure.
+      const isTimeout =
+        e?.code === "ECONNABORTED" ||
+        (typeof e?.message === "string" && /timeout of \d+ms exceeded/i.test(e.message));
+      if (isTimeout) {
+        try {
+          const { getActiveLoop } = await import("../lib/loopApi");
+          const activeResp = await getActiveLoop(activeProject?.project_id || null);
+          const active = activeResp?.active;
+          if (active?.loop_id) {
+            // Recovery path — the loop DID start server-side, HTTP
+            // just took too long to return. Bind ChatPanel to it and
+            // let SSE take over from here (the plan blob will arrive
+            // via a phase-transition event once planning finishes).
+            setLoopId(active.loop_id);
+            setLoopPhase(String(active.phase || active.state || "planning").toLowerCase());
+            
+
+SHOW_PLAN_CARD_BLOCK:
+ const showPlanCard =
+    execMode === EXEC_MODES.LOOP &&
+    loopPhase === "plan_pending" &&
+    !!loopPlan &&
+    !!loopId &&
+    !busy &&
+    !loopTerminal &&
+    !loopTerminalRef.current &&
+    loopPhase !== "error" &&
+    loopPhase !== "done";
+
+  

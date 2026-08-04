@@ -1,0 +1,2 @@
+bad_token_status 401
+detail {"detail":"Invalid token: Invalid header string: 'utf-8' codec can't decode byte 0xe7 in position 1: invalid continuation byte"}

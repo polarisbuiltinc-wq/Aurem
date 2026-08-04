@@ -1,0 +1,46 @@
+{
+  "current_keys": [
+    "avg_per_loop",
+    "by_phase",
+    "distinct_loops",
+    "since_utc",
+    "total_calls",
+    "total_cost_usd",
+    "total_input",
+    "total_output",
+    "until_utc"
+  ],
+  "marker": "qa313_b1cf267873",
+  "ok": true,
+  "seeded_phases": {
+    "chat_present_in_loop_groups": false,
+    "execute": {
+      "calls": 1,
+      "cost_usd": 0.00333,
+      "input_tokens": 333,
+      "loop_sessions": 1,
+      "output_tokens": 44
+    },
+    "plan": {
+      "calls": 1,
+      "cost_usd": 0.00111,
+      "input_tokens": 111,
+      "loop_sessions": 1,
+      "output_tokens": 22
+    }
+  },
+  "shape_keys": [
+    "current",
+    "data_source",
+    "note",
+    "ok",
+    "previous",
+    "window_days"
+  ],
+  "status_codes": {
+    "admin": 200,
+    "no_auth": 401,
+    "non_admin": 403
+  },
+  "url": "http://localhost:8001/api/aurem-dev/admin/loop-token-metrics"
+}

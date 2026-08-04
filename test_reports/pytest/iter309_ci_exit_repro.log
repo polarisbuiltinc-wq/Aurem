@@ -1,0 +1,23 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________________ test_ci_failure_propagation_canary_iter309 __________________
+tests/test_ci_canary_MUST_FAIL_iter309.py:35: in test_ci_failure_propagation_canary_iter309
+    assert False, (
+E   AssertionError: CANARY: This test is deliberately failing to verify that CI turns the Actions tab red on any test failure. If you see this in a GitHub Actions log, the CI signal is WORKING. If the workflow shows green despite this test running, CI is broken and needs to be fixed BEFORE adding pytest -k loop to quality-gate.yml (see /app/memory/CHANGELOG.md iter 309).
+E   assert False
+=============================== warnings summary ===============================
+../../tmp/iter309-ci-venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1464
+  /tmp/iter309-ci-venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1464: PytestConfigWarning: Unknown config option: asyncio_mode
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_ci_canary_MUST_FAIL_iter309.py::test_ci_failure_propagation_canary_iter309
+1 failed, 1 warning in 0.04s
+---iter309-canary-check---
+tests/test_ci_canary_MUST_FAIL_iter309.py:35: in test_ci_failure_propagation_canary_iter309
+E   AssertionError: CANARY: This test is deliberately failing to verify that CI turns the Actions tab red on any test failure. If you see this in a GitHub Actions log, the CI signal is WORKING. If the workflow shows green despite this test running, CI is broken and needs to be fixed BEFORE adding pytest -k loop to quality-gate.yml (see /app/memory/CHANGELOG.md iter 309).
+FAILED tests/test_ci_canary_MUST_FAIL_iter309.py::test_ci_failure_propagation_canary_iter309
+---end-canary-check---
+CI_REPRO_EXIT=1

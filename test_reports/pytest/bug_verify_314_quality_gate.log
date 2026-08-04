@@ -1,0 +1,262 @@
+..F..................................................................... [ 32%]
+........................................................................ [ 64%]
+........................................................................ [ 96%]
+.......                                                                  [100%]
+=================================== FAILURES ===================================
+___________________ test_checkout_does_not_block_event_loop ____________________
+
+body = CheckoutBody(plan='starter', tier=None, origin_url='https://auremcto.com')
+http_request = <MagicMock id='278036409080784'>, authorization = 'Bearer x'
+
+    @router.post("/payments/checkout")
+    async def create_checkout(
+        body: CheckoutBody,
+        http_request: Request,
+        authorization: Optional[str] = Header(None),
+    ) -> dict:
+        _require_stripe()
+        user = await current_dev(authorization)
+        plan = (body.plan or body.tier or "").strip().lower()
+        if plan not in STRIPE_PRICES:
+            raise HTTPException(400, f"Invalid plan `{plan}` — expected starter|pro|team")
+        price_id = STRIPE_PRICES[plan]()
+        if not price_id:
+            raise HTTPException(
+                503,
+                f"Stripe price ID for `{plan}` not configured "
+                f"(set STRIPE_{plan.upper()}_PRICE_ID).",
+            )
+    
+        # Iter 212m-15 — sanity-check the configured price BEFORE attempting
+        # Checkout. If a misconfigured env var points at a test-mode price
+        # while the key is live (or a deleted / one-time / inactive price),
+        # the canonical Stripe error is `No such price` — but on some prod
+        # pods the failure mode was a worker crash that returned Cloudflare
+        # 502 HTML instead of clean JSON (this hit the founder live on
+        # monthly plans while annual variants worked, proving it's the env
+        # vars, not the code path). Pre-flighting `Price.retrieve` lets us
+        # return a clean diagnostic JSON instead.
+        try:
+>           await _stripe_call(stripe.Price.retrieve, price_id)
+
+routers/payments.py:243: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+routers/payments.py:81: in _stripe_call
+    return await asyncio.wait_for(
+/usr/local/lib/python3.11/asyncio/tasks.py:489: in wait_for
+    return fut.result()
+/usr/local/lib/python3.11/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+/usr/local/lib/python3.11/concurrent/futures/thread.py:58: in run
+    result = self.fn(*self.args, **self.kwargs)
+/root/.venv/lib/python3.11/site-packages/sentry_sdk/integrations/threading.py:175: in wrapped_fn
+    return fn(*args, **kwargs)
+/root/.venv/lib/python3.11/site-packages/stripe/_price.py:378: in retrieve
+    instance.refresh()
+/root/.venv/lib/python3.11/site-packages/stripe/_api_resource.py:38: in refresh
+    return self._request_and_refresh("get", self.instance_url())
+/root/.venv/lib/python3.11/site-packages/stripe/_api_resource.py:128: in _request_and_refresh
+    obj = StripeObject._request(
+/root/.venv/lib/python3.11/site-packages/stripe/_stripe_object.py:424: in _request
+    return self._requestor.request(
+/root/.venv/lib/python3.11/site-packages/stripe/_api_requestor.py:211: in request
+    resp = requestor._interpret_response(rbody, rcode, rheaders, api_mode)
+/root/.venv/lib/python3.11/site-packages/stripe/_api_requestor.py:897: in _interpret_response
+    self.handle_error_response(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <stripe._api_requestor._APIRequestor object at 0xfcdf65445f50>
+rbody = '{\n  "error": {\n    "message": "Invalid API Key provided: sk_live_test",\n    "type": "invalid_request_error"\n  }\n}\n'
+rcode = 401
+resp = OrderedDict([('error', OrderedDict([('message', 'Invalid API Key provided: sk_live_test'), ('type', 'invalid_request_error')]))])
+rheaders = {'Server': 'nginx', 'Date': 'Sun, 26 Jul 2026 05:43:32 GMT', 'Content-Type': 'application/json', 'Content-Length': '11..."', 'X-Robots-Tag': 'none', 'X-Wc': '383', 'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload'}
+api_mode = 'V1'
+
+    def handle_error_response(
+        self, rbody, rcode, resp, rheaders, api_mode
+    ) -> NoReturn:
+        try:
+            error_data = resp["error"]
+        except (KeyError, TypeError):
+            raise error.APIError(
+                "Invalid response object from API: %r (HTTP response code "
+                "was %d)" % (rbody, rcode),
+                rbody,
+                rcode,
+                resp,
+            )
+    
+        err = None
+    
+        # OAuth errors are a JSON object where `error` is a string. In
+        # contrast, in API errors, `error` is a hash with sub-keys. We use
+        # this property to distinguish between OAuth and API errors.
+        if isinstance(error_data, str):
+            err = self.specific_oauth_error(
+                rbody, rcode, resp, rheaders, error_data
+            )
+    
+        if err is None:
+            err = (
+                self.specific_v2_api_error(
+                    rbody, rcode, resp, rheaders, error_data
+                )
+                if api_mode == "V2"
+                else self.specific_v1_api_error(
+                    rbody, rcode, resp, rheaders, error_data
+                )
+            )
+    
+>       raise err
+E       stripe._error.AuthenticationError: Invalid API Key provided: sk_live_test
+
+/root/.venv/lib/python3.11/site-packages/stripe/_api_requestor.py:352: AuthenticationError
+
+During handling of the above exception, another exception occurred:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0xfcdf657ad050>
+
+    @pytest.mark.asyncio
+    async def test_checkout_does_not_block_event_loop(monkeypatch):
+        """A slow stripe.* call must run on a worker thread, leaving the
+        event loop free to service concurrent async work."""
+        # Force live-mode key path so _require_stripe doesn't 503
+        monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_live_test")
+        monkeypatch.setenv("STRIPE_STARTER_PRICE_ID", "price_starter")
+        monkeypatch.setenv("FRONTEND_URL", "https://auremcto.com")
+    
+        from routers import payments as pay
+    
+        # Stub current_dev (async, returns a user dict).
+        async def _fake_user(_auth):
+            return {"user_id": "u_test", "email": "test@aurem.dev"}
+        monkeypatch.setattr(pay, "current_dev", _fake_user)
+    
+        # Stub require_db with a mock that has the insert call awaited.
+        fake_db = MagicMock()
+        fake_db.cto_payments.insert_one = AsyncMock()
+        monkeypatch.setattr(pay, "require_db", lambda: fake_db)
+    
+        # Simulate Stripe taking 1.5s synchronously. If this ran on the
+        # event loop, the concurrent ticker below would not advance.
+        def slow_create(**kwargs):
+            time.sleep(1.5)
+            m = MagicMock()
+            m.id = "cs_test_123"
+            m.url = "https://checkout.stripe.com/test"
+            return m
+    
+        monkeypatch.setattr("stripe.checkout.Session.create", slow_create)
+    
+        # Concurrent task — counts how many times we tick during the call.
+        # If the event loop is blocked we'll see < 5 ticks for a 1.5s call.
+        ticks = {"n": 0}
+    
+        async def ticker():
+            for _ in range(30):
+                ticks["n"] += 1
+                await asyncio.sleep(0.05)
+    
+        body = pay.CheckoutBody(plan="starter", origin_url="https://auremcto.com")
+        fake_request = MagicMock()
+        fake_request.base_url = "https://auremcto.com"
+    
+        t = asyncio.create_task(ticker())
+>       result = await pay.create_checkout(
+            body=body, http_request=fake_request, authorization="Bearer x",
+        )
+
+tests/test_iter124d_stripe_async_offload.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+body = CheckoutBody(plan='starter', tier=None, origin_url='https://auremcto.com')
+http_request = <MagicMock id='278036409080784'>, authorization = 'Bearer x'
+
+    @router.post("/payments/checkout")
+    async def create_checkout(
+        body: CheckoutBody,
+        http_request: Request,
+        authorization: Optional[str] = Header(None),
+    ) -> dict:
+        _require_stripe()
+        user = await current_dev(authorization)
+        plan = (body.plan or body.tier or "").strip().lower()
+        if plan not in STRIPE_PRICES:
+            raise HTTPException(400, f"Invalid plan `{plan}` — expected starter|pro|team")
+        price_id = STRIPE_PRICES[plan]()
+        if not price_id:
+            raise HTTPException(
+                503,
+                f"Stripe price ID for `{plan}` not configured "
+                f"(set STRIPE_{plan.upper()}_PRICE_ID).",
+            )
+    
+        # Iter 212m-15 — sanity-check the configured price BEFORE attempting
+        # Checkout. If a misconfigured env var points at a test-mode price
+        # while the key is live (or a deleted / one-time / inactive price),
+        # the canonical Stripe error is `No such price` — but on some prod
+        # pods the failure mode was a worker crash that returned Cloudflare
+        # 502 HTML instead of clean JSON (this hit the founder live on
+        # monthly plans while annual variants worked, proving it's the env
+        # vars, not the code path). Pre-flighting `Price.retrieve` lets us
+        # return a clean diagnostic JSON instead.
+        try:
+            await _stripe_call(stripe.Price.retrieve, price_id)
+        except HTTPException as he:
+            # Stripe 4xx surfaces as a 502 from _stripe_call's catch-all.
+            # Translate to a precise admin-facing message instead.
+            if he.status_code in (502, 504):
+                logger.warning(
+                    "stripe price.retrieve failed for plan=%s price_id=%s: %s",
+                    plan, price_id, getattr(he, "detail", ""),
+                )
+                raise HTTPException(
+                    503,
+                    f"Stripe price `{plan}` is misconfigured — the configured "
+                    f"price ID does not exist or is from a different "
+                    f"(test/live) mode than the Stripe secret key. Admin: "
+                    f"check STRIPE_{plan.upper()}_PRICE_ID env var in the "
+                    f"Emergent dashboard against the Stripe dashboard.",
+                )
+            raise
+        except stripe.error.StripeError as se:
+            logger.warning(
+                "stripe price.retrieve raised for plan=%s price_id=%s: %r",
+                plan, price_id, se,
+            )
+>           raise HTTPException(
+                503,
+                f"Stripe price `{plan}` is misconfigured — Stripe says: "
+                f"{getattr(se, 'user_message', None) or str(se)}. "
+                f"Admin: rotate STRIPE_{plan.upper()}_PRICE_ID.",
+            )
+E           fastapi.exceptions.HTTPException: 503: Stripe price `starter` is misconfigured — Stripe says: Invalid API Key provided: sk_live_test. Admin: rotate STRIPE_STARTER_PRICE_ID.
+
+routers/payments.py:266: HTTPException
+------------------------------ Captured log call -------------------------------
+WARNING  routers.payments:payments.py:262 stripe price.retrieve raised for plan=starter price_id=price_starter: AuthenticationError(message='Invalid API Key provided: sk_live_test', http_status=401, request_id=None)
+=============================== warnings summary ===============================
+routers/chat.py:264
+  /app/backend/routers/chat.py:264: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.9/migration/
+    @validator("prompt")
+
+routers/chat.py:268
+  /app/backend/routers/chat.py:268: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.9/migration/
+    @validator("task_type")
+
+../../root/.venv/lib/python3.11/site-packages/pydantic/_internal/_fields.py:172
+  /root/.venv/lib/python3.11/site-packages/pydantic/_internal/_fields.py:172: UserWarning: Field name "schema" in "InsertBody" shadows an attribute in parent "BaseModel"
+    warnings.warn(
+
+tests/test_iter212m144_loop_cross_worker_rehydrate.py::test_loop_router_uses_rehydrate_on_confirm
+  tests/test_iter212m144_loop_cross_worker_rehydrate.py:165: PytestWarning: The test <Function test_loop_router_uses_rehydrate_on_confirm> is marked with '@pytest.mark.asyncio' but it is not an async function. Please remove the asyncio mark. If the test is not marked explicitly, check for global marks applied via 'pytestmark'.
+    def test_loop_router_uses_rehydrate_on_confirm():
+
+tests/test_iter212m178_prod_perf.py::test_bulk_loop_paces_github_mutations
+  tests/test_iter212m178_prod_perf.py:181: PytestWarning: The test <Function test_bulk_loop_paces_github_mutations> is marked with '@pytest.mark.asyncio' but it is not an async function. Please remove the asyncio mark. If the test is not marked explicitly, check for global marks applied via 'pytestmark'.
+    def test_bulk_loop_paces_github_mutations():
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_iter124d_stripe_async_offload.py::test_checkout_does_not_block_event_loop
+1 failed, 222 passed, 3471 deselected, 5 warnings in 17.52s

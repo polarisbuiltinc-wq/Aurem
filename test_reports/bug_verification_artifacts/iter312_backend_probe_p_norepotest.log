@@ -1,0 +1,23 @@
+
+# BACKEND-1 curl: POST /loop/start (async default)
+{"loop_id":"loop_487276bec65b46","state":"planning","phase":"plan","plan":null,"async_start":true}
+HTTP_STATUS:200
+TIME_TOTAL:0.107654
+
+Captured loop_id=loop_487276bec65b46 project_id=p_norepotest
+
+# BACKEND-2 curl: immediate second POST /loop/start same project should 409
+{"detail":{"error":"loop_already_running","existing_loop_id":"loop_487276bec65b46","message":"Another loop is already running for this project. Wait for it to finish or cancel it."}}
+HTTP_STATUS:409
+TIME_TOTAL:0.096236
+
+# BACKEND-3 curl: GET /loop/active immediately after async start
+{"ok":true,"active":null}
+HTTP_STATUS:200
+TIME_TOTAL:0.107206
+
+# Poll active until plan/terminal (max 180s)
+[poll 01] {"ok":true,"active":null}
+
+# Cleanup: cancel loop if still active
+{"loop_id":"loop_487276bec65b46","state":"failed","lock_force_released":true}

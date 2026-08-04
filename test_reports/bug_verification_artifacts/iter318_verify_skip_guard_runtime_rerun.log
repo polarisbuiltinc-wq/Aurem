@@ -1,0 +1,4 @@
+glm-5.2 call raised: RuntimeError('OPENROUTER_API_KEY not set')
+Pro mode: Claude fallback also failed: RuntimeError('OPENROUTER_API_KEY not set')
+{'ok': False, 'results': [{'path': 'README.md', 'ok': False, 'linter': 'skip', 'stderr': '\nintegrity_guard: elision_marker (path=README.md)', 'integrity_guard': {'rule_fired': 'elision_marker', 'offending_path': 'README.md', 'marker_pattern': 'bracket_rest_of', 'marker_text': '[Rest of existing README content remains unchanged...]'}}], 'errors': ['README.md: integrity_guard:elision_marker']}
+PASS: .md linter skip row downgraded by integrity guard

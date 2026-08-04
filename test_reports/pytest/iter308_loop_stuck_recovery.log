@@ -1,0 +1,15 @@
+
+==================================== ERRORS ====================================
+__________ ERROR collecting tests/test_loop_execute_stuck_recovery.py __________
+ImportError while importing test module '/app/backend/tests/test_loop_execute_stuck_recovery.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/local/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+backend/tests/test_loop_execute_stuck_recovery.py:45: in <module>
+    from services.loop_engine import (
+E   ModuleNotFoundError: No module named 'services'
+=========================== short test summary info ============================
+ERROR backend/tests/test_loop_execute_stuck_recovery.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.18s
