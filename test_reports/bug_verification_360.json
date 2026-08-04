@@ -1,0 +1,54 @@
+{
+  "verdict": "not_fixed",
+  "user_reported_bug": "when a verify step fails, the system loops infinitely (triggering 4+ 'Verify failed after 2 attempts' events) and the frontend chip is stuck at 'heal 1/2'. MAX_SELF_HEALS = 2 is not being enforced per-loop; it's infinitely looping 'Verify failed after 2 attempts', and the UI chip has no live timer. The loop must halt at exactly 2 heal attempts and surface a terminal state (not a silent retry).",
+  "summary": "No relevant testing skill found. Core _do_verify behavior is fixed in deterministic behavioral tests: it stops at exactly MAX_SELF_HEALS=2, emits one FAILED event, emits no PAUSED_FOR_USER event, and _run_pipeline_inner does not continue to scan/ship. However the required pause-response terminal guard is not fixed for persisted terminal loops: with no live in-memory engine, POST retry resolves through lookup_or_rehydrate(), refuses failed-state rehydration, and returns 404 'Loop not found' instead of HTTP 409 loop_terminal. Tests used MOCKED fake DB/verifier/healer to deterministically exercise the state machine; no external API integrations were called.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/aurem-dev/loop/{loop_id}/pause-response",
+        "issue": "Persisted terminal FAILED loop with no live _LIVE engine returns HTTP 404 'Loop not found' instead of required HTTP 409 detail.error=loop_terminal because lookup_or_rehydrate refuses non-paused states before the new terminal guard runs.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/pytest/bug_verify_360_requested_suite.log",
+    "/app/test_reports/pytest/bug_verify_360_behavioral_qa.log",
+    "/app/test_reports/pytest/bug_verify_360_persisted_terminal_router_guard.log",
+    "/app/test_reports/frontend/iter360_frontend_selfheal_timer_and_counter.log",
+    "/app/test_reports/bug_verification_artifacts/iter360_verify_terminal_behavior_test.py",
+    "/app/test_reports/bug_verification_artifacts/iter360_persisted_terminal_router_guard_test.py"
+  ],
+  "action_items": [
+    "Fix pause_response so retry/skip against terminal sessions loaded from Mongo returns HTTP 409 with detail.error='loop_terminal' instead of 404. Options: check loop_sessions for terminal state before raising 404, or allow lookup_or_rehydrate to return a non-runnable terminal engine only for this guard.",
+    "Add a behavioral regression test for persisted terminal FAILED/COMPLETED/ABORTED pause-response retry/skip, not just a static source assertion or live-engine-only monkeypatch."
+  ],
+  "critical_code_review_comments": [
+    "The new guard in backend/routers/loop.py is placed after lookup_or_rehydrate(). backend/services/loop_engine.py:4190 refuses rehydration for persisted state='failed', so the guard is bypassed whenever the terminal loop is not still present in the current worker's _LIVE map."
+  ],
+  "updated_files": [
+    "/app/test_reports/bug_verification_artifacts/iter360_verify_terminal_behavior_test.py",
+    "/app/test_reports/bug_verification_artifacts/iter360_persisted_terminal_router_guard_test.py",
+    "/app/test_reports/pytest/bug_verify_360_requested_suite.log",
+    "/app/test_reports/pytest/bug_verify_360_behavioral_qa.log",
+    "/app/test_reports/pytest/bug_verify_360_persisted_terminal_router_guard.log",
+    "/app/test_reports/frontend/iter360_frontend_selfheal_timer_and_counter.log",
+    "/app/test_reports/bug_verification_360.json",
+    "/app/test_reports/iteration_360.json"
+  ],
+  "success_rate": {
+    "backend": "80%",
+    "frontend": "100%"
+  },
+  "seed_data_creation": "No persistent seed data created. Tests used in-memory fake DB rows only.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run the requested pytest suite plus /app/test_reports/bug_verification_artifacts/iter360_persisted_terminal_router_guard_test.py. The engine cap behavior passed, but the persisted-terminal router guard failed with 404 vs expected 409 loop_terminal.",
+  "rca_of_the_issue": "Repro: create/load a loop_sessions row with loop_id=iter360_persisted_failed, user_id=qa_user, state=failed, phase=verify, ensure services.loop_engine._LIVE has no entry, then call routers.loop.pause_response(... action='retry'). lookup_or_rehydrate() loads the row, refuses rehydration because state failed is not in awaiting_confirmation/paused_for_user, returns None, and pause_response raises 404 before reaching the new terminal-state guard. This misses the requested defensive stale-UI contract."
+}

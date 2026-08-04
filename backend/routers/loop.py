@@ -521,6 +521,29 @@ async def pause_response(loop_id: str, body: PauseResponseBody,
         raise HTTPException(404, "Loop not found")
     if engine.user_id != user["user_id"]:
         raise HTTPException(403, "Not your loop")
+    # Feb 2026 · Terminal-state retry guard — founder-directed. Once
+    # a loop is in a terminal state (FAILED / COMPLETED / ABORTED),
+    # pause_response(retry|skip) must NOT resurrect it. Specifically
+    # the verify phase now hard-fails at MAX_SELF_HEALS instead of
+    # pausing; without this guard, a stale UI still holding the
+    # PAUSED_FOR_USER snapshot could POST retry and silently bypass
+    # confirm()'s AWAITING_CONFIRMATION guard (the code below sets
+    # state=AWAITING_CONFIRMATION unconditionally before calling
+    # confirm()).
+    if (body.action in ("retry", "skip")
+            and engine.state in {eng.LoopState.FAILED,
+                                 eng.LoopState.COMPLETED,
+                                 eng.LoopState.ABORTED}):
+        raise HTTPException(
+            409,
+            {"error": "loop_terminal",
+             "message": (
+                 f"Loop is in terminal state {engine.state.value}. "
+                 f"Start a fresh loop instead of retrying."
+             ),
+             "state": engine.state.value,
+             "phase": engine.phase},
+        )
     if body.action == "abort":
         await engine.cancel()
     elif (body.action == "skip"

@@ -54,26 +54,54 @@ def test_verify_retry_cap_present_in_pause_response_handler():
     )
 
 
-def test_verify_pause_event_carries_retry_counters():
-    """Lock-in — the paused_for_user event body emitted by _do_verify
-    must include verify_retry_count + max_verify_retries so the
-    frontend can render the outer retry count accurately."""
-    src = (_REPO / "backend" / "services" / "loop_engine.py").read_text(encoding="utf-8")
-    # Both context storage AND event payload must be present.
+def test_verify_pause_event_removed_after_terminal_hard_fail():
+    """Contract update (Feb 2026 · terminal hard-fail) — the founder
+    reported that the outer-retry path was still causing duplicate
+    "Verify failed after 2 attempts" events. The bug_testing_agent
+    confirmed the loop was still pausing for user instead of hard-
+    failing at the cap. New contract:
+
+      When MAX_SELF_HEALS heal rounds are exhausted with files still
+      failing, `_do_verify` HARD-FAILS via `_fail("verify", ...)`
+      (LoopState.FAILED). It does NOT emit a PAUSED_FOR_USER event
+      and does NOT forward verify_retry_count/max_verify_retries
+      into any event (those payload keys stopped being emitted by
+      the engine — the router-side outer-retry cap is now dead code
+      protected by an explicit terminal-state guard).
+
+    This test locks the removal in so a refactor can't quietly
+    reintroduce the pause-for-user fallback.
+    """
+    src = (_REPO / "backend" / "services" / "loop_engine.py").read_text(
+        encoding="utf-8")
+
+    # Context keys are still persisted (for the router's fallback
+    # feedback carrier if a legacy client ever needs them).
     assert 'self.context["verify_failed_files"]' in src, (
-        "loop_engine must persist verify_failed_files so the retry "
-        "handler in loop.py can inject them into the feedback."
+        "loop_engine must still persist verify_failed_files for "
+        "diagnostics + audit trail."
     )
     assert 'self.context["verify_last_errors"]' in src, (
-        "loop_engine must persist verify_last_errors for the same "
-        "reason as verify_failed_files."
+        "loop_engine must still persist verify_last_errors."
     )
-    assert "verify_retry_count" in src, (
-        "loop_engine must forward the context's verify_retry_count "
-        "into the paused_for_user event payload so the frontend "
-        "renders the OUTER retry counter (0..3) instead of the "
-        "inner self-heal counter (0..2)."
+
+    # The engine no longer emits a PAUSED_FOR_USER event for verify
+    # exhaustion — it emits a terminal FAILED via _fail().
+    verify_block = src[src.find("async def _do_verify"):
+                       src.find("async def _do_scan")]
+    assert "LoopState.PAUSED_FOR_USER" not in verify_block, (
+        "Feb 2026 terminal-fail contract: _do_verify must NOT "
+        "transition to PAUSED_FOR_USER when heals are exhausted. "
+        "Use `_fail('verify', ...)` for the terminal state instead."
     )
-    assert "max_verify_retries" in src, (
-        "loop_engine must emit max_verify_retries in the pause payload."
+    # And the emit payload no longer carries the retry-count keys
+    # (they were only meaningful for the removed pause path).
+    assert '"verify_retry_count": int(' not in verify_block, (
+        "Feb 2026 terminal-fail contract: _do_verify must not emit "
+        "verify_retry_count in any event — the outer-retry pause "
+        "path was removed."
+    )
+    assert '"max_verify_retries": 3' not in verify_block, (
+        "Feb 2026 terminal-fail contract: max_verify_retries=3 "
+        "leftover from the removed pause path must be gone."
     )

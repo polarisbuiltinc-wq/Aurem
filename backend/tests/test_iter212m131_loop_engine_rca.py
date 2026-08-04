@@ -294,8 +294,10 @@ def test_verify_self_heal_timeout_doesnt_hang(monkeypatch):
     elapsed = asyncio.run(go())
     # Must complete within a few seconds (timeout × MAX_SELF_HEALS + budget).
     assert elapsed < 10, f"verify hung for {elapsed:.1f}s — timeout broken"
-    # Phase ended in PAUSED_FOR_USER (heals exhausted with timeouts).
-    assert eng.state == le.LoopState.PAUSED_FOR_USER
+    # Feb 2026 · Terminal-fail contract change — heals exhausted with
+    # files still failing now hard-fails (LoopState.FAILED) instead of
+    # pausing for user. See test_iter_feb2026_verify_terminal_fail.
+    assert eng.state == le.LoopState.FAILED
 
 
 # ──────────────────────────────────────────────────────────────────
