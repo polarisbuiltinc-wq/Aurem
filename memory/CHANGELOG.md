@@ -5,6 +5,86 @@ statement and historical context; this file captures recent feature
 work in date-stamped chunks so PRD.md stays focused.
 
 
+## 2026-02-04 07:00 UTC — Iter 362 · Post-Retest Bug Fixes (Bugs A/B/C)
+
+Founder's regression retest (Aug 4, 2026) confirmed 3 real bugs
+persisting after iter 361; they were fixed in this iter with real
+root-cause changes (no band-aids), each shipped with automated tests.
+
+### Bug A (P0) · Execute fails/slows with file size
+**Reproduced**: Large existing files → "LLM produced no usable file
+content" 2/2. Small files: Plan alone 102 s, pipeline ~150 s.
+
+**Root cause**: `core/parliament.py::_CouncilMember` used a
+static `max_tokens=4000` output cap. For any existing file whose
+`bytes//3` (≈token equivalent) exceeded 4000, the LLM output
+TRUNCATED — the post-emission integrity guard rejected each of
+the 3 council members → CEO returned `manual_review` → 0 files
+generated → `_do_execute` surfaced the opaque error. Small-file
+slowness is upstream LLM latency (Council fan-out still runs
+parallel), and unfixable at this layer.
+
+**Fix** (real, not band-aid):
+1. `_CouncilMember.cast_vote` now honours `context.max_tokens_override`
+   (capped at 32 000 — upstream provider ceiling).
+2. `loop_engine._gen_via_parliament` computes an output budget from
+   the current file bytes: `min(32_000, max(4_000, bytes//3 + 1_500))`
+   and threads it through the Parliament context.
+3. Files >96 KB skip the LLM call entirely with a targeted
+   `file_too_large` sub_step + `executor_file_too_large` audit
+   row + a clear user-facing message ("narrow the plan to touch
+   smaller files or split this one"). Replaces the previously
+   opaque "no usable file content" failure.
+
+**Tests** — `backend/tests/test_iter_feb2026_bug_a_dynamic_output_budget.py`
+(10 contracts):
+- Council member honours override; caps at 32 K; defaults to 4 K
+  without override.
+- loop_engine threads override end-to-end.
+- Huge files short-circuit with `file_too_large`.
+- Budget formula scales sanely across 5 size tiers.
+
+### Bug B (P1) · Rollback used native `window.confirm()`
+**Reproduced**: 2/2 — the plain-white browser dialog broke the
+dark theme and synchronously blocked the JS thread.
+
+**Fix**: New shared `frontend/src/components/RollbackConfirmModal.jsx`
+— themed, centered, non-blocking, focus-managed, Escape-cancel,
+a11y labelled. Wired into both entry points:
+- `LoopLiveFeed.jsx::ShippedRow` (post-ship rollback button)
+- `OperationHistory.jsx` (row rollback in the history table)
+
+Every `window.confirm(...)` call in the rollback path is removed.
+
+### Bug C (P3) · Button label stuck at "ROLLING BACK — SEE HISTORY"
+**Reproduced**: Label never re-evaluated after the rollback op
+finished.
+
+**Root cause**: `ShippedRow.phase` transitioned to `"handed-off"`
+on the POST-success and stayed there forever; nothing signalled
+completion.
+
+**Fix**: New module-level `_rollbackTerminal` registry + exported
+`markRollbackTerminal(loopId)` helper. `OperationHistory`'s SSE
+stream calls this when a `rollback` phase event lands with a
+terminal state. `ShippedRow` polls the registry every 500 ms
+while in `handed-off` and transitions phase → `"completed"` when
+signalled — label becomes "Rolled back — view history".
+
+### Tests (frontend, all passing)
+- `LoopLiveFeed.iter362_modal_rollback.test.jsx` — 6 contracts
+  covering Bug B (modal open, approve, cancel, Escape) + Bug C
+  (idle → submitting → handed-off → completed relabelling).
+- `LoopLiveFeed.iter339j_rollback_remount.test.jsx` — migrated 6
+  existing regression contracts to the new modal flow (assertion:
+  `window.confirm` MUST NOT be called anywhere).
+- `LoopLiveFeed.iter329_task2_shipped_row.test.jsx` — 3 tests
+  migrated to modal flow.
+
+Total: 34/34 backend + 25/25 rollback-frontend tests green.
+
+
+
 ## 2026-02-04 06:20 UTC — Iter 361 · Self-Heal Terminal Hard-Cap (P0)
 
 Founder-reported bug (recurring, verdict `not_fixed` in iter 358):

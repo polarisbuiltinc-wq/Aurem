@@ -171,8 +171,7 @@ describe("Iter 329 · Task 2 — ShippedRow render + rollback flow", () => {
       .toHaveTextContent(/Rollback/i);
   });
 
-  it("Rollback flow (Iter 342): pointerdown + confirm → submitting → handed-off", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("Rollback flow (Iter 362 · Bug B): pointerdown → modal open → approve → submitting → handed-off", async () => {
     let resolvePost;
     loopApi.rollbackLoop.mockImplementation(
       () => new Promise((res) => { resolvePost = res; }),
@@ -188,10 +187,15 @@ describe("Iter 329 · Task 2 — ShippedRow render + rollback flow", () => {
     });
     const btn = screen.getByTestId("loop-shipped-rollback-btn-5d939a4");
 
-    // Single press → native confirm → POST fires; in flight = submitting.
+    // Iter 362 · Bug B — pointerdown OPENS the in-app modal (no
+    // native confirm) → user clicks the modal's approve button → POST.
     const { fireEvent } = await import("@testing-library/react");
     await act(async () => { fireEvent.pointerDown(btn, { button: 0 }); });
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    const modal = screen.getByTestId("rollback-confirm-modal");
+    expect(modal).toBeInTheDocument();
+    const approve = screen.getByTestId("rollback-confirm-approve");
+    await act(async () => { fireEvent.click(approve); });
+
     expect(loopApi.rollbackLoop).toHaveBeenCalledWith("loop_task2_d");
     expect(screen.getByTestId("loop-shipped-row-5d939a4")
       .getAttribute("data-rollback-phase")).toBe("submitting");
@@ -216,11 +220,9 @@ describe("Iter 329 · Task 2 — ShippedRow render + rollback flow", () => {
     await waitFor(() => {
       expect(onRollbackStarted).toHaveBeenCalledWith("loop_task2_d");
     });
-    confirmSpy.mockRestore();
   });
 
   it("Rollback POST rejects → phase=failed + error text surfaces", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     loopApi.rollbackLoop.mockRejectedValue(
       new Error("Only completed loops can be rolled back (current: aborted)"),
     );
@@ -232,17 +234,18 @@ describe("Iter 329 · Task 2 — ShippedRow render + rollback flow", () => {
     const { fireEvent } = await import("@testing-library/react");
     const btn = screen.getByTestId("loop-shipped-rollback-btn-abcdef1");
     await act(async () => { fireEvent.pointerDown(btn, { button: 0 }); });
+    // Approve in the modal to actually fire the failing POST.
+    const approve = screen.getByTestId("rollback-confirm-approve");
+    await act(async () => { fireEvent.click(approve); });
     await waitFor(() => {
       expect(screen.getByTestId("loop-shipped-row-abcdef1")
         .getAttribute("data-rollback-phase")).toBe("failed");
     });
     expect(screen.getByTestId("loop-shipped-rollback-error"))
       .toHaveTextContent(/Only completed loops/);
-    confirmSpy.mockRestore();
   });
 
-  it("Iter 342 — confirm Cancel leaves row idle, no POST", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+  it("Iter 362 · Bug B — modal Cancel leaves row idle, no POST", async () => {
     feedMount({
       loopId: "loop_task2_f",
       event: shipEvent({ commit_sha: "cancelsha99" }),
@@ -251,10 +254,10 @@ describe("Iter 329 · Task 2 — ShippedRow render + rollback flow", () => {
     const { fireEvent } = await import("@testing-library/react");
     const btn = screen.getByTestId("loop-shipped-rollback-btn-cancels");
     await act(async () => { fireEvent.pointerDown(btn, { button: 0 }); });
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    const cancel = screen.getByTestId("rollback-confirm-cancel");
+    await act(async () => { fireEvent.click(cancel); });
     expect(loopApi.rollbackLoop).not.toHaveBeenCalled();
     expect(screen.getByTestId("loop-shipped-row-cancels")
       .getAttribute("data-rollback-phase")).toBe("idle");
-    confirmSpy.mockRestore();
   });
 });

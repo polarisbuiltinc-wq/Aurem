@@ -477,9 +477,25 @@ class _CouncilMember:
             primary_model = council_b_primary_model()
         else:
             primary_model = "deepseek/deepseek-chat"
+        # Feb 2026 · Iter 362 — dynamic max_tokens support (Bug A).
+        # Founder reproduced a size-correlated failure: large existing
+        # files → "LLM produced no usable file content" (output cap
+        # hit → truncation → integrity guard rejects). Small files
+        # succeed but slowly (still fine — LLM latency, upstream).
+        # Root cause: max_tokens=4000 (default) is not enough to emit
+        # a full-file rewrite for a >~15 KB file. Fix: allow the
+        # caller (loop_engine._gen_via_parliament) to pass an
+        # explicit `max_tokens_override` in the context, computed
+        # from the file's current byte length. Capped at 32_000 —
+        # the upstream provider ceiling that the LLM gateway honours.
+        _mto = context.get("max_tokens_override")
+        if isinstance(_mto, int) and _mto > 0:
+            _effective_max = min(32_000, max(self.max_tokens, _mto))
+        else:
+            _effective_max = self.max_tokens
         content, latency_ms, err = await _llm_call_protected(
             system=self.persona, user=task,
-            max_tokens=self.max_tokens, mode=self.mode,
+            max_tokens=_effective_max, mode=self.mode,
             review_mode=self.review_mode,
             user_id=context.get("user_id"),
             temperature=self.temperature,
@@ -495,6 +511,8 @@ class _CouncilMember:
                 "v2_longcat":       LONGCAT_ENABLED,
                 "v2_council_b_glm": COUNCIL_B_GLM_ENABLED,
                 "v2_ceo_rescue":    CEO_RESCUE_ENABLED,
+                "max_tokens":       _effective_max,
+                "max_tokens_default": self.max_tokens,
             },
         )
         if err:

@@ -1396,6 +1396,79 @@ class LoopEngine:
                             self._orig_content_cache[path] = current or ""
                         except Exception:
                             pass
+                        # ── Iter 362 · Bug A · Dynamic output budget ──
+                        # Founder-repro: existing files >~15 KB fail
+                        # with "LLM produced no usable file content"
+                        # because Council A's default max_tokens=4000
+                        # can't fit a full-file rewrite (LLM output
+                        # truncates → integrity guard rejects → CEO
+                        # returns manual_review → 0 files generated).
+                        #
+                        # Fix: size the output budget from the CURRENT
+                        # file bytes (LLM must emit the entire final
+                        # body). Rule of thumb: ~3.5 chars/token for
+                        # code, plus 1500-token slack for the LLM to
+                        # add net-new lines. Capped at 32_000 tokens
+                        # (upstream provider ceiling honoured by the
+                        # gateway).
+                        _cur_bytes = len(current or "")
+                        _out_budget = min(
+                            32_000,
+                            max(4_000, (_cur_bytes // 3) + 1_500),
+                        )
+                        # ── Iter 362 · Graceful degradation · huge files ──
+                        # Files above the upstream output ceiling
+                        # (~110 KB → >32 K output tokens) cannot be
+                        # rewritten in one pass no matter what budget
+                        # we set. Surface a clear, actionable error
+                        # BEFORE spending 3 Council LLM calls that are
+                        # guaranteed to truncate. The user gets an
+                        # explicit message; the per_file_diag row
+                        # captures the reason for audit.
+                        _HUGE_FILE_BYTES = 96_000  # ~30K output tokens
+                        if _cur_bytes > _HUGE_FILE_BYTES:
+                            logger.warning(
+                                "[parliament] file %s is %d bytes — "
+                                "exceeds single-pass rewrite ceiling "
+                                "(%d B). Skipping with graceful message.",
+                                path, _cur_bytes, _HUGE_FILE_BYTES,
+                            )
+                            try:
+                                await self.db.loop_run_log.insert_one({
+                                    "loop_id":     self.loop_id,
+                                    "user_id":     self.user_id,
+                                    "project_id":  self.project_id,
+                                    "kind":        "executor_file_too_large",
+                                    "path":        path,
+                                    "bytes":       _cur_bytes,
+                                    "ceiling":     _HUGE_FILE_BYTES,
+                                    "ts":          _iso(),
+                                })
+                            except Exception:
+                                pass
+                            await self._emit(
+                                LoopState.EXECUTING, "execute",
+                                step=2, total_steps=5,
+                                message=(
+                                    f"{path} is {_cur_bytes // 1024} KB — "
+                                    f"too large for single-pass edit "
+                                    f"(cap {_HUGE_FILE_BYTES // 1024} KB). "
+                                    f"Narrow the plan to touch smaller "
+                                    f"files or split this one."
+                                ),
+                                data={"file": path,
+                                      "sub_step": "file_too_large",
+                                      "bytes": _cur_bytes,
+                                      "ceiling_bytes": _HUGE_FILE_BYTES},
+                            )
+                            await self._narrate(
+                                step="execute", tone="danger",
+                                text=(f"{path} too large ({_cur_bytes // 1024}"
+                                      f" KB > {_HUGE_FILE_BYTES // 1024} KB) "
+                                      f"— split the file to proceed"),
+                                correlation_id=f"execute:{path}",
+                            )
+                            return None
                         task_text = (
                             f"USER REQUEST:\n{self.user_message}\n\n"
                             f"APPROVED PLAN:\n{plan_title}\n{plan_bullets}\n\n"
@@ -1458,6 +1531,15 @@ class LoopEngine:
                                         "task_type":       "code_fix",
                                         "loop_session_id": self.loop_id,
                                         "user_id":         self.user_id,
+                                        # Iter 362 · Bug A · dynamic
+                                        # output budget threaded to
+                                        # Council A members via
+                                        # cast_vote(). Sized from the
+                                        # current file bytes so the
+                                        # LLM can emit the complete
+                                        # final body without truncation.
+                                        "max_tokens_override": _out_budget,
+                                        "current_file_bytes":  _cur_bytes,
                                     },
                                 ),
                                 timeout=PER_FILE_TIMEOUT_S,

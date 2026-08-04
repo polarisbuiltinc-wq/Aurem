@@ -31,6 +31,8 @@ import React, {
   useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
 import { streamLoopEvents, rollbackLoop } from "../lib/loopApi";
+import { markRollbackTerminal } from "./LoopLiveFeed";
+import RollbackConfirmModal from "./RollbackConfirmModal";
 
 const API_BASE = process.env.REACT_APP_BACKEND_URL || "";
 
@@ -412,6 +414,14 @@ function OperationHistoryInner({ projectId, activeLoopId, authToken }) {
         if (isTerminal
             && finalizedForLoopIdRef.current !== activeLoopId) {
           finalizedForLoopIdRef.current = activeLoopId;
+          // Iter 362 · Bug C — signal ShippedRow to relabel its
+          // rollback button once the rollback op finishes on the
+          // backend. Without this, the button would stay stuck on
+          // "Rolling back — see history" forever, even after the
+          // ops-history row already reads "Rollback finished".
+          try {
+            markRollbackTerminal(activeLoopId);
+          } catch { /* noop */ }
           // Defer to microtask so React commits the last step visibly
           // before we collapse the card.
           Promise.resolve().then(() => finalize(merged, ev));
@@ -451,12 +461,13 @@ function OperationHistoryInner({ projectId, activeLoopId, authToken }) {
     setExpandedId((cur) => (cur === key ? null : key)), []);
   const onCollapse = useCallback(() => setExpandedId(null),         []);
 
-  // Iter 342 — native window.confirm replaces the fragile two-click
-  // arm (same root fix as ShippedRow: a synchronous browser dialog is
-  // immune to remounts/state resets/timers). Stream-independent: fires
-  // POST /loop/{id}/rollback directly, then lifts the id into the
-  // shared stream subscription for live progress.
-  const handleRowRollback = useCallback(async (loopId, source) => {
+  // Iter 362 · Bug B — in-app themed rollback confirmation modal
+  // replacing the native window.confirm() the row rollback used to
+  // pop. Same message content, dark theme, non-blocking, a11y
+  // labelled. `rbConfirm` carries the pending loopId while the
+  // modal is open; onConfirm fires the actual POST /rollback.
+  const [rbConfirm, setRbConfirm] = useState(null); // {loopId} | null
+  const handleRowRollback = useCallback((loopId, source) => {
     const now = Date.now();
     const last = _rbLastFire.get(loopId) || 0;
     if (source === "click" && now - last < 800) return;
@@ -465,26 +476,30 @@ function OperationHistoryInner({ projectId, activeLoopId, authToken }) {
     // eslint-disable-next-line no-console
     console.debug("[op-history rollback] trigger", { loopId, source });
     if (cur && cur.loopId === loopId && cur.phase === "submitting") return;
-    const ok = window.confirm(
-      `Rollback this shipped loop (${String(loopId).slice(0, 8)})?\n\n`
-      + "This creates a new revert commit on GitHub that undoes the ship. "
-      + "No history is force-pushed.",
-    );
-    if (!ok) return;
-    setRbState({ loopId, phase: "submitting" });
+    setRbConfirm({ loopId });
+  }, []);
+
+  // Iter 362 · Bug B — invoked when the user clicks "Rollback"
+  // inside the themed modal. Splits the previous single flow so
+  // the confirmation gate stays non-blocking.
+  const performRowRollback = useCallback(async () => {
+    const target = rbConfirm && rbConfirm.loopId;
+    setRbConfirm(null);
+    if (!target) return;
+    setRbState({ loopId: target, phase: "submitting" });
     try {
-      await rollbackLoop(loopId);
+      await rollbackLoop(target);
       // eslint-disable-next-line no-console
-      console.debug("[op-history rollback] POST ok — opening progress stream", loopId);
+      console.debug("[op-history rollback] POST ok — opening progress stream", target);
       setRbState(null);
-      setInternalActiveId(loopId);
+      setInternalActiveId(target);
     } catch (e) {
       const msg = e?.response?.data?.detail || e?.message || "Rollback failed";
       // eslint-disable-next-line no-console
       console.warn("[op-history rollback] POST failed:", msg);
-      setRbState({ loopId, phase: "failed", error: msg });
+      setRbState({ loopId: target, phase: "failed", error: msg });
     }
-  }, []);
+  }, [rbConfirm]);
 
   const items = useMemo(() => history || [], [history]);
 
@@ -582,6 +597,16 @@ function OperationHistoryInner({ projectId, activeLoopId, authToken }) {
           collapsible={false}
         />
       )}
+      {/* Iter 362 · Bug B — themed in-app rollback confirmation modal
+          replacing native window.confirm() for row rollbacks. */}
+      <RollbackConfirmModal
+        open={!!rbConfirm}
+        shortLabel={rbConfirm && rbConfirm.loopId
+          ? `shipped loop ${String(rbConfirm.loopId).slice(0, 8)}`
+          : "shipped commit"}
+        onConfirm={performRowRollback}
+        onCancel={() => setRbConfirm(null)}
+      />
     </div>
   );
 }

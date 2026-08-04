@@ -78,6 +78,25 @@ export function extractShipInfo(events) {
 //     `click` that follows the handled `pointerdown`.
 const _rollbackInFlight = new Map();   // loopId → true while POST in flight / handed off
 const _rollbackLastFire = new Map();   // loopId → ts of last handled trigger
+// Iter 362 · Bug C — Cross-component signal for terminal rollback
+// completion, so ShippedRow can transition its button label from
+// "Rolling back — see history" to "Rolled back — view history"
+// once the rollback op actually finishes on the backend.
+// OperationHistory's SSE stream calls markRollbackTerminal(loopId)
+// when a `rollback` op event lands with a terminal state.
+const _rollbackTerminal = new Map();   // loopId → true when rollback op terminal
+
+export function markRollbackTerminal(loopId) {
+  if (!loopId) return;
+  _rollbackTerminal.set(loopId, true);
+}
+
+// Exported for test-fixture reset only.
+export function _resetRollbackRegistriesForTests() {
+  _rollbackInFlight.clear();
+  _rollbackLastFire.clear();
+  _rollbackTerminal.clear();
+}
 
 export function ShippedRow({ loopId, ship, onDone, onRollbackStarted }) {
   // Iter 342 — phase is VISUALS-ONLY: idle | submitting | handed-off | failed.
@@ -87,12 +106,44 @@ export function ShippedRow({ loopId, ship, onDone, onRollbackStarted }) {
   const [phase, setPhase] = useState(() =>
     _rollbackInFlight.get(loopId) ? "handed-off" : "idle");
   const [error, setError] = useState(null);
+  // Iter 362 · Bug B — in-app themed rollback confirmation modal.
+  // Replaces the previous native window.confirm() (which rendered a
+  // plain-white browser dialog pinned below the address bar, broke
+  // the app's dark theme, and synchronously blocked the JS thread).
+  // The confirmation is now non-blocking + focus-managed + a11y
+  // labelled — see RollbackConfirmModal for the shared component.
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Iter 362 · Bug C — the button label used to lock at
+  // "Rolling back — see history" the moment the POST succeeded and
+  // never re-evaluated, so a completed rollback still read as
+  // "ROLLING BACK — SEE HISTORY". Now the ShippedRow subscribes to
+  // its own rollback op-history state via a small module-level
+  // registry keyed by loopId. When the OperationHistory stream
+  // (or a manual poll) marks the rollback op terminal, we transition
+  // phase → "completed" so the label reverts to a neutral
+  // "Rolled back — view history".
+  useEffect(() => {
+    // Poll the shared registry for terminal status. Cheap — the
+    // registry is a Map with O(1) lookup; the interval only runs
+    // while phase === "handed-off".
+    if (phase !== "handed-off") return undefined;
+    const iv = setInterval(() => {
+      const terminal = _rollbackTerminal.get(loopId);
+      if (terminal === true) {
+        setPhase("completed");
+        _rollbackInFlight.delete(loopId);
+      }
+    }, 500);
+    return () => clearInterval(iv);
+  }, [phase, loopId]);
 
   // Iter 342 — single trigger, fired from `pointerdown` (synchronous,
-  // pre-remount) with `click` kept only as a keyboard fallback. Native
-  // window.confirm() replaces the two-click arm — it cannot be lost to
-  // remounts/state resets, and it's a hard safety gate.
-  const triggerRollback = useCallback(async (source) => {
+  // pre-remount) with `click` kept only as a keyboard fallback.
+  // Iter 362 · Bug B — window.confirm() replaced with the themed
+  // in-app RollbackConfirmModal. Trigger now just opens the modal;
+  // the actual POST fires from the modal's onConfirm handler below.
+  const triggerRollback = useCallback((source) => {
     const now = Date.now();
     const last = _rollbackLastFire.get(loopId) || 0;
     // Swallow the synthetic `click` that follows a handled `pointerdown`.
@@ -104,15 +155,16 @@ export function ShippedRow({ loopId, ship, onDone, onRollbackStarted }) {
       inFlight: !!_rollbackInFlight.get(loopId) });
 
     if (_rollbackInFlight.get(loopId)) return;
+    setConfirmOpen(true);
+  }, [loopId, ship.shortSha]);
 
-    const ok = window.confirm(
-      `Rollback shipped commit ${ship.shortSha}?\n\n`
-      + "This creates a new revert commit on GitHub that undoes this ship. "
-      + "No history is force-pushed.",
-    );
-    if (!ok) return;
-
+  // Iter 362 · Bug B — invoked when user clicks "Rollback" inside
+  // the themed confirmation modal.
+  const performRollback = useCallback(async () => {
+    setConfirmOpen(false);
+    if (_rollbackInFlight.get(loopId)) return;
     _rollbackInFlight.set(loopId, true);
+    _rollbackTerminal.delete(loopId);
     setPhase("submitting");
     setError(null);
     try {
@@ -134,11 +186,12 @@ export function ShippedRow({ loopId, ship, onDone, onRollbackStarted }) {
         e?.response?.data?.detail || e?.message || "Rollback failed",
       );
     }
-  }, [loopId, ship.shortSha, onRollbackStarted]);
+  }, [loopId, onRollbackStarted]);
 
   const rollbackLabel =
     phase === "submitting"  ? "Rolling back…"
     : phase === "handed-off"? "Rolling back — see history"
+    : phase === "completed" ? "Rolled back — view history"
     : phase === "failed"    ? "Retry rollback"
     : "Rollback";
 
@@ -237,6 +290,14 @@ export function ShippedRow({ loopId, ship, onDone, onRollbackStarted }) {
           {String(error).slice(0, 40)}
         </span>
       )}
+      {/* Iter 362 · Bug B — themed in-app rollback confirmation modal.
+          Replaces the previous native window.confirm() call. */}
+      <RollbackConfirmModal
+        open={confirmOpen}
+        shortLabel={`shipped commit ${ship.shortSha}`}
+        onConfirm={performRollback}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }
@@ -286,6 +347,7 @@ import {
 } from "lucide-react";
 import { rollbackLoop } from "../lib/loopApi";
 import OperationHistory from "./OperationHistory";
+import RollbackConfirmModal from "./RollbackConfirmModal";
 
 // ── Tone → icon + colour ────────────────────────────────────────────
 const TONE_STYLES = {
