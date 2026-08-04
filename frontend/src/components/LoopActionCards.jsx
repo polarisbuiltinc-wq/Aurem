@@ -23,7 +23,7 @@ import React, { useState } from "react";
 import { Wrench, Play, SkipForward, X, AlertTriangle, ShieldCheck, Rocket } from "lucide-react";
 
 
-export function SelfHealIndicator({ visible, attempt = 1, max = 3,
+export function SelfHealIndicator({ visible, attempt = 1, max = 2,
                                     errorPreview }) {
   if (!visible) return null;
   return (

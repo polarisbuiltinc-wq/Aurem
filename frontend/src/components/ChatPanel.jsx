@@ -572,7 +572,13 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   // `loopAbortRef` — AbortController for the active SSE stream.
   const [loopId, setLoopId] = useState(null);
   const [loopPlan, setLoopPlan] = useState(null);
-  const [selfHeal, setSelfHeal] = useState({ visible: false, attempt: 1, max: 3, errorPreview: "" });
+  // Feb 2026 · Counter-consistency fix — backend `MAX_SELF_HEALS = 2`
+  // (services/loop_engine.py line 124) but the `max` here was 3, so
+  // the SelfHealIndicator banner rendered "attempt 1/3" while the
+  // LoopStepBar retry pill correctly showed "heal 1/2". Founder
+  // screenshot caught both numbers on-screen simultaneously →
+  // instant credibility hit. Lock to 2 everywhere.
+  const [selfHeal, setSelfHeal] = useState({ visible: false, attempt: 1, max: 2, errorPreview: "" });
   const [userAction, setUserAction] = useState(null);
   const [userActionBusy, setUserActionBusy] = useState(false);
   // Iter 275 — dedicated live-feed panel state. `loopFeedEvent` is
@@ -2403,7 +2409,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     }
     setLoopId(null);
     setLoopPlan(null);
-    setSelfHeal({ visible: false, attempt: 1, max: 3, errorPreview: "" });
+    setSelfHeal({ visible: false, attempt: 1, max: 2, errorPreview: "" });
     setUserAction(null);
     setLoopRetryCount(0);
     setLoopVerifyRetryCount(0);
@@ -3049,7 +3055,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         : "";
       const m = /attempt\s+(\d+)\b/i.exec(ev.message || "");
       const attempt = m ? parseInt(m[1], 10) : 1;
-      setSelfHeal({ visible: true, attempt, max: 3, errorPreview: preview });
+      setSelfHeal({ visible: true, attempt, max: 2, errorPreview: preview });
       setLoopRetryCount(attempt);
     } else if (selfHeal.visible && state !== "self_healing") {
       setSelfHeal((s) => ({ ...s, visible: false }));
