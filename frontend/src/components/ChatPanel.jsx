@@ -1298,6 +1298,20 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     setLoopTerminal(true);
     setLoopPhase("cancelled");
     setLoopPlan(null);
+    // Feb 2026 · Founder repro — "stop/abort click krna pe loop chip
+    // stop kyo nhi hoti": with only phase="cancelled" + terminal=true,
+    // LoopStepBar kept rendering the PRE-STOP tones (PLAN✓ EXECUTE✓
+    // VERIFY✓ etc.) because `stepTones` was preserved for the 8-second
+    // auto-reset window. Visually it looked like the loop was
+    // completing successfully AFTER stop. We now IMMEDIATELY zero
+    // the step tones so no lingering greens imply "still running /
+    // just finished" — plus set errorPhase so LoopStepBar's
+    // "cancelled" branch (added Feb 2026) can paint the danger tint
+    // in the same tick, not 8 seconds later.
+    setLoopStepTones({});
+    setLoopErrorPhase("cancelled");
+    setLoopRetryCount(0);
+    setLoopVerifyRetryCount(0);
     // Iter 134 — clean up orphan "thinking…" bubbles when the user
     // clicks Stop. Previously this only cancelled the SSE network call;
     // any assistant placeholders with streaming:true stayed in
@@ -4037,9 +4051,11 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           retryCount={loopRetryCount}
           verifyRetryCount={loopVerifyRetryCount}
           maxVerifyRetries={3}
-          errorStep={loopPhase === "error"
-            ? ({plan:1, execute:2, verify:3, security:4, scan:4, ship:5}[
-                (loopErrorPhase || "").toLowerCase()] || 2)
+          errorStep={(loopPhase === "error" || loopPhase === "cancelled"
+                      || loopPhase === "aborted" || loopPhase === "failed")
+            ? ({plan:1, execute:2, verify:3, security:4, scan:4, ship:5,
+                cancelled: 0, aborted: 0}[
+                (loopErrorPhase || loopPhase || "").toLowerCase()] || 0)
             : 0}
           stepTones={loopStepTones}
         />

@@ -52,7 +52,7 @@ const PHASE_TO_STEP = {
   verifying: 3,
   security: 4, scanning: 4,
   shipping: 5, done: 5, completed: 5, shipped: 5,
-  error: 0, failed: 0, aborted: 0, expired: 0,
+  error: 0, failed: 0, aborted: 0, expired: 0, cancelled: 0,
   // Iter 331 · Bug 1 fix — raw ENGINE phase aliases. ChatPanel's
   // timeout-recovery path (setLoopPhase(active.phase…)) and the
   // ship-gate hydration branch (setLoopPhase("ship")) leak the DB's
@@ -195,8 +195,17 @@ export default function LoopStepBar({
   if (!phase) return null;
 
   const isDone   = phase === "done" || phase === "completed" || phase === "shipped";
+  // Feb 2026 · Founder repro — "stop/abort click krna pe loop chip
+  // stop kyo nhi hoti": ChatPanel's Stop handler sets
+  // phase="cancelled" but "cancelled" wasn't in this isError list,
+  // so LoopStepBar treated it as neutral and kept rendering prior
+  // "success" tones — chip looked like a happy completed loop AFTER
+  // the user hit stop. Adding it here routes through the same
+  // danger-red rendering path as "aborted"/"failed", giving Stop
+  // an instant, unambiguous visual acknowledgement.
   const isError  = phase === "error" || phase === "failed"
-                || phase === "aborted" || phase === "expired";
+                || phase === "aborted" || phase === "expired"
+                || phase === "cancelled";
   const active   = isError ? errorStep : (PHASE_TO_STEP[phase] || 0);
   const isIdle   = phase === "idle";
 
