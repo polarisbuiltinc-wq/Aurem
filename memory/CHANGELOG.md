@@ -5,6 +5,57 @@ statement and historical context; this file captures recent feature
 work in date-stamped chunks so PRD.md stays focused.
 
 
+## 2026-02-04 06:20 UTC — Iter 361 · Self-Heal Terminal Hard-Cap (P0)
+
+Founder-reported bug (recurring, verdict `not_fixed` in iter 358):
+> "When a verify step fails, the system loops infinitely (4+ 'Verify
+> failed after 2 attempts' events) and the chip is stuck at 'heal
+> 1/2'. Loop must halt at exactly 2 heal attempts and surface a
+> **terminal** state (not a silent retry)."
+
+### Root cause
+`_do_verify` in `backend/services/loop_engine.py` correctly enforced
+the pre-loop `total_heal_attempts >= MAX_SELF_HEALS` global check
+(iter 358), but the **fallback after heal exhaustion** still routed
+to `LoopState.PAUSED_FOR_USER` with `requires_user_action=True` and
+a "verify_retry_count" outer retry cap. On the founder's retry
+click, the loop re-entered `_do_verify` → cap check → `_fail()` →
+user saw a **second** "Verify failed" event. Meanwhile, the
+frontend chip regex-parsed the message + reset to 1/2 on each entry.
+
+### Fix
+1. **loop_engine.py**: Replaced the `PAUSED_FOR_USER` fallback at
+   `_do_verify`'s heal-exhaustion tail with a terminal
+   `await self._fail("verify", ...)` call. LoopState.FAILED → outer
+   `_should_stop()` returns True → pipeline halts. Exactly ONE
+   FAILED SSE event is emitted; zero PAUSED_FOR_USER events.
+2. **routers/loop.py**: Added two `pause_response` guards:
+   - **In-memory guard**: if `engine.state in {FAILED, COMPLETED,
+     ABORTED}`, reject retry/skip with **409 `loop_terminal`**.
+   - **Persisted-doc guard**: if `lookup_or_rehydrate` returns None
+     (terminal loops refuse rehydration → 404 previously), check
+     Mongo directly, enforce ownership (**403** for non-owner), and
+     return **409 loop_terminal** for terminal state. Fixes the
+     stale-worker leak.
+
+### Behavioral tests (zero mocks — deterministic state doubles only)
+`/app/backend/tests/test_iter_feb2026_verify_terminal_fail.py` — 5
+contracts:
+- state == FAILED (not PAUSED_FOR_USER) after `MAX_SELF_HEALS`
+- exactly 1 FAILED SSE event, 0 PAUSED_FOR_USER events
+- in-memory pause_response retry → 409 loop_terminal
+- persisted-only pause_response retry → 409 (not 404)
+- non-owner → 403 (never leaks terminal state)
+
+Regressions updated: `test_iter212m131_loop_engine_rca.py`
+(PAUSED_FOR_USER → FAILED assertion), `test_iter_feb2026_verify_retry_cap.py`
+(locked in pause-fallback removal).
+
+**Verdict**: bug_testing_agent iter 361 → `fixed` (24/24 requested
+suite + 3/3 QA probe pass).
+
+
+
 ## 2026-07-31 04:15 UTC — Iter 367 · Session 4 · P1 batch (dep upgrades + CI wire + hallucination cron + silent-catch logging)
 
 ### 1. Guard 15 dep upgrades — 14 → 0 HIGH/CRITICAL, no allowlist needed
