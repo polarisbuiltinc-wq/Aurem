@@ -730,3 +730,5 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 ### Iter 0 · 2026-08-04
 
 - `loop_run_log kind='executor_file_too_large'` — auto-detected in backend/services/loop_engine.py (verify) [Iter 0, 2026-08-04T08:08:10.696781Z] <!-- inv:loop_run_log_kind:executor_file_too_large -->
+- `loop_run_log kind='terminal_fail'` — auto-detected in backend/services/loop_engine.py (verify) [Iter 0, 2026-08-04T21:25:10.792856Z] <!-- inv:loop_run_log_kind:terminal_fail -->
+- `loop_run_log kind='custom_ship_fail'` — auto-detected in backend/tests/test_iter_feb2026_verify_fail_surfaces_errors.py (verify) [Iter 0, 2026-08-04T21:25:10.792893Z] <!-- inv:loop_run_log_kind:custom_ship_fail -->
