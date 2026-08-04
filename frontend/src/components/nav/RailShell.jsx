@@ -98,7 +98,13 @@ export default function RailShell({
   // left edge is the manual way back. Founder can also toggle it
   // anytime via the little chevron pinned to the rail's edge.
   const AUTO_HIDE_KEY = "aurem_rail_autohide";
-  const [hiddenForTyping, setHiddenForTyping] = useState(false);
+  // Feb 2026 · Founder request: "sidebar ko default hide rkho".
+  // Rail now starts hidden on every mount so the chat window is the
+  // hero. The bottom-left "SIDEBAR" peek tab (matching the ADVISOR
+  // launcher) is the one-tap way in. When the founder toggles AUTO
+  // OFF, the effect below flips `hiddenForTyping` back to false so
+  // the rail re-appears — semantics preserved.
+  const [hiddenForTyping, setHiddenForTyping] = useState(true);
   const [autoHideEnabled, setAutoHideEnabled] = useState(() => {
     try {
       const v = localStorage.getItem(AUTO_HIDE_KEY);
