@@ -1,0 +1,61 @@
+{
+  "verdict": "not_fixed",
+  "user_reported_bug": "Bug: Self-heal retry logic + counter, real fix needed (not a UI patch, not mocked). Loop config has MAX_SELF_HEALS = 2. But in a live run, the chat log showed 4+ separate 'Verify failed after 2 attempts' events in the same loop run, and the self-heal chip stayed frozen at 'heal 1/2' throughout — never advanced to 2/2, never reset, never reflected actual attempt count. TWO SEPARATE BUGS: (1) RETRY CAP NOT ENFORCED — expected loop halts after MAX_SELF_HEALS=2 heals across the whole run and surfaces terminal state; actual multiple '2 attempts' events fire repeatedly because per-verify-call heal_attempt resets. (2) HEAL CHIP STALE + NO TIMER — expected chip reads real backend counter, live-ticks per-attempt seconds. No hardcoded values. Real fix in retry-counter/event-stream logic. Test: 3+ verify failures on real run → loop halts at exactly 2, chip shows 1/2 then 2/2, timer resets and counts up.",
+  "summary": "No relevant testing skill found. Inspected loop_engine.py, ChatPanel.jsx, and LoopActionCards.jsx; ran the existing static assertion pytest (4/4 pass) plus a focused backend runtime probe. Backend is still not fixed: after exactly MAX_SELF_HEALS=2 failed heals, _do_verify ends in paused_for_user and emits 'Verify failed after 2 self-heal attempts. Your input needed.' instead of terminal FAILED. Frontend SelfHealIndicator component-level timer/counter test passes, but end-to-end bug remains not fixed because backend terminal cap behavior is wrong.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "LoopEngine._do_verify",
+        "issue": "After consuming exactly MAX_SELF_HEALS=2 failed self-heal attempts, the code still executes the legacy exhausted path at backend/services/loop_engine.py:2111-2138, sets state=PAUSED_FOR_USER, and emits a user-action 'Verify failed after 2 self-heal attempts' event. The hard-fail guard only runs on a later _do_verify re-entry, not at the required moment when the cap is reached.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Loop self-heal SSE -> SelfHealIndicator",
+        "issue": "Component-level frontend behavior passed for 1/2 -> 2/2 and timer reset/tick, but the full frontend/backend flow cannot be considered fixed while backend emits paused_for_user instead of terminal failed after the cap.",
+        "affected_selectors": ["self-heal-indicator", "self-heal-timer"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/bug_verification_artifacts/iter_global_heal_runtime_probe.py",
+    "/app/test_reports/bug_verification_artifacts/iter_global_heal_runtime_probe.log",
+    "/app/test_reports/pytest/bug_verify_global_heal_static.log",
+    "/app/frontend/src/components/__tests__/SelfHealIndicator.live_timer_bug_verify.test.jsx",
+    "/app/test_reports/frontend/selfheal_indicator_live_timer_bug_verify.log"
+  ],
+  "action_items": [
+    "Change the post-loop exhausted path in _do_verify so a failed second global heal immediately calls self._fail('verify', ...) and returns terminal FAILED instead of setting PAUSED_FOR_USER.",
+    "Bound the heal loop by remaining global attempts, not range(1, MAX_SELF_HEALS + 1) regardless of existing total_heal_attempts; avoid any possible 3/2 self_healing SSE event when context starts at 1.",
+    "Add a runtime/unit test that executes _do_verify with always-failing verify/heal stubs and asserts final state is FAILED, total_heal_attempts is exactly 2, and no paused_for_user event is emitted. Current static source assertions are insufficient."
+  ],
+  "critical_code_review_comments": [
+    "backend/services/loop_engine.py:1902-1917 only hard-fails when _do_verify starts with total_heal_attempts >= MAX_SELF_HEALS. It does not hard-fail the current _do_verify call after the second failed heal.",
+    "backend/services/loop_engine.py:2111-2138 still contains the old exhausted behavior that sets self.state = LoopState.PAUSED_FOR_USER and emits requires_user_action=True after MAX_SELF_HEALS is exhausted.",
+    "backend/services/loop_engine.py:1920 loops over range(1, MAX_SELF_HEALS + 1) instead of remaining attempts; if total_heal_attempts starts at 1, the next iteration can emit total_heal_attempts=3/max=2 before failing."
+  ],
+  "updated_files": [
+    "/app/test_reports/bug_verification_artifacts/iter_global_heal_runtime_probe.py",
+    "/app/test_reports/bug_verification_artifacts/iter_global_heal_runtime_probe.log",
+    "/app/test_reports/pytest/bug_verify_global_heal_static.log",
+    "/app/frontend/src/components/__tests__/SelfHealIndicator.live_timer_bug_verify.test.jsx",
+    "/app/test_reports/frontend/selfheal_indicator_live_timer_bug_verify.log",
+    "/app/test_reports/bug_verification_359.json",
+    "/app/test_reports/iteration_359.json"
+  ],
+  "success_rate": {
+    "backend": "50% (static assertions pass, runtime cap behavior fails)",
+    "frontend": "100% component-level; end-to-end blocked by backend failure"
+  },
+  "seed_data_creation": "None. Backend runtime probe used TEST-ONLY MOCKS/stubs for verify_files and Parliament.healer to force deterministic repeated failures; no product API was mocked or modified.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Re-run /app/test_reports/bug_verification_artifacts/iter_global_heal_runtime_probe.py after fixing _do_verify. Passing criteria: final_state=failed, total_heal_attempts=2, self_healing events show 1/2 then 2/2, and no paused_for_user event appears after cap exhaustion. Also re-run the frontend SelfHealIndicator timer test.",
+  "rca_of_the_issue": "The implementation added a global counter and SSE fields, but left the old exhausted branch intact. When a verify run starts at total_heal_attempts=0 and both heal rounds fail, the counter reaches 2, the for-loop exits, then the legacy code sets PAUSED_FOR_USER and emits another 'Verify failed after 2 attempts' style event. This violates the requested terminal hard cap at exactly MAX_SELF_HEALS=2. The static tests passed because they only searched for source strings, not actual state-machine behavior."
+}

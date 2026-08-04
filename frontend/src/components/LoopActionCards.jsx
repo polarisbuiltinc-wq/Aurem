@@ -24,7 +24,21 @@ import { Wrench, Play, SkipForward, X, AlertTriangle, ShieldCheck, Rocket } from
 
 
 export function SelfHealIndicator({ visible, attempt = 1, max = 2,
-                                    errorPreview }) {
+                                    errorPreview, startedAt }) {
+  // Feb 2026 · Per-attempt live timer. Founder ask:
+  // "chip shows a running time counter for the CURRENT attempt
+  // that resets to 0 at the start of every new attempt". `startedAt`
+  // is the epoch-ms captured by ChatPanel when the current attempt
+  // began; we tick every 500ms while visible so the seconds counter
+  // climbs live, independent of the overall loop timer.
+  const [nowMs, setNowMs] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    if (!visible || !startedAt) return;
+    const iv = setInterval(() => setNowMs(Date.now()), 500);
+    return () => clearInterval(iv);
+  }, [visible, startedAt]);
+  const elapsedSec = (visible && startedAt)
+    ? Math.max(0, Math.floor((nowMs - startedAt) / 1000)) : 0;
   if (!visible) return null;
   return (
     <div
@@ -48,6 +62,17 @@ export function SelfHealIndicator({ visible, attempt = 1, max = 2,
         Self-heal — attempt <strong>{attempt}/{max}</strong>: ORA is
         rewriting failing file{errorPreview ? "…" : ""}
       </span>
+      {startedAt && (
+        <span data-testid="self-heal-timer" style={{
+          fontSize: 10, fontWeight: 700,
+          color: "#a78bfa",
+          fontFamily: "'JetBrains Mono', monospace",
+          padding: "2px 6px",
+          background: "rgba(168,85,247,0.10)",
+          borderRadius: 4,
+          whiteSpace: "nowrap",
+        }}>{elapsedSec}s</span>
+      )}
       {errorPreview && (
         <code style={{
           fontSize: 9.5,

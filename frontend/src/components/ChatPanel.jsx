@@ -3074,9 +3074,31 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       const preview = Array.isArray(data.errors_preview)
         ? (data.errors_preview[0] || "")
         : "";
+      // Feb 2026 · Founder repro — chip stuck at "heal 1/2" across
+      // multiple outer verify cycles. Root cause: the regex-parsed
+      // `attempt` here was scoped to the CURRENT _do_verify entry
+      // (1 or 2), and each new outer cycle re-emitted "attempt 1/2"
+      // → chip visually stuck at 1. Backend now also emits
+      // `total_heal_attempts` (loop-run-wide counter) + hard-caps
+      // at MAX_SELF_HEALS. Prefer the backend authoritative counter;
+      // fall back to regex-parse only if the field is absent
+      // (old-build backend during rolling deploy).
+      const totalHeals = (typeof data.total_heal_attempts === "number")
+        ? data.total_heal_attempts
+        : null;
       const m = /attempt\s+(\d+)\b/i.exec(ev.message || "");
-      const attempt = m ? parseInt(m[1], 10) : 1;
-      setSelfHeal({ visible: true, attempt, max: 2, errorPreview: preview });
+      const inlineAttempt = m ? parseInt(m[1], 10) : 1;
+      const attempt = totalHeals != null ? totalHeals : inlineAttempt;
+      const maxHeals = (typeof data.max_heal_attempts === "number")
+        ? data.max_heal_attempts : 2;
+      setSelfHeal({
+        visible: true, attempt, max: maxHeals,
+        errorPreview: preview,
+        // Feb 2026 — per-attempt live timer. Reset epoch each time
+        // a new attempt starts so the chip's counter climbs from 0
+        // for each round, independent of the overall loop timer.
+        startedAt: Date.now(),
+      });
       setLoopRetryCount(attempt);
     } else if (selfHeal.visible && state !== "self_healing") {
       setSelfHeal((s) => ({ ...s, visible: false }));
@@ -4104,6 +4126,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         attempt={selfHeal.attempt}
         max={selfHeal.max}
         errorPreview={selfHeal.errorPreview}
+        startedAt={selfHeal.startedAt}
       />
       {userAction && (
         <UserActionCard

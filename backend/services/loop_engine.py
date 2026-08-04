@@ -1884,6 +1884,38 @@ class LoopEngine:
         # accumulate per-file history across all heal rounds so
         # every retry sees every prior failed output + error, and
         # the "Do NOT repeat" prompt actually engages.
+        # Feb 2026 · Retry-cap hard enforcement — founder repro:
+        # "MAX_SELF_HEALS = 2 but chat shows 4+ 'Verify failed after
+        # 2 attempts' events in one run". Root cause: `heal_attempt`
+        # was scoped to a single `_do_verify` call. Each outer
+        # verify-retry (user-clicked resume, independent-verifier
+        # rejection auto-resume, ship-block re-execute) re-entered
+        # `_do_verify` with a fresh `heal_attempt = 1` counter → net
+        # 2×N heals across one loop run.
+        #
+        # Fix: track `total_heal_attempts` in `self.context`. This
+        # counter climbs across EVERY heal attempt in the loop's
+        # lifetime. When it hits MAX_SELF_HEALS (2) globally, we
+        # HARD-FAIL the loop instead of pausing for user — user's
+        # explicit ask: "loop halts at exactly 2 heal attempts and
+        # surfaces a terminal state (not a silent retry)".
+        _global_healed = int(self.context.get("total_heal_attempts", 0))
+        if _global_healed >= MAX_SELF_HEALS:
+            await self._narrate(
+                step="verify", tone="danger",
+                text=(f"Global heal cap reached ({_global_healed}/"
+                      f"{MAX_SELF_HEALS}) — halting loop"),
+                correlation_id="verify:global_cap",
+            )
+            await self._fail(
+                "verify",
+                (f"Self-heal exhausted globally: {_global_healed} of "
+                 f"{MAX_SELF_HEALS} attempts consumed across this loop "
+                 f"run. Loop halted. Start a fresh run with a narrower "
+                 f"brief or the failing files fixed manually."),
+            )
+            return
+
         per_file_attempt_history: dict[str, list[dict]] = {}
         for heal_attempt in range(1, MAX_SELF_HEALS + 1):
             if self._cancelled:
@@ -1902,8 +1934,29 @@ class LoopEngine:
                     f"rewriting {len(failing_indices)} file(s)…"
                 ),
                 data={"errors_preview": report["errors"][:10],
-                      "failing_count":  len(failing_indices)},
+                      "failing_count":  len(failing_indices),
+                      "total_heal_attempts": int(
+                          self.context.get("total_heal_attempts", 0)
+                      ) + 1,
+                      "max_heal_attempts": MAX_SELF_HEALS},
             )
+            # Feb 2026 · Retry-cap fix — every heal attempt increments
+            # the loop-wide counter so a fresh `_do_verify` re-entry
+            # can't get another 2 free attempts. Also short-circuits
+            # AFTER emitting the attempt narration (so the frontend
+            # chip sees a genuine "N/2" progression) if this attempt
+            # would exceed the cap.
+            self.context["total_heal_attempts"] = int(
+                self.context.get("total_heal_attempts", 0)
+            ) + 1
+            if self.context["total_heal_attempts"] > MAX_SELF_HEALS:
+                await self._fail(
+                    "verify",
+                    (f"Global self-heal cap exceeded "
+                     f"({self.context['total_heal_attempts']}/"
+                     f"{MAX_SELF_HEALS}). Loop halted."),
+                )
+                return
             # Iter 309 · Narration — WARNING pending. Resolved by the
             # per-round done narration emitted right after the heal
             # inner loop finishes (or by a final danger if the outer
