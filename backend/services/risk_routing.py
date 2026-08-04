@@ -87,7 +87,24 @@ class RiskScore:
 # Ordered specific → generic so `deploy/keys/prod.pem` scores higher
 # than plain `deploy/`.
 _PATH_WEIGHTS: list[tuple[re.Pattern, float, str]] = [
-    (re.compile(r"^\.env(\..+)?$"),                    0.90, "env_secrets"),
+    # Feb 2026 · False-positive fix — placeholder env files
+    # (`.env.example`, `.env.sample`, `.env.template`, `.env.dist`) are
+    # a repo convention for documenting env-var shape with dummy
+    # values. They're deliberately checked into git and contain no
+    # real secrets. Match them FIRST with a near-zero weight so the
+    # broader `.env(\..+)?$` rule below doesn't trip the WARN_SHIP
+    # tier at 0.4013 (bare-margin above the 0.40 threshold). Same
+    # allowlist Vanguard scanner already uses at services/vanguard_scanner.py:317.
+    #
+    # Note on ordering: this scorer uses "highest weight wins" (see
+    # line 161 `if w > top_path_w`), not first-match-wins. So we ALSO
+    # need a negative lookahead in the broad `.env*` rule below to
+    # PREVENT the 0.90 weight from being applied to placeholders.
+    (re.compile(r"(?i)^\.env\.(?:example|sample|template|dist|defaults)$"),
+                                                        0.02, "env_placeholder"),
+    # Real secret env — must NOT match the placeholder suffixes above.
+    (re.compile(r"(?i)^\.env(?!\.(?:example|sample|template|dist|defaults)$)(\..+)?$"),
+                                                        0.90, "env_secrets"),
     (re.compile(r"(?i)/secrets?/"),                    0.80, "secrets_dir"),
     (re.compile(r"(?i)(^|/)auth([/_.]|$)"),            0.55, "auth_code"),
     (re.compile(r"(?i)(^|/)payment[s]?([/_.]|$)"),     0.60, "payments"),
