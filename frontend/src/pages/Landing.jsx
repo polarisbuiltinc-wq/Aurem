@@ -814,67 +814,12 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* ─── Two ways to ship (Personal + Developer tracks) ───
-            Iter 212m-236 — Non-technical visitors get a clear entry
-            point here instead of drowning in the developer-pitched
-            hero. Each card deep-links into signup with ?track= so
-            the /choose-track screen is skipped when the user has
-            already made up their mind. */}
-        <section className="tracks" data-testid="landing-tracks-section">
-          <div className="tracks-header">
-            <div className="tracks-eyebrow">▸ Two ways to ship</div>
-            <h2 className="tracks-title">Pick your track</h2>
-            <p className="tracks-sub">You can switch anytime from Settings.</p>
-          </div>
-          <div className="tracks-grid">
-            {/* Personal Track */}
-            <Link
-              to="/signup?track=personal"
-              className="track-card personal"
-              data-testid="landing-track-personal"
-            >
-              <span className="track-badge">No code needed</span>
-              <div className="track-icon">✦</div>
-              <h3 className="track-name">Personal Track</h3>
-              <p className="track-desc">
-                Describe your idea in plain English. AUREM handles the
-                repo, code, database and deploy — you just watch your
-                app come to life.
-              </p>
-              <ul className="track-bullets">
-                <li>No GitHub, no terminals, no jargon</li>
-                <li>Live preview as your app builds</li>
-                <li>One-click ship to a real live URL</li>
-              </ul>
-              <span className="track-cta" data-testid="landing-track-personal-cta">
-                Start building →
-              </span>
-            </Link>
-
-            {/* Developer Track */}
-            <Link
-              to="/signup?track=developer"
-              className="track-card developer"
-              data-testid="landing-track-developer"
-            >
-              <div className="track-icon">{"</>"}</div>
-              <h3 className="track-name">Developer Track</h3>
-              <p className="track-desc">
-                Connect your own repos. Full IDE-style control over
-                code, deploys and infra. Everything AUREM CTO has
-                built for pro developers.
-              </p>
-              <ul className="track-bullets">
-                <li>GitHub-native — real PRs, real commits</li>
-                <li>Vanguard security scans + Loop Mode</li>
-                <li>Bring your own Claude / DeepSeek / Gemini key</li>
-              </ul>
-              <span className="track-cta" data-testid="landing-track-developer-cta">
-                Enter workspace →
-              </span>
-            </Link>
-          </div>
-        </section>
+        {/* Feb 2026 — "Pick your track" section removed on founder
+            request. Track selection now lives on /choose-track (post-
+            signup) and via subdomain/route routing (builder.* vs
+            auremcto.com). Keeping the anchor comment so future edits
+            know the section historically sat between Guardrails and
+            the "Why teams ship" marquee. */}
 
         {/* ─── Why teams ship marquee ─── */}
         <div className="marquee-wrap">
