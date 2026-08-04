@@ -23,9 +23,9 @@ import {
   MessageSquare, Rocket, BarChart3, Settings as Cog, ShieldCheck,
   Plus, FolderGit2, Globe, Zap, Trophy, Coins, Gift,
   Receipt, User as UserIcon, Plug, Lock, KeyRound, LayoutDashboard,
-  Users as UsersIcon, Lightbulb, Landmark, X, Menu,
+  Users as UsersIcon, Lightbulb, Landmark, X, Menu, LogOut,
 } from "lucide-react";
-import { api, getToken, newSessionId } from "../../lib/api";
+import { api, getToken, logout as apiLogout, newSessionId } from "../../lib/api";
 import { useChatSession } from "../Shell";
 
 const BG      = "rgb(7,8,13)";
@@ -467,6 +467,42 @@ export default function RailShell({
           }}
         >
           {autoHideEnabled ? "AUTO" : "OFF"}
+        </button>
+        {/* Feb 2026 · Founder request: "logout add kia he nhi sidebar
+            main? production pe". RailShell (Dashboard v2's 56px rail)
+            had no sign-out affordance — founder had to navigate to
+            Settings then hunt for it. Legacy Shell.jsx has one at
+            line 941/1007; we mirror that pattern here so both shells
+            expose the same sign-out target. Uses the shared
+            `logout` helper from `lib/api` which clears the token +
+            user cache and redirects to /login. */}
+        <button
+          type="button"
+          data-testid="rail-logout-btn"
+          aria-label="Sign out"
+          title="Sign out"
+          onClick={() => {
+            try { apiLogout(); } catch { /* ignore */ }
+          }}
+          style={{
+            width: 36, height: 36, borderRadius: 8,
+            border: "none", background: "transparent",
+            color: "rgba(148,163,184,0.75)",
+            cursor: "pointer",
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            marginTop: 6,
+            transition: "background 140ms ease, color 140ms ease",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(239,68,68,0.10)";
+            e.currentTarget.style.color = "#ef4444";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = "rgba(148,163,184,0.75)";
+          }}
+        >
+          <LogOut size={16} strokeWidth={1.9} />
         </button>
       </nav>
 
