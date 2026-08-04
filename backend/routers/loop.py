@@ -518,6 +518,43 @@ async def pause_response(loop_id: str, body: PauseResponseBody,
     # Iter 212m-144 — cross-worker rehydration.
     engine = await eng.lookup_or_rehydrate(get_db(), loop_id)
     if engine is None:
+        # Feb 2026 · Terminal-state retry guard (persisted path).
+        # `lookup_or_rehydrate` refuses to rehydrate terminal loops
+        # (FAILED / COMPLETED / ABORTED) — they get None here. A stale
+        # UI POSTing retry/skip to such a loop would then have received
+        # a misleading 404 "Loop not found". The founder-directed
+        # contract is that terminal loops must surface as 409
+        # `loop_terminal` so the frontend can render a "Start a fresh
+        # loop" message instead of "not found". Check the persisted
+        # session doc directly before falling through to 404.
+        if body.action in ("retry", "skip"):
+            _doc = None
+            try:
+                _doc = await eng.load_session(get_db(), loop_id)
+            except Exception:                                # noqa: BLE001
+                _doc = None
+            _dstate = (_doc or {}).get("state")
+            _duser = (_doc or {}).get("user_id")
+            _TERMINAL_VALUES = {
+                eng.LoopState.FAILED.value,
+                eng.LoopState.COMPLETED.value,
+                eng.LoopState.ABORTED.value,
+            }
+            if _doc and _dstate in _TERMINAL_VALUES:
+                # Ownership check first — never leak a terminal state
+                # to a non-owner.
+                if _duser and _duser != user["user_id"]:
+                    raise HTTPException(403, "Not your loop")
+                raise HTTPException(
+                    409,
+                    {"error": "loop_terminal",
+                     "message": (
+                         f"Loop is in terminal state {_dstate}. "
+                         f"Start a fresh loop instead of retrying."
+                     ),
+                     "state": _dstate,
+                     "phase": (_doc or {}).get("phase") or ""},
+                )
         raise HTTPException(404, "Loop not found")
     if engine.user_id != user["user_id"]:
         raise HTTPException(403, "Not your loop")

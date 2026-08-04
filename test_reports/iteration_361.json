@@ -1,0 +1,42 @@
+{
+  "verdict": "fixed",
+  "user_reported_bug": "when a verify step fails, the system loops infinitely (triggering 4+ 'Verify failed after 2 attempts' events) and the frontend chip is stuck at 'heal 1/2'. MAX_SELF_HEALS = 2 is not being enforced per-loop. The loop must halt at exactly 2 heal attempts and surface a terminal state (not a silent retry).",
+  "summary": "No relevant testing skill found. Focused backend verification passed: _do_verify halts at MAX_SELF_HEALS=2 with LoopState.FAILED, emits exactly one FAILED event and no PAUSED_FOR_USER event, _should_stop() is true, re-entry with cap consumed performs no extra heals, and pause-response retry/skip returns 409 loop_terminal for both live and persisted terminal loops while preserving 403 ownership for non-owners. Requested 24-test regression suite and an additional 3-test QA probe all passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/pytest/bug_verify_361_requested_suite.log",
+    "/app/test_reports/pytest/bug_verify_361_manual_probe.log",
+    "/app/test_reports/bug_verification_artifacts/test_iter361_verify_terminal_probe.py",
+    "/app/test_reports/bug_verification_artifacts/iter361_backend_logs_tail.log"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Verified services/loop_engine.py hard-fails verify cap exhaustion via _fail('verify', ...) instead of PAUSED_FOR_USER fallback, and _should_stop treats FAILED as terminal.",
+    "Verified routers/loop.py persisted terminal guard runs before 404 fallthrough and checks ownership before returning 409 loop_terminal."
+  ],
+  "updated_files": [
+    "/app/test_reports/bug_verification_artifacts/test_iter361_verify_terminal_probe.py",
+    "/app/test_reports/pytest/bug_verify_361_requested_suite.log",
+    "/app/test_reports/pytest/bug_verify_361_manual_probe.log",
+    "/app/test_reports/bug_verification_artifacts/iter361_backend_logs_tail.log",
+    "/app/test_reports/bug_verification_361.json",
+    "/app/test_reports/iteration_361.json"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "not tested - backend only request"
+  },
+  "seed_data_creation": "No persistent seed data created. QA probe used in-memory fake Mongo/Auth/Parliament test doubles only to deterministically exercise the state machine and router guards.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Skill lookup found no relevant testing skill. Ran cd /app/backend && python -m pytest tests/test_iter_feb2026_verify_terminal_fail.py tests/test_iter212m131_loop_engine_rca.py tests/test_iter_feb2026_global_heal_cap.py tests/test_iter_feb2026_verify_retry_cap.py -v (24 passed) plus /app/test_reports/bug_verification_artifacts/test_iter361_verify_terminal_probe.py (3 passed). Backend log tail showed app startup complete; unrelated existing G19 restart-loop log and integration-health note were not part of this verify-cap flow.",
+  "rca_of_the_issue": "Regression target was the verify self-heal counter being scoped per _do_verify/retry instead of per loop, plus pause-response resurrecting terminal or no-live terminal sessions. The current fix persists total_heal_attempts in context, hard-fails at the cap, and rejects stale retry/skip against terminal loops with 409 loop_terminal while returning 403 for non-owners."
+}

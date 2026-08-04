@@ -334,3 +334,134 @@ def test_reentered_do_verify_short_circuits_when_cap_consumed(
         f"(initial only, no heal-round reverifies). Got "
         f"{len(verify_calls)}: {verify_calls}"
     )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Contract 4 — Persisted terminal loops return 409 (not 404)
+# ═══════════════════════════════════════════════════════════════════
+def test_pause_response_persisted_terminal_returns_409(monkeypatch):
+    """Behavioral (HTTP-level) — a terminal loop that exists ONLY in
+    Mongo (no live `_LIVE` engine, e.g. after a worker restart) must
+    surface as 409 loop_terminal on retry/skip, NOT the misleading
+    404 that `lookup_or_rehydrate` would otherwise cause (it refuses
+    to rehydrate terminal states → returns None → 404).
+
+    This exercises the persisted-doc guard added at the top of
+    `pause_response` alongside the in-memory guard.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from routers import loop as loop_router
+    from routers.loop import router as loop_api_router
+    from services import loop_engine as le
+
+    app = FastAPI()
+    app.include_router(loop_api_router, prefix="/api/aurem-dev")
+
+    async def _fake_dev(*_a, **_kw):
+        return {"user_id": "u_test_terminal"}
+    monkeypatch.setattr(loop_router, "current_dev", _fake_dev)
+
+    class _Coll2:
+        def __init__(self, rows):
+            self._rows = rows
+
+        async def find_one(self, q, *_a, **_kw):
+            for r in self._rows:
+                if all(r.get(k) == v for k, v in q.items()
+                       if not isinstance(v, dict)):
+                    return dict(r)
+            return None
+
+    fake_doc = {
+        "loop_id": "lp_persisted_terminal_test",
+        "user_id": "u_test_terminal",
+        "state": le.LoopState.FAILED.value,
+        "phase": "verify",
+        "context": {},
+    }
+
+    class _DB2:
+        def __init__(self):
+            self.loop_sessions = _Coll2([fake_doc])
+
+    fake_db = _DB2()
+    monkeypatch.setattr(loop_router, "get_db", lambda: fake_db)
+
+    # Reset the in-memory registry so lookup() returns None → the
+    # router must fall into the persisted-doc guard.
+    le.reset_registry()
+
+    client = TestClient(app)
+    resp = client.post(
+        "/api/aurem-dev/loop/lp_persisted_terminal_test/pause-response",
+        json={"action": "retry"},
+        headers={"Authorization": "Bearer irrelevant"},
+    )
+
+    assert resp.status_code == 409, (
+        f"expected 409 for persisted terminal loop, got "
+        f"{resp.status_code}: {resp.text}"
+    )
+    body = resp.json()
+    detail = body.get("detail", body)
+    assert isinstance(detail, dict), f"unexpected body shape: {body}"
+    assert detail.get("error") == "loop_terminal"
+    assert detail.get("state") == le.LoopState.FAILED.value
+
+
+def test_pause_response_persisted_terminal_403_for_wrong_user(
+        monkeypatch):
+    """Ownership check must run BEFORE surfacing the terminal state
+    so we never leak a stranger's loop's state to a non-owner."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from routers import loop as loop_router
+    from routers.loop import router as loop_api_router
+    from services import loop_engine as le
+
+    app = FastAPI()
+    app.include_router(loop_api_router, prefix="/api/aurem-dev")
+
+    async def _fake_dev(*_a, **_kw):
+        return {"user_id": "some_other_user"}
+    monkeypatch.setattr(loop_router, "current_dev", _fake_dev)
+
+    class _Coll2:
+        def __init__(self, rows):
+            self._rows = rows
+
+        async def find_one(self, q, *_a, **_kw):
+            for r in self._rows:
+                if all(r.get(k) == v for k, v in q.items()
+                       if not isinstance(v, dict)):
+                    return dict(r)
+            return None
+
+    fake_doc = {
+        "loop_id": "lp_persisted_other_user",
+        "user_id": "the_owner",
+        "state": le.LoopState.FAILED.value,
+        "phase": "verify",
+        "context": {},
+    }
+
+    class _DB2:
+        def __init__(self):
+            self.loop_sessions = _Coll2([fake_doc])
+
+    monkeypatch.setattr(loop_router, "get_db", lambda: _DB2())
+    le.reset_registry()
+
+    client = TestClient(app)
+    resp = client.post(
+        "/api/aurem-dev/loop/lp_persisted_other_user/pause-response",
+        json={"action": "retry"},
+        headers={"Authorization": "Bearer irrelevant"},
+    )
+    assert resp.status_code == 403, (
+        f"non-owner must get 403, not a leaked terminal state. "
+        f"Got {resp.status_code}: {resp.text}"
+    )
