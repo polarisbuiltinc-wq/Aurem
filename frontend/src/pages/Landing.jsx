@@ -705,7 +705,7 @@ export default function Landing() {
 
   // SEO/AEO title + description sync (preserved from Iter 175).
   useEffect(() => {
-    document.title = "ORA — developers choice | by Aurem";
+    document.title = "ORA by Aurem — developers choice";
     const desc =
       "ORA by Aurem — AI engineer that reads your GitHub repo and " +
       "commits production code directly. No IDE. Flat $9/month.";

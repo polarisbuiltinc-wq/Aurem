@@ -3271,7 +3271,7 @@ class LoopEngine:
             # Commits + Co-authored-by trailer. The commit_message
             # arriving here may be either the raw user task or an
             # already-formatted `feat: …` string; `build_commit_message`
-            # normalises both and adds the `[via ORA]` marker + the
+            # normalises both and adds the `[via ORA by Aurem]` marker + the
             # co-author trailer.
             author_name, author_email = await resolve_git_identity(
                 self.db, self.user_id,

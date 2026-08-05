@@ -227,7 +227,7 @@ async def build_repo_index(
             _msg = build_commit_message(
                 task_type="chore",
                 summary="regenerate CODEBASE.md",
-                body="Automated index refresh by ORA.",
+                body="Automated index refresh by ORA (by Aurem).",
             )
             commit_info = await commit_files(
                 owner=owner, repo=repo, branch=branch,

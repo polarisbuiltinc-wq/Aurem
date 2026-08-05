@@ -332,7 +332,7 @@ async def apply_finding_fix(
     )
     # Iter 212m-218 — Normalise via git_identity so this commit lands
     # with the real developer as author + ORA as co-author + the
-    # `[via ORA]` transparency marker.  We already have a well-formed
+    # `[via ORA by Aurem]` transparency marker.  We already have a well-formed
     # `fix(rule):` subject so we pass it through as-is; the builder
     # only appends the marker and the Co-authored-by trailer.
     from services.git_identity import (

@@ -9,10 +9,10 @@ Locks the three-part fix:
 
   2. Every commit message goes through
      `services.git_identity.build_commit_message(...)` which normalises
-     to Conventional Commits format (`type: summary [via ORA]`).
+     to Conventional Commits format (`type: summary [via ORA by Aurem]`).
 
   3. Every commit body ends with the exact
-     `Co-authored-by: ORA by Aurem CTO <cto@auremcto.com>` trailer so
+     `Co-authored-by: ORA by Aurem <cto@auremcto.com>` trailer so
      GitHub credits ORA as co-author on the commit page and the PR
      contributor list.
 
@@ -111,14 +111,14 @@ async def test_resolve_no_email_falls_back_to_gh_noreply():
 async def test_resolve_missing_user_returns_synthetic():
     db = _FakeDB(None)
     name, email = await resolve_git_identity(db, "ghost")
-    assert name  == "AUREM Developer"
+    assert name  == "AUREM"
     assert email == "aurem-user@users.noreply.github.com"
 
 
 @pytest.mark.asyncio
 async def test_resolve_db_none_returns_synthetic():
     name, email = await resolve_git_identity(None, "anyone")
-    assert name  == "AUREM Developer"
+    assert name  == "AUREM"
     assert email == "aurem-user@users.noreply.github.com"
 
 
@@ -131,7 +131,7 @@ async def test_resolve_db_failure_never_raises():
     _BrokenDB.dev_users = _BrokenDB()
     name, email = await resolve_git_identity(_BrokenDB(), "u5")
     # Fallback identity — a DB blip MUST NOT block the commit path.
-    assert name  == "AUREM Developer"
+    assert name  == "AUREM"
     assert email == "aurem-user@users.noreply.github.com"
 
 
@@ -173,7 +173,7 @@ def test_build_message_from_user_message_infers_type():
     msg = build_commit_message(user_message="Fix the login race condition")
     subject = msg.splitlines()[0]
     assert subject.startswith("fix: "), subject
-    assert subject.endswith(" [via ORA]"), subject
+    assert subject.endswith(" [via ORA by Aurem]"), subject
     assert CO_AUTHOR_TRAILER in msg
 
 
@@ -182,7 +182,7 @@ def test_build_message_with_explicit_type_and_summary():
         task_type="feat",
         summary="add rate-limit countdown toast",
     )
-    assert msg.startswith("feat: add rate-limit countdown toast [via ORA]\n\n")
+    assert msg.startswith("feat: add rate-limit countdown toast [via ORA by Aurem]\n\n")
     assert msg.rstrip().endswith(CO_AUTHOR_TRAILER)
 
 
@@ -191,10 +191,10 @@ def test_build_message_never_double_appends_via_ora_marker():
     second one appended."""
     msg = build_commit_message(
         task_type="fix",
-        summary="already tagged [via ORA]",
+        summary="already tagged [via ORA by Aurem]",
     )
     # Count occurrences of the marker — must be exactly one.
-    assert msg.count("[via ORA]") == 1, msg
+    assert msg.count("[via ORA by Aurem]") == 1, msg
 
 
 def test_build_message_subject_capped_at_72_chars():
@@ -202,7 +202,7 @@ def test_build_message_subject_capped_at_72_chars():
     msg = build_commit_message(task_type="feat", summary=long_summary)
     subject = msg.splitlines()[0]
     assert len(subject) <= 72, (len(subject), subject)
-    assert subject.endswith("[via ORA]")
+    assert subject.endswith("[via ORA by Aurem]")
 
 
 def test_build_message_includes_body():
@@ -227,7 +227,7 @@ def test_co_author_trailer_is_exact_github_format():
     """GitHub's parser is strict: `Co-authored-by: Name <email>`. Any
     typo (missing space, wrong angle bracket) breaks credit assignment.
     """
-    assert CO_AUTHOR_TRAILER == "Co-authored-by: ORA by Aurem CTO <cto@auremcto.com>"
+    assert CO_AUTHOR_TRAILER == "Co-authored-by: ORA by Aurem <cto@auremcto.com>"
     # Also match GitHub's regex spec:
     # https://docs.github.com/en/pull-requests/committing-changes-to-your-project/creating-and-editing-commits/creating-a-commit-with-multiple-authors
     m = re.match(r"^Co-authored-by:\s+.+\s+<.+@.+>$", CO_AUTHOR_TRAILER)
@@ -300,7 +300,7 @@ def test_caller_resolves_git_identity_before_committing(path):
     assert "resolve_git_identity" in src, (
         f"{path} calls commit_files() but does not resolve identity "
         f"via services.git_identity.resolve_git_identity — commits "
-        f"from this path will fall back to synthetic 'AUREM Developer'."
+        f"from this path will fall back to synthetic 'AUREM'."
     )
     assert "author_name=" in src and "author_email=" in src, (
         f"{path} does not pass author_name / author_email to commit_files()."

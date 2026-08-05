@@ -12,7 +12,7 @@ import RobotGuide, { RobotGuideKeyframes, escapeHtml } from "../components/Robot
 
 export default function Login() {
   usePageMeta({
-    title: "Sign in · AUREM for developers",
+    title: "Sign in · ORA by Aurem",
     description: "Sign in to your AUREM account and continue shipping features to your GitHub repo with an autonomous AI engineer.",
     canonical: (typeof window !== "undefined" ? window.location.origin : "") + "/login",
   });

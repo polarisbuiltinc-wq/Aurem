@@ -292,8 +292,8 @@ async def revert_commit(
         new_tree_sha = r.json()["sha"]
 
         msg = commit_message or (
-            f'chore: revert "{commit_sha[:7]}" [via ORA]\n\n'
-            f"Automated revert triggered by ORA safety pipeline.\n\n"
+            f'chore: revert "{commit_sha[:7]}" [via ORA by Aurem]\n\n'
+            f"Automated revert triggered by ORA (by Aurem) safety pipeline.\n\n"
             f"Co-authored-by: ORA by Aurem <cto@auremcto.com>"
         )
         r = await client.post(

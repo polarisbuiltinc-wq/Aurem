@@ -7,7 +7,7 @@
  */
 import { useEffect } from "react";
 
-const DEFAULT_TITLE = "AUREM — Your Autonomous CTO. Ships code to GitHub in minutes.";
+const DEFAULT_TITLE = "ORA by Aurem — Your Autonomous CTO. Ships code to GitHub in minutes.";
 const DEFAULT_DESC =
   "AUREM is an autonomous AI engineer that plans, writes, tests and ships features to your GitHub repo. 1,000 tokens free, no card required.";
 

@@ -13,7 +13,7 @@ import GoogleIcon from "../components/GoogleIcon";
 
 export default function Signup() {
   usePageMeta({
-    title: "Sign up · Claim 1,000 free tokens · AUREM for developers",
+    title: "Sign up · Claim 1,000 free tokens · ORA by Aurem",
     description: "Create your AUREM account in 30 seconds. 1,000 tokens free on signup — no credit card required. Bring your own Anthropic, DeepSeek or Gemini key.",
     canonical: (typeof window !== "undefined" ? window.location.origin : "") + "/signup",
   });

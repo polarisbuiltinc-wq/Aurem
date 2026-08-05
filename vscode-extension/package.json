@@ -1,6 +1,6 @@
 {
   "name": "aurem-cto",
-  "displayName": "ORA by Aurem CTO",
+  "displayName": "ORA by Aurem",
   "description": "AI engineer that reads your GitHub repo and ships code directly via MCP. Works alongside Cursor, VS Code, and Claude Desktop.",
   "version": "0.3.0",
   "publisher": "auremcto",

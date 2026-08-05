@@ -23,8 +23,8 @@ New model (industry-standard, matches GitHub Copilot / Devin / Cursor):
                        commit page and the PR contributor list.
 
 Every commit message is also normalised to Conventional Commits format:
-`{type}: {summary} [via ORA]` with `type ∈ {feat, fix, refactor,
-chore, docs, test, perf, style, ci, build}`.  The `[via ORA]` suffix
+`{type}: {summary} [via ORA by Aurem]` with `type ∈ {feat, fix, refactor,
+chore, docs, test, perf, style, ci, build}`.  The `[via ORA by Aurem]` suffix
 is a transparency marker — same convention Devin PRs use.
 
 Public surface:
@@ -35,7 +35,7 @@ Public surface:
 
     build_commit_message(*, task_type, summary, body=None) -> str
         Sync. Returns a Conventional-Commits-formatted message with
-        the `[via ORA]` marker in the subject and the co-author
+        the `[via ORA by Aurem]` marker in the subject and the co-author
         trailer in the body.
 
     infer_commit_type(user_message: str) -> str
@@ -126,9 +126,9 @@ def build_commit_message(
     user_message: Optional[str] = None,
 ) -> str:
     """Assemble a Conventional-Commits-formatted message with the
-    `[via ORA]` transparency marker and the co-author trailer.
+    `[via ORA by Aurem]` transparency marker and the co-author trailer.
 
-    Subject:   `{type}: {summary} [via ORA]`
+    Subject:   `{type}: {summary} [via ORA by Aurem]`
     Body:      optional caller-supplied paragraph, then a blank line,
                then the `Co-authored-by:` trailer.
 
@@ -144,13 +144,13 @@ def build_commit_message(
     if not summary:
         summary = _first_line(user_message or "") or "apply automated change"
 
-    # If the summary already carries the "[via ORA]" marker (e.g. a
+    # If the summary already carries the "[via ORA by Aurem]" marker (e.g. a
     # test that pre-formats it) — don't double-append.
     subject = f"{task_type}: {summary}"
-    if "[via ORA]" not in subject:
+    if "[via ORA by Aurem]" not in subject:
         # Cap subject at 72 chars INCLUDING the marker; trim summary
         # first so we don't accidentally exceed.
-        marker = " [via ORA]"
+        marker = " [via ORA by Aurem]"
         max_summary_len = 72 - len(f"{task_type}: ") - len(marker)
         if len(summary) > max_summary_len:
             summary = summary[: max_summary_len - 1].rstrip() + "…"
