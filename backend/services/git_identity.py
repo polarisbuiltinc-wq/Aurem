@@ -172,7 +172,7 @@ async def resolve_git_identity(db, user_id: str) -> Tuple[str, str]:
                   dev_users.name          →
                   dev_users.github.login →
                   local part of email     →
-                  "AUREM Developer"       (last-resort synthetic)
+                  "AUREM"       (last-resort synthetic)
         email   : dev_users.github.email →
                   dev_users.email        →
                   "<login>@users.noreply.github.com"  (GitHub-native fallback)
@@ -181,7 +181,7 @@ async def resolve_git_identity(db, user_id: str) -> Tuple[str, str]:
     Never raises — a DB blip degrades to the synthetic fallback so a
     commit push is never blocked on identity resolution.
     """
-    fallback_name  = "AUREM Developer"
+    fallback_name  = "AUREM"
     fallback_email = "aurem-user@users.noreply.github.com"
     if db is None or not user_id:
         return fallback_name, fallback_email

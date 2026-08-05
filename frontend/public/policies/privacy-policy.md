@@ -187,3 +187,7 @@ auremcto.com
 For GDPR requests, response within 30 days.
 For CCPA requests, response within 45 days.
 
+---
+
+*AUREM™ is a trademark of Polaris Built Inc. (CIPO Application No. 2492318, filed August 5, 2026 — pending examination).*
+

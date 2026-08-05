@@ -34,7 +34,7 @@ class FileEntry(BaseModel):
 class PushBody(BaseModel):
     repo: str  # "owner/name"
     branch: str = "main"
-    commit_message: str = "AUREM Dev: push from chat session"
+    commit_message: str = "AUREM: push from chat session"
     files: Optional[List[FileEntry]] = None
     session_id: Optional[str] = None  # if files omitted, extract from session
 

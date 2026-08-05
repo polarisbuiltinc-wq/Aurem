@@ -160,7 +160,7 @@ async def call_openrouter_model(
     headers = {
         "Authorization": f"Bearer {api_key}",
         "HTTP-Referer": os.getenv("APP_URL", "https://auremcto.com"),
-        "X-Title": "AUREM Dev",
+        "X-Title": "AUREM",
         "Content-Type": "application/json",
     }
     base_messages = [

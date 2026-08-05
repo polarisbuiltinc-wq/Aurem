@@ -114,7 +114,7 @@ async def _describe_image_via_vision(raw: bytes, content_type: str,
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "HTTP-Referer": "https://auremcto.com",
-            "X-Title": "AUREM Dev - upload/convert (image)",
+            "X-Title": "AUREM - upload/convert (image)",
         }
         async with httpx.AsyncClient(timeout=45.0) as c:
             r = await c.post(

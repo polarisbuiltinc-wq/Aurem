@@ -580,7 +580,7 @@ export default function Shell({ children, requireAuth, chromeless = false }) {
                     className="serif"
                     style={{ fontSize: 18, color: "var(--text)" }}
                   >
-                    AUREM Dev
+                    AUREM
                   </span>
                   <span
                     className="eyebrow"

@@ -12,8 +12,8 @@ import RobotGuide, { RobotGuideKeyframes, escapeHtml } from "../components/Robot
 
 export default function Login() {
   usePageMeta({
-    title: "Sign in · AUREM Dev",
-    description: "Sign in to your AUREM Dev account and continue shipping features to your GitHub repo with an autonomous AI engineer.",
+    title: "Sign in · AUREM for developers",
+    description: "Sign in to your AUREM account and continue shipping features to your GitHub repo with an autonomous AI engineer.",
     canonical: (typeof window !== "undefined" ? window.location.origin : "") + "/login",
   });
   const navigate = useNavigate();
@@ -139,7 +139,8 @@ export default function Login() {
           <span className="eyebrow">sign in</span>
           <h1 className="serif" style={{ fontSize: 32, marginTop: 10 }}>Welcome back, builder.</h1>
           <p style={{ fontSize: 13, color: "var(--text-dim)" }}>
-            Sign in to your AUREM Dev account.
+            Sign in to your <strong>AUREM</strong> account
+            <span style={{ color: "var(--text-dim)", opacity: 0.7 }}> — for developers</span>.
           </p>
         </div>
 

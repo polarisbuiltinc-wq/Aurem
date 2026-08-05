@@ -7,9 +7,9 @@
  */
 import { useEffect } from "react";
 
-const DEFAULT_TITLE = "AUREM Dev — Your Autonomous CTO. Ships code to GitHub in minutes.";
+const DEFAULT_TITLE = "AUREM — Your Autonomous CTO. Ships code to GitHub in minutes.";
 const DEFAULT_DESC =
-  "AUREM Dev is an autonomous AI engineer that plans, writes, tests and ships features to your GitHub repo. 1,000 tokens free, no card required.";
+  "AUREM is an autonomous AI engineer that plans, writes, tests and ships features to your GitHub repo. 1,000 tokens free, no card required.";
 
 function setMeta(name, content, attr = "name") {
   let tag = document.querySelector(`meta[${attr}="${name}"]`);

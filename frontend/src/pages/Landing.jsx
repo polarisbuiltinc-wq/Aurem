@@ -1391,6 +1391,14 @@ export default function Landing() {
           <div>
             © 2026 <strong style={{ color: "var(--text-dim)" }}>Polaris Built Inc</strong> · Incorporated in Canada · All rights reserved.
           </div>
+          <div
+            data-testid="footer-trademark-notice"
+            style={{ fontSize: 10.5, color: "var(--text-faint)", opacity: 0.85 }}
+          >
+            AUREM™ is a trademark of Polaris Built Inc. (Application
+            No.&nbsp;2492318, filed with the Canadian Intellectual
+            Property Office).
+          </div>
           <div>
             <button
               type="button"

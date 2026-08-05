@@ -241,7 +241,7 @@ START_TIME = time.time()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("AUREM Dev starting...")
+    logger.info("AUREM starting...")
     # Iter 127 — cold-start fix. uvicorn doesn't bind port 8001 until the
     # lifespan.startup phase completes, so any awaited work here blocks
     # the entire HTTP listener. The previous flow ran a synchronous
@@ -1187,11 +1187,11 @@ async def lifespan(app: FastAPI):
         app.state.loop_expiry_task.cancel()
     if app.state.mongo:
         app.state.mongo.close()
-    logger.info("AUREM Dev shutdown")
+    logger.info("AUREM shutdown")
 
 
 app = FastAPI(
-    title="AUREM Dev API",
+    title="AUREM API",
     version="1.0.0",
     lifespan=lifespan,
     # Iter 140 — expose interactive docs at /api/docs (avoids
@@ -1200,8 +1200,8 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
     description=(
-        "AUREM Developer AI — reads your GitHub repo, writes "
-        "code, ships commits. Authenticate with Bearer token from "
+        "AUREM — Autonomous AI engineer that reads your GitHub repo, "
+        "writes code, ships commits. Authenticate with Bearer token from "
         "/api/aurem-dev/auth/login."
     ),
 )

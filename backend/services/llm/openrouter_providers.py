@@ -313,7 +313,7 @@ async def _call_deepseek(messages: list, system: str = "",
     headers = {
         "Authorization": f"Bearer {api_key}",
         "HTTP-Referer": os.getenv("APP_URL", "https://auremcto.com"),
-        "X-Title": "AUREM Dev",
+        "X-Title": "AUREM",
         "X-No-Cache": "true",
     }
     msgs = ([{"role": "system", "content": system}] + messages) if system else messages

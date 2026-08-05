@@ -199,7 +199,7 @@ function RechargeModal({ tokens, onRecharge, onDismiss }) {
           You&apos;re almost out of tokens
         </h2>
         <p style={{ color: "var(--text-dim)", fontSize: 13, margin: "0 0 22px" }}>
-          {tokens} tokens remaining. Recharge to keep building with AUREM Dev.
+          {tokens} tokens remaining. Recharge to keep building with AUREM.
         </p>
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
           <button
