@@ -204,7 +204,7 @@ const StepDashboard = ({ tick }) => (
     {/* Sidebar */}
     <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14 }}>
       <div style={{ fontFamily: C.mono, fontSize: 11, color: C.amber, fontWeight: 700, marginBottom: 4 }}>ORA</div>
-      <div style={{ fontSize: 10, color: C.faint, marginBottom: 18 }}>by Aurem CTO</div>
+      <div style={{ fontSize: 10, color: C.faint, marginBottom: 18 }}>by Aurem</div>
       <MonoLabel>REPOSITORIES (0)</MonoLabel>
       <div style={{
         marginTop: 12,
@@ -262,7 +262,7 @@ const StepDashboard = ({ tick }) => (
 // signup), so this modal loads their repo list from GitHub AND asks
 // for a PAT with write access (contents: read & write) so ORA can
 // push commits back.  Structure captured verbatim from prod:
-//   • Header: "ORA · by Aurem CTO"  · "Step 1 of 3"
+//   • Header: "ORA · by Aurem"  · "Step 1 of 3"
 //   • Progress: 3 dots, first amber
 //   • Title: "Connect your GitHub repo"
 //   • Green pill: "🔗 Connected as your-github"
@@ -299,7 +299,7 @@ const StepConnect = ({ tick }) => {
           <div style={{ width: 28, height: 28, borderRadius: 6, background: C.amber, color: "#000", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>ᴥ</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: C.mono, fontSize: 12, fontWeight: 700, color: C.amber }}>
-              ORA <span style={{ color: C.faint, fontWeight: 400, fontSize: 10 }}>by Aurem CTO</span>
+              ORA <span style={{ color: C.faint, fontWeight: 400, fontSize: 10 }}>by Aurem</span>
             </div>
           </div>
           <div style={{ fontFamily: C.mono, fontSize: 10, color: C.dim, letterSpacing: "0.08em" }}>Step 1 of 3</div>
@@ -453,7 +453,7 @@ const StepConnected = ({ tick }) => (
   <div style={{ height: "100%", display: "grid", gridTemplateColumns: "180px 1fr", gap: 12, position: "relative" }}>
     <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14 }}>
       <div style={{ fontFamily: C.mono, fontSize: 11, color: C.amber, fontWeight: 700, marginBottom: 4 }}>ORA</div>
-      <div style={{ fontSize: 10, color: C.faint, marginBottom: 18 }}>by Aurem CTO</div>
+      <div style={{ fontSize: 10, color: C.faint, marginBottom: 18 }}>by Aurem</div>
       <MonoLabel>REPOSITORIES (1)</MonoLabel>
       <div
         style={{

@@ -63,7 +63,7 @@ export default function PolicyPage({ slug }) {
     }}>
       <Link to="/" data-testid="back-home" style={{
         fontSize: 12, color: "var(--text-dim)", textDecoration: "none",
-      }}>← Back to AUREM CTO</Link>
+      }}>← Back to AUREM</Link>
 
       <h1 data-testid="policy-title" style={{
         fontSize: 32, fontWeight: 500, letterSpacing: "-0.02em",

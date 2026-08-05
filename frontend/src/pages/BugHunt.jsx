@@ -342,7 +342,7 @@ export default function BugHunt() {
   // we redirect).
   useEffect(() => {
     if (!adminOrAnon) return undefined;  // about to redirect, skip SEO write
-    document.title = "Bug Hunt — Detect 50+ vulnerabilities in your codebase | ORA by Aurem CTO";
+    document.title = "Bug Hunt — Detect 50+ vulnerabilities in your codebase | ORA by Aurem";
     let meta = document.querySelector('meta[name="description"]');
     const prev = meta ? meta.getAttribute("content") : null;
     if (!meta) {
@@ -379,7 +379,7 @@ export default function BugHunt() {
       <nav className="bh-nav" data-testid="bh-nav">
         <div className="nav-left">
           <img src="/ora-icon.png" alt="ORA" className="logo-img" />
-          <div className="logo-text">ORA<span> by Aurem CTO</span></div>
+          <div className="logo-text">ORA<span> by Aurem</span></div>
         </div>
         <div className="nav-links">
           <Link className="nav-link" to="/dashboard" data-testid="bh-nav-dashboard">← Dashboard</Link>
@@ -548,7 +548,7 @@ export default function BugHunt() {
       <footer className="footer" data-testid="bh-footer">
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <img src="/ora-icon.png" alt="ORA" className="logo-img" />
-          <div className="footer-text">ORA by Aurem CTO — Bug Hunt v1 · Iter 212m-73</div>
+          <div className="footer-text">ORA by Aurem — Bug Hunt v1 · Iter 212m-73</div>
         </div>
         <div className="footer-links">
           <Link to="/">Home</Link>

@@ -37,7 +37,7 @@ def _master_key() -> bytes:
         raise RuntimeError(
             "AUREM_CTO_MASTER_KEY env var missing — vault refuses to "
             "operate without an explicit master key (fail-closed). "
-            "Set this env var on the deployment to enable AUREM CTO "
+            "Set this env var on the deployment to enable AUREM "
             "vault features."
         )
     if len(raw) < 32:

@@ -12,7 +12,7 @@ from fastapi import APIRouter, Header
 from cto_services.auth import current_dev
 from cto_services.db import require_db
 
-router = APIRouter(prefix="/vault", tags=["AUREM CTO Vault"])
+router = APIRouter(prefix="/vault", tags=["AUREM Vault"])
 
 
 @router.get("/audit-log")

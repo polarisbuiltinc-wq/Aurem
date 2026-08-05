@@ -1,8 +1,8 @@
-# Cookie Policy — ORA by Aurem CTO
+# Cookie Policy — ORA by Aurem
 **Last updated: February 12, 2026**
 **Effective: February 12, 2026**
 
-Polaris Built Inc ("we", "us", "Aurem CTO") operates ORA at auremcto.com. This policy explains what cookies and similar tracking technologies we set in your browser, why, and how you can control them.
+Polaris Built Inc ("we", "us", "Aurem") operates ORA at auremcto.com. This policy explains what cookies and similar tracking technologies we set in your browser, why, and how you can control them.
 
 This policy layers on top of our [Privacy Policy](/privacy) and applies globally — including to visitors covered by **GDPR (EU/UK)**, **CCPA/CPRA (California)**, **DPDP Act (India)**, and **PIPEDA (Canada)**.
 
@@ -29,9 +29,9 @@ We classify cookies into four buckets:
 
 | Name | Provider | Purpose | Lifetime |
 |---|---|---|---|
-| `aurem_jwt` | Aurem CTO (first-party) | Auth session token | 7 days |
-| `aurem_csrf` | Aurem CTO (first-party) | CSRF protection | Session |
-| `aurem_ui_prefs` | Aurem CTO (localStorage) | Theme, sidebar, dismissed tips | Persistent (client-only) |
+| `aurem_jwt` | Aurem (first-party) | Auth session token | 7 days |
+| `aurem_csrf` | Aurem (first-party) | CSRF protection | Session |
+| `aurem_ui_prefs` | Aurem (localStorage) | Theme, sidebar, dismissed tips | Persistent (client-only) |
 
 ### 2.2 Analytics & Marketing (consent-gated)
 

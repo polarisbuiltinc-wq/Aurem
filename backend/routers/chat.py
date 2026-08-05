@@ -2114,7 +2114,7 @@ async def chat_stream(
                             "falling back to orchestrator", _adv_chain, glm_err,
                         )
                         activity["label"] = (
-                            "advisor models unavailable — switching to AUREM CTO…"
+                            "advisor models unavailable — switching to AUREM…"
                         )
                         # Fall through to the AUREM/orchestrator path below.
 
@@ -2178,7 +2178,7 @@ async def chat_stream(
                     try:
                         from services.llm import call_llm as _call_llm
                         _casual_system = (
-                            "You are ORA — AUREM CTO's developer co-pilot.\n"
+                            "You are ORA — AUREM's developer co-pilot.\n"
                             "For this casual message, respond naturally and briefly.\n"
                             "Be confident, warm, and direct. Do NOT mention\n"
                             "pipelines, agents, or technical systems. Keep your\n"

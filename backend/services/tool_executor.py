@@ -10,7 +10,7 @@ The structured signal is bubbled up to the SSE stream so the frontend
 can render a typed banner via `SystemSignalBanner.jsx` instead of relying
 on the LLM to explain the failure.
 
-Iter 209 — Aurem CTO core architecture.
+Iter 209 — Aurem core architecture.
 """
 from __future__ import annotations
 

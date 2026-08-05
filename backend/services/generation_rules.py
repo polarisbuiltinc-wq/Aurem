@@ -285,7 +285,7 @@ def build_condensed_manifest(*, include_low: bool = False) -> str:
         return ""
 
     header = (
-        "# ── AUREM CTO — Generation-Time Safety Rules "
+        "# ── AUREM — Generation-Time Safety Rules "
         "(v" + MANIFEST_VERSION + ") ──"
     )
     guidance = (
@@ -324,7 +324,7 @@ def build_condensed_manifest(*, include_low: bool = False) -> str:
 # Integration helpers — used by orchestrator.py and loop.py to add the
 # manifest to a persona layer stack idempotently.
 # ──────────────────────────────────────────────────────────────────────
-_MANIFEST_SENTINEL = "AUREM CTO — Generation-Time Safety Rules"
+_MANIFEST_SENTINEL = "AUREM — Generation-Time Safety Rules"
 
 
 def already_injected(persona_or_prompt: str | Iterable[str]) -> bool:

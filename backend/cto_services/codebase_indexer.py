@@ -38,7 +38,7 @@ from .db import get_db
 from .auth import current_dev
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/codebase", tags=["AUREM CTO Codebase"])
+router = APIRouter(prefix="/codebase", tags=["AUREM Codebase"])
 
 
 GITHUB_API = "https://api.github.com"
@@ -201,7 +201,7 @@ async def refresh_index(user_id: str, repo_url: str, pat: str) -> dict[str, Any]
 
 
 def _format_context_block(doc: dict, max_chars: int = 6000) -> str:
-    """Renders the cached index into the system-prompt block AUREM CTO
+    """Renders the cached index into the system-prompt block AUREM
     reads at the top of every turn. Trims to `max_chars` so we never
     blow the context budget."""
     parts: list[str] = []

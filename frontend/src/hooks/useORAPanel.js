@@ -28,7 +28,7 @@ const API_BASE =
 // line with a project-aware greeting that addresses the user by first
 // name. Plain text only (no emoji in body) so SpeechSynthesis reads
 // naturally; a single 👋 sits in the headline where TTS pauses anyway.
-const WELCOME = `Welcome to AUREM CTO, {name}! 👋
+const WELCOME = `Welcome to AUREM, {name}! 👋
 
 Your AI Advisor is ready. I've already loaded your project context and I'm here to help you ship faster, debug smarter, and make better technical decisions.
 

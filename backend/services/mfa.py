@@ -27,7 +27,7 @@ import pyotp
 import qrcode
 
 
-_APP_NAME = "AUREM CTO"
+_APP_NAME = "AUREM"
 
 
 def generate_secret() -> str:

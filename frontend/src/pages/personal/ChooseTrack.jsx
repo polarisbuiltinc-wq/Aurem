@@ -154,7 +154,7 @@ export default function ChooseTrack() {
             }}>Developer Track</h2>
             <p style={{ fontSize: 14, lineHeight: 1.65, color: "#A1A1AA", margin: 0 }}>
               Connect your own repos. Full IDE-style control over code, deployments,
-              and infrastructure. Everything AUREM CTO has built for pro developers.
+              and infrastructure. Everything AUREM has built for pro developers.
             </p>
             <div data-testid="track-developer-cta" style={{
               marginTop: 24, display: "flex", alignItems: "center", gap: 8,

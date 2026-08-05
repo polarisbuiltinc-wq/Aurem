@@ -299,7 +299,7 @@ export default function NewUserWizard({ onComplete }) {
                             fontFamily: "var(--font-mono, ui-monospace, monospace)" }}>
                 ORA
               </div>
-              <div style={{ fontSize: 10, color: "#64748b" }}>by Aurem CTO</div>
+              <div style={{ fontSize: 10, color: "#64748b" }}>by Aurem</div>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -499,7 +499,7 @@ export default function NewUserWizard({ onComplete }) {
                     />
                     <a
                       data-testid="wizard-generate-pat-btn"
-                      href="https://github.com/settings/tokens/new?scopes=repo,workflow,read:user,user:email&description=AUREM%20CTO%20(per-project)&default_expires_at=90"
+                      href="https://github.com/settings/tokens/new?scopes=repo,workflow,read:user,user:email&description=AUREM%20(per-project)&default_expires_at=90"
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={() => setPatGenClicked(true)}
@@ -669,7 +669,7 @@ function buildRobotMessage({ step, ghStatus, busy, err, repoUrl, task, taskId })
     const isPatErr = /personal access token|github_pat_|ghp_/i.test(err);
     if (isPatErr) {
       return `Hmm — <strong>GitHub Personal Access Token needed.</strong> ` +
-        `Tap <a href="https://github.com/settings/tokens/new?scopes=repo&description=AUREM%20CTO" target="_blank" rel="noopener" style="color:#FF6608;text-decoration:underline;font-weight:600;">Generate PAT on GitHub →</a> ` +
+        `Tap <a href="https://github.com/settings/tokens/new?scopes=repo&description=AUREM" target="_blank" rel="noopener" style="color:#FF6608;text-decoration:underline;font-weight:600;">Generate PAT on GitHub →</a> ` +
         `then paste it in the field below. Or skip for now.`;
     }
     return `Hmm — <strong>${escapeHtml(err)}</strong>. Try again, or skip for now.`;

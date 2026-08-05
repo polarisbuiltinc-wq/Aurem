@@ -1,7 +1,7 @@
-# Security & Trust — ORA by Aurem CTO
+# Security & Trust — ORA by Aurem
 **Last updated: February 12, 2026**
 
-Aurem CTO ships production code on your behalf. That means you're extending your **trust boundary** to us. This page documents — with engineering-grade specificity — how we protect that trust.
+Aurem ships production code on your behalf. That means you're extending your **trust boundary** to us. This page documents — with engineering-grade specificity — how we protect that trust.
 
 If you find a security issue, please report it to **security@auremcto.com**. We honour responsible disclosure and will credit you on our Hall of Fame if you consent.
 

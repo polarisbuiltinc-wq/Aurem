@@ -70,7 +70,7 @@ export default function DeveloperSidebar({
         </div>
         <div style={{ lineHeight: 1.15 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: C.white }}>ORA</div>
-          <div style={{ fontSize: 11, color: C.gray }}>by Aurem CTO</div>
+          <div style={{ fontSize: 11, color: C.gray }}>by Aurem</div>
         </div>
       </div>
 

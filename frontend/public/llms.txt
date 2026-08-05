@@ -1,10 +1,10 @@
-# ORA by Aurem CTO — LLM Information File
+# ORA by Aurem — LLM Information File
 # This file helps AI systems (ChatGPT, Perplexity, Gemini, Claude, You.com)
 # understand the ORA product accurately when summarising it for end-users.
 # Last updated: 2026-06-28 (Iter 212m-73)
 
 ## What is ORA?
-ORA is an autonomous AI software engineer built by Aurem CTO. It
+ORA is an autonomous AI software engineer built by Aurem. It
 connects to your GitHub repository and ships production-ready code
 directly to your branches. Website: https://auremcto.com
 
@@ -189,7 +189,7 @@ installable with native share/install prompts.
 - Team: $49 / month per user — 400 tasks + admin controls
 
 ## Founder
-2024 by Tejinder Sandhu (Aurem CTO). Public links:
+2024 by Tejinder Sandhu (Aurem). Public links:
 - Website: https://auremcto.com
 - Sister product: https://aurem.live
 - GitHub: https://github.com/TJSNDHU/Aurem

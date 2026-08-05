@@ -1,5 +1,5 @@
 /* aurem-design.css — AUREM Design System baseline
- * Auto-shipped with every React stack template scaffolded by AUREM CTO.
+ * Auto-shipped with every React stack template scaffolded by AUREM.
  * Adapted from Emil Kowalski's design-engineering rules.
  */
 
@@ -11,7 +11,7 @@
 }
 
 /* Universal pressable feedback. Every button/anchor/role=button feels
- * the press immediately, on every site AUREM CTO builds. */
+ * the press immediately, on every site AUREM builds. */
 button,
 .button,
 a.button,

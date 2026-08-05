@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from cto_services.auth import current_dev
 from cto_services.db import require_db
 
-router = APIRouter(prefix="/domain", tags=["AUREM CTO Domain"])
+router = APIRouter(prefix="/domain", tags=["AUREM Domain"])
 
 DOMAIN_RE = re.compile(
     r"^([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$",

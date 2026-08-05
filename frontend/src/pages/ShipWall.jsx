@@ -13,7 +13,7 @@ const APP_URL = window.location.origin;
 export default function ShipWall() {
   usePageMeta({
     title: "Ship Wall · AUREM — Real code shipped by real developers",
-    description: "Every task AUREM CTO ships appears here in real time.",
+    description: "Every task AUREM ships appears here in real time.",
     canonical: `${APP_URL}/wall`,
   });
 
@@ -44,7 +44,7 @@ export default function ShipWall() {
   // page CTA "See real ships"). It must NEVER render the internal
   // Shell sidebar, even for logged-in visitors — that leaks the
   // customer interface to anyone clicking the public CTA. Logged-in
-  // users can still navigate back via the "AUREM CTO" header link.
+  // users can still navigate back via the "AUREM" header link.
   const body = (
     <div style={{ minHeight: "100vh",
                   background: "var(--bg)", paddingBottom: 60 }}>
@@ -56,7 +56,7 @@ export default function ShipWall() {
       }}>
         <div>
           <Link to="/" style={{ textDecoration: "none" }}>
-            <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-dim)" }}>AUREM CTO</span>
+            <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-dim)" }}>AUREM</span>
           </Link>
           <h1 style={{ fontSize: 22, fontWeight: 500, marginTop: 4, color: "var(--text)" }}>Ship Wall</h1>
           <p style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 2 }}>

@@ -78,7 +78,7 @@ INTERNAL_MODE_NAMES = (
     "REPO-CONNECTED MODE", "TOP-OF-MIND",
 )
 PERSONA_SIGNATURE_PHRASES = (
-    "AUREM_CTO_PERSONA", "AUREM CTO — a senior, proactive engineering co-pilot",
+    "AUREM_CTO_PERSONA", "AUREM — a senior, proactive engineering co-pilot",
     "MODE DETECTION — DO THIS FIRST",
     "aurem-handoff",
 )

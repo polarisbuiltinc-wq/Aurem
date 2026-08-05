@@ -1,4 +1,4 @@
-# robots.txt — AUREM CTO (auremcto.com)
+# robots.txt — AUREM (auremcto.com)
 # Last updated: 2026-06-14
 #
 # Policy: we welcome traditional crawlers AND AI/LLM crawlers — answer

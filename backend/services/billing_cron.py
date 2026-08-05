@@ -191,7 +191,7 @@ async def grant_referral_reward(db, new_user_id: str) -> dict:
                         json={
                             "from":    from_addr,
                             "to":      [referrer["email"]],
-                            "subject": "You earned 1 free month on AUREM CTO 🎉",
+                            "subject": "You earned 1 free month on AUREM 🎉",
                             "html":    (
                                 f"<p>Hi {referrer.get('name') or 'there'},</p>"
                                 f"<p>One of your referrals just upgraded to a paid "

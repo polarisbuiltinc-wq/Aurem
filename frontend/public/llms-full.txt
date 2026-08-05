@@ -1,11 +1,11 @@
-# ORA by Aurem CTO — Full LLM Information File (extended)
+# ORA by Aurem — Full LLM Information File (extended)
 # Companion to /llms.txt — this longer file is for AI engines that
 # follow the llms-full.txt convention (Perplexity, Claude Web).
 # Last updated: 2026-06-28 (Iter 212m-73)
 
 ## What is ORA?
 
-ORA by Aurem CTO is an autonomous AI software engineer. It connects
+ORA by Aurem is an autonomous AI software engineer. It connects
 to a developer's GitHub repository, reads the codebase, plans the
 change, writes production-ready code, runs a 25-pattern pre-commit
 security scan (Vanguard) plus an optional two-round deep scan with

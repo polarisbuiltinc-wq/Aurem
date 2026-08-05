@@ -25,7 +25,7 @@ from cto_services.crypto import encrypt, decrypt, is_vault_available
 from cto_services.db import require_db
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/deploy", tags=["AUREM CTO Deploy"])
+router = APIRouter(prefix="/deploy", tags=["AUREM Deploy"])
 
 DEPLOY_TIMEOUT_SECONDS = 8 * 60
 

@@ -1200,7 +1200,7 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
     description=(
-        "AUREM CTO Developer AI — reads your GitHub repo, writes "
+        "AUREM Developer AI — reads your GitHub repo, writes "
         "code, ships commits. Authenticate with Bearer token from "
         "/api/aurem-dev/auth/login."
     ),

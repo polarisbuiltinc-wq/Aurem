@@ -30,7 +30,7 @@ export default function Projects() {
       <PageHeader
         eyebrow="multi-project"
         title="Client Projects"
-        sub="Connect any client's existing GitHub repo. Submit tasks in plain English — AUREM CTO pulls, edits, commits, pushes."
+        sub="Connect any client's existing GitHub repo. Submit tasks in plain English — AUREM pulls, edits, commits, pushes."
         right={<FounderOfferPill />}
       />
       <Body />
@@ -398,7 +398,7 @@ function PatHelpTooltip() {
             How to get a GitHub PAT
           </div>
           <a
-            href="https://github.com/settings/personal-access-tokens/new?name=aurem-cto-ship&description=AUREM%20CTO%20read%20%2B%20ship%20access&expires_in=90&contents=write&pull_requests=write"
+            href="https://github.com/settings/personal-access-tokens/new?name=aurem-cto-ship&description=AUREM%20read%20%2B%20ship%20access&expires_in=90&contents=write&pull_requests=write"
             target="_blank" rel="noreferrer"
             data-testid="pat-prefilled-link"
             style={{
@@ -423,7 +423,7 @@ function PatHelpTooltip() {
               </a> → <strong>Fine-grained tokens</strong>
             </li>
             <li>Click <strong>Generate new token</strong></li>
-            <li><strong>Repository access:</strong> select the repo(s) you want AUREM CTO to edit</li>
+            <li><strong>Repository access:</strong> select the repo(s) you want AUREM to edit</li>
             <li>
               <strong>Permissions needed:</strong>
               <ul style={{ paddingLeft: 16, marginTop: 4 }}>
@@ -1158,7 +1158,7 @@ function AddDialog({ onClose, onAdded, projects = [] }) {
                   href={
                     "https://github.com/settings/personal-access-tokens/new" +
                     "?name=" + encodeURIComponent(`ORA · ${effectiveRepo.name}`) +
-                    "&description=" + encodeURIComponent("AUREM CTO (ORA) — read & commit on this repo.") +
+                    "&description=" + encodeURIComponent("AUREM (ORA) — read & commit on this repo.") +
                     "&expires_in=90&contents=write&pull_requests=write"
                   }
                   target="_blank" rel="noopener noreferrer"
@@ -1386,7 +1386,7 @@ export function PatModal({ project, onClose, onSaved }) {
   const ghPatUrl =
     "https://github.com/settings/personal-access-tokens/new" +
     "?name=" + encodeURIComponent(`ORA · ${project.name}`) +
-    "&description=" + encodeURIComponent("AUREM CTO (ORA) — read & commit on this repo.") +
+    "&description=" + encodeURIComponent("AUREM (ORA) — read & commit on this repo.") +
     "&expires_in=90&contents=write&pull_requests=write";
 
   async function runConnectionTest() {
@@ -1868,7 +1868,7 @@ function TaskRow({ t, onRollback }) {
     if (!ok1) return;
     const ok2 = window.confirm(
       `Are you sure?\n\n` +
-      `AUREM CTO will push a revert of ${t.commit_sha} to the remote branch right now. ` +
+      `AUREM will push a revert of ${t.commit_sha} to the remote branch right now. ` +
       `Click OK to proceed.`
     );
     if (!ok2) return;

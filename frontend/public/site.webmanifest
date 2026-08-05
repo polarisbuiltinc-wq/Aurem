@@ -1,8 +1,8 @@
 {
   "id": "/?source=pwa",
-  "name": "ORA by Aurem CTO — developers choice",
+  "name": "ORA by Aurem — developers choice",
   "short_name": "ORA",
-  "description": "ORA — developers choice, by Aurem CTO. AI engineer that reads your GitHub repo, writes production code, and commits directly. No IDE needed. Flat $9/month.",
+  "description": "ORA — developers choice, by Aurem. AI engineer that reads your GitHub repo, writes production code, and commits directly. No IDE needed. Flat $9/month.",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
@@ -59,7 +59,7 @@
       "type": "image/png",
       "sizes": "1024x1024",
       "form_factor": "wide",
-      "label": "ORA — developers choice, by Aurem CTO"
+      "label": "ORA — developers choice, by Aurem"
     }
   ],
   "related_applications": [

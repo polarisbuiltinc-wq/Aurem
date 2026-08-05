@@ -1,5 +1,5 @@
 /**
- * theme.js — Aurem CTO theme controller (Iter 212m-52)
+ * theme.js — Aurem theme controller (Iter 212m-52)
  *
  * Three modes:
  *   • "auto"  — follow OS / browser via prefers-color-scheme

@@ -90,7 +90,7 @@ export default function SuggestionBoxModal({ open, onClose }) {
               onChange={(e) => setText(e.target.value)}
               maxLength={4000}
               rows={6}
-              placeholder="What would make Aurem CTO better for you?"
+              placeholder="What would make Aurem better for you?"
               style={{
                 width: "100%", padding: "10px 12px", fontSize: 13,
                 background: "var(--panel-2, #1c1c1c)",

@@ -1,6 +1,6 @@
 version: "3.9"
 
-# React + FastAPI starter — AUREM CTO default stack.
+# React + FastAPI starter — AUREM default stack.
 # Generated from /app/aurem-cto/ reference compose.
 
 services:

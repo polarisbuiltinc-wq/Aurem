@@ -93,7 +93,7 @@ def _render_text(d: dict) -> str:
     if not d.get("ok"):
         return "(digest unavailable)"
     lines = [
-        "AUREM CTO — Daily Digest",
+        "AUREM — Daily Digest",
         d["generated_at"],
         "─" * 40,
         f"New users (24h):  {d['users']['new']}   (total: {d['users']['total']})",
@@ -119,7 +119,7 @@ async def _send_via_resend(to_email: str, subject: str, body: str) -> bool:
     key = os.environ.get("RESEND_API_KEY")
     if not key:
         return False
-    sender = os.environ.get("DIGEST_FROM", "AUREM CTO <onboarding@resend.dev>")
+    sender = os.environ.get("DIGEST_FROM", "AUREM <onboarding@resend.dev>")
     try:
         async with httpx.AsyncClient(timeout=15.0) as c:
             r = await c.post(
@@ -142,7 +142,7 @@ async def _run_once() -> None:
     admin_email = os.environ.get("ADMIN_EMAIL", "").strip()
     if admin_email:
         sent = await _send_via_resend(
-            admin_email, "AUREM CTO — Daily Digest", body,
+            admin_email, "AUREM — Daily Digest", body,
         )
         if not sent:
             logger.info(

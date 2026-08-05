@@ -315,9 +315,9 @@ function VSCodeTab({ data, onCopy }) {
           copy install link
         </button>
       </Step>
-      <Step n={2} title="Or install the AUREM CTO extension">
+      <Step n={2} title="Or install the AUREM extension">
         <p style={styles.p}>
-          The AUREM CTO VS Code extension bundles the MCP config plus a
+          The AUREM VS Code extension bundles the MCP config plus a
           right-click "Ship via ORA" action.
         </p>
         <a data-testid="vscode-marketplace-link"

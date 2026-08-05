@@ -6,7 +6,7 @@ from fastapi import APIRouter
 
 from cto_services.stacks import list_stacks, get_stack
 
-router = APIRouter(prefix="/stacks", tags=["AUREM CTO Stacks"])
+router = APIRouter(prefix="/stacks", tags=["AUREM Stacks"])
 
 
 @router.get("")

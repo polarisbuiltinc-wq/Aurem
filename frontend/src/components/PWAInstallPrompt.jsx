@@ -89,7 +89,7 @@ export default function PWAInstallPrompt() {
     <div
       data-testid="pwa-install-prompt"
       role="dialog"
-      aria-label="Install AUREM CTO"
+      aria-label="Install AUREM"
       style={{
         position: "fixed",
         right: 18,
@@ -150,7 +150,7 @@ export default function PWAInstallPrompt() {
             PWA · install AUREM
           </div>
           <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.35 }}>
-            Open AUREM CTO straight from your home screen.
+            Open AUREM straight from your home screen.
           </div>
           <div
             style={{

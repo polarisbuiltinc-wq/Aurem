@@ -356,7 +356,7 @@ export default function SidebarBound({
       >
         <img
           src="https://customer-assets.emergentagent.com/job_launch-pad-237/artifacts/oj4581h8_Gemini_Generated_Image_sozbptsozbptsozb.png"
-          alt="ORA by Aurem CTO"
+          alt="ORA by Aurem"
           data-testid="ds2-sidebar-logo"
           className="size-[28px] shrink-0 rounded-full object-cover ring-1 ring-primary/25"
           draggable={false}
@@ -365,7 +365,7 @@ export default function SidebarBound({
           <>
             <div className="min-w-0 flex-1">
               <p className="text-[14px] font-bold leading-none tracking-tight text-sidebar-foreground">ORA</p>
-              <p className="mt-[3px] text-[10px] leading-none text-muted-foreground">by Aurem CTO</p>
+              <p className="mt-[3px] text-[10px] leading-none text-muted-foreground">by Aurem</p>
             </div>
             {onPinChange && (
               <button onClick={(e) => { e.stopPropagation(); onPinChange(!pinned); }}

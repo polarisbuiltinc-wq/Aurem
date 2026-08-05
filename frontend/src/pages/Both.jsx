@@ -501,7 +501,7 @@ function BuilderView() {
 
         <footer style={{padding:"50px 0", textAlign:"center"}}>
           <p style={{fontSize:13.5, color:"#8A7F6D"}}>
-            AUREM CTO — for people with ideas, not codebases.
+            AUREM — for people with ideas, not codebases.
           </p>
         </footer>
       </div>

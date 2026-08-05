@@ -383,7 +383,7 @@ function CodebaseHealthInner() {
   }
 
   useEffect(() => {
-    document.title = "Codebase Health — ORA by Aurem CTO";
+    document.title = "Codebase Health — ORA by Aurem";
     (async () => {
       try {
         const r = await api.get("/auth/me");

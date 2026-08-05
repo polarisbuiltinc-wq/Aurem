@@ -1,5 +1,5 @@
 """
-routers/cto_projects.py — AUREM CTO multi-project system.
+routers/cto_projects.py — AUREM multi-project system.
 Connect existing client GitHub repos, run AI tasks (git pull → fix → push).
 Mounted under /api/aurem-dev/cto/* to avoid clashing with /projects/* (new-project flow).
 """
@@ -31,7 +31,7 @@ from services.github_api_writer import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/cto", tags=["AUREM CTO Projects"])
+router = APIRouter(prefix="/cto", tags=["AUREM Projects"])
 
 # Detect whether `git` binary is available — production containers don't
 # have it (Iter 21). When missing we route to the pure-HTTP GitHub API path.
@@ -1743,7 +1743,7 @@ async def rollback_task(
     bg: BackgroundTasks,
     authorization: str = Header(None),
 ) -> dict:
-    """Revert a previously-pushed AUREM CTO commit on the project's repo.
+    """Revert a previously-pushed AUREM commit on the project's repo.
     Uses `git revert --no-edit <sha>` so the rollback is itself a new
     commit (no force-push, full history preserved). Idempotent: a task
     that's already been rolled back returns 409."""
@@ -1844,7 +1844,7 @@ async def _run_rollback_via_api(task_id: str, proj: dict, commit_sha: str,
     try:
         await _set(rollback_status="running")
         # Iter 212m-218 — attribute the revert commit to the real
-        # developer instead of the historical "AUREM CTO" bot identity.
+        # developer instead of the historical "AUREM" bot identity.
         from services.git_identity import resolve_git_identity
         _author_name, _author_email = await resolve_git_identity(
             db, proj.get("user_id") or "",
@@ -1904,7 +1904,7 @@ async def _run_rollback_with_git(task_id: str, proj: dict, commit_sha: str,
         await _rollback_log(task_id, "✅ Cloned", "success")
 
         _sh(["git", "config", "user.email", "cto@auremcto.com"], repo_path)
-        _sh(["git", "config", "user.name", "AUREM CTO"], repo_path)
+        _sh(["git", "config", "user.name", "AUREM"], repo_path)
 
         # Use `git revert` so we never force-push; it produces a new commit
         # that undoes the changes. `-m 1` lets us revert merge commits if
@@ -2270,7 +2270,7 @@ def _sh(cmd: list, cwd: Path, timeout: int = 60) -> subprocess.CompletedProcess:
 
 
 _AI_SYS = (
-    "You are AUREM CTO — a senior engineer who SHIPS production-grade code.\n"
+    "You are AUREM — a senior engineer who SHIPS production-grade code.\n"
     "\n"
     "OUTPUT CONTRACT (NON-NEGOTIABLE):\n"
     "  Line 1 must be exactly:  SUMMARY: <one line, <=120 chars>\n"
@@ -3303,7 +3303,7 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
             lambda: gh_api_commit(
                 owner=owner, repo=repo, branch=branch, token=user_token,
                 files=edits,
-                commit_message=f"AUREM CTO: {task[:60]}",
+                commit_message=f"AUREM: {task[:60]}",
                 progress=_prog,
             ),
             what="GitHub commit", task_id=task_id, attempts=4, base_sleep=2.0,
@@ -3664,9 +3664,9 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
         # 5) commit + push
         await _set_status(task_id, status="pushing")
         _sh(["git", "config", "user.email", "cto@auremcto.com"], repo_path)
-        _sh(["git", "config", "user.name", "AUREM CTO"], repo_path)
+        _sh(["git", "config", "user.name", "AUREM"], repo_path)
         _sh(["git", "add", "-A"], repo_path)
-        cm = _sh(["git", "commit", "-m", f"AUREM CTO: {task[:60]}"], repo_path)
+        cm = _sh(["git", "commit", "-m", f"AUREM: {task[:60]}"], repo_path)
         if "nothing to commit" in cm.stdout:
             await _log(task_id, "ℹ️ no diff to commit", "info")
             await _set_status(task_id, status="done", result=summary,

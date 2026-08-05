@@ -3535,7 +3535,7 @@ async def admin_send_user_offer(
     resend_key = os.environ.get("RESEND_API_KEY") or ""
     sender = from_addr or os.environ.get("DIGEST_FROM") or os.environ.get(
         "RESEND_FROM_EMAIL"
-    ) or "AUREM CTO <onboarding@resend.dev>"
+    ) or "AUREM <onboarding@resend.dev>"
 
     # When the API key is missing we record what *would* have been sent
     # so the UI can still display recipient counts (and ops can see what

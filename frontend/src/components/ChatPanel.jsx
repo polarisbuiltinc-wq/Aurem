@@ -93,7 +93,7 @@ import {
 const WELCOME = {
   role: "assistant",
   content:
-    "I'm ORA — developers choice, by Aurem CTO — your sovereign engineering co-pilot. Ask me to plan a feature, write code, or debug an error. What are we shipping today?",
+    "I'm ORA — developers choice, by Aurem — your sovereign engineering co-pilot. Ask me to plan a feature, write code, or debug an error. What are we shipping today?",
   provider: "system",
 };
 

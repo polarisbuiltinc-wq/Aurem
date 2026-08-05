@@ -1,4 +1,4 @@
-# Terms of Service — AUREM CTO Dev
+# Terms of Service — AUREM Dev
 **Last updated: February 7, 2026**
 **Effective: February 7, 2026**
 
@@ -6,7 +6,7 @@
 
 ## 1. Agreement
 
-By accessing or using AUREM CTO Dev ("Service") at auremcto.com, you agree to these Terms. If you do not agree, do not use the Service.
+By accessing or using AUREM Dev ("Service") at auremcto.com, you agree to these Terms. If you do not agree, do not use the Service.
 
 The Service is operated by Polaris Built Inc ("Company", "we", "us").
 
@@ -14,7 +14,7 @@ The Service is operated by Polaris Built Inc ("Company", "we", "us").
 
 ## 2. Service Description
 
-AUREM CTO Dev is an AI-powered developer tool that:
+AUREM Dev is an AI-powered developer tool that:
 - Reads code from GitHub repositories you connect
 - Generates code changes using AI models
 - Commits code directly to your GitHub repositories

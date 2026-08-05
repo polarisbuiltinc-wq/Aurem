@@ -1,7 +1,7 @@
-# Subprocessor List — ORA by Aurem CTO
+# Subprocessor List — ORA by Aurem
 **Last updated: February 12, 2026**
 
-Polaris Built Inc uses the third-party service providers ("subprocessors") listed below to deliver ORA by Aurem CTO. Each subprocessor is bound by a data-processing agreement (or equivalent contractual commitments) meeting GDPR Art. 28, CCPA/CPRA service-provider requirements, DPDP data-fiduciary duties, and PIPEDA safeguards.
+Polaris Built Inc uses the third-party service providers ("subprocessors") listed below to deliver ORA by Aurem. Each subprocessor is bound by a data-processing agreement (or equivalent contractual commitments) meeting GDPR Art. 28, CCPA/CPRA service-provider requirements, DPDP data-fiduciary duties, and PIPEDA safeguards.
 
 We update this list whenever we add or remove a subprocessor. Material changes are announced by email **at least 30 days before** they take effect, giving enterprise customers the ability to object under Section 5 below.
 

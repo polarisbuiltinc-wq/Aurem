@@ -220,7 +220,7 @@ async def oauth_authorize_page(
   <div class="card" data-testid="oauth-consent-card">
     <div class="logo">ORA</div>
     <h1>Connect ORA to Claude</h1>
-    <p class="lead"><b>{safe_client_id}</b> is requesting access to your ORA by Aurem CTO account.</p>
+    <p class="lead"><b>{safe_client_id}</b> is requesting access to your ORA by Aurem account.</p>
     {err_block}
     <div class="scopes">
       <div class="scope-row"><span class="check">✓</span> List your projects</div>

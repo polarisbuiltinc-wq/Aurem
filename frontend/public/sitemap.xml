@@ -8,12 +8,12 @@
     <priority>1.0</priority>
     <image:image>
       <image:loc>https://auremcto.com/og-image.png</image:loc>
-      <image:title>ORA by Aurem CTO — The AI Engineer That Actually Commits</image:title>
+      <image:title>ORA by Aurem — The AI Engineer That Actually Commits</image:title>
       <image:caption>ORA reads your GitHub repo, writes production code, runs Vanguard 25-pattern security scans + Bug Hunt 50+ Nuclei patterns, and commits directly. $9/month flat — 55% cheaper than Copilot.</image:caption>
     </image:image>
     <image:image>
       <image:loc>https://auremcto.com/ora-logo.png</image:loc>
-      <image:title>ORA logo — by Aurem CTO</image:title>
+      <image:title>ORA logo — by Aurem</image:title>
     </image:image>
   </url>
   <url>

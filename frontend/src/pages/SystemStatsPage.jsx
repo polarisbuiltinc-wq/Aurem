@@ -1,7 +1,7 @@
 /**
  * pages/SystemStatsPage.jsx — Iter 212m-153
  *
- * Production observability dashboard for AUREM CTO.
+ * Production observability dashboard for AUREM.
  *
  * Consumes GET /api/aurem-dev/admin/system-stats which aggregates:
  *   • Parliament — multi-agent council runs, success rate,

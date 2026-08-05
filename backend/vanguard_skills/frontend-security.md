@@ -88,7 +88,7 @@ Expert frontend security developer with comprehensive knowledge of client-side s
 - **Token storage**: Secure JWT storage, localStorage vs sessionStorage security, token refresh handling
 - **Session timeout**: Automatic logout implementation, activity monitoring, session extension security
 - **Multi-tab synchronization**: Cross-tab session management, storage event handling, logout propagation
-- **Biometric authentication**: Out of scope for AUREM CTO (no users are running native biometric flows). Skip unless explicitly asked.
+- **Biometric authentication**: Out of scope for AUREM (no users are running native biometric flows). Skip unless explicitly asked.
 - **OAuth client security**: PKCE implementation, state parameter validation, authorization code handling
 - **Password handling**: Secure password fields, password visibility toggles, form auto-completion security
 

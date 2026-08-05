@@ -1,5 +1,5 @@
 """
-services/local_tools.py — First-party tools for AUREM CTO orchestrator.
+services/local_tools.py — First-party tools for AUREM orchestrator.
 
 Iter 35 — Major upgrade to close the Emergent capability gap:
 
@@ -10,7 +10,7 @@ NEW TOOLS ADDED:
   search_repo         → grep pattern across all files in repo (new)
   read_multiple_lines → read specific line ranges from multiple files (new)
 
-These 4 new tools bring AUREM CTO from 1 local tool to 5, closing the
+These 4 new tools bring AUREM from 1 local tool to 5, closing the
 biggest practical gap vs Emergent (which can read 20 files at once via
 mcp_view_bulk + mcp_glob_files pattern).
 
@@ -675,7 +675,7 @@ async def write_repo_file(ctx: dict, args: dict) -> dict:
     Args:
       path             str   — repo-relative file path (no leading `/`, no `..`)
       content          str   — FULL new file body (we do not patch in-place)
-      commit_message?  str   — defaults to "AUREM CTO: edit {path}"
+      commit_message?  str   — defaults to "AUREM: edit {path}"
 
     Returns:
       {ok: true,  sha, html_url, path}       on success
@@ -1838,7 +1838,7 @@ async def execute_bash(ctx: dict, args: dict) -> dict:
 
     SECURITY (Iter 212m-168): This tool exposes the local pod
     filesystem (`/app`, `/tmp`, `/var/log`, etc.) — which contains
-    the internal AUREM CTO codebase.  It MUST NOT be exposed to
+    the internal AUREM codebase.  It MUST NOT be exposed to
     end-user (customer) chat sessions or the LLM will surface AUREM
     internal paths when the user asks about *their* connected repo
     ("which repo are you working on?" → LLM inspects /app/backend and
@@ -2036,7 +2036,7 @@ TOOL_SPECS: list[dict] = [
         "args_spec": {
             "path":            "string — repo-relative file path",
             "content":         "string — COMPLETE new file body (no diff, no ellipses)",
-            "commit_message":  "optional string — defaults to 'AUREM CTO: edit <path>'",
+            "commit_message":  "optional string — defaults to 'AUREM: edit <path>'",
         },
     },
     {

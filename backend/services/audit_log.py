@@ -23,7 +23,7 @@ Schema (one document per turn)::
       "was_retry":                      bool,
     }
 
-Iter 209 — Aurem CTO core architecture.
+Iter 209 — Aurem core architecture.
 """
 from __future__ import annotations
 

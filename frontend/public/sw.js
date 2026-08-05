@@ -1,5 +1,5 @@
 /**
- * sw.js — AUREM CTO Service Worker
+ * sw.js — AUREM Service Worker
  *
  * Strategy:
  *   • App shell (HTML + favicons + manifest + webp bg)    → precache

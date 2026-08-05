@@ -30,11 +30,11 @@ function MetaTags() {
     ld.text = JSON.stringify({
       "@context": "https://schema.org",
       "@type": "ItemList",
-      name: "AUREM CTO comparisons",
+      name: "AUREM comparisons",
       itemListElement: Object.values(COMPETITORS).map((c, i) => ({
         "@type": "ListItem",
         position: i + 1,
-        name: `AUREM CTO vs ${c.name}`,
+        name: `AUREM vs ${c.name}`,
         url: c.canonical,
       })),
     });
@@ -54,7 +54,7 @@ export default function CompareHub() {
       <div style={S.shell}>
         <header style={{ padding: "72px 0 32px", textAlign: "center" }}>
           <h1 style={{ fontSize: 38, fontWeight: 700, margin: "0 0 12px" }}>
-            How AUREM CTO compares
+            How AUREM compares
           </h1>
           <p style={{ ...S.dim, maxWidth: 620, margin: "0 auto" }}>
             Honest, verifiable comparisons — pricing, delivery mode, security
@@ -70,7 +70,7 @@ export default function CompareHub() {
                   data-testid={`compare-card-${c.slug}`}>
               <h2 style={{ fontSize: 17, fontWeight: 600, margin: "0 0 8px",
                            display: "flex", alignItems: "center", gap: 8 }}>
-                AUREM CTO vs {c.name} <ArrowRight size={15} aria-hidden />
+                AUREM vs {c.name} <ArrowRight size={15} aria-hidden />
               </h2>
               <p style={{ ...S.dim, fontSize: 13.5, margin: 0 }}>
                 {c.intro.slice(0, 150)}…

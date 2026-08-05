@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from cto_services.auth import current_dev
 from cto_services.db import require_db
 
-router = APIRouter(tags=["AUREM CTO Trust"])
+router = APIRouter(tags=["AUREM Trust"])
 
 
 # ─── Deploy count ────────────────────────────────────────────────────

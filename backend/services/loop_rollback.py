@@ -233,7 +233,7 @@ async def run_rollback(
                     "[loop-rollback %s] identity resolve failed: %r",
                     loop_id, e,
                 )
-                author_name = author_name or "AUREM CTO"
+                author_name = author_name or "AUREM"
                 author_email = author_email or "cto@aurem.dev"
 
         result = await gh_api_revert(

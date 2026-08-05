@@ -106,7 +106,7 @@ async def _openrouter_call(model: str, system: str, user: str,
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://auremcto.com",
-        "X-Title": "Aurem CTO - Graph Diagram",
+        "X-Title": "Aurem - Graph Diagram",
     }
     try:
         async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as cx:

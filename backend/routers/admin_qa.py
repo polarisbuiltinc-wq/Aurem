@@ -799,7 +799,7 @@ _VSCODE_MARKETPLACE_TTL_S = 300  # 5 min
 async def vscode_marketplace_status(
     authorization: Optional[str] = Header(None),
 ):
-    """Return the true published state of the AUREM CTO VS Code
+    """Return the true published state of the AUREM VS Code
     extension on the VS Marketplace.
 
     Uses a 5-minute in-memory cache so the admin dashboard doesn't

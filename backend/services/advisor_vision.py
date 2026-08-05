@@ -120,7 +120,7 @@ async def _call_openrouter(
         "Content-Type": "application/json",
         # OpenRouter attribution headers — nice-to-have, not required.
         "HTTP-Referer": "https://auremcto.com",
-        "X-Title": "Aurem CTO Advisor",
+        "X-Title": "Aurem Advisor",
     }
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT_S) as cx:

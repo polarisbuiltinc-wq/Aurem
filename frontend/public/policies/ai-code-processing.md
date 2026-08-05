@@ -1,8 +1,8 @@
-# AI & Code Processing Disclosure — ORA by Aurem CTO
+# AI & Code Processing Disclosure — ORA by Aurem
 **Last updated: February 12, 2026**
 **Effective: February 12, 2026**
 
-ORA by Aurem CTO reads your GitHub repository, generates fixes with large language models (LLMs), and commits code directly. This document explains — in engineering-grade detail — exactly what happens to your code when it enters our system.
+ORA by Aurem reads your GitHub repository, generates fixes with large language models (LLMs), and commits code directly. This document explains — in engineering-grade detail — exactly what happens to your code when it enters our system.
 
 This disclosure supplements our [Privacy Policy](/privacy), [Subprocessor List](/subprocessors), and [Terms of Service](/terms).
 
@@ -40,8 +40,8 @@ ORA uses a multi-model "Parliament" router. A single task may be evaluated by 2�
 
 ### 2.1 Data Flow
 ```
-Your Browser → Aurem CTO backend (Canada/US region) → LLM provider API
-                                                    ↳ Response → Aurem CTO → GitHub commit
+Your Browser → Aurem backend (Canada/US region) → LLM provider API
+                                                    ↳ Response → Aurem → GitHub commit
 ```
 
 Every hop uses TLS 1.2+ encryption in transit.
@@ -75,7 +75,7 @@ Even without training, some providers cache request/response pairs for abuse mon
 | DeepSeek | 30 days | Standard API |
 | Groq | 24 hours | Standard API |
 
-**Aurem CTO's own retention:** Selected file contents are purged from our servers within **24 hours** of task completion. Only the diff, commit SHA, and task metadata are retained per §1.
+**Aurem's own retention:** Selected file contents are purged from our servers within **24 hours** of task completion. Only the diff, commit SHA, and task metadata are retained per §1.
 
 ---
 
@@ -104,14 +104,14 @@ Redaction replaces the match with `[REDACTED_SECRET_<type>]` before the LLM sees
 
 ## 7. Human Review
 
-- **Your code is not read by Aurem CTO staff** except when you explicitly file a support ticket that requires it. Such reviews are logged, and you are notified.
+- **Your code is not read by Aurem staff** except when you explicitly file a support ticket that requires it. Such reviews are logged, and you are notified.
 - Anonymised/aggregated **task metadata** (model latency, error rates, no code content) is reviewed by engineering for reliability and cost optimisation.
 
 ---
 
 ## 8. Model Output Warranty
 
-LLM output is probabilistic. Aurem CTO does **not** warrant that generated code is:
+LLM output is probabilistic. Aurem does **not** warrant that generated code is:
 - Bug-free
 - Optimal
 - Free of licensing conflicts with third-party dependencies your project pulls in

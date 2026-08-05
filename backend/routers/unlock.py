@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from cto_services.auth import current_dev
 from cto_services.db import require_db
 
-router = APIRouter(prefix="/unlock", tags=["AUREM CTO Unlock"])
+router = APIRouter(prefix="/unlock", tags=["AUREM Unlock"])
 
 
 def _now_iso() -> str:

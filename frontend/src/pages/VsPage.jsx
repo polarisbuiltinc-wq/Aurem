@@ -99,12 +99,12 @@ function MetaTags({ c }) {
         {
           "@type": "BreadcrumbList",
           itemListElement: [
-            { "@type": "ListItem", position: 1, name: "AUREM CTO",
+            { "@type": "ListItem", position: 1, name: "AUREM",
               item: "https://auremcto.com/" },
             { "@type": "ListItem", position: 2, name: "Compare",
               item: "https://auremcto.com/compare" },
             { "@type": "ListItem", position: 3,
-              name: `AUREM CTO vs ${c.name}`, item: c.canonical },
+              name: `AUREM vs ${c.name}`, item: c.canonical },
           ],
         },
       ],
@@ -138,7 +138,7 @@ export default function VsPage({ forcedSlug }) {
           </span>
           <h1 style={{ fontSize: 40, fontWeight: 700, margin: "20px 0 14px",
                        lineHeight: 1.15 }}>
-            AUREM CTO vs {c.name}
+            AUREM vs {c.name}
           </h1>
           <p style={{ ...S.dim, maxWidth: 640, margin: "0 auto", fontSize: 17 }}>
             {c.intro}
@@ -151,7 +151,7 @@ export default function VsPage({ forcedSlug }) {
           <div style={{ ...S.card, borderColor: "var(--border-strong)" }}
                data-testid={`vs-${c.slug}-pick-aurem`}>
             <h2 style={{ fontSize: 18, fontWeight: 600, margin: "0 0 10px" }}>
-              Choose AUREM CTO if you want…
+              Choose AUREM if you want…
             </h2>
             <ul style={{ ...S.dim, margin: 0, paddingLeft: 18, lineHeight: 1.9 }}>
               {c.pickAurem.map((li) => <li key={li}>{li}</li>)}
@@ -192,7 +192,7 @@ export default function VsPage({ forcedSlug }) {
                 <tr style={{ background: "var(--panel-2)", textAlign: "left" }}>
                   <th style={{ padding: "12px 16px", fontWeight: 600 }}> </th>
                   <th style={{ padding: "12px 16px", fontWeight: 600,
-                               color: "var(--accent-2)" }}>AUREM CTO</th>
+                               color: "var(--accent-2)" }}>AUREM</th>
                   <th style={{ padding: "12px 16px", fontWeight: 600 }}>{c.name}</th>
                 </tr>
               </thead>
@@ -211,7 +211,7 @@ export default function VsPage({ forcedSlug }) {
             </table>
           </div>
           <p style={{ ...S.dim, fontSize: 13, marginTop: 10 }}>
-            Sources: AUREM CTO production codebase and docs; {c.name} public
+            Sources: AUREM production codebase and docs; {c.name} public
             pricing and documentation, last verified {LAST_VERIFIED}. Spotted
             something stale? Email ora@auremcto.com and we&apos;ll fix it.
           </p>
@@ -257,7 +257,7 @@ export default function VsPage({ forcedSlug }) {
               .map((o) => (
                 <Link key={o.slug} to={`/vs/${o.slug}`} style={S.badge}
                       data-testid={`vs-link-${o.slug}`}>
-                  AUREM CTO vs {o.name}
+                  AUREM vs {o.name}
                 </Link>
               ))}
             <Link to="/compare" style={S.badge} data-testid="vs-link-compare-hub">

@@ -20,7 +20,7 @@ Wires into the orchestrator's response post-process step:
     )
     return final  # ← only this ever reaches the frontend
 
-Iter 209 — Aurem CTO core architecture.
+Iter 209 — Aurem core architecture.
 """
 from __future__ import annotations
 

@@ -21,7 +21,7 @@ from cto_services.auth import current_dev
 from cto_services.db import get_db
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/github", tags=["AUREM CTO GitHub"])
+router = APIRouter(prefix="/github", tags=["AUREM GitHub"])
 
 GITHUB_API = "https://api.github.com"
 

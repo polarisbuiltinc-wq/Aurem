@@ -206,7 +206,7 @@ async def push_file(
 async def push_files_bulk(
     repo_name: str,
     files: list[dict],
-    commit_message: str = "Initial scaffold from AUREM CTO",
+    commit_message: str = "Initial scaffold from AUREM",
     branch: Optional[str] = None,
 ) -> dict:
     """Push many files to a repo. Sequential (respects GitHub's 5,000/h

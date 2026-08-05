@@ -1,5 +1,5 @@
 """
-MCP (Model Context Protocol) server endpoint for AUREM CTO.
+MCP (Model Context Protocol) server endpoint for AUREM.
 
 Spec: 2025-03-26 (Streamable HTTP transport). JSON-RPC 2.0 over a
 single endpoint. Reference:
@@ -48,7 +48,7 @@ router = APIRouter(prefix="/mcp", tags=["mcp"])
 
 # Protocol constants ───────────────────────────────────────────────────
 MCP_PROTOCOL_VERSION = "2025-03-26"
-MCP_SERVER_NAME      = "ORA by Aurem CTO"
+MCP_SERVER_NAME      = "ORA by Aurem"
 MCP_SERVER_VERSION   = "1.0.0"
 
 # JSON-RPC 2.0 error codes (spec)
@@ -1403,7 +1403,7 @@ def _server_manifest() -> dict:
             "tools": {"listChanged": False},
         },
         "instructions": (
-            "ORA by Aurem CTO — AI engineer that reads "
+            "ORA by Aurem — AI engineer that reads "
             "your repo and ships code to GitHub. No IDE needed."
         ),
     }
@@ -1923,7 +1923,7 @@ async def install_links(
             ),
             "vscode":         (
                 "Click the Install button to open VS Code (1.100+) "
-                "with ORA pre-configured. Or install the AUREM CTO "
+                "with ORA pre-configured. Or install the AUREM "
                 "extension from the marketplace."
             ),
             "claude_desktop": (

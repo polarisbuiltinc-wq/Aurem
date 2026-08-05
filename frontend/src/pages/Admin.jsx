@@ -2605,7 +2605,7 @@ export default function Admin({ initialTab = "overview" }) {
                        borderBottom: "1px solid var(--border)", marginBottom: 12,
                        flexShrink: 0 }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}>
-            AUREM CTO
+            AUREM
           </div>
           <div style={{ fontSize: 10, color: "var(--text-faint)",
                          letterSpacing: "0.1em", textTransform: "uppercase" }}>

@@ -147,7 +147,7 @@ Please add a test with any PR. Keep the "zero runtime deps" invariant intact.
 
 ## Credits
 
-Extracted from the ORA Chat assistant powering [AUREM CTO](https://auremcto.com). The library is a distillation of about 5 iterations of dogfooding what it takes to make a chat agent stop making things up.
+Extracted from the ORA Chat assistant powering [AUREM](https://auremcto.com). The library is a distillation of about 5 iterations of dogfooding what it takes to make a chat agent stop making things up.
 
 ## License
 

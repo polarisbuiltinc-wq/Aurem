@@ -92,7 +92,7 @@ export function Sidebar({ collapsed = false, pinned = false, onPinChange, loopOn
           <>
             <div className="min-w-0 flex-1">
               <p className="text-[14px] font-bold leading-none tracking-tight text-sidebar-foreground">ORA</p>
-              <p className="mt-[3px] text-[10px] leading-none text-muted-foreground">by Aurem CTO</p>
+              <p className="mt-[3px] text-[10px] leading-none text-muted-foreground">by Aurem</p>
             </div>
             {onPinChange && (
               <button onClick={() => onPinChange(!pinned)}

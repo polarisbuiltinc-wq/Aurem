@@ -1,4 +1,4 @@
-# System Status — ORA by Aurem CTO
+# System Status — ORA by Aurem
 **Last updated: February 12, 2026**
 
 This page reflects the current operational status of core ORA services. For real-time uptime and incident history, we are integrating a dedicated status platform (target: Q2 2026). Until then, this page and our email notifications are the source of truth.

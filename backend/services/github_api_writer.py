@@ -95,7 +95,7 @@ async def commit_files(
     Iter 212m-218 — `author_name` and `author_email` are REQUIRED
     keyword arguments (no defaults).  Every caller MUST resolve the
     real developer identity via `services.git_identity.resolve_git_identity`
-    before invoking this writer.  Hardcoded `AUREM CTO <cto@auremcto.com>`
+    before invoking this writer.  Hardcoded `AUREM <cto@auremcto.com>`
     defaults were removed so a lazy caller can't accidentally push
     bot-attributed commits again.
     """
@@ -294,7 +294,7 @@ async def revert_commit(
         msg = commit_message or (
             f'chore: revert "{commit_sha[:7]}" [via ORA]\n\n'
             f"Automated revert triggered by ORA safety pipeline.\n\n"
-            f"Co-authored-by: ORA by Aurem CTO <cto@auremcto.com>"
+            f"Co-authored-by: ORA by Aurem <cto@auremcto.com>"
         )
         r = await client.post(
             f"{GITHUB_API}/repos/{owner}/{repo}/git/commits",

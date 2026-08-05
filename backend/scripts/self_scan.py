@@ -171,10 +171,10 @@ def main() -> None:
 
     # ── Render markdown ──────────────────────────────────────────
     lines: list[str] = []
-    lines.append("# AUREM CTO — Self-Scan Report (Dogfood run)")
+    lines.append("# AUREM — Self-Scan Report (Dogfood run)")
     lines.append("")
     lines.append(f"**Scan date:** `{time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}`")
-    lines.append(f"**Target:** `/app` (AUREM CTO's own codebase, backend + frontend)")
+    lines.append(f"**Target:** `/app` (AUREM's own codebase, backend + frontend)")
     lines.append(f"**Files scanned:** `{len(cache)}` "
                  f"(same scanner functions users hit on `auremcto.com`)")
     lines.append("")

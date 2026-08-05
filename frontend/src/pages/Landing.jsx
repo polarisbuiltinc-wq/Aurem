@@ -681,9 +681,9 @@ export default function Landing() {
 
   // SEO/AEO title + description sync (preserved from Iter 175).
   useEffect(() => {
-    document.title = "ORA — developers choice | by Aurem CTO";
+    document.title = "ORA — developers choice | by Aurem";
     const desc =
-      "ORA by Aurem CTO — AI engineer that reads your GitHub repo and " +
+      "ORA by Aurem — AI engineer that reads your GitHub repo and " +
       "commits production code directly. No IDE. Flat $9/month.";
     let tag = document.querySelector('meta[name="description"]');
     if (!tag) {
@@ -702,7 +702,7 @@ export default function Landing() {
       <nav className="nav" data-testid="ora-nav">
         <div className="nav-left">
           <img src="/ora-icon.png" alt="ORA" className="logo-img" />
-          <div className="logo-text">ORA<span> by Aurem CTO</span></div>
+          <div className="logo-text">ORA<span> by Aurem</span></div>
         </div>
         <div className="nav-links">
           <a className="nav-link" href="#features" data-testid="nav-features">Features</a>
@@ -1316,7 +1316,7 @@ export default function Landing() {
       <footer className="footer" data-testid="ora-footer" style={{ flexDirection: "column", alignItems: "stretch", gap: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <img src="/ora-icon.png" alt="ORA" className="logo-img" />
-          <div className="footer-text">ORA by Aurem CTO — Built for developers · MIT extension</div>
+          <div className="footer-text">ORA by Aurem — Built for developers · MIT extension</div>
         </div>
 
         {/* Legal + product links grouped */}

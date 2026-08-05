@@ -2,7 +2,7 @@
 services/ora_context.py — Iter 212m-170  (ORAContext hardening — Layer 0)
 
 ORA-specific extension of BINContext that adds the FINAL boundary layer:
-ORA System files (the AUREM CTO codebase itself under /app/, /tmp/,
+ORA System files (the AUREM codebase itself under /app/, /tmp/,
 /var/, /etc/, /usr/, /root/, /home/, and the string tokens auremcto /
 aurem-cto / auremdev) are OFF-LIMITS to every session — even founder
 sessions in normal chat mode.
@@ -66,7 +66,7 @@ ORA_SYSTEM_PATHS: frozenset[str] = frozenset({
     "/home",
 })
 
-# Case-insensitive substrings that indicate the AUREM CTO internal
+# Case-insensitive substrings that indicate the AUREM internal
 # codebase.  Any command arg that contains one of these MUST be
 # refused even for founders in normal mode (debug_mode is the
 # only escape hatch, and only a founder can enable it — see below).

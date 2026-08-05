@@ -1,6 +1,6 @@
 # React + FastAPI
 
-The AUREM CTO default stack. Used by 9/10 customers shipping a product
+The AUREM default stack. Used by 9/10 customers shipping a product
 landing + dashboard + a small REST API.
 
   - `api/`: FastAPI (Python 3.11), routes prefixed `/api/*`.
@@ -12,7 +12,7 @@ across all stacks: `git pull && docker compose up -d --build`.
 
 ## AUREM Design System (mandatory, pre-installed)
 
-Every React project AUREM CTO scaffolds ships with these libraries
+Every React project AUREM scaffolds ships with these libraries
 already in `package.json`:
 
   - **sonner** — toasts (`import { toast } from "sonner"`).

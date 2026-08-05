@@ -1,4 +1,4 @@
-# ORA by Aurem CTO
+# ORA by Aurem
 ### The AI Engineer That Actually Commits.
 
 > No IDE. No token billing. No broken loops. Just code that ships.
@@ -406,5 +406,5 @@ up on the next redeploy.
 
 ---
 
-*Built by Aurem CTO · [auremcto.com](https://auremcto.com) ·
+*Built by Aurem · [auremcto.com](https://auremcto.com) ·
 sister app [aurem.live](https://aurem.live)*

@@ -266,7 +266,7 @@ async def _send_via_resend(to_email: str, subject: str, body: str) -> bool:
         return False
     sender = os.environ.get(
         "ALERT_FROM",
-        os.environ.get("DIGEST_FROM", "AUREM CTO <onboarding@resend.dev>"),
+        os.environ.get("DIGEST_FROM", "AUREM <onboarding@resend.dev>"),
     )
     try:
         async with httpx.AsyncClient(timeout=15.0) as c:
@@ -294,16 +294,16 @@ def _render_email(new_alerts: list[dict]) -> tuple[str, str]:
     warns = [a for a in new_alerts if a["severity"] == "warning"]
     if crits and warns:
         subject = (
-            f"🚨 AUREM CTO — {len(crits)} critical + "
+            f"🚨 AUREM — {len(crits)} critical + "
             f"{len(warns)} warning integration alert(s)"
         )
     elif crits:
-        subject = f"🚨 AUREM CTO — {len(crits)} critical integration alert(s)"
+        subject = f"🚨 AUREM — {len(crits)} critical integration alert(s)"
     else:
-        subject = f"⚠️ AUREM CTO — {len(warns)} integration warning(s)"
+        subject = f"⚠️ AUREM — {len(warns)} integration warning(s)"
 
     lines: list[str] = [
-        "AUREM CTO has detected the following integration issues that"
+        "AUREM has detected the following integration issues that"
         " need your attention:",
         "",
     ]

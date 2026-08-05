@@ -18,7 +18,7 @@ from fastapi import APIRouter, Header
 from cto_services.auth import current_dev
 from cto_services.db import require_db
 
-router = APIRouter(tags=["AUREM CTO Engagement"])
+router = APIRouter(tags=["AUREM Engagement"])
 
 
 # ─── Iter 101: Public referral click tracking ────────────────────────

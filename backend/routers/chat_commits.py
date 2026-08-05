@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from cto_services.auth import current_dev
 from cto_services.db import require_db
 
-router = APIRouter(prefix="/chat-commits", tags=["AUREM CTO Chat Commits"])
+router = APIRouter(prefix="/chat-commits", tags=["AUREM Chat Commits"])
 
 
 def _now_iso() -> str:

@@ -1,8 +1,8 @@
-# Privacy Policy — ORA by Aurem CTO
+# Privacy Policy — ORA by Aurem
 **Last updated: June 16, 2026**
 **Effective: June 16, 2026**
 
-Polaris Built Inc ("we", "us") operates ORA by Aurem CTO at auremcto.com. This policy explains what data we collect, how we use it, and your rights. ORA is an AI engineer that reads your GitHub repo, writes production code, and commits directly — no IDE needed.
+Polaris Built Inc ("we", "us") operates ORA by Aurem at auremcto.com. This policy explains what data we collect, how we use it, and your rights. ORA is an AI engineer that reads your GitHub repo, writes production code, and commits directly — no IDE needed.
 
 ---
 

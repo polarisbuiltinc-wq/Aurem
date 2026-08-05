@@ -5,7 +5,7 @@ Central resolver for the git author identity attached to every commit
 we push through `github_api_writer.commit_files()`.
 
 Before this iter, every commit landed as
-`AUREM CTO <cto@auremcto.com>` — hardcoded defaults on the writer.
+`AUREM <cto@auremcto.com>` — hardcoded defaults on the writer.
 That made every AUREM-shipped commit look like a bot did it, hiding
 the user's actual authorship on `git blame`, GitHub contribution
 graphs and PR author fields.
@@ -17,7 +17,7 @@ New model (industry-standard, matches GitHub Copilot / Devin / Cursor):
                        or their profile row, or a `.noreply` fallback).
   * **committer**    = same as author (we don't split author vs
                        committer — one identity per commit).
-  * **co-author**    = `ORA by Aurem CTO <cto@auremcto.com>` appended
+  * **co-author**    = `ORA by Aurem <cto@auremcto.com>` appended
                        as a `Co-authored-by:` trailer in the commit
                        body so GitHub credits both parties on the
                        commit page and the PR contributor list.
@@ -58,11 +58,11 @@ logger = logging.getLogger(__name__)
 
 # The co-author trailer.  GitHub renders this on the commit page and
 # credits the second identity on the PR contributor list.
-# NB: the display name is intentionally "ORA by Aurem CTO" — matches
+# NB: the display name is intentionally "ORA by Aurem" — matches
 # the product name the user sees in the UI, so `git blame` reads as
-# "written by <you>, co-authored by ORA by Aurem CTO".
+# "written by <you>, co-authored by ORA by Aurem".
 CO_AUTHOR_TRAILER = (
-    "Co-authored-by: ORA by Aurem CTO <cto@auremcto.com>"
+    "Co-authored-by: ORA by Aurem <cto@auremcto.com>"
 )
 
 # Conventional Commits vocabulary.  We use a fixed set so type

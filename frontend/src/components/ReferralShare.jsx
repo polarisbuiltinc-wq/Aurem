@@ -29,7 +29,7 @@ export default function ReferralShare() {
   const tweet = () =>
     window.open(
       `https://twitter.com/intent/tweet?text=${encodeURIComponent(
-        "Building with AUREM CTO — the autonomous AI engineer that ships code to your GitHub. Use my link to get started:"
+        "Building with AUREM — the autonomous AI engineer that ships code to your GitHub. Use my link to get started:"
       )}&url=${encodeURIComponent(link)}`,
       "_blank",
     );

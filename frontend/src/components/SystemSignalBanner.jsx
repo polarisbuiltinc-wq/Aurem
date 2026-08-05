@@ -13,7 +13,7 @@
  *     ...
  *   ]
  *
- * Iter 209 — Aurem CTO core architecture.
+ * Iter 209 — Aurem core architecture.
  */
 import React from "react";
 import { useNavigate } from "react-router-dom";

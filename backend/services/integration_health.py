@@ -295,7 +295,7 @@ async def _probe_tavily() -> dict:
     async with httpx.AsyncClient(timeout=10) as c:
         r = await c.post(
             "https://api.tavily.com/search",
-            json={"api_key": key, "query": "aurem cto healthcheck", "max_results": 1},
+            json={"api_key": key, "query": "aurem healthcheck", "max_results": 1},
         )
         if r.status_code == 200:
             data = r.json()

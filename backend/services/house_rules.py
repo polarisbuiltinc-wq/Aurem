@@ -247,7 +247,7 @@ def format_house_rules_block(prompt: str) -> str:
         return ""
     return (
         "=== ADMIN HOUSE RULES (HIGHEST PRIORITY — READ FIRST) ===\n"
-        "These rules are set by the Aurem CTO admin and take precedence "
+        "These rules are set by the Aurem admin and take precedence "
         "over every other instruction in this system prompt. Follow them "
         "exactly before applying any other persona, tool, or routing "
         "guidance.\n\n"
@@ -284,7 +284,7 @@ async def get_active_advisor_llm() -> str:
 async def get_active_chat_prompt() -> str:
     """Return the admin-defined CHAT prompt when its kill-switch is on,
     else empty string.  Injected AFTER the ORA boundary rule and
-    BEFORE the AUREM CTO persona so the admin can tune tone / behaviour
+    BEFORE the AUREM persona so the admin can tune tone / behaviour
     without polluting either layer."""
     doc = await get_house_rules_doc()
     if not doc.get("chat_prompt_enabled"):
