@@ -190,7 +190,8 @@
       "@type": "Organization",
       "@id": "https://auremcto.com/#organization",
       "name": "Aurem",
-      "alternateName": ["Aurem", "AUREM Labs", "AUREM Dev"],
+      "legalName": "Polaris Built Inc.",
+      "alternateName": ["AUREM", "AUREM Labs"],
       "url": "https://auremcto.com/",
       "logo": {
         "@type": "ImageObject",
@@ -198,8 +199,16 @@
         "width": 1024,
         "height": 1024
       },
-      "description": "Aurem builds autonomous AI software engineers. ORA is our flagship product — the AI engineer that actually commits code to GitHub. We also operate aurem.live, an autonomous AI workforce platform for lead generation and business automation.",
+      "description": "Aurem builds autonomous AI software engineers. ORA is our flagship product — the AI engineer that actually commits code to GitHub. AUREM is a trademark of Polaris Built Inc. (Canadian Intellectual Property Office Application No. 2492318, filed August 5, 2026).",
       "foundingDate": "2024",
+      "founder": {
+        "@type": "Person",
+        "name": "Tejinder Sandhu"
+      },
+      "address": {
+        "@type": "PostalAddress",
+        "addressCountry": "CA"
+      },
       "sameAs": [
         "https://aurem.live",
         "https://github.com/TJSNDHU/Aurem",
@@ -242,83 +251,49 @@
       "@type": "SoftwareApplication",
       "@id": "https://auremcto.com/#product",
       "name": "ORA by Aurem",
-      "alternateName": ["ORA", "Aurem", "ORA AI Engineer", "ORA by Aurem"],
-      "description": "ORA is an autonomous AI software engineer that connects to your GitHub repository, reads your codebase, writes production-ready code, runs Vanguard 25-pattern security scans before every commit, and ships code directly to your branches. No IDE required. No token billing. Flat $9/month pricing. Supports Claude Desktop, Claude Code, Cursor, VS Code, Ollama, LM Studio, GitHub, and MCP 2.4.",
+      "alternateName": ["ORA", "ORA AI Engineer"],
+      "description": "ORA is an autonomous AI software engineer that connects to your GitHub repository, reads your codebase, writes production-ready code, runs Vanguard pre-commit security scans, and ships code directly to your branches on manual approval. Every task runs through a verified 5-phase Loop (Plan → Execute → Verify → Scan → Ship) with a hard 2-attempt self-heal cap. No IDE required. Flat monthly pricing starting at $9/month with 10 tasks free. Supports MCP 2.4 clients (Claude Desktop, Claude Code, Cursor, VS Code) and a Local mode that runs against Ollama, LM Studio, or llama.cpp.",
       "url": "https://auremcto.com",
       "image": "https://auremcto.com/ora-logo.png",
       "screenshot": "https://auremcto.com/og-image.png",
       "applicationCategory": "DeveloperApplication",
       "applicationSubCategory": "AI Coding Assistant",
       "operatingSystem": "Web, Windows, macOS, Linux",
-      "softwareVersion": "Iter 212m-73",
-      "datePublished": "2026-02-11",
-      "offers": {
-        "@type": "Offer",
-        "name": "Founder Plan",
-        "price": "9",
-        "priceCurrency": "USD",
-        "priceValidUntil": "2026-12-31",
-        "availability": "https://schema.org/InStock",
-        "url": "https://auremcto.com/pricing",
-        "description": "498 of 500 founder spots remaining. $9/month flat — no token billing, no per-seat pricing, unlimited repos."
-      },
-      "featureList": [
-        "Autonomous code writing and direct GitHub commits via REST API",
-        "Vanguard 2.0 pre-commit security scan — 25 base patterns + 13 deep-mode rules + 3 chain-detection rules (Iter 212m-66 two-round mode)",
-        "AI Remediation Report — auto-generates exact fix diffs with per-finding pr_ready flag and weighted risk score 0-100",
-        "Auto draft Pull Request with the security report on a vanguard/auto-fix-{ts} branch (never force-merges)",
-        "Codebase Health Dashboard — six-category 0-100 score (Security, Performance, Code Quality, Dependencies, Database, Bug Hunt) with dramatic urgency UI",
-        "Bug Hunt scanner — 50+ Nuclei-template-inspired static rules (Iter 212m-73) covering leaked secrets, RCE primitives, exposed admin endpoints, and CVE-vulnerable dependencies",
-        "Hardcoded secret detection across 15 cloud providers (AWS access keys, GCP API keys, Stripe live keys, SendGrid, Slack, GitHub PAT/OAuth/App, JWT secrets, Twilio, Azure Storage, private RSA keys)",
-        "Dependency CVE scanner for requirements.txt and package.json (requests/flask/django/pillow/cryptography/urllib3/pyyaml/jinja2/axios/lodash/next with live version comparison)",
-        "Vulnerable code pattern detection — Log4Shell ${jndi:}, eval/exec with user input, pickle.loads, yaml.load, subprocess shell=True, SSRF, SQL f-string, XSS sinks, JWT alg=none, CORS misconfig, weak crypto (MD5/SHA1), insecure cookies",
-        "Exposed endpoint detection — /debug, /admin, /actuator, /metrics, leaky /health, API keys in URL, stack traces returned to client, DEBUG=True in production, Swagger in prod, CORS allow_origins=['*']",
-        "One-click commit Rollback — two-step confirm, git revert semantics, never force-push, full history preserved, PAT scrubbed from all error logs",
-        "Loop Mode — five-phase verified pipeline (Plan → Execute → Verify → Security Scan → Ship) with Mongo-persisted state machine and G1-G5 reliability (resume, backup, rollback)",
-        "Self-healing verifier (ruff + eslint subprocess, up to 3 auto-retries, user-pause on persistent failure)",
-        "Six AI execution modes — Swift (DeepSeek V3), Pro (Claude Sonnet 4.5), Maxx (two-agent parallel + Claude reviewer), Mode D (Debug), Mode E (Audit), Mode F (Engage/Market)",
-        "4-hop LLM fallback chain — OpenRouter → DeepSeek → OpenRouter Free → Groq emergency. Never goes down on single-provider outages",
-        "ORA Council self-learning — every interaction across 5 modes logged for per-codebase fine-tuning",
-        "Project Brain memory layer with TF-IDF retrieval injected on every chat turn",
-        "Repo Indexing — single-call deterministic CODEBASE.md generation (zero LLM cost)",
-        "Repo Context Injector — top-10 priority files inlined (15 KB budget) plus full tree of all files",
-        "GitHub Issues Context — auto-pulls relevant open issues into the prompt",
-        "Vanguard Skill Injector — auto-attaches PCI Compliance and Privacy-by-Design skill cards on Stripe/GDPR tasks",
-        "MarkItDown file upload — PDF, DOCX, XLSX, PPTX, images, code, CSV auto-converted to markdown (25 MB cap, 60K char output cap)",
-        "Vision OCR — paste an image, ORA reads the text and code from it",
-        "URL fetching in chat — up to 5 URLs per prompt, parallel fetch with SSRF guard (blocks loopback, private IPs, link-local)",
-        "/diagram chat command — Mermaid.js ERD/sequence/class/flowchart rendered inline as SVG",
-        "Live Preview Panel — split-pane chat ↔ iframe (Bolt-style) with the connected project's running site as the first tab",
-        "Two-Agent Maxx mode — Claude Sonnet 4.5 writes + parallel verify before commit",
-        "Customer Ship Wall — public commit feed with live admin updates (social proof + virality)",
-        "ORA Wrapped — Spotify-style yearly developer stats (tasks shipped, agents used, time saved)",
-        "4-tier Stripe subscription pricing — Founder $9 / Starter / Pro / Team — with live Stripe prices and webhook-driven idempotent tier flip",
-        "Founder Offer — atomic 500-spot decrement (no over-allocation under concurrent claims), 3-per-user cap, dry-run preview before confirm",
-        "Hard token enforcement — budget-cap check before AI runs, with admin manual top-up grants",
-        "Automations — user-defined GitHub webhook triggers with batched $in project lookups",
-        "AES-GCM PAT encryption at rest with per-tenant master key (HKDF-Fernet)",
-        "NoSQL injection ASGI middleware ($where operator blocked at the request boundary)",
-        "MCP 2.4 server — works with Claude Desktop, Cursor, VS Code, Ollama, LM Studio",
-        "F12 browser error auto-capture — console.error / fetch / XHR failures forwarded to the next chat turn",
-        "Live system map at /feature-window — every route, collection, integration health, and Loop session in one view",
-        "9-tab admin command centre — Dashboard, Users, Projects, Tasks, Token P&L, Payments, Support Inbox, Architecture, Settings",
-        "Daily Digest email at 06:00 UTC — new users, tasks done/failed, AI cost, top failed sample (via Resend, ora@aurem.live)",
-        "Onboarding nudge emails — founder-signed at 24 h + 72 h retry, idempotent via onboarding_emails audit log",
-        "Database hardening — 30 MongoDB indexes, Motor connection pool (maxPoolSize=50, minPoolSize=5), 5 N+1 query eliminations, 12 projection optimizations",
-        "PWA installable — full mobile-first PWA manifest with native share/install prompts",
-        "Zero token billing — flat monthly price regardless of LLM consumption",
-        "Privacy-locked — OpenRouter data_collection: deny, code never trains third-party models"
+      "offers": [
+        {
+          "@type": "Offer",
+          "name": "Free",
+          "price": "0",
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock",
+          "url": "https://auremcto.com/pricing",
+          "description": "10 tasks free per month. No credit card required."
+        },
+        {
+          "@type": "Offer",
+          "name": "Founder",
+          "price": "9",
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock",
+          "url": "https://auremcto.com/pricing",
+          "description": "$9/month flat — no token metering, no per-seat pricing, unlimited repositories. Limited to the first 500 users."
+        }
       ],
-      "aggregateRating": {
-        "@type": "AggregateRating",
-        "ratingValue": "4.9",
-        "reviewCount": "500",
-        "bestRating": "5",
-        "worstRating": "1"
-      },
+      "featureList": [
+        "Verified 5-phase Loop Mode: Plan (user approval) → Execute → Verify → Scan → Ship (user approval)",
+        "Vanguard pre-commit security scanner — 25 base patterns for SQL/NoSQL injection, hardcoded secrets, XSS, CSRF, path traversal, weak crypto, JWT alg=none and more",
+        "Self-heal on verify failure with a hard 2-attempt cap — no infinite loops, terminal fail surfaces the actual lint/type errors to the user",
+        "One-click rollback — creates a real revert commit on GitHub, never force-pushes, preserves original commit in history",
+        "GitHub OAuth with per-repo scope selection — code stays in the repos you authorize",
+        "MCP 2.4 server — works with Claude Desktop, Claude Code, Cursor, VS Code, and any MCP 2.4 client",
+        "Local mode — point at Ollama, LM Studio or llama.cpp on localhost so repo + prompts never leave your machine",
+        "Repository-level reasoning across Python, JavaScript, TypeScript, Go, Rust, Java, Kotlin, Swift, Ruby, PHP, C, C++",
+        "Flat monthly pricing with no token metering",
+        "Privacy: OpenRouter data_collection: deny — code is not used to train third-party models"
+      ],
       "author":    { "@id": "https://auremcto.com/#organization" },
       "publisher": { "@id": "https://auremcto.com/#organization" },
-      "brand":     { "@type": "Brand", "name": "Aurem" }
+      "brand":     { "@type": "Brand", "name": "AUREM" }
     }
     </script>
 
@@ -330,26 +305,18 @@
       "mainEntity": [
         {
           "@type": "Question",
-          "name": "What is ORA by Aurem?",
+          "name": "What is AUREM?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "ORA is an autonomous AI software engineer built by Aurem. It connects directly to your GitHub repository, reads your codebase, writes production-ready code, runs Vanguard 25-pattern security scans before every commit, and ships code directly to your branches — all without requiring an IDE or token-based billing. ORA works with Claude Desktop, Claude Code, Cursor, VS Code, Ollama, LM Studio, and MCP 2.4."
+            "text": "AUREM is the company. ORA is the product — an autonomous AI engineer that reads your GitHub repo, writes code, runs security scans, and commits directly to your branches. AUREM (Application No. 2492318 with the Canadian Intellectual Property Office) is a trademark of Polaris Built Inc."
           }
         },
         {
           "@type": "Question",
-          "name": "How is ORA different from GitHub Copilot and Cursor?",
+          "name": "Does ORA commit code automatically or do I approve first?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "ORA has three features no competitor offers: (1) Vanguard pre-commit security scan — 25 security patterns checked automatically before any code commits to GitHub. Copilot and Cursor have no equivalent. (2) 4-hop LLM fallback chain — if one AI provider fails, ORA automatically switches to the next, so ORA never goes down. (3) ORA Council self-learning — ORA learns from every interaction and improves over time for your specific codebase. ORA also costs $9/month flat with no token billing, versus Cursor's $20/month and Copilot's $10/month with limited premium requests."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "What is the Vanguard security scan?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Vanguard is ORA's pre-commit security scanner that runs 25 security pattern checks automatically before any code is committed to GitHub. The Iter 212m-66 upgrade added a two-round deep scan that re-scans flagged files with 13 extra rules + ±10-line context, plus a chain-detection rule that escalates compound exploits (e.g. sql_string_format + requests_no_verify in the same file) to CRITICAL. It detects: SQL injection, NoSQL injection, hardcoded secrets and API keys, XSS vulnerabilities, JWT replay attacks, path traversal, insecure deserialization, missing authentication, broken authorization, CSRF vulnerabilities, sensitive data exposure, and more. Critical findings block the commit. High findings warn the developer. After every scan ORA also produces an AI Remediation Report with exact code fixes and can open a draft PR with the report. This means ORA never ships insecure code — a problem that affected Lovable (CVE-2025-48757, April 2026) and 91.5% of AI-generated applications according to Q1 2026 security research."
+            "text": "You approve first. ORA runs a 5-phase Loop — Plan, Execute, Verify, Scan, Ship — and Ship requires your manual click. Nothing lands in your repo until you press Ship, and every ship generates a real commit (not a force-push) that can be rolled back in one click."
           }
         },
         {
@@ -357,71 +324,63 @@
           "name": "How much does ORA cost?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "ORA costs $9/month flat — no token billing, no per-seat pricing, unlimited repositories. This makes ORA 55% cheaper than GitHub Copilot ($10/month with limited premium requests) and 55% cheaper than Cursor ($20/month). Devin, a comparable autonomous AI engineer, costs $500/month — ORA is 98% cheaper. ORA offers 498 of 500 founder spots at the $9 price. 10 free tasks are available with no credit card required."
+            "text": "ORA starts at $9/month flat, and there are 10 tasks free with no credit card. The $9 plan has no token metering and no per-seat pricing — the same monthly price whether ORA runs 5 tasks or 500. Founder pricing is limited to the first 500 users; check the pricing page for the current spots-remaining count."
           }
         },
         {
           "@type": "Question",
-          "name": "What is ORA's Loop Mode?",
+          "name": "What happens if ORA can't verify a change?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "ORA Loop Mode is a verified execution system where every task goes through 5 phases: (1) Plan — ORA shows exactly what it will do and waits for user approval. (2) Execute — files are written one at a time with live progress shown. (3) Verify — ruff/eslint runs after every file, auto-retry up to 3 times on failure. (4) Security Scan — Vanguard 25-pattern scan runs automatically. (5) Ship — commit only after all steps pass. This guarantees production-ready, security-verified code. No other AI coding tool offers this verified loop."
+            "text": "ORA self-heals up to 2 times, then fails cleanly — no infinite loop. When the verify step (ruff / eslint / type checks) fails, ORA re-writes the file with the actual lint errors as context; if 2 attempts still fail, the loop terminates and shows you the exact ruff/eslint errors and which files failed so you can either fix manually or send a more specific follow-up prompt."
           }
         },
         {
           "@type": "Question",
-          "name": "What IDE does ORA require?",
+          "name": "Do I need an IDE to use ORA?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "ORA requires no IDE. It works entirely through your browser at auremcto.com. ORA connects to your GitHub repository and ships code directly to your branches without you opening an IDE, editor, or terminal. It is also compatible with Claude Desktop, Claude Code, Cursor, VS Code, Ollama, LM Studio, and MCP 2.4 for developers who prefer their existing tools."
+            "text": "No. ORA is a browser app (also installable as a PWA on mobile) and a terminal MCP 2.4 server — no IDE required. If you already live in VS Code, Cursor, Claude Desktop, or Claude Code, ORA has an MCP client for each, but the extension is optional."
           }
         },
         {
           "@type": "Question",
-          "name": "Is ORA secure for production code?",
+          "name": "Can I run ORA locally without internet?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Yes. ORA is the only AI coding tool with mandatory pre-commit security scanning. Every commit goes through Vanguard — 25 security patterns covering OWASP Top 10 and more, plus a two-round deep scan with chain-detection in Iter 212m-66. Competitors like Lovable, Bolt, and Replit have documented security vulnerabilities in their generated code (CVE-2025-48757, April 2026). Research shows 45-62% of AI-generated code contains security vulnerabilities. ORA's Vanguard scan catches and blocks these before they reach your repository, then auto-writes the fix and opens a draft PR for you to review."
+            "text": "Yes, via Local mode. Point ORA at Ollama, LM Studio, or llama.cpp running on localhost, and your repo and prompts never leave the machine. Same MCP tools work; zero cloud inference; runs on air-gapped boxes."
           }
         },
         {
           "@type": "Question",
-          "name": "How does ORA compare to Devin?",
+          "name": "Is my code safe with ORA?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "ORA and Devin are both autonomous AI software engineers, but ORA costs $9/month versus Devin's $500/month — a 98% cost difference. ORA adds Vanguard pre-commit security scanning which Devin lacks. ORA's 4-hop fallback chain ensures it never goes down even when individual AI providers have outages. ORA's self-learning system improves over time for your specific codebase through the ORA Council."
+            "text": "ORA reads only the GitHub repos you explicitly authorize via GitHub OAuth. Inferences route through OpenRouter with data-collection: deny (code is not used to train third-party models); if you use Local mode nothing leaves your machine. Full data export is available anytime from Settings."
           }
         },
         {
           "@type": "Question",
-          "name": "What is the Codebase Health Dashboard?",
+          "name": "How is ORA different from GitHub Copilot or Cursor?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "The ORA Codebase Health Dashboard scans your connected GitHub repo across six independent categories and assigns each a 0-100 score plus a combined overall health score: (1) Security — Vanguard's 25-pattern catalogue. (2) Performance — unbounded .to_list, missing pagination, N+1 query detection. (3) Code Quality — large files, large functions, bare except, open TODO/FIXME. (4) Dependencies — vulnerable package versions cross-referenced against a CVE database. (5) Database — Motor pool config, hard caps over 2000 docs, missing TTL indexes. (6) Bug Hunt — 50+ Nuclei-template-inspired deep patterns. Each finding ships with a one-click 'Fix this — N tokens' button that enqueues a real ORA task to patch the issue and open a draft PR. No other AI coding tool offers a six-category health audit on real GitHub repos."
+            "text": "Copilot and Cursor are autocompletes inside your IDE; ORA is an agent outside the IDE. ORA plans the change, writes multi-file diffs, runs Vanguard security patterns before every commit, and commits directly to GitHub — you never open an editor, and there is no copy-paste step."
           }
         },
         {
           "@type": "Question",
-          "name": "What is ORA's Bug Hunt scanner?",
+          "name": "What languages does ORA support?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Bug Hunt is the deep static-analysis layer of ORA's Codebase Health Dashboard (Iter 212m-73), inspired by ProjectDiscovery's Nuclei template catalogue but adapted to run at commit time against source code instead of HTTP targets. It runs 50+ pure-regex rules across four families: (a) 15 secret patterns covering AWS access keys, GCP API keys, Stripe live secrets, SendGrid API keys, Slack tokens, GitHub PAT/OAuth/App tokens, hardcoded JWT secrets, Azure Storage keys, Twilio API keys, private RSA/EC/PGP key blocks; (b) 20 vulnerable code patterns including Log4Shell ${jndi:}, eval()/exec() with user input, pickle.loads, yaml.load, subprocess(shell=True), SSRF, SQL f-string injection, weak crypto (MD5/SHA1), JWT alg=none, CORS misconfig with credentials, dangerouslySetInnerHTML, .innerHTML assignment, insecure cookies; (c) 10 exposed endpoint patterns including /debug, /admin without auth, /actuator, /metrics, leaky /health, API keys in URL, stack traces returned to client, DEBUG=True in production, Swagger in prod, CORS allow_origins=['*']; (d) 11 known-vulnerable dependency versions cross-referenced against CVE database for requests, flask, django, pillow, cryptography, urllib3, pyyaml, jinja2, axios, lodash, next. Every finding ships with a fix hint, severity ranking (critical/high/medium/low), and a one-click 'Fix — 8 tokens' button. GitHub Copilot, Cursor, and Lovable have no equivalent — Bug Hunt is unique to ORA."
+            "text": "Python, JavaScript, TypeScript, Go, Rust, Java, Kotlin, Swift, Ruby, PHP, C, and C++. Repository-level reasoning works across stacks; test scaffolds are auto-included when ORA generates new modules."
           }
         },
         {
           "@type": "Question",
-          "name": "Can ORA undo a bad commit?",
+          "name": "Can I roll back a shipped commit?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Yes. Every ORA task that successfully ships gets a one-click Rollback button on the task card. Clicking it requires two confirmation prompts (the first explains git revert semantics, the second is the final yes/no). On confirmation, ORA opens the repo via the GitHub REST API, runs git revert against the commit (with fallback to plain revert for non-merge commits), and pushes the result as a new commit to the same branch. ORA never force-pushes and never deletes commits — full git history is always preserved. PATs are scrubbed from every log line and error message. This is unique among AI coding tools — Cursor, Copilot, and Devin require the developer to manually undo their AI's commits."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "Does ORA support file uploads (PDF, DOCX, images)?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Yes. ORA's chat composer accepts uploads up to 25 MB of any format: PDF, DOCX, XLSX, PPTX, images (PNG/JPG/WebP), CSV, and source code. Microsoft's MarkItDown library auto-converts every upload to clean markdown before passing it to the LLM — this saves token cost and lets ORA actually read binary files. ORA also runs Vision OCR on images for image-to-code workflows (paste a Figma screenshot, get the React component). URLs in chat messages are auto-fetched in parallel (up to 5 per prompt, with SSRF guard blocking loopback and private-IP ranges)."
+            "text": "Yes — one click. The Rollback button on any shipped run creates a new revert commit on GitHub (never a force-push), preserving the original commit in history for audit, and the operation is confirmed via a themed in-app modal (not a native browser dialog)."
           }
         }
       ]

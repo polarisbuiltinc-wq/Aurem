@@ -649,19 +649,43 @@ const COMPARE_ROWS = [
   ["OAuth 2.1 + PKCE for AI clients",       ["yes","Native"], ["no","No"], ["no","No"], ["no","No"], ["yes","Yes"]],
   ["Open source friendly",                  ["yes","MIT extension"], ["no","No"], ["no","No"], ["no","No"], ["no","No"]],
 ];
+// FAQ — Feb 2026 (Iter 362.2 · SEO/AEO refresh).
+// Every answer is written in AEO-optimal "direct-answer-first" format:
+// a 1-2 sentence definitive statement, then elaboration. Every claim
+// traces to VERIFIED product behavior (Loop Mode 5 phases, MAX_SELF_HEALS=2,
+// $9/mo flat, GitHub OAuth scope, Ollama/LM Studio local mode). No
+// aspirational marketing copy — an AI engine citing us verbatim must
+// still be quoting the truth.
 const FAQS = [
-  { q: "Do I need an IDE to use ORA?",
-    a: "No. ORA is a browser/mobile/PWA app and a terminal MCP server. Use it from any device. If you do live in VS Code or Cursor, install the extension — but it's optional." },
+  { q: "What is AUREM?",
+    a: "AUREM is the company. ORA is the product — an autonomous AI engineer that reads your GitHub repo, writes code, runs security scans, and commits directly to your branches. AUREM (Application No. 2492318 with the Canadian Intellectual Property Office) is a trademark of Polaris Built Inc." },
+
+  { q: "Does ORA commit code automatically or do I approve first?",
+    a: "You approve first. ORA runs a 5-phase Loop — Plan → Execute → Verify → Scan → Ship — and Ship requires your manual click. Nothing lands in your repo until you press Ship, and every ship generates a real commit (not a force-push) that can be rolled back in one click." },
+
+  { q: "How much does ORA cost?",
+    a: "ORA starts at $9/month flat, and there are 10 tasks free with no credit card. The $9 plan has no token metering and no per-seat pricing — the same monthly price whether ORA runs 5 tasks or 500. Founder pricing is limited to the first 500 users; check the pricing page for the current spots-remaining count." },
+
+  { q: "What happens if ORA can't verify a change?",
+    a: "ORA self-heals up to 2 times, then fails cleanly — no infinite loop. When the verify step (ruff / eslint / type checks) fails, ORA re-writes the file with the actual lint errors as context; if 2 attempts still fail, the loop terminates and shows you the exact ruff/eslint errors and which files failed so you can either fix manually or send a more specific follow-up prompt." },
+
+  { q: "Do I need an IDE?",
+    a: "No. ORA is a browser app (also installable as a PWA on mobile) and a terminal MCP 2.4 server — no IDE required. If you already live in VS Code, Cursor, Claude Desktop, or Claude Code, ORA has an MCP client for each, but the extension is optional." },
+
+  { q: "Can I run ORA locally without internet?",
+    a: "Yes, via Local mode. Point ORA at Ollama, LM Studio, or llama.cpp running on localhost, and your repo + prompts never leave the machine. Same MCP tools work; zero cloud inference; runs on air-gapped boxes." },
+
+  { q: "Is my code safe with ORA?",
+    a: "ORA reads only the GitHub repos you explicitly authorize via GitHub OAuth. Inferences route through OpenRouter with data-collection: deny (code is not used to train third-party models); if you use Local mode nothing leaves your machine. Full data export is available anytime from Settings." },
+
   { q: "How is ORA different from GitHub Copilot or Cursor?",
-    a: "Copilot and Cursor are autocompletes inside an IDE. ORA is an agent that lives outside the IDE — it reads your repo, plans the change, writes the code, runs security checks, and commits. You never copy-paste." },
-  { q: "Can I run ORA locally on my PC without internet?",
-    a: <>Yes — that&apos;s the <b>Local</b> mode. Point ORA at Ollama / LM Studio / llama.cpp on localhost. Your repo and prompts never leave your machine. Same MCP tools, zero cloud inference. Works on air-gapped boxes.</> },
-  { q: "Which MCP clients does ORA support?",
-    a: <><b>All of them.</b> Claude Desktop, Claude Code, Cursor, VS Code (via extension), any client that speaks MCP 2.4 Streamable HTTP. Native OAuth 2.1 + PKCE for the Claude Directory listing.</> },
-  { q: "Is my repo code safe with ORA?",
-    a: "ORA reads what you authorize via GitHub OAuth, scoped to the repos you select. Inferences go through OpenRouter (audit-logged) — or stay on your box if you use Local mode. No prompt-training opt-in. Full data export anytime." },
+    a: "Copilot and Cursor are autocompletes inside your IDE; ORA is an agent outside the IDE. ORA plans the change, writes multi-file diffs, runs Vanguard security patterns before every commit, and commits directly to GitHub — you never open an editor, and there's no copy-paste step." },
+
   { q: "What languages does ORA support?",
-    a: "Python, JavaScript / TypeScript, Go, Rust, Java, Kotlin, Swift, Ruby, PHP, C/C++. Repository-level reasoning across stacks. Test scaffolds auto-included." },
+    a: "Python, JavaScript, TypeScript, Go, Rust, Java, Kotlin, Swift, Ruby, PHP, C, and C++. Repository-level reasoning works across stacks; test scaffolds are auto-included when ORA generates new modules." },
+
+  { q: "Can I roll back a shipped commit?",
+    a: "Yes — one click. The Rollback button on any shipped run creates a new revert commit on GitHub (never a force-push), preserving the original commit in history for audit, and the operation is confirmed via a themed in-app modal (not a native browser dialog)." },
 ];
 
 export default function Landing() {
