@@ -22,6 +22,11 @@ before being called "done".
 
 ---
 
+## Backlog · Legal / Compliance
+- **MSA (Master Service Agreement)** — save-for-future-build (founder flagged 2026-02-08). Current `terms-of-service.md` covers self-serve; Team/Enterprise deals will need a standalone countersigned MSA + per-customer schedules (pricing, SLA, uptime, indemnity, IP ownership, order forms). DPA + subprocessor list + GDPR/CCPA/DPDP/PIPEDA references are already in place under `/app/frontend/public/policies/`. Suggested trigger: first Enterprise deal or first customer request for a signed MSA.
+
+---
+
 ## Change Log
 
 ### 2026-02-08 · morning — Phase 3 · Two-Layer Intent Router ✅
