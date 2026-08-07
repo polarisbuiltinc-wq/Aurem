@@ -2217,6 +2217,46 @@ async def health_ora_breaker():
     return {"ok": not bs["open"], "breaker": bs}
 
 
+# ── Iter 386 · Session 2 · Part 0 — Rate-limiter health probe ──────────
+#
+# UNAUTHENTICATED, cheap, no upstream call. Returns whether the
+# Redis-shared rate limiter is active on THIS pod. Founder + on-call
+# use it after every deploy to independently verify the multi-pod fix
+# is live without needing to run a full 400-request burst test.
+#
+# Contract:
+#   200 OK
+#   {
+#     "backend":       "redis" | "in_memory",
+#     "redis_active":  true | false,
+#     "redis_url_set": true | false,   # whether REDIS_URL env is present
+#     "global_ceiling_per_min": <int>
+#   }
+#
+# If `backend == "in_memory"` on prod → alert: Redis unreachable from
+# this pod → multi-pod gap is back. Escalate to Emergent Support.
+@app.get("/api/aurem-dev/health/rate-limiter", tags=["Health"])
+async def health_rate_limiter():
+    """Return the rate-limiter backend state. Zero upstream calls;
+    just reads local module state. Intended for post-deploy verify
+    and for external monitors that want to catch a silent regression
+    to the multi-pod-vulnerable in-memory fallback."""
+    from services.rate_limiter import (
+        _ensure_redis, redis_backend_active,
+    )
+    # Force a lazy connect so the FIRST hit after boot flips the
+    # state accurately. Subsequent calls are a memoised no-op.
+    await _ensure_redis()
+    redis_url_set = bool((os.environ.get("REDIS_URL") or "").strip())
+    active = redis_backend_active()
+    return {
+        "backend":       "redis" if active else "in_memory",
+        "redis_active":  active,
+        "redis_url_set": redis_url_set,
+        "global_ceiling_per_min": _GLOBAL_RL_PER_MIN,
+    }
+
+
 # Iter 140 — Versioned health endpoint. Stable contract for v1 API
 # consumers (mobile apps, third-party integrations) so /api/health
 # stays free to evolve. Pings MongoDB so callers can distinguish a

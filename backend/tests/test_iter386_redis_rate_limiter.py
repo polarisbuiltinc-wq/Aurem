@@ -221,3 +221,41 @@ class TestInMemorySyncPath:
         key = "test:sync:legacy"
         results = [check_rate_limit(key, 3) for _ in range(5)]
         assert results == [True, True, True, False, False]
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 5) Health endpoint contract — /api/aurem-dev/health/rate-limiter
+# ══════════════════════════════════════════════════════════════════════
+class TestHealthEndpointContract:
+    """Regression guard for the shape of the health probe. If ANY
+    field changes, the founder's post-deploy verification script will
+    silently break — this test light lights up first."""
+
+    async def test_response_shape(self, redis_url):
+        # Exercise the endpoint via the shipped handler directly so
+        # this test doesn't need FastAPI's full app boot.
+        from main import health_rate_limiter
+        result = await health_rate_limiter()
+        assert set(result.keys()) == {
+            "backend", "redis_active",
+            "redis_url_set", "global_ceiling_per_min",
+        }, f"unexpected keys: {set(result.keys())}"
+        assert result["backend"] == "redis"
+        assert result["redis_active"] is True
+        assert result["redis_url_set"] is True
+        assert isinstance(result["global_ceiling_per_min"], int)
+        assert result["global_ceiling_per_min"] > 0
+
+    async def test_reports_in_memory_when_redis_missing(self, monkeypatch):
+        monkeypatch.delenv("REDIS_URL", raising=False)
+        # Reset connection state so the endpoint's `_ensure_redis` call
+        # re-evaluates the freshly-cleared env.
+        import services.rate_limiter as rl
+        rl._REDIS_CLIENT = None
+        rl._REDIS_TRIED = False
+        rl._REDIS_BACKEND_ACTIVE = False
+        from main import health_rate_limiter
+        result = await health_rate_limiter()
+        assert result["backend"] == "in_memory"
+        assert result["redis_active"] is False
+        assert result["redis_url_set"] is False

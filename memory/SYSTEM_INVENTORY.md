@@ -743,3 +743,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `loop_run_log kind='doc'` — auto-detected in backend/routers/ora_chat.py (verify) [Iter 0, 2026-08-07T15:59:02.254627Z] <!-- inv:loop_run_log_kind:doc -->
 - `services/bg_safe.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-07T21:00:54.456179Z] <!-- inv:service:services/bg_safe.py -->
 - `GLOBAL_RATE_LIMIT_PER_MIN` — auto-detected in backend/tests/test_iter386_global_rate_limit.py (verify) (default: unset) [Iter 0, 2026-08-07T21:59:35.058676Z] <!-- inv:envvar:GLOBAL_RATE_LIMIT_PER_MIN -->
+- `REDIS_URL` — auto-detected in backend/tests/test_iter386_redis_rate_limiter.py (verify) (default: unset) [Iter 0, 2026-08-07T22:44:26.506308Z] <!-- inv:envvar:REDIS_URL -->
