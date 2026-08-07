@@ -30,7 +30,7 @@ before being called "done".
 Founder-requested 13-layer audit. Green layers are solid; the items below are the amber/red gaps to schedule.
 
 ### P0 — Cost / Continuity Bombs
-- **[Layer 9] SlowAPI not wired to FastAPI app.** `slowapi==0.1.9` is in `backend/requirements.txt` and `rate_limits` Mongo collection exists, but no `Limiter()` is bound in `backend/main.py`. Only DB-counter throttling exists today; per-IP burst limits absent. One motivated attacker can hammer `/message` and drain the OpenRouter budget in minutes. Estimated fix: 2h. Trigger: ASAP after Phase 5 prod-verify (before any public launch).
+- **[Layer 9] Rate-limiting reality check (updated 2026-02-08 evening).** Hand-rolled `services/rate_limiter.py` protects **10 endpoints total** — legacy: `/ora-chat/message`, `/chat`, `/auth/login`, `/cto-projects/submit`; new (added this session): `/ora-chat/preview-scan`, `/intent-classify`, `/upload`, `/image-generate` (tight 6/min pre-OpenAI), `/image-status`. `slowapi==0.1.9` is installed but unused — hand-rolled path chosen deliberately (see Iter 45 comment). **Remaining gap**: no global middleware default, so any new endpoint added in future MUST remember to call `check_rate_limit(...)` — otherwise it starts unprotected. Consider adding a `@rate_limited` decorator or a middleware-level default when convenient.
 - **[Layer 7] Save-to-GitHub sync broken post-`git filter-repo`.** 3rd recurrence — Emergent Platform-side issue. Blocked on Emergent Support. Founder cannot push to own repo. Escalation path: support ticket.
 - **[Layer 7] Deploy pipeline frontend-lag pattern.** Founder observed 3× across Phase 2 / Phase 3 / Phase 4: the same deploy request ships backend routes correctly but the frontend bundle for that phase's UI changes is *sometimes* absent on the first prod hit. Confirmed cases:
     · Phase 2 · HIGH-severity click-through gate — first prod deploy shipped without the gate; second deploy fixed it (no code diff).
@@ -54,6 +54,23 @@ Founder-requested 13-layer audit. Green layers are solid; the items below are th
 
 ### ✅ Green (Do NOT touch)
 Backend arch, LLM routing, Vanguard scanner, Phase 1-4 chat surface, tier-gated upload, iframe sandbox contract, JWT+bcrypt auth, PAT encryption, test suite (47 pytest + 22 vitest).
+
+## Backlog · Error-Handling Pipeline (2026-02-08 audit — founder-scoped)
+
+Founder brief (2026-02-08): "split error handling into two layers — public clean message + private full stack trace; catch at every boundary; automated tests; searchable log pipeline." Items 1 (BG-task safety) and 3 (Stripe post-signature alert) are the current focused-session build. The rest are logged here.
+
+### P1 — Boundary Safety (do soon)
+- **Item 1 · BG-task safety wrapper.** FastAPI `BackgroundTasks` silently swallow exceptions. Callers in `admin_qa.py`, `suggestions.py`, `supabase.py`, `loop.py`, `user_rollback.py` need each task body wrapped in `try/except Exception → logger.exception + sentry_sdk.capture_exception` OR (better) a shared `_safe_bg(fn)` decorator in `services/bg_safe.py`. Effort: 2h. **Session-in-progress**.
+- **Item 3 · Stripe post-signature failure alert path.** `payments.py` webhook currently: signature-verify → 400 on failure (good), but downstream DB-writeback (e.g. tier upgrade after `checkout.session.completed`) uses only the generic 500 handler. A silently-failed upgrade means a paid customer doesn't get their tier flipped, and no dedicated alert fires. Add a `try/except` wrapper with `sentry_sdk.set_tag("event", "stripe_upgrade_failed")` + optional Slack/email hook. Effort: 2h. **Session-in-progress**.
+
+### P2 — Observability (do later)
+- **Item 2 · Client-side error telemetry endpoint.** Frontend crashes today are invisible server-side. Build `POST /api/telemetry/client-error` (admin-visible, rate-limited); frontend `window.onerror` + React error boundary posts `{stack, session_id, route, user_agent, viewport, timestamp}` to it. Paired with Item 6. Effort: 3h.
+- **Item 5 · Loop engine phase-tagged Sentry breadcrumbs.** `services/loop_engine.py` transitions between phases (plan → execute → verify → …). Failures within a phase log to Mongo `dev_events` but not tagged in Sentry. Add `sentry_sdk.set_tag("phase", current_phase)` at each transition so Sentry issues auto-group by phase. Effort: 1h.
+- **Item 6 · React error boundary at App root.** Wrap `App.jsx` with `<ErrorBoundary>` that catches render/lifecycle exceptions and POSTs to Item 2's endpoint. Effort: 2h.
+- **Item 7 · Property/fuzz test for structured error payload.** Hypothesis-style test — random inputs into every 4xx-raising endpoint MUST always return JSON with `error` + `message` keys, never a raw prose string. Effort: 3h.
+
+### P3 — Gated on Paying-Customer Revenue (do NOT proceed without founder sign-off)
+- **Item 4 · Aggregated log search (Loki / Datadog / Better Stack / OpenSearch).** Currently Sentry for errors + Emergent platform logs for tail-only. A proper aggregator adds recurring external cost — **not approved right now, revisit once paying-customer scale justifies it** (founder brief 2026-02-08). Same policy as `[Layer 12]` in the infra audit — merged with that item conceptually.
 
 ## Backlog · Phase 5.1 · Image-Bypass Regex Length Cap
 - **Symptom** (founder-flagged 2026-02-08, non-blocking): The `IMG_DATA_URI_RE` in `ImageGenBubbleContent` (`frontend/src/pages/OraDirect.jsx`) accepts an unbounded base64 payload — `[A-Za-z0-9+/=\r\n]+` has no upper length. A pathological input flagged with `imageGen:true` (would already require bypassing layers ① + ②) could theoretically hang the render on regex backtracking.
