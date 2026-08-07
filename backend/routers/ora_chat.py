@@ -1246,3 +1246,72 @@ async def canary_runs(limit: int = 10,
     cursor = db.ora_canary_runs.find({}, {"_id": 0}) \
         .sort("started_at", -1).limit(max(1, min(limit, 50)))
     return {"ok": True, "runs": [row async for row in cursor]}
+
+
+
+# ── Phase 2 · srcdoc-sandbox preview (Iter 212m-264 · Feb 2026) ─────
+# Security contract enforced by this endpoint:
+#   1. 16MB hard cap on submitted code (reject 413 before scanning).
+#   2. Vanguard regex scanner runs on every submission — any CRITICAL
+#      finding blocks the preview render (frontend refuses to build
+#      the srcdoc). HIGH findings are surfaced as warnings but do not
+#      block.  Same policy the Loop pre-push gate uses.
+#   3. Only whitelisted preview langs are ever considered — anything
+#      outside {html, htm, jsx, tsx, js, javascript} short-circuits
+#      with `renderable=false` so the frontend renders code-only.
+#   4. Endpoint is admin-only (require_admin gate) — no anonymous
+#      scanning, so this can't be turned into a public scan-oracle.
+_PREVIEW_MAX_BYTES = 16 * 1024 * 1024   # 16 MB
+_PREVIEW_RENDERABLE = {"html", "htm", "jsx", "tsx", "js", "javascript"}
+
+
+class PreviewScanBody(BaseModel):
+    code: str = Field(..., min_length=0, max_length=_PREVIEW_MAX_BYTES + 1)
+    lang: str = Field(..., min_length=1, max_length=32)
+
+
+@router.post("/preview-scan")
+async def preview_scan(body: PreviewScanBody,
+                       authorization: Optional[str] = Header(None)):
+    """Vanguard-gate the srcdoc preview render path.
+
+    Contract: returns `{ ok, renderable, safe, blockers, warnings }`.
+      - `renderable`: bool — lang is in the whitelist.
+      - `safe`:       bool — no CRITICAL findings.  When false, the
+                       frontend MUST refuse to build the srcdoc.
+      - `blockers`:   CRITICAL findings (list[dict], severity/name/line/snippet).
+      - `warnings`:   HIGH / MEDIUM findings — surfaced but non-blocking.
+    """
+    await require_admin(authorization)
+    lang = (body.lang or "").strip().lower()
+    code = body.code or ""
+
+    # 16MB cap — reject before we spend regex time.
+    if len(code.encode("utf-8", errors="ignore")) > _PREVIEW_MAX_BYTES:
+        raise HTTPException(413, "code_too_large")
+
+    if lang not in _PREVIEW_RENDERABLE:
+        return {"ok": True, "renderable": False, "safe": False,
+                "blockers": [], "warnings": [],
+                "reason": "lang_not_renderable"}
+
+    # Pick a filepath extension the scanner recognises so its
+    # code-only rules (innerHTML, dangerouslySetInnerHTML) actually fire.
+    _ext_map = {"html": ".html", "htm": ".html",
+                "jsx": ".jsx", "tsx": ".tsx",
+                "js": ".js", "javascript": ".js"}
+    fake_path = f"ora_preview{_ext_map[lang]}"
+
+    from services.vanguard_scanner import scan_text
+    findings = scan_text(code, filepath=fake_path, include_dangerous=True)
+
+    blockers = [f for f in findings if f.get("severity") == "CRITICAL"]
+    warnings = [f for f in findings if f.get("severity") in ("HIGH", "MEDIUM")]
+
+    return {
+        "ok": True,
+        "renderable": True,
+        "safe": len(blockers) == 0,
+        "blockers": blockers,
+        "warnings": warnings,
+    }

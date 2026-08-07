@@ -24,6 +24,37 @@ before being called "done".
 
 ## Change Log
 
+### 2026-02-07 · evening — Phase 2 · Security-Hardened `srcdoc` Preview ✅
+
+**Deliverable:** Founder can hit "▶ Preview" on any ORA reply containing a renderable code block (`html/htm/jsx/tsx/js`) → sandboxed drawer slides in from the right, renders the code inside a locked-down iframe, with a Vanguard-scan gate in front of every render.
+
+**Security contract enforced end-to-end:**
+1. `sandbox="allow-scripts"` ONLY — never combined with `allow-same-origin`. Preview code can't touch parent cookies/storage/DOM. Locked in vitest.
+2. Strict CSP `<meta http-equiv>` injected into every srcdoc: `default-src 'none'; script-src 'unsafe-inline' https://unpkg.com; style-src 'unsafe-inline'; img-src data: https:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';`. Vitest asserts CSP + `connect-src 'none'` are always present.
+3. 300ms debounce on srcdoc rebuild + Vanguard scan. Vitest verifies no POST fires before the timer elapses.
+4. 16MB hard cap enforced client-side (never round-trips the payload) AND server-side (returns HTTP 413). Vitest verifies oversized payload never hits `api.post`.
+5. Every render blocked by `POST /api/aurem-dev/ora-chat/preview-scan` — CRITICAL Vanguard findings collapse `safe=false` and refuse render; HIGH/MEDIUM surface as non-blocking warning banner.
+
+**Backend:**
+- `backend/routers/ora_chat.py::preview_scan` — new `POST /preview-scan` endpoint, admin-gated, reuses shared `services.vanguard_scanner.scan_text` (same regex sweep as the pre-push gate — no bespoke rules → no drift), whitelist of renderable langs, 16MB cap.
+
+**Frontend:**
+- `frontend/src/components/OraPreviewPanel.jsx` — self-contained drawer, `useDebounced()` helper (starts empty so first mount honours the 300ms window), scan-state UI (scanning / warnings / blocked / error banners), Preview↔Code toggle, findings footer, trust footer.
+- `frontend/src/pages/OraDirect.jsx` — `findRenderableBlock()` markdown fence detector (first `html|htm|jsx|tsx|js|javascript` fence wins), "▶ Preview {LANG}" chip below the assistant bubble (hidden while streaming), state lifted to `ChatShell` so multiple bubbles can share one drawer.
+
+**Tests (all green):**
+- `frontend/src/components/__tests__/OraPreviewPanel.phase2_security.test.jsx` — 5 tests: sandbox exactness, CSP presence, debounce respected, CRITICAL blocker refuses render, 16MB cap short-circuits before network.
+- `backend/tests/test_iter212m264_ora_preview_scan.py` — 7 tests: admin gate, 16MB constant, lang whitelist, `scan_text` reuse + XSS vectors (`innerHTML_assignment`, `dangerouslySetInnerHTML`) still flagged, clean HTML has no CRITICAL findings.
+- Phase 1 vitest (`OraChat.streamdown_xss.test.jsx`) still 2/2 green — no regression.
+
+**Live smoke on preview:**
+- Prompted ORA for an HTML card snippet → assistant reply carried a fenced `html` code block → "▶ Preview HTML" chip visible → drawer opened → real card ("Aurem Preview Test") rendered inside the sandbox.
+- DOM inspection: `sandbox="allow-scripts"` (exact match, no allow-same-origin), `srcdoc` contains `Content-Security-Policy` + `connect-src 'none'`.
+
+Ready for founder redeploy → prod re-verification.
+
+---
+
 ### 2026-02-07 · afternoon — Phase 1 · Post-Live Findings + Claude-Style Restructure ✅
 
 Founder QA on preview flagged 3 real bugs + a full UI restructure to match Claude.ai's chat aesthetic. Batched into a single Phase 1 close-out pass so the whole surface ships coherent.

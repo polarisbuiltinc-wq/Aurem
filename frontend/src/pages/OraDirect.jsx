@@ -15,12 +15,37 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Lock, Settings, LogOut, ArrowUp, RefreshCw, Zap, Clock, Plus, Square, Copy } from "lucide-react";
+import { Lock, Settings, LogOut, ArrowUp, RefreshCw, Zap, Clock, Plus, Square, Copy, Play } from "lucide-react";
 import { api, setToken, getToken } from "../lib/api";
 import OraChatHouseRulesPanel from "../components/OraChatHouseRulesPanel";
 // Feb 2026 · Phase 1 (Streamdown) — see OraChatDrawer.jsx for the full
 // rationale. XSS-safe defaults, streaming caret, GFM/LaTeX/Mermaid.
 import { Streamdown } from "streamdown";
+// Feb 2026 · Phase 2 — Security-hardened live preview drawer for
+// HTML/JSX/JS code blocks. See OraPreviewPanel.jsx for the full
+// security contract (sandbox=allow-scripts only, strict CSP,
+// Vanguard-gated, 300ms debounce, 16MB cap).
+import OraPreviewPanel from "../components/OraPreviewPanel";
+
+// Iter 212m-264 · Feb 2026 — Renderable code-fence detector.
+// Returns the FIRST renderable ``` fence found in a markdown string
+// (`{ lang, code }`) or null.  We only surface a "Preview" affordance
+// for langs the sandboxed iframe can execute — HTML/JSX/TSX/JS.
+const _RENDERABLE_LANGS = new Set([
+  "html", "htm", "jsx", "tsx", "js", "javascript",
+]);
+function findRenderableBlock(md) {
+  if (!md || typeof md !== "string") return null;
+  const re = /```([a-zA-Z0-9_+-]+)\n([\s\S]*?)```/g;
+  let m;
+  while ((m = re.exec(md)) !== null) {
+    const lang = (m[1] || "").toLowerCase();
+    if (_RENDERABLE_LANGS.has(lang)) {
+      return { lang, code: m[2] || "" };
+    }
+  }
+  return null;
+}
 
 const BASE = `${process.env.REACT_APP_BACKEND_URL}/api/aurem-dev/ora-chat`;
 const PIN_LENGTH = 4;
@@ -224,6 +249,7 @@ const SUGGESTIONS = [
 function ChatShell({ onLogout }) {
   const containerW = useContainerWidth();
   const debug = useDebugMode();
+  const [previewBlock, setPreviewBlock] = useState(null); // {code, lang} | null
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages]   = useState([]);
   const [input, setInput]         = useState("");
@@ -518,11 +544,13 @@ function ChatShell({ onLogout }) {
               <div style={{ maxWidth: containerW.maxW, width: containerW.pct,
                               margin: "0 auto",
                               display: "flex", flexDirection: "column", gap: 28 }}>
-                {messages.map((m, i) => <Bubble key={i} m={m} debug={debug} />)}
+                {messages.map((m, i) => <Bubble key={i} m={m} debug={debug}
+                                                       onOpenPreview={setPreviewBlock} />)}
                 {sending && !stream.buf && <ThinkingDots label={stream.reviewing ? "verifying high-stakes response…" : undefined} />}
                 {stream.buf && (
                   <Bubble m={{ role: "assistant", content: stream.buf,
-                                 ...stream, streaming: true }} debug={debug} />
+                                 ...stream, streaming: true }} debug={debug}
+                          onOpenPreview={setPreviewBlock} />
                 )}
               </div>
             </div>
@@ -547,6 +575,17 @@ function ChatShell({ onLogout }) {
       {/* House rules panel */}
       {showRules && (
         <OraChatHouseRulesPanel onClose={() => setShowRules(false)} />
+      )}
+
+      {/* Iter 212m-264 · Feb 2026 · Phase 2 — Security-hardened live
+          preview drawer.  Slides in from the right when the user
+          clicks "Preview" on an assistant message that contains a
+          renderable code block. See OraPreviewPanel.jsx for the
+          full security contract. */}
+      {previewBlock && (
+        <OraPreviewPanel code={previewBlock.code}
+                          lang={previewBlock.lang}
+                          onClose={() => setPreviewBlock(null)} />
       )}
     </div>
   );
@@ -660,7 +699,7 @@ function InputCard({ input, setInput, onSend, sending, onStop, large = false }) 
   );
 }
 
-function Bubble({ m, debug = false }) {
+function Bubble({ m, debug = false, onOpenPreview }) {
   const isUser = m.role === "user";
   // Iter 212m-258 — copy toggle on bottom-outer of every bubble.
   // 2s "Copied!" flash confirms the clipboard write, then reverts.
@@ -733,6 +772,34 @@ function Bubble({ m, debug = false }) {
             <Streamdown>{m.content || ""}</Streamdown>
           </div>
         )}
+        {/* Iter 212m-264 · Feb 2026 · Phase 2 — Preview affordance.
+            When the assistant message contains a renderable code
+            block (html/jsx/tsx/js), surface a "Preview" chip that
+            opens the sandboxed drawer. Streaming replies hide it
+            until final so we don't scan a half-built payload. */}
+        {!isUser && !m.streaming && onOpenPreview && (() => {
+          const _blk = findRenderableBlock(m.content || "");
+          if (!_blk) return null;
+          return (
+            <div style={{ marginTop: 10 }}>
+              <button type="button"
+                      data-testid="ora-open-preview"
+                      onClick={() => onOpenPreview(_blk)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6,
+                                 padding: "6px 12px", borderRadius: 999,
+                                 background: PAL.accentBg,
+                                 border: `1px solid ${PAL.accent}33`,
+                                 color: PAL.accent, fontSize: 12, fontWeight: 500,
+                                 cursor: "pointer", fontFamily: "inherit",
+                                 transition: "background 120ms" }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = "rgba(224,122,95,0.18)"}
+                      onMouseLeave={(e) => e.currentTarget.style.background = PAL.accentBg}>
+                <Play size={11} />
+                Preview {_blk.lang.toUpperCase()}
+              </button>
+            </div>
+          );
+        })()}
         {!isUser && Array.isArray(m.ungrounded) && m.ungrounded.length > 0 && (
           <div data-testid="ora-grounding-warning"
                style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8,
