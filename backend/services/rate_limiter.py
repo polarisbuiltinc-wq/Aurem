@@ -122,12 +122,33 @@ _REDIS_TRIED = False
 _REDIS_LUA_SHA: str | None = None
 _REDIS_BACKEND_ACTIVE = False   # exposed so tests + observability endpoints
 #                                 can assert we're actually on Redis path
+_REDIS_LAST_ERROR: str | None = None  # last connection-attempt error, for
+#                                       the /health/rate-limiter probe. Never
+#                                       includes credentials (see _redact).
+_REDIS_LAST_ATTEMPT_TS: float | None = None
+_REDIS_HOST_REDACTED: str | None = None  # "host:port" only, no user:pass
+
+
+def _redact_redis_url(url: str) -> str:
+    """Return `host:port` from a redis[s]:// URL without ever exposing
+    user:password. Used by the health probe so on-call can SEE which
+    endpoint the pod is trying to reach without risking a credential
+    leak into logs / Sentry / API responses."""
+    try:
+        from urllib.parse import urlparse
+        p = urlparse(url)
+        host = p.hostname or "?"
+        port = p.port or 6379
+        return f"{host}:{port}"
+    except Exception:
+        return "<unparseable>"
 
 
 async def _ensure_redis():
     """Lazy connect. Returns the aioredis client or None. Never raises —
     Redis outage falls back to in-memory silently."""
     global _REDIS_CLIENT, _REDIS_TRIED, _REDIS_LUA_SHA, _REDIS_BACKEND_ACTIVE
+    global _REDIS_LAST_ERROR, _REDIS_LAST_ATTEMPT_TS, _REDIS_HOST_REDACTED
     if not _ENABLED:
         return None
     url = (os.getenv("REDIS_URL") or "").strip()
@@ -141,6 +162,8 @@ async def _ensure_redis():
         return None
     if _REDIS_CLIENT is not None and _REDIS_BACKEND_ACTIVE:
         return _REDIS_CLIENT
+    _REDIS_LAST_ATTEMPT_TS = time.time()
+    _REDIS_HOST_REDACTED = _redact_redis_url(url)
     try:
         from redis import asyncio as aioredis
         client = aioredis.from_url(
@@ -154,19 +177,27 @@ async def _ensure_redis():
         _REDIS_LUA_SHA = await client.script_load(_RL_LUA)
         _REDIS_CLIENT = client
         _REDIS_BACKEND_ACTIVE = True
+        _REDIS_LAST_ERROR = None
         if not _REDIS_TRIED:
-            logger.info("rate_limiter: Redis backend LIVE — cross-pod "
-                        "shared counter ON (%s)", url.split("@")[-1])
+            logger.info(
+                "rate_limiter: Redis backend LIVE — cross-pod shared "
+                "counter ON (host=%s)", _REDIS_HOST_REDACTED)
             _REDIS_TRIED = True
         return client
     except Exception as e:
         _REDIS_CLIENT = None
         _REDIS_BACKEND_ACTIVE = False
-        if not _REDIS_TRIED:
-            logger.warning(
-                "rate_limiter: Redis unavailable (%s) — falling back to "
-                "per-process in-memory", type(e).__name__)
-            _REDIS_TRIED = True
+        # Capture the FULL error string (type + message) so the health
+        # probe can surface WHY the connection failed. Truncated to
+        # 300 chars so a huge traceback doesn't blow up the JSON.
+        _REDIS_LAST_ERROR = f"{type(e).__name__}: {str(e)[:250]}"
+        # Log every attempt (not just the first) so a Redis flap is
+        # visible in `journalctl -u backend | grep rate_limiter`.
+        logger.warning(
+            "rate_limiter: Redis unavailable at host=%s error=%s — "
+            "falling back to per-process in-memory",
+            _REDIS_HOST_REDACTED, _REDIS_LAST_ERROR)
+        _REDIS_TRIED = True
         return None
 
 
@@ -235,4 +266,16 @@ def redis_backend_active() -> bool:
     Used by pytest + admin /healthz to assert multi-pod protection is
     actually on."""
     return _REDIS_BACKEND_ACTIVE
+
+
+def redis_diag() -> dict:
+    """Return structured diagnostic info for the /health/rate-limiter
+    probe. NEVER returns credentials — only `host:port`, error type,
+    and truncated error message. Safe to expose over public HTTP."""
+    return {
+        "host":              _REDIS_HOST_REDACTED,
+        "last_error":        _REDIS_LAST_ERROR,
+        "last_attempt_ts":   _REDIS_LAST_ATTEMPT_TS,
+        "backend_active":    _REDIS_BACKEND_ACTIVE,
+    }
 

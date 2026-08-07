@@ -238,13 +238,17 @@ class TestHealthEndpointContract:
         result = await health_rate_limiter()
         assert set(result.keys()) == {
             "backend", "redis_active",
-            "redis_url_set", "global_ceiling_per_min",
+            "redis_url_set", "global_ceiling_per_min", "diag",
         }, f"unexpected keys: {set(result.keys())}"
         assert result["backend"] == "redis"
         assert result["redis_active"] is True
         assert result["redis_url_set"] is True
         assert isinstance(result["global_ceiling_per_min"], int)
         assert result["global_ceiling_per_min"] > 0
+        # Diag block on a healthy connection: host present, no error.
+        assert result["diag"]["host"] is not None
+        assert result["diag"]["last_error"] is None
+        assert isinstance(result["diag"]["last_attempt_ts"], float)
 
     async def test_reports_in_memory_when_redis_missing(self, monkeypatch):
         monkeypatch.delenv("REDIS_URL", raising=False)
@@ -259,3 +263,66 @@ class TestHealthEndpointContract:
         assert result["backend"] == "in_memory"
         assert result["redis_active"] is False
         assert result["redis_url_set"] is False
+
+
+class TestConnectionDiagnostics:
+    """Iter 386 · Session 2.6 — prod showed `backend:in_memory` with
+    `redis_url_set:true`; without diag surfacing we had no way to
+    tell whether it was DNS, auth, or firewall. These tests prove
+    the enhanced probe now yields actionable diagnostics."""
+
+    async def test_url_present_but_host_unreachable_surfaces_error(
+            self, monkeypatch):
+        """Simulate the exact prod failure mode — REDIS_URL is set but
+        points at an unreachable host. Diag block MUST carry the
+        error type + message so on-call sees WHY it failed."""
+        monkeypatch.setenv("REDIS_URL",
+                            "redis://192.0.2.1:6379/0")  # RFC 5737 TEST-NET-1
+        import services.rate_limiter as rl
+        # Reset connection cache so the new env is evaluated.
+        rl._REDIS_CLIENT = None
+        rl._REDIS_TRIED = False
+        rl._REDIS_BACKEND_ACTIVE = False
+        rl._REDIS_LAST_ERROR = None
+        rl._REDIS_HOST_REDACTED = None
+        from main import health_rate_limiter
+        result = await health_rate_limiter()
+        # The critical asserts — on-call MUST be able to see this.
+        assert result["backend"] == "in_memory"
+        assert result["redis_active"] is False
+        assert result["redis_url_set"] is True  # url IS present
+        assert result["diag"]["host"] == "192.0.2.1:6379"
+        assert result["diag"]["last_error"] is not None
+        # Whatever the specific error, on-call gets a real string,
+        # not just "in_memory" with no explanation.
+        assert len(result["diag"]["last_error"]) > 10
+
+    async def test_redact_never_leaks_credentials(self):
+        """The diag `host` field must never contain user:password even
+        if the caller put credentials in REDIS_URL."""
+        from services.rate_limiter import _redact_redis_url
+        redacted = _redact_redis_url(
+            "redis://user:secret-password@redis.internal:6379/0")
+        assert redacted == "redis.internal:6379"
+        assert "user" not in redacted
+        assert "secret-password" not in redacted
+
+    async def test_redact_handles_rediss_scheme(self):
+        """TLS variant `rediss://` is a common pattern for managed
+        Redis (Upstash, Redis Cloud). Redaction still works."""
+        from services.rate_limiter import _redact_redis_url
+        redacted = _redact_redis_url(
+            "rediss://default:token@some.upstash.io:38612")
+        assert redacted == "some.upstash.io:38612"
+        assert "token" not in redacted
+
+    async def test_redact_unparseable_input_never_raises(self):
+        """Garbage input to _redact_redis_url must NOT explode — the
+        health probe would 500 and hide the very problem it exists
+        to surface."""
+        from services.rate_limiter import _redact_redis_url
+        # Whatever the exact fallback, it MUST be a string and MUST
+        # NOT raise.
+        for garbage in ("", "not-a-url-at-all", "://broken"):
+            r = _redact_redis_url(garbage)
+            assert isinstance(r, str) and len(r) > 0

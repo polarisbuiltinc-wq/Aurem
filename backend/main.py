@@ -2242,18 +2242,28 @@ async def health_rate_limiter():
     and for external monitors that want to catch a silent regression
     to the multi-pod-vulnerable in-memory fallback."""
     from services.rate_limiter import (
-        _ensure_redis, redis_backend_active,
+        _ensure_redis, redis_backend_active, redis_diag,
     )
     # Force a lazy connect so the FIRST hit after boot flips the
     # state accurately. Subsequent calls are a memoised no-op.
     await _ensure_redis()
     redis_url_set = bool((os.environ.get("REDIS_URL") or "").strip())
     active = redis_backend_active()
+    diag = redis_diag()
     return {
         "backend":       "redis" if active else "in_memory",
         "redis_active":  active,
         "redis_url_set": redis_url_set,
         "global_ceiling_per_min": _GLOBAL_RL_PER_MIN,
+        # Iter 386 · Session 2.6 — surface CONNECTION DIAGNOSTICS so
+        # on-call can distinguish "URL not set" from "URL set but
+        # host unreachable" without shelling into the pod. Never
+        # contains credentials — `host` is host:port only.
+        "diag": {
+            "host":            diag["host"],           # e.g. "127.0.0.1:6379"
+            "last_error":      diag["last_error"],     # e.g. "ConnectionError: ..."
+            "last_attempt_ts": diag["last_attempt_ts"],
+        },
     }
 
 
