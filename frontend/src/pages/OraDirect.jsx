@@ -987,8 +987,25 @@ function InputCard({ input, setInput, onSend, sending, onStop, large = false,
 // keep the remaining italic quota-line rendered by Streamdown so it
 // still looks like the rest of the chat.
 function ImageGenBubbleContent({ content }) {
-  const m = (content || "").match(/^!\[([^\]]*)\]\((data:[^)]+)\)\n\n?([\s\S]*)$/);
+  // Iter 212m-267b · Feb 2026 — Defense-in-depth on the Streamdown
+  // bypass.  The security envelope is:
+  //   ① `m.imageGen === true` is set ONLY in the /image-generate
+  //      success branch (OraDirect.jsx ~line 415);
+  //   ② the data URL is constructed client-side from `j.mime`, which
+  //      the backend hardcodes to "image/png" (image_gen.py);
+  //   ③ this regex — the LAST line of defence — refuses anything
+  //      that isn't `data:image/(png|jpeg|jpg|webp);base64,…`.
+  //   The three checks together mean: even if a future refactor
+  //   accidentally sets imageGen:true on a malicious message, or the
+  //   backend returns a bad mime, this component still renders
+  //   NOTHING outside the tight image allow-list — falling back to
+  //   Streamdown's full harden for any mismatch.
+  const IMG_DATA_URI_RE =
+    /^!\[([^\]]*)\]\((data:image\/(?:png|jpe?g|webp);base64,[A-Za-z0-9+/=\r\n]+)\)\n\n?([\s\S]*)$/;
+  const m = (content || "").match(IMG_DATA_URI_RE);
   if (!m) {
+    // Any content that doesn't cleanly match `data:image/*;base64,…`
+    // falls back to normal Streamdown-hardened rendering.
     return (
       <div className="ora-md" data-testid="ora-msg-md">
         <Streamdown>{content || ""}</Streamdown>
