@@ -1725,6 +1725,87 @@ async def _route_cache_mw(request, call_next):
     return response
 
 
+# ── Iter 386 · Session 2 · Layer 9 · Global rate-limit safety net ──────
+#
+# Root-cause pattern this fixes: `services/rate_limiter.check_rate_limit`
+# was applied MANUALLY to 10 endpoints (auth login, chat submit, ora
+# Phase 2-5 surface, etc.). Every future endpoint had to REMEMBER to
+# wire it — and the audit that surfaced this session showed Phase 2-5
+# had shipped without protection until it was patched retro-actively.
+# Root-cause is the manual-per-endpoint pattern, not any single miss.
+#
+# This middleware applies a per-IP DEFAULT ceiling to every path so a
+# freshly-added endpoint inherits burst protection automatically. Tight
+# per-endpoint limits still fire on top — the two are complementary, so
+# effectively the STRICTER of {global, per-endpoint} wins.
+#
+# Defaults:
+#   · 300 req/min/IP  — comfortable for legitimate SPA traffic
+#     (multi-tab dashboards + polling routes), well below what any
+#     real user hits, catches script-driven abuse.
+#   · Env override:  GLOBAL_RATE_LIMIT_PER_MIN=<int>
+#   · Global disable: RATE_LIMIT_DISABLED=1  (already honoured by the
+#     underlying primitive — for tests / local dev)
+#
+# Skip-list (paths that MUST NOT be throttled globally):
+#   · Health checks — infra probes hammer these every 5 s.
+#   · SSE streams — one long-lived request; per-request throttle is the
+#     wrong shape (use dedicated per-stream limits instead if needed).
+#   · OPTIONS preflight — CORS. Browsers fire these before every non-
+#     simple request; throttling them breaks UX for no security gain.
+_GLOBAL_RL_SKIP_PREFIXES = (
+    "/api/health",
+    "/api/aurem-dev/health",
+    "/api/chat/stream",
+    "/api/loop/",           # loop SSE paths (/loop/{id}/stream, /events)
+    "/api/aurem-dev/loop/",  # namespace-prefixed variant
+)
+
+
+def _global_rl_should_skip(request) -> bool:
+    """True when this request path is exempt from the global default.
+    Kept as a function (not inline) so the pytest can call it directly
+    to prove the skip semantics without hitting HTTP."""
+    if request.method == "OPTIONS":
+        return True
+    path = request.url.path or ""
+    for pfx in _GLOBAL_RL_SKIP_PREFIXES:
+        if path.startswith(pfx):
+            return True
+    # Streaming paths sometimes appear as `.../stream` or `.../events`
+    # under deeper prefixes — belt+braces suffix check.
+    if path.endswith("/stream") or path.endswith("/events"):
+        return True
+    return False
+
+
+_GLOBAL_RL_PER_MIN = int(os.getenv("GLOBAL_RATE_LIMIT_PER_MIN", "300"))
+
+
+@app.middleware("http")
+async def _global_rate_limit_guard(request, call_next):
+    if _global_rl_should_skip(request):
+        return await call_next(request)
+    ip = client_ip_from_request(request)
+    # Namespaced key so this never collides with per-endpoint limiters
+    # (they use `ora_chat:...`, `login-ip:...`, etc). One shared 60-s
+    # sliding window per IP across ALL of that IP's non-skip requests.
+    if not check_rate_limit(f"global-ip:{ip}", _GLOBAL_RL_PER_MIN):
+        logger.warning(
+            "global_rate_limit_hit ip=%s path=%s limit=%d/min",
+            ip, request.url.path, _GLOBAL_RL_PER_MIN,
+        )
+        return JSONResponse(
+            status_code=429,
+            content={
+                "detail": "Too many requests — global per-IP limit hit",
+                "limit_per_minute": _GLOBAL_RL_PER_MIN,
+            },
+            headers={"Retry-After": "60"},
+        )
+    return await call_next(request)
+
+
 # ── Iter 44 — Global exception handler ──
 # Never leak stack traces. Log full error internally, return a stable
 # 500 envelope to the caller.

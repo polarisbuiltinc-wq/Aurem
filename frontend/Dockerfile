@@ -14,6 +14,21 @@ RUN printf 'server {\n\
   listen 3001;\n\
   root /usr/share/nginx/html;\n\
   index index.html;\n\
+  # Iter 386 · Session 2 · Layer 7 — Deploy-lag mitigation.\n\
+  # Hashed asset files (main.abc123.js, styles.def456.css, etc.) can\n\
+  # be cached aggressively — their filename embeds the content hash,\n\
+  # so a new build creates new filenames. index.html has NO hash in\n\
+  # its own name — it is the SPA entry point that references the\n\
+  # hashed bundles. If a CDN/browser caches index.html across a\n\
+  # deploy, the client is stuck loading OLD bundle refs against a\n\
+  # NEW backend contract — the exact FE-BE lag pattern we hit twice\n\
+  # (Phase 2 + Phase 4). Force revalidation on index.html only.\n\
+  location = /index.html {\n\
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;\n\
+    add_header Pragma "no-cache" always;\n\
+    add_header Expires "0" always;\n\
+    try_files $uri =404;\n\
+  }\n\
   location / {\n\
     try_files $uri $uri/ /index.html;\n\
   }\n\
