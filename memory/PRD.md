@@ -32,6 +32,10 @@ Founder-requested 13-layer audit. Green layers are solid; the items below are th
 ### P0 — Cost / Continuity Bombs
 - **[Layer 9] SlowAPI not wired to FastAPI app.** `slowapi==0.1.9` is in `backend/requirements.txt` and `rate_limits` Mongo collection exists, but no `Limiter()` is bound in `backend/main.py`. Only DB-counter throttling exists today; per-IP burst limits absent. One motivated attacker can hammer `/message` and drain the OpenRouter budget in minutes. Estimated fix: 2h. Trigger: ASAP after Phase 5 prod-verify (before any public launch).
 - **[Layer 7] Save-to-GitHub sync broken post-`git filter-repo`.** 3rd recurrence — Emergent Platform-side issue. Blocked on Emergent Support. Founder cannot push to own repo. Escalation path: support ticket.
+- **[Layer 7] Deploy pipeline frontend-lag pattern.** Founder observed 3× across Phase 2 / Phase 3 / Phase 4: the same deploy request ships backend routes correctly but the frontend bundle for that phase's UI changes is *sometimes* absent on the first prod hit. Confirmed cases:
+    · Phase 2 · HIGH-severity click-through gate — first prod deploy shipped without the gate; second deploy fixed it (no code diff).
+    · Phase 4 · attach button/paperclip — briefly missing when founder first checked prod post-deploy, then confirmed present on a re-check minutes later.
+  Working hypothesis: the deployer race-condition builds the frontend from a stale commit or serves a cached bundle for ~a few minutes after the "deployed" webhook fires. Suggested investigation: run `troubleshoot_agent` against the deploy pipeline to correlate `deploy-completed` timestamps vs when the new frontend hash actually reaches the CDN edge. Not blocking any single feature, but compounds — worth a proper look after the current phase set is done.
 
 ### P1 — Availability / Security Hardening
 - **[Layer 13] No DR runbook, no RTO/RPO documented, no on-call rotation.** Backups exist at Emergent-platform level but restore has never been drilled. Fix: 1 day (draft runbook + verify a real restore into a scratch DB). Trigger: before onboarding first paying Enterprise customer.
