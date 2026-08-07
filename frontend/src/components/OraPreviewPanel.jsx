@@ -42,9 +42,23 @@ const RENDERABLE_LANGS = new Set([
 
 // Iter 212m-264 · Feb 2026 — Strict CSP for the sandboxed preview.
 // `connect-src 'none'` is the anti-exfil hammer.
-const STRICT_CSP =
+// Iter 212m-264 · Feb 2026 — CSP is split per-lang so the supply-chain
+// blast radius stays as small as possible:
+//
+//   HTML / JS previews  → script-src 'unsafe-inline'  (NO external hosts)
+//   JSX / TSX previews  → script-src 'unsafe-inline' https://unpkg.com
+//                          — needed to load React + Babel-standalone
+//                          for at-runtime JSX transpilation.
+//
+// `connect-src 'none'` is the anti-exfil hammer in BOTH variants —
+// even if unpkg were compromised, the payload cannot beacon out.
+// The outer iframe's `sandbox="allow-scripts"` (no allow-same-origin)
+// then keeps everything trapped away from the parent origin.
+//
+// Backlog / P2 improvement: bundle React + Babel into the app's own
+// static assets so JSX previews never hit unpkg at all.
+const _CSP_COMMON =
   "default-src 'none'; " +
-  "script-src 'unsafe-inline' https://unpkg.com; " +
   "style-src 'unsafe-inline'; " +
   "img-src data: https:; " +
   "font-src data:; " +
@@ -52,11 +66,18 @@ const STRICT_CSP =
   "base-uri 'none'; " +
   "form-action 'none'; " +
   "frame-ancestors 'none';";
+const CSP_HTML_JS = "script-src 'unsafe-inline'; " + _CSP_COMMON;
+const CSP_JSX     = "script-src 'unsafe-inline' https://unpkg.com; " + _CSP_COMMON;
+
+function _cspFor(lang) {
+  const l = (lang || "").toLowerCase();
+  return (l === "jsx" || l === "tsx") ? CSP_JSX : CSP_HTML_JS;
+}
 
 function buildSrcDoc(code, lang) {
   const l = (lang || "").toLowerCase();
   const cspMeta =
-    `<meta http-equiv="Content-Security-Policy" content="${STRICT_CSP}">`;
+    `<meta http-equiv="Content-Security-Policy" content="${_cspFor(lang)}">`;
   const baseHead =
     `<meta charset="utf-8">${cspMeta}` +
     `<style>html,body{margin:0;padding:14px;` +
@@ -152,6 +173,16 @@ export default function OraPreviewPanel({ code = "", lang = "", onClose }) {
   const [mode, setMode] = useState("preview");   // 'preview' | 'code'
   const [scan, setScan] = useState({ state: "idle", data: null, err: null });
   const [refreshKey, setRefreshKey] = useState(0);
+  // Iter 212m-264 · Feb 2026 — Founder review flagged that the
+  // original HIGH/MEDIUM banner was easy to miss: the iframe below
+  // built automatically even when Vanguard reported a HIGH-severity
+  // sink (e.g. innerHTML). HIGH findings now require an explicit
+  // acknowledgement click (`ack`) before the srcdoc builds. MEDIUM
+  // findings stay passive (mostly stylistic / informational).
+  const [ack, setAck] = useState(false);
+  // Reset the acknowledgement whenever the code changes so a stale
+  // "Preview anyway" can't carry over to a NEW payload.
+  useEffect(() => { setAck(false); }, [code, lang]);
 
   const codeSize = useMemo(
     () => (code ? new Blob([code]).size : 0),
@@ -192,8 +223,12 @@ export default function OraPreviewPanel({ code = "", lang = "", onClose }) {
   }, [debouncedCode, lang, tooBig, refreshKey]);
 
   const langOk = RENDERABLE_LANGS.has((lang || "").toLowerCase());
+  const highFindings = scan.data?.warnings?.filter(
+    (w) => w.severity === "HIGH") || [];
+  const hasHigh = scan.state === "done" && highFindings.length > 0;
   const canRender = langOk && !tooBig
-    && scan.state === "done" && scan.data?.safe === true;
+    && scan.state === "done" && scan.data?.safe === true
+    && (!hasHigh || ack);
   const srcDoc = useMemo(
     () => (canRender ? buildSrcDoc(debouncedCode, lang) : ""),
     [canRender, debouncedCode, lang]
@@ -254,12 +289,48 @@ export default function OraPreviewPanel({ code = "", lang = "", onClose }) {
           Vanguard scanning preview payload…
         </div>
       )}
-      {scan.state === "done" && scan.data?.safe && (scan.data?.warnings?.length > 0) && (
+      {/* HIGH-severity findings require a click-through ack before
+          the iframe builds — no more passive "banner you can miss". */}
+      {hasHigh && !ack && (
+        <div data-testid="ora-preview-high-ack"
+             style={{ padding: "10px 16px", background: "#FBF1DC",
+                        color: "#7A5A0F", borderBottom: "1px solid #E4C26B",
+                        fontSize: 12, display: "flex", gap: 10,
+                        alignItems: "center", flexWrap: "wrap" }}>
+          <ShieldAlert size={14} />
+          <span style={{ flex: 1, minWidth: 200 }}>
+            <b>{highFindings.length} HIGH-severity</b> finding
+            {highFindings.length === 1 ? "" : "s"} in this code
+            (e.g. <code style={{ fontFamily: "ui-monospace, monospace" }}>
+              {highFindings[0]?.name || highFindings[0]?.rule}
+            </code>). Review the details below before rendering.
+          </span>
+          <button type="button"
+                  data-testid="ora-preview-ack-btn"
+                  onClick={() => setAck(true)}
+                  style={{ padding: "5px 12px", borderRadius: 999,
+                             background: "#7A5A0F", color: "#fff",
+                             border: "none", fontSize: 11, fontWeight: 600,
+                             cursor: "pointer", fontFamily: "inherit" }}>
+            Preview anyway
+          </button>
+        </div>
+      )}
+      {hasHigh && ack && (
+        <div data-testid="ora-preview-high-acked"
+             style={bannerStyle("#FBF1DC", "#8A6512")}>
+          <ShieldAlert size={12} />
+          Rendering with {highFindings.length} HIGH finding
+          {highFindings.length === 1 ? "" : "s"} acknowledged.
+        </div>
+      )}
+      {scan.state === "done" && scan.data?.safe && !hasHigh
+        && (scan.data?.warnings?.length > 0) && (
         <div data-testid="ora-preview-warnings"
              style={bannerStyle("#FBF1DC", "#8A6512")}>
           <ShieldAlert size={12} />
-          {scan.data.warnings.length} non-blocking warning{scan.data.warnings.length === 1 ? "" : "s"} —
-          rendering anyway.
+          {scan.data.warnings.length} MEDIUM-severity note
+          {scan.data.warnings.length === 1 ? "" : "s"} — rendering anyway.
         </div>
       )}
       {scan.state === "done" && scan.data?.safe === false && (

@@ -24,6 +24,30 @@ before being called "done".
 
 ## Change Log
 
+### 2026-02-07 · late-evening — Phase 2 · Security Hardening Follow-up ✅
+
+Founder review flagged two legitimate concerns after the initial Phase 2 build. Both fixed in this pass before prod redeploy.
+
+**Concern A: `unpkg.com` in every CSP was broader than necessary.**
+- HTML and plain-JS previews don't need external scripts — only JSX/TSX does (React + Babel-standalone).
+- Fix: split into two CSPs. `CSP_HTML_JS = "script-src 'unsafe-inline'; …"` (no external hosts). `CSP_JSX = "script-src 'unsafe-inline' https://unpkg.com; …"`. Chosen at srcdoc build time via `_cspFor(lang)`.
+- Supply-chain blast radius: even if unpkg were compromised for a JSX preview, the outer `sandbox="allow-scripts"` (no `allow-same-origin`) + `connect-src 'none'` keeps a malicious payload from touching the parent origin OR beaconing out. Fail-safe: if unpkg is unreachable, the JSX inner try/catch renders `pre.__ora_err` — no execution.
+- Backlog P2: bundle React + Babel into app static assets so unpkg is never hit at all.
+
+**Concern B: HIGH/MEDIUM Vanguard findings were passive — easy to miss.**
+- Fix: HIGH findings now block render behind an explicit "Preview anyway" click-through (`ora-preview-high-ack` + `ora-preview-ack-btn`). Ack state is per-payload — `useEffect(() => setAck(false), [code, lang])` wipes it whenever the code changes so a stale acknowledgement can't carry over to a new payload.
+- MEDIUM findings stay as a passive `ora-preview-warnings` banner (mostly stylistic / informational).
+- The existing CRITICAL-blocker path is unchanged: no bypass, no ack option, refuse.
+
+**Tests:**
+- `OraPreviewPanel.phase2_security.test.jsx` now 8 tests (up from 5): added `HTML previews do NOT allow unpkg`, `JSX previews DO allow unpkg`, `HIGH-severity click-through required`. All green.
+
+**Live smoke on preview:** HTML card render confirmed `HTML_CSP_HAS_UNPKG: False`; DOM inspection of the injected CSP shows `script-src 'unsafe-inline'` with no external host for HTML previews.
+
+Ready for redeploy → founder live-verification on prod → Phase 3 green-light.
+
+---
+
 ### 2026-02-07 · evening — Phase 2 · Security-Hardened `srcdoc` Preview ✅
 
 **Deliverable:** Founder can hit "▶ Preview" on any ORA reply containing a renderable code block (`html/htm/jsx/tsx/js`) → sandboxed drawer slides in from the right, renders the code inside a locked-down iframe, with a Vanguard-scan gate in front of every render.

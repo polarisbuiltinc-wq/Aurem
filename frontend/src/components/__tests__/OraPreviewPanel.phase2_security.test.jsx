@@ -67,6 +67,50 @@ describe("Phase 2 · OraPreviewPanel security contract", () => {
     expect(srcdoc).toContain("frame-ancestors 'none'");
   });
 
+  it("HTML previews do NOT allow unpkg.com in script-src (tighter per-lang CSP)", async () => {
+    render(<OraPreviewPanel code="<h1>hi</h1>" lang="html" onClose={() => {}} />);
+    await advance(400);
+    await advance(50);
+    const srcdoc = document.querySelector('[data-testid="ora-preview-iframe"]')
+      .getAttribute("srcdoc") || "";
+    // HTML preview should have NO external host in script-src.
+    expect(srcdoc).toContain("script-src 'unsafe-inline';");
+    expect(srcdoc.includes("https://unpkg.com")).toBe(false);
+  });
+
+  it("JSX previews DO allow unpkg.com — required for React+Babel transpile", async () => {
+    render(<OraPreviewPanel code="const App = () => <h1>hi</h1>;" lang="jsx"
+                             onClose={() => {}} />);
+    await advance(400);
+    await advance(50);
+    const srcdoc = document.querySelector('[data-testid="ora-preview-iframe"]')
+      .getAttribute("srcdoc") || "";
+    expect(srcdoc).toContain("script-src 'unsafe-inline' https://unpkg.com;");
+  });
+
+  it("HIGH-severity Vanguard findings BLOCK render until user click-through", async () => {
+    api.post.mockResolvedValueOnce({
+      data: {
+        ok: true, renderable: true, safe: true,
+        blockers: [],
+        warnings: [{ name: "innerHTML_assignment", severity: "HIGH",
+                       line: 3, snippet: "el.innerHTML = x" }],
+      },
+    });
+    render(<OraPreviewPanel code="el.innerHTML = x" lang="js"
+                             onClose={() => {}} />);
+    await advance(400);
+    await advance(50);
+    // No iframe yet — waiting for founder ack.
+    expect(document.querySelector('[data-testid="ora-preview-iframe"]')).toBeNull();
+    // Ack banner is up with a clickable "Preview anyway" button.
+    expect(screen.getByTestId("ora-preview-high-ack")).toBeTruthy();
+    const ackBtn = screen.getByTestId("ora-preview-ack-btn");
+    await act(async () => { ackBtn.click(); });
+    // Now the iframe builds.
+    expect(document.querySelector('[data-testid="ora-preview-iframe"]')).not.toBeNull();
+  });
+
   it("does NOT invoke the Vanguard scan until debounce elapses", async () => {
     render(<OraPreviewPanel code="<h1>hi</h1>" lang="html" onClose={() => {}} />);
     // Before 300ms: no POST yet.
