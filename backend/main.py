@@ -1790,6 +1790,15 @@ async def _global_rate_limit_guard(request, call_next):
     # Namespaced key so this never collides with per-endpoint limiters
     # (they use `ora_chat:...`, `login-ip:...`, etc). One shared 60-s
     # sliding window per IP across ALL of that IP's non-skip requests.
+    #
+    # Multi-pod note (2026-02-08): the underlying `_buckets` dict is
+    # PER-PROCESS. In a K8s deployment with N replicas each pod holds
+    # its own bucket, so the effective per-IP ceiling across the fleet
+    # is `_GLOBAL_RL_PER_MIN × N`. This still catches genuine abuse
+    # (any single pod hitting 300/min-per-IP is well above legit
+    # traffic and gets 429'd), but a coordinated multi-pod flood
+    # slips past. Shared-bucket (Redis) or edge-layer (Cloudflare)
+    # rate-limiting is the long-term fix — logged in the ROADMAP.
     if not check_rate_limit(f"global-ip:{ip}", _GLOBAL_RL_PER_MIN):
         logger.warning(
             "global_rate_limit_hit ip=%s path=%s limit=%d/min",
