@@ -736,3 +736,8 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 ### Iter 0 · 2026-08-05
 
 - `DIGEST_FROM` — auto-detected in backend/services/daily_digest.py (verify) (default: unset) [Iter 0, 2026-08-05T04:47:51.748676Z] <!-- inv:envvar:DIGEST_FROM -->
+
+### Iter 0 · 2026-08-07
+
+- `loop_run_log kind='image'` — auto-detected in backend/routers/ora_chat.py (verify) [Iter 0, 2026-08-07T15:59:02.254592Z] <!-- inv:loop_run_log_kind:image -->
+- `loop_run_log kind='doc'` — auto-detected in backend/routers/ora_chat.py (verify) [Iter 0, 2026-08-07T15:59:02.254627Z] <!-- inv:loop_run_log_kind:doc -->

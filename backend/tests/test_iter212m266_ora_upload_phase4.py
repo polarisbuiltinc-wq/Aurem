@@ -37,6 +37,37 @@ class TestUploadContract:
     def test_allowed_tiers_are_exactly_pro_team_founder(self):
         assert '_ORA_UPLOAD_ALLOWED_TIERS = {"pro", "team", "founder"}' in _SRC
 
+    def test_whitelist_is_exactly_png_jpg_webp_pdf(self):
+        # Founder brief (2026-02-08 Phase 4): tighten to these four.
+        # Everything the generic /upload/convert supports (docx/xlsx/
+        # txt/csv/html/gif/bmp/…) must NOT be in this endpoint's list.
+        assert '"image/png"' in _SRC
+        assert '"image/jpeg"' in _SRC
+        assert '"image/webp"' in _SRC
+        assert '"application/pdf"' in _SRC
+        for banned in (
+            '"application/vnd.openxmlformats-officedocument.wordprocessingml.document"',
+            '"text/csv"', '"image/gif"', '"image/bmp"', '"text/html"',
+        ):
+            assert banned not in _SRC, f"disallowed MIME still whitelisted: {banned}"
+
+    def test_disallowed_type_returns_structured_415(self):
+        idx = _SRC.find('@router.post("/upload")')
+        body = _SRC[idx:idx + 5000]
+        assert '415' in body
+        assert '"error":    "file_type_not_allowed"' in body
+        # allowed list must be echoed in the error payload so the
+        # frontend can render a specific toast without parsing prose.
+        assert '"allowed":  ["png", "jpg", "webp", "pdf"]' in body
+
+    def test_both_ext_AND_mime_must_match(self):
+        # Defense-in-depth: a `.jpg` file with a masqueraded MIME
+        # (e.g. text/html) MUST still be refused.  Test the source
+        # asserts an `and` between the two checks.
+        idx = _SRC.find("_ORA_UPLOAD_ALLOWED_EXTS")
+        body = _SRC[idx:idx + 4000]
+        assert "_ext not in _ORA_UPLOAD_ALLOWED_EXTS or _mime not in _ORA_UPLOAD_ALLOWED_MIMES" in body
+
     def test_free_tier_returns_structured_402(self):
         idx = _SRC.find('@router.post("/upload")')
         body = _SRC[idx:idx + 4000]
@@ -65,7 +96,7 @@ class TestUploadContract:
 
     def test_response_shape_matches_upload_convert(self):
         idx = _SRC.find('@router.post("/upload")')
-        body = _SRC[idx:idx + 4000]
+        body = _SRC[idx:idx + 6000]
         # These are the exact keys /upload/convert returns — mirror
         # so the frontend pill uses one code path.
         for key in ('"ok"', '"kind"', '"filename"', '"content_type"',

@@ -895,7 +895,12 @@ function InputCard({ input, setInput, onSend, sending, onStop, large = false,
                    data-testid="ora-file-input"
                    onChange={onPick}
                    style={{ display: "none" }}
-                   accept=".png,.jpg,.jpeg,.webp,.gif,.bmp,.pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.html,image/*" />
+                   /* Iter 212m-266b · Feb 2026 — founder-tightened
+                      Phase 4 whitelist: exactly PNG, JPG, WEBP, PDF.
+                      Server enforces the same set with a 415 on any
+                      mismatch, so this `accept` is a native-UI hint,
+                      not a security boundary. */
+                   accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf" />
             {sending ? (
               <button type="button" onClick={onStop} data-testid="ora-stop"
                       title="Stop generating"

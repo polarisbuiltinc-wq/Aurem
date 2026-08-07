@@ -25,6 +25,32 @@ before being called "done".
 ## Backlog · Legal / Compliance
 - **MSA (Master Service Agreement)** — save-for-future-build (founder flagged 2026-02-08). Current `terms-of-service.md` covers self-serve; Team/Enterprise deals will need a standalone countersigned MSA + per-customer schedules (pricing, SLA, uptime, indemnity, IP ownership, order forms). DPA + subprocessor list + GDPR/CCPA/DPDP/PIPEDA references are already in place under `/app/frontend/public/policies/`. Suggested trigger: first Enterprise deal or first customer request for a signed MSA.
 
+## Backlog · Infrastructure Hardening (2026-02-08 audit — save-for-future-build)
+
+Founder-requested 13-layer audit. Green layers are solid; the items below are the amber/red gaps to schedule.
+
+### P0 — Cost / Continuity Bombs
+- **[Layer 9] SlowAPI not wired to FastAPI app.** `slowapi==0.1.9` is in `backend/requirements.txt` and `rate_limits` Mongo collection exists, but no `Limiter()` is bound in `backend/main.py`. Only DB-counter throttling exists today; per-IP burst limits absent. One motivated attacker can hammer `/message` and drain the OpenRouter budget in minutes. Estimated fix: 2h. Trigger: ASAP after Phase 5 prod-verify (before any public launch).
+- **[Layer 7] Save-to-GitHub sync broken post-`git filter-repo`.** 3rd recurrence — Emergent Platform-side issue. Blocked on Emergent Support. Founder cannot push to own repo. Escalation path: support ticket.
+
+### P1 — Availability / Security Hardening
+- **[Layer 13] No DR runbook, no RTO/RPO documented, no on-call rotation.** Backups exist at Emergent-platform level but restore has never been drilled. Fix: 1 day (draft runbook + verify a real restore into a scratch DB). Trigger: before onboarding first paying Enterprise customer.
+- **[Layer 8] Secrets in plaintext `.env` (not in a vault).** `STRIPE_API_KEY`, `JWT_SECRET`, `OPENROUTER_API_KEY`, `AUREM_MASTER_KEY`, `ORA_API_KEY` all live in `backend/.env` on the pod. One leak = full compromise. Fix: half day (move to platform-managed secret store OR HashiCorp Vault / AWS Secrets Manager integration). Trigger: before any external audit / SOC2 pursuit.
+- **[Layer 11] SSE + horizontal scaling contract untested.** Chat sessions tie a client to a specific pod; a rolling restart mid-stream cuts the connection. No sticky-session config, no shared pub/sub for streaming. Fix: 1 day design (decide: sticky-session at ingress, OR Redis pub/sub fan-out, OR client-side resume-from-offset). Trigger: before autoscale beyond 2 pods under real load.
+
+### P2 — Nice-to-Have
+- **[Layer 4] MFA/2FA on founder / admin accounts.** Single password guards `auremcto.com` admin surface. Fix: half day (TOTP via any standard lib). Trigger: before any Team-tier customer onboarding.
+- **[Layer 10] Explicit CDN + WAF layer.** Currently trusting Emergent platform edge — no anti-DDoS proof, no cache-control tuning. Fix: external (Cloudflare in front of `auremcto.com`).
+- **[Layer 5] Multi-region failover.** Single region today. Fix: significant — depends on Emergent Platform capability.
+- **[Layer 2] OpenAPI spec exported + stitched into a public docs page.** Currently FastAPI's `/docs` is admin-gated and undocumented externally. Fix: half day.
+- **[Layer 1] Design-system consolidation** (shadcn tokens vs inline `PAL` hex) + Storybook. Fix: 2 days.
+- **[Layer 6] Own GPU capacity for vision** (Phase 4 uses OpenRouter for images). Fix: significant — depends on scale + cost model.
+- **[Layer 12] Aggregated log search** (Loki / Datadog / OpenSearch). Currently Sentry for errors + Emergent platform logs for tail-only.
+- **[Layer 3] Scheduled DB dump verifier** — cron that restores a dump into a scratch DB and asserts non-empty core collections. Fix: half day.
+
+### ✅ Green (Do NOT touch)
+Backend arch, LLM routing, Vanguard scanner, Phase 1-4 chat surface, tier-gated upload, iframe sandbox contract, JWT+bcrypt auth, PAT encryption, test suite (47 pytest + 22 vitest).
+
 ## Backlog · Phase 3.1 · LLM Intent Classifier Calibration
 - **Symptom** (founder-verified 2026-02-08 on prod): Test 3 "hey there" — a plain greeting with zero preview/code intent — was promoted by the Gemini fallback classifier to `preview only · llm`. Chip stayed hidden because the badge only surfaces in `?debug=1`, but the underlying label is wrong.
 - **Cause**: The current LLM system prompt asks the model to pick ONE of two labels for every message. On genuinely neutral input the model defaults to PREVIEW_ONLY rather than saying "no evidence".
@@ -34,6 +60,30 @@ before being called "done".
 ---
 
 ## Change Log
+
+### 2026-02-08 · late-afternoon — Phase 4 · Whitelist Tightening (founder-requested scope narrow) ✅
+
+Founder explicitly narrowed the Phase 4 whitelist to exactly PNG / JPG / WEBP / PDF (was: broader `png/jpg/jpeg/webp/gif/bmp/pdf/docx/xlsx/pptx/txt/md/csv/html`). Rationale: ORA chat context stays predictable + cheap; docs beyond PDF should go through a future dedicated ingestion path.
+
+**Backend (`backend/routers/ora_chat.py`):**
+- New constants `_ORA_UPLOAD_ALLOWED_MIMES = {image/png, image/jpeg, image/jpg, image/webp, application/pdf}` and `_ORA_UPLOAD_ALLOWED_EXTS = {.png, .jpg, .jpeg, .webp, .pdf}`.
+- Defense-in-depth check: **BOTH** ext AND MIME must sit in their allow-list — a `.jpg` with `text/html` MIME is refused as a mismatch.
+- New 415 error path with structured body: `{error: "file_type_not_allowed", ext, mime, allowed: ["png","jpg","webp","pdf"], message}`.
+
+**Frontend (`frontend/src/pages/OraDirect.jsx`):**
+- `<input type=file accept>` narrowed to `.png,.jpg,.jpeg,.webp,.pdf` + their MIME equivalents. Native OS picker now hides everything else.
+
+**Tests:** `test_iter212m266_ora_upload_phase4.py` extended to 12 tests (was 8) covering the exact allow-list, banned MIMEs (docx/csv/gif/bmp/html) staying OUT, structured 415 body, and the ext-AND-mime defense-in-depth. Rolling total: **50 backend / 22 frontend, all green.**
+
+**Live-verified on preview:**
+- `POST /ora-chat/upload` with a real `text/plain` `.txt` → HTTP **415** with the exact structured refusal payload.
+- Same endpoint with a real 1-pixel PNG → HTTP 200 + vision LLM description: "The image is a solid, vibrant red color…" (Gemini 2.5 Flash-Lite doing real pixel OCR).
+
+Phase 3.1 (LLM intent-classifier calibration) is already tracked in PRD backlog — no rebuild needed, it just needs picking up before intent is used for user-visible tier gating.
+
+Ready for founder redeploy → prod verification pass.
+
+---
 
 ### 2026-02-08 · afternoon — Phase 4 · Upload + Vision (Tier-Gated) ✅
 

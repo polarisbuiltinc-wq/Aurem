@@ -1382,6 +1382,18 @@ async def intent_classify(body: IntentClassifyBody,
 #     the attachment pill component.
 _ORA_UPLOAD_MAX_BYTES = 10 * 1024 * 1024   # 10 MB per Phase 4 brief
 _ORA_UPLOAD_ALLOWED_TIERS = {"pro", "team", "founder"}
+# Iter 212m-266b · Feb 2026 — founder tightened the Phase 4 whitelist
+# to exactly four types (PNG, JPEG, WEBP, PDF).  Everything else the
+# generic /upload/convert accepts (docx, xlsx, txt, csv, html, gif,
+# bmp, …) must be REFUSED here so ORA-chat context stays predictable
+# and cheap.  Both extension AND MIME must match one of the four —
+# a `.jpg` file whose MIME is `text/html` is refused as a mismatch.
+_ORA_UPLOAD_ALLOWED_MIMES = {
+    "image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf",
+}
+_ORA_UPLOAD_ALLOWED_EXTS = {
+    ".png", ".jpg", ".jpeg", ".webp", ".pdf",
+}
 
 
 @router.post("/upload")
@@ -1428,6 +1440,24 @@ async def ora_upload(
             "max_mb":  _ORA_UPLOAD_MAX_BYTES // (1024 * 1024),
             "message": f"File too large ({size // (1024 * 1024)}MB). "
                         f"Max is {_ORA_UPLOAD_MAX_BYTES // (1024 * 1024)}MB.",
+        })
+
+    # ── Phase 4 whitelist gate (Iter 212m-266b) ────────────────────
+    # Refuse anything outside {PNG, JPEG, WEBP, PDF}.  Both extension
+    # AND declared MIME must sit in their respective allow-lists —
+    # ANY mismatch is rejected with a structured 415 so the frontend
+    # can render a "not a supported file type" toast without parsing
+    # a stringified detail body.
+    from pathlib import Path as _P0
+    _ext  = _P0(file.filename or "").suffix.lower()
+    _mime = (file.content_type or "").lower()
+    if _ext not in _ORA_UPLOAD_ALLOWED_EXTS or _mime not in _ORA_UPLOAD_ALLOWED_MIMES:
+        raise HTTPException(415, {
+            "error":    "file_type_not_allowed",
+            "ext":      _ext,
+            "mime":     _mime,
+            "allowed":  ["png", "jpg", "webp", "pdf"],
+            "message":  "Only PNG, JPG, WEBP, and PDF files are supported.",
         })
 
     # Delegate to the shared conversion helpers so we don't duplicate
