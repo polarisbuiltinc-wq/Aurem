@@ -25,6 +25,7 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Header, Request, UploadFile, File
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
@@ -1530,5 +1531,107 @@ async def ora_upload(
         "md_size":       len(text),
         "truncated":     truncated,
         "markdown":      text,
+    }
+
+
+# ── Phase 5 · Image Generation (Iter 212m-267 · Feb 2026) ───────────
+# Founder-tier ONLY, gpt-image-1 · low quality · 1024².  Gate stack:
+#   1. `require_admin` (JWT).
+#   2. Founder-tier explicit check (Pro/Team locked OUT until unit
+#      economics justify expansion — founder brief 2026-02-08).
+#   3. Global $3/day USD cap (services/ora_chat/image_gen.py).
+#   4. Per-user 10 images/month cap.
+# On upstream failure, both counters are refunded so the founder's
+# quota isn't burned by a transient OpenAI hiccup.
+from services.ora_chat import image_gen as ora_image_gen
+
+
+class ImageGenBody(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=1000)
+
+
+@router.post("/image-generate")
+async def image_generate(body: ImageGenBody,
+                          authorization: Optional[str] = Header(None)):
+    user = await require_admin(authorization)
+    tier = (user.get("tier") or "").strip().lower()
+    is_founder = bool(user.get("is_founder") or user.get("is_admin")
+                       or tier == "founder")
+    if not is_founder:
+        # Explicit founder gate (per 2026-02-08 scope narrow). Pro /
+        # Team refused with a structured 402 so the eventual expansion
+        # only needs to flip this gate, not restructure the payload.
+        raise HTTPException(402, {
+            "error":   "tier_locked",
+            "feature": "image_generation",
+            "tier":    tier or "free",
+            "message": ("Image generation is currently Founder-only "
+                         "during the internal-test phase."),
+        })
+
+    from cto_services.db import get_db
+    db = get_db()
+    user_id = user["user_id"]
+
+    # Reserve capacity BEFORE the OpenAI call — burst-safe.
+    try:
+        reservation = await ora_image_gen.check_and_reserve(db, user_id)
+    except ora_image_gen.ImageGenError as e:
+        raise HTTPException(429, {
+            "error":   e.kind,
+            "message": e.message,
+            **e.extra,
+        })
+
+    # Actual generation.  On any failure, refund the reservation so a
+    # transient upstream 500 doesn't burn the daily $3 budget.
+    try:
+        result = await ora_image_gen.generate(body.prompt)
+    except ora_image_gen.ImageGenError as e:
+        await ora_image_gen.refund_reservation(db, user_id)
+        code = 402 if e.kind == "missing_key" else 502
+        raise HTTPException(code, {"error": e.kind, "message": e.message})
+    except Exception as e:  # noqa: BLE001
+        await ora_image_gen.refund_reservation(db, user_id)
+        raise HTTPException(502, {"error": "generation_failed",
+                                     "message": str(e)[:200]})
+
+    # Success — record the event for auditing / cost analysis.
+    await db["ora_image_events"].insert_one({
+        "user_id":  user_id,
+        "prompt":   result["prompt"],
+        "model":    result["model"],
+        "cost_usd": result["cost_usd"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    daily = await ora_image_gen.daily_status(db)
+    month = await ora_image_gen.user_month_status(db, user_id)
+    return {
+        "ok":            True,
+        "image_base64":  result["image_base64"],
+        "mime":          result["mime"],
+        "cost_usd":      result["cost_usd"],
+        "model":         result["model"],
+        "prompt":        result["prompt"],
+        "daily_status":  daily,
+        "user_month_status": month,
+    }
+
+
+@router.get("/image-status")
+async def image_status(authorization: Optional[str] = Header(None)):
+    """Non-generating status peek so the frontend can badge remaining
+    quota / daily spend without spending an image."""
+    user = await require_admin(authorization)
+    from cto_services.db import get_db
+    db = get_db()
+    return {
+        "ok":                True,
+        "daily_status":      await ora_image_gen.daily_status(db),
+        "user_month_status": await ora_image_gen.user_month_status(
+            db, user["user_id"]),
+        "per_image_usd":     ora_image_gen.GPT_IMAGE_1_LOW_USD_PER_IMAGE,
+        "model":             ora_image_gen.ORA_IMAGE_MODEL,
+        "quality":           ora_image_gen.ORA_IMAGE_QUALITY,
     }
 

@@ -375,6 +375,58 @@ function ChatShell({ onLogout }) {
     // errored ones stay behind so the founder can retry / remove.
     const readyAttachments = attachments.filter(a => a.status === "ready");
     if ((!text && readyAttachments.length === 0) || !sessionId || sending) return;
+
+    // ── Phase 5 · Feb 2026 — client-side /image slash-command ─────
+    //   `/image <prompt>` short-circuits to the JSON image-generate
+    //   endpoint (founder-only, gpt-image-1 low, $3/day + 10/mo caps).
+    //   We handle it in the client so the SSE pipeline stays a pure
+    //   text stream — no binary blobs threaded through delta events.
+    const _imageSlash = text.match(/^\/image(?:-gen)?\s+([\s\S]+)$/i);
+    if (_imageSlash) {
+      const prompt = _imageSlash[1].trim();
+      setInput("");
+      setMessages(m => [...m, { role: "user", content: text }]);
+      setSending(true);
+      try {
+        const r = await fetch(`${BASE}/image-generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json",
+                     "Authorization": `Bearer ${getToken()}` },
+          body: JSON.stringify({ prompt }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          const detail = j?.detail || j;
+          const kind   = detail?.error || `HTTP_${r.status}`;
+          const msg    = detail?.message || `Image generation failed (${r.status}).`;
+          setMessages(m => [...m, {
+            role: "assistant",
+            content: `**Image generation blocked** · \`${kind}\`\n\n${msg}`,
+            isError: true,
+          }]);
+        } else {
+          const dataUrl = `data:${j.mime || "image/png"};base64,${j.image_base64}`;
+          const quotaLine = j.user_month_status
+            ? `_${j.user_month_status.used}/${j.user_month_status.cap} images used this month · $${(j.daily_status?.spent_usd || 0).toFixed(3)} / $${j.daily_status?.cap_usd?.toFixed?.(2) || "3.00"} today._`
+            : "";
+          setMessages(m => [...m, {
+            role: "assistant",
+            content: `![${prompt.slice(0, 80)}](${dataUrl})\n\n${quotaLine}`,
+            imageGen: true,
+          }]);
+        }
+      } catch (e) {
+        setMessages(m => [...m, {
+          role: "assistant",
+          content: `**Image generation failed** — ${e?.message || "network error"}`,
+          isError: true,
+        }]);
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+
     // Iter 212m-266 · Feb 2026 · Phase 4 — prepend each attachment's
     // markdown as a fenced ATTACHMENT block so the LLM can distinguish
     // "user typed this" from "here's the doc/image content".  The
@@ -930,6 +982,36 @@ function InputCard({ input, setInput, onSend, sending, onStop, large = false,
   );
 }
 
+// Iter 212m-267 · Feb 2026 · Phase 5 — render an image-gen assistant
+// message: parse the first `![alt](data:…)` line into a real <img>,
+// keep the remaining italic quota-line rendered by Streamdown so it
+// still looks like the rest of the chat.
+function ImageGenBubbleContent({ content }) {
+  const m = (content || "").match(/^!\[([^\]]*)\]\((data:[^)]+)\)\n\n?([\s\S]*)$/);
+  if (!m) {
+    return (
+      <div className="ora-md" data-testid="ora-msg-md">
+        <Streamdown>{content || ""}</Streamdown>
+      </div>
+    );
+  }
+  const [, alt, dataUrl, tail] = m;
+  return (
+    <div data-testid="ora-msg-md" className="ora-md">
+      <img src={dataUrl} alt={alt} data-testid="ora-gen-image"
+           style={{ maxWidth: "100%", borderRadius: 12,
+                      border: "1px solid #E5E5DF",
+                      display: "block" }} />
+      {tail && (
+        <div style={{ marginTop: 8, fontSize: 11,
+                        color: "#8B8B7D", fontStyle: "italic" }}>
+          <Streamdown>{tail}</Streamdown>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Iter 212m-266 · Feb 2026 · Phase 4 — per-attachment pill.  Icon
 // swaps by kind (image vs doc), a small spinner shows while
 // uploading, error banner replaces filename when the upload fails.
@@ -1036,6 +1118,16 @@ function Bubble({ m, debug = false, onOpenPreview }) {
             with XSS-safe defaults from Streamdown. */}
         {isUser ? (
           <span style={{ whiteSpace: "pre-wrap" }}>{m.content}</span>
+        ) : m.imageGen ? (
+          // Iter 212m-267 · Feb 2026 · Phase 5 — image-generation
+          // messages carry a `data:image/png;base64,…` URL that
+          // Streamdown's harden step refuses to render (its default
+          // `linkSafety` treats data: as suspicious even with
+          // allowDataImages:true).  We bypass Streamdown for this
+          // one message type and drop the raw <img> directly — the
+          // URL is server-generated, never user-typed, so the
+          // safety envelope stays intact.
+          <ImageGenBubbleContent content={m.content} />
         ) : (
           <div className="ora-md" data-testid="ora-msg-md">
             <Streamdown>{m.content || ""}</Streamdown>

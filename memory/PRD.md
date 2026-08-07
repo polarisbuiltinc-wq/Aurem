@@ -65,6 +65,33 @@ Backend arch, LLM routing, Vanguard scanner, Phase 1-4 chat surface, tier-gated 
 
 ## Change Log
 
+### 2026-02-08 · evening — Phase 5 · Image Generation (Founder-Only) ✅
+
+**Deliberately-minimal scope** per founder brief (2026-02-08): "build for CURRENT reality, not projected reality" — no Pro/Team access, no free-tier hook, $3/day global kill-switch, 10/mo per-user cap, cheapest viable model.
+
+**Backend:**
+- New `backend/services/ora_chat/image_gen.py` — pure service module (no HTTP): `GPT_IMAGE_1_LOW_USD_PER_IMAGE = 0.011`, `ORA_IMAGE_DAILY_CAP_USD = 3.00`, `ORA_IMAGE_MONTH_PER_USER_CAP = 10`, `ORA_IMAGE_MODEL = "gpt-image-1"`, `ORA_IMAGE_QUALITY = "low"`. Reserve-then-refund gate stack: `check_and_reserve()` atomically increments both `ora_image_daily_spend` (global) and `ora_image_user_month` (per-user) counters BEFORE the OpenAI call; `refund_reservation()` reverses both on any upstream failure so a transient 502 doesn't burn quota. `generate()` uses `emergentintegrations.llm.openai.image_generation.OpenAIImageGeneration` with EMERGENT_LLM_KEY. Returns `{image_base64, mime, cost_usd, prompt, model}`.
+- New endpoints in `backend/routers/ora_chat.py`:
+  - `POST /api/aurem-dev/ora-chat/image-generate` — founder-tier gate (Pro/Team explicit 402 with `feature: "image_generation"`), calls check_and_reserve → generate → truebup / refund. Success path also inserts an `ora_image_events` audit row. Returns image + updated daily+monthly status so the frontend can badge remaining quota inline.
+  - `GET /api/aurem-dev/ora-chat/image-status` — non-generating peek (`daily_status`, `user_month_status`, `per_image_usd`, `model`, `quality`) so the frontend can display quota without spending an image.
+- `backend/tests/test_iter212m267_ora_image_gen.py` — **14 tests** covering constants (locked cost / caps / model / quality), router wiring (endpoints present, founder-only gate, reservation-then-refund pattern, 429 on cap), and runtime gates against a mock Mongo (reservation succeeds when empty; daily cap blocks when +$0.011 would exceed $3; monthly cap blocks at 10; refund reverses counters; empty prompt refused before OpenAI call).
+
+**Frontend (`frontend/src/pages/OraDirect.jsx`):**
+- Client-side `/image <prompt>` slash command intercepted in `send()`. POSTs to `/image-generate` (NOT the SSE `/message` endpoint so the founder-tier + $3 + 10/mo gates fire). Renders success as an assistant bubble with `imageGen: true` flag.
+- New `ImageGenBubbleContent` helper: parses the `![alt](data:image/png;base64,…)` line into a real `<img>` (bypassing Streamdown, whose default harden step blocks data: URIs even with `allowDataImages:true`), renders the italic quota tail via Streamdown so it looks like the rest of the chat.
+- Errors surface the structured `error.kind` + `message` from the backend — no silent fails, no generic "network error" for real 402/429/502.
+
+**Live-verified on preview** (real dollars spent, ≈ $0.033 for the 3 test runs):
+- `POST /image-status` → daily $0 / $3, monthly 0/10, model gpt-image-1, per-image $0.011.
+- `POST /image-generate` with terracotta-square prompt → real 1.4MB PNG returned, daily → $0.011, monthly → 1/10.
+- Playwright E2E `/image` slash command → orange origami crane rendered inline, quota line updated to `3/10 · $0.033 / $3.00 today`.
+
+**Tests:** 14 new backend + 6 new frontend = rolling **70 backend / 35 frontend, all green.**
+
+Ready for founder redeploy → prod verification → next-phase decisions (Phase 3.1 calibration, P0 SlowAPI wire, or expand Phase 5 scope as unit-economics improve).
+
+---
+
 ### 2026-02-08 · late-afternoon — Phase 4 · Whitelist Tightening (founder-requested scope narrow) ✅
 
 Founder explicitly narrowed the Phase 4 whitelist to exactly PNG / JPG / WEBP / PDF (was: broader `png/jpg/jpeg/webp/gif/bmp/pdf/docx/xlsx/pptx/txt/md/csv/html`). Rationale: ORA chat context stays predictable + cheap; docs beyond PDF should go through a future dedicated ingestion path.
