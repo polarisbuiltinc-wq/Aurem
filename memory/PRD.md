@@ -1,5 +1,51 @@
 # AUREM CTO — PRD (Product Requirements & Change Log)
 
+## Master Status Audit (2026-02-08, founder-issued)
+
+### ✅ COMPLETE (verified on production)
+- **Session 1 · Item 1** — BG-task safety wrapper (@safe_bg integration). Prod-verified via Sentry canary event `kind=bg_task_failed` at `environment=canary-iter386-verify`.
+- **Session 1 · Item 3** — Stripe post-signature failure alert. Prod-verified via Sentry canary event `event=stripe_upgrade_failed`.
+- **Session 2 · Fix 2** — Cache-Control on `index.html` (deploy-lag mitigation). Curl-verified on prod: `Cache-Control: no-cache, no-store, must-revalidate` on index.html + normal caching on hashed JS bundles.
+
+### 🚧 IN PROGRESS (do NOT close until independently prod-verified)
+- **Session 2 · Redis rate-limiter (multi-pod fix)** — Redis path shipped, health probe reported `backend:"in_memory"` with `redis_url_set:true` on prod → connection failure. Session 2.6 diagnostics upgrade deploying now; awaits `diag.last_error` from the prod probe to classify root cause (DNS / auth / timeout / TLS scheme / no managed Redis). NOT closed until burst test against `auremcto.com` produces ~300×200 + ~100×429 with the exact envelope.
+- **Session 2.5 · ORA capability-manifest update** — 7 of 11 gaps closed in the committed prompt (Phase 2 preview panel, Phase 4 upload+vision, Phase 5 `/image` proactive-offer with raster caveat). Needs prod confirmation via "design a logo" test that it actually shipped in the current deploy.
+
+### 📋 NOT STARTED — queued behind Redis fix (in order)
+- **Session 3** — TC-11 New Run button retest, TC-12 plan-content mismatch retest, Phase 3.1 LLM intent-classifier calibration (parked behind Session 2 close).
+- **Session 4** — P1 infra: Layer 8 secrets-vault, Layer 13 DR runbook, Layer 11 SSE + horizontal-scaling contract (design-only). LOW-URGENCY given current scale; only pull forward if an Enterprise conversation starts.
+- **Session 5** — Cosmetic batch: Phase 5.1 image-bypass regex length cap, Error-Handling Item 5 (loop-engine phase-tagged Sentry breadcrumbs), Item 7 (property/fuzz test for error payload shape).
+
+### 🆕 NOT STARTED — newly discovered, not yet scheduled
+- **4 remaining ORA-prompt gaps** — prioritised: Supabase paid-tier storage awareness (highest, direct revenue impact) → suggestions-box → referrals → intent-router self-awareness.
+- **Collapsible tool-call cards + server-side redaction pipeline** — full visual spec parked behind Session 2 close.
+- **Founder-spot-counter hardcoded fix** — `Landing.jsx` still shows hardcoded "498/500 spots left"; never formally scheduled since original audit.
+- **MFA/2FA on founder account** — flagged in original Layer 4 as "revisit soon"; founder ruling on 2026-02-08 elevates it above the original P2 (cheap, worth pulling forward given what's exposed in Admin/Financial panels). Standalone half-day session recommended.
+
+### 🔒 HARD-GATED — do NOT build without new founder sign-off
+- Layer 12 / Error-Handling Item 4 — aggregated log search (Datadog/Loki/Better Stack). Gated on actual paying-customer MRR justifying recurring cost.
+- Layer 10 — CDN + WAF.
+- Layer 5 — Multi-region failover.
+- Layer 2 — OpenAPI public docs.
+- Layer 1 — Design-system + Storybook.
+- Layer 6 — Own GPU capacity for vision.
+- Layer 3 — Scheduled DB dump verifier.
+- Error-Handling Item 2 + Item 6 — client-side error telemetry + React error boundary at App root (paired; deferred until founder can't manually observe frontend errors).
+- MSA legal draft — trigger-based only (first Enterprise inquiry).
+- **Save-to-GitHub sync** — externally blocked on Emergent Support. Not a build-task on this side; founder escalates directly. Tracked-blocked, not scheduled.
+
+### 🎯 SINGLE NEXT ACTION
+Once the current deploy is live, curl `https://auremcto.com/api/aurem-dev/health/rate-limiter` and share `diag.host` + `diag.last_error`. Classify against the branching plan already agreed:
+- DNS / host issue → Emergent Support REDIS_URL fix.
+- Auth issue → Emergent Support credentials fix.
+- TLS mismatch → code change to force `rediss://`.
+- `127.0.0.1:refused` → Emergent Support (no per-pod Redis).
+- **No managed Redis on Emergent → founder decision point** — present Upstash pricing at our scale (real $/month numbers) vs tightened per-endpoint stopgap ceilings; do NOT default to either autonomously. Any stopgap logged as "temporary mitigation, not the real fix" in this doc.
+
+Do NOT start Session 3 or any newly-discovered item until Redis is GENUINELY closed (prod burst test proves the shared ceiling), not just deployed.
+
+---
+
 ## Original Problem Statement
 AUREM CTO is a React SPA + FastAPI + MongoDB developer-productivity
 platform ("aurem-dev" service). Focus: shipping features founders/devs
