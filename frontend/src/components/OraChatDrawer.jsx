@@ -180,7 +180,11 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
           let obj = {};
           try { obj = JSON.parse(dataStr); } catch { continue; }
           if (evtType === "route" || obj.type === "route") {
-            routeMeta = { route: obj.route, model: obj.model, temperature: obj.temperature,
+            // Iter 212m-265 · Feb 2026 — spread previous meta so a
+            // second route event on the deep path doesn't wipe
+            // fields set by intermediate events (e.g. intent).
+            routeMeta = { ...routeMeta,
+                           route: obj.route, model: obj.model, temperature: obj.temperature,
                            sources: obj.sources, sources_fired: obj.sources_fired,
                            downgraded: obj.downgraded };
             setStream(s => ({ ...s, ...routeMeta }));

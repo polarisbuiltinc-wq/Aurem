@@ -366,7 +366,14 @@ function ChatShell({ onLogout }) {
           if (!dataStr) continue;
           let obj = {}; try { obj = JSON.parse(dataStr); } catch { continue; }
           if (evtType === "route" || obj.type === "route") {
-            routeMeta = { route: obj.route, model: obj.model, temperature: obj.temperature,
+            // Iter 212m-265 · Feb 2026 — spread the previous
+            // routeMeta so a second `route` event (deep-research
+            // emits one at start AND one after tool orchestration
+            // with the final `sources` list) does NOT wipe fields
+            // set by earlier events, most importantly the Phase 3
+            // `intent` verdict which sits between the two routes.
+            routeMeta = { ...routeMeta,
+                           route: obj.route, model: obj.model, temperature: obj.temperature,
                            sources: obj.sources, sources_fired: obj.sources_fired,
                            downgraded: obj.downgraded };
             setStream(s => ({ ...s, ...routeMeta }));
@@ -392,6 +399,19 @@ function ChatShell({ onLogout }) {
           } else if (evtType === "review_status" || obj.type === "review_status") {
             // Iter 268 — HIGH_STAKES turn being buffered + reviewed.
             setStream(s => ({ ...s, reviewing: true }));
+          } else if (evtType === "intent" || obj.type === "intent") {
+            // Iter 212m-265 · Feb 2026 · Phase 3 — two-layer intent
+            // verdict from the backend router.  Store on the route
+            // meta so it persists onto the final assistant turn.
+            routeMeta = {
+              ...routeMeta,
+              intent: obj.intent,
+              intent_source: obj.source,
+              intent_matches: obj.matches,
+              intent_meta: obj.meta,
+            };
+            setStream(s => ({ ...s, intent: obj.intent,
+                                     intent_source: obj.source }));
           } else if (evtType === "review_caveat" || obj.type === "review_caveat") {
             routeMeta = { ...routeMeta, review_caveats: obj.quotes || [] };
           } else if (evtType === "grounding_warning" || obj.type === "grounding_warning") {
@@ -770,6 +790,39 @@ function Bubble({ m, debug = false, onOpenPreview }) {
         ) : (
           <div className="ora-md" data-testid="ora-msg-md">
             <Streamdown>{m.content || ""}</Streamdown>
+          </div>
+        )}
+        {/* Iter 212m-265 · Feb 2026 · Phase 3 — intent verdict from
+            the two-layer router.  Renders a small subtle chip so the
+            founder sees at a glance what ORA thinks the message was
+            asking for.  CODE_CHANGE also surfaces a CTA hint about
+            starting a loop run — Phase 3 doesn't kick off the loop
+            automatically (that lives in Phase 4 wiring), it just
+            makes the affordance discoverable. */}
+        {!isUser && !m.streaming && m.intent
+          && m.intent !== "UNKNOWN" && (
+          <div data-testid={`ora-intent-${m.intent}`}
+               style={{ marginTop: 10, display: "flex", gap: 8,
+                          alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ padding: "2px 8px", borderRadius: 999,
+                             background: m.intent === "CODE_CHANGE"
+                               ? "#EEF0F6" : PAL.chip,
+                             color: m.intent === "CODE_CHANGE"
+                               ? "#4A5878" : PAL.muted,
+                             fontSize: 10, fontWeight: 600,
+                             fontFamily: "ui-monospace, monospace",
+                             letterSpacing: 0.5 }}>
+              {m.intent === "CODE_CHANGE" ? "code change" : "preview only"}
+              {debug && m.intent_source ? ` · ${m.intent_source}` : ""}
+            </span>
+            {m.intent === "CODE_CHANGE" && (
+              <span data-testid="ora-code-change-hint"
+                    style={{ fontSize: 11, color: PAL.faint,
+                               fontStyle: "italic" }}>
+                Want ORA to actually make this change? Start a loop
+                run from the dashboard.
+              </span>
+            )}
           </div>
         )}
         {/* Iter 212m-264 · Feb 2026 · Phase 2 — Preview affordance.

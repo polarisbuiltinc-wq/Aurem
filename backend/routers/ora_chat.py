@@ -48,6 +48,7 @@ from services.ora_chat.safety import (
     CORE_SAFETY_RULES, AUREM_CONTEXT,
 )
 from services.ora_chat import slash_commands as slash_dispatch
+from services.ora_chat import intent_router as ora_intent
 
 logger = logging.getLogger(__name__)
 
@@ -313,6 +314,21 @@ async def send_message(body: MessageBody,
     if parsed:
         return await _stream_slash_result(user, sess, body.content.strip(), parsed, b_status, user_tz)
 
+    # ── Phase 3 · Feb 2026 — Two-layer intent classification.
+    # Compute ONCE here so both the deep-research and regular-chat
+    # SSE paths can emit the same verdict.  Regex layer is
+    # deterministic + near-zero cost; LLM layer only fires when the
+    # regex says UNKNOWN.  Never allowed to raise — falls back to
+    # UNKNOWN so downstream code never sees a broken verdict.
+    try:
+        _intent_verdict = await ora_intent.classify_intent(
+            body.content, one_shot_fn=one_shot,
+        )
+    except Exception as _intent_err:   # noqa: BLE001
+        logger.warning("intent classify failed: %r", _intent_err)
+        _intent_verdict = {"intent": "UNKNOWN", "source": "empty",
+                            "matches": [], "meta": {}}
+
     # Iter 212m-245 — Auto Deep-Research pre-check.
     # Run the multi-label classifier BEFORE the single-route regex.
     # Only fire the multi-source path if >=2 substantive labels match
@@ -332,6 +348,7 @@ async def send_message(body: MessageBody,
         if labels and await ora_deep.should_go_deep(labels):
             return await _stream_deep_research(
                 user, sess, body.content, labels, b_status, user_tz,
+                intent_verdict=_intent_verdict,
             )
         # Iter 267 GAP 1 — a pasted non-GitHub URL always routes deep
         # (the URL-fetch tool lives in the orchestrator), even when the
@@ -339,6 +356,7 @@ async def send_message(body: MessageBody,
         if ora_deep.has_fetchable_url(body.content):
             return await _stream_deep_research(
                 user, sess, body.content, labels, b_status, user_tz,
+                intent_verdict=_intent_verdict,
             )
 
     # Regular chat — pick route via keyword rules.
@@ -422,6 +440,11 @@ async def send_message(body: MessageBody,
         yield {"type": "route", "route": cfg["route"],
                 "model": cfg["model"], "temperature": cfg["temperature"],
                 "budget_mode": b_status["mode"]}
+        # Phase 3 · Feb 2026 — emit the pre-computed intent verdict
+        # from send_message() so both deep and regular paths hand the
+        # frontend the same event shape.
+        if _intent_verdict:
+            yield {"type": "intent", **_intent_verdict}
         async for evt in _try_stream(cfg):
             if regen_mode and evt["type"] == "delta":
                 continue
@@ -741,7 +764,8 @@ def _labels_to_source_tag(fired: list[str]) -> str:
 async def _stream_deep_research(user: dict, sess: dict,
                                  raw_text: str, labels: list[str],
                                  b_status: dict,
-                                 user_tz: Optional[str] = None):
+                                 user_tz: Optional[str] = None,
+                                 intent_verdict: Optional[dict] = None):
     """SSE envelope for the multi-source deep-research path.
 
     Semantics:
@@ -779,6 +803,11 @@ async def _stream_deep_research(user: dict, sess: dict,
                 "model": cfg["model"], "temperature": cfg["temperature"],
                 "labels": labels,
                 "budget_mode": b_status["mode"]}
+        # Phase 3 · Feb 2026 — surface the intent verdict on the deep
+        # path too so the founder sees the same badge/CTA regardless
+        # of which route ORA chose.
+        if intent_verdict:
+            yield {"type": "intent", **intent_verdict}
         if "HIGH_STAKES" in (labels or []):
             yield {"type": "review_status", "state": "verifying",
                     "reason": "high_stakes"}
@@ -1315,3 +1344,28 @@ async def preview_scan(body: PreviewScanBody,
         "blockers": blockers,
         "warnings": warnings,
     }
+
+
+
+# ── Phase 3 · Two-layer intent classifier (Iter 212m-265 · Feb 2026) ──
+# Public endpoint for verifying / consuming the intent verdict outside
+# the streaming path.  Same contract the /message SSE emits, one JSON
+# response.  Admin-only.
+class IntentClassifyBody(BaseModel):
+    text: str = Field(..., min_length=0, max_length=8000)
+
+
+@router.post("/intent-classify")
+async def intent_classify(body: IntentClassifyBody,
+                          authorization: Optional[str] = Header(None)):
+    """Two-layer intent classify (regex pre-filter → LLM fallback).
+
+    Returns `{intent, source, matches, meta}`. `intent` is one of
+    `PREVIEW_ONLY`, `CODE_CHANGE`, or `UNKNOWN`.  See
+    services/ora_chat/intent_router.py for the full contract.
+    """
+    await require_admin(authorization)
+    verdict = await ora_intent.classify_intent(
+        body.text or "", one_shot_fn=one_shot,
+    )
+    return {"ok": True, **verdict}

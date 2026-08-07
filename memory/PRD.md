@@ -24,6 +24,40 @@ before being called "done".
 
 ## Change Log
 
+### 2026-02-08 · morning — Phase 3 · Two-Layer Intent Router ✅
+
+**Deliverable:** Every /ora chat message now gets classified into `PREVIEW_ONLY | CODE_CHANGE | UNKNOWN` before ORA replies. The verdict streams to the frontend as a dedicated `intent` SSE event; the founder sees a small chip below each assistant turn (and a "Start a loop run" CTA hint on CODE_CHANGE) so future Phase 4 loop wiring is one click away from being surfaced.
+
+**Backend:**
+- New `backend/services/ora_chat/intent_router.py`:
+  - **Layer 1 — regex pre-filter** (`classify_intent_regex`): high-precision patterns only. CODE_CHANGE list catches verbs (`commit / push / merge / deploy / apply / update / fix / refactor`), scope phrases (`in the repo`, `make it live`), start-a-loop imperatives, and bare `path/to/file.py`-style mentions. PREVIEW_ONLY list catches `show me / draft / sketch / mock`, `what would … look like`, `just a snippet`, and negative-commit phrasing.
+  - **Layer 2 — constrained LLM fallback** (`classify_intent_llm`): Gemini 2.5 Flash at t=0.0, max_tokens=8, system-prompted to reply with EXACTLY one of the two label words. `_sanitize_llm_label` strips punctuation/backticks and enforces exact match — anything else collapses to UNKNOWN, so the classifier can never promote a fabricated label.
+  - **Tie-break policy**: when both regex families fire, CODE_CHANGE wins (imperative > exploratory).
+  - **Robustness**: LLM exceptions are caught inside the module so the top-level `/message` SSE stream can never be killed by a classifier hiccup.
+  - **Provider adapter**: `classify_intent_llm` calls `one_shot(top_p=1.0, presence_penalty=0.0, …)` for real providers, with a `TypeError` retry that accepts a minimal signature so test stubs stay clean.
+- `backend/routers/ora_chat.py`:
+  - New `POST /api/aurem-dev/ora-chat/intent-classify` (admin-gated) so intent can be verified/consumed outside the streaming path.
+  - Intent verdict computed ONCE at the top of `send_message` (right after slash short-circuit) and passed into BOTH the deep-research path and the regular event stream via kwarg / closure. Each path yields `{type: "intent", …}` right after its initial `route` event.
+- `backend/tests/test_iter212m265_ora_intent_router.py` — 15 tests (regex family, LLM sanitiser, two-layer orchestrator, static router wiring). All green.
+
+**Frontend:**
+- `frontend/src/pages/OraDirect.jsx`:
+  - SSE handler consumes `intent` events, persists on `routeMeta` (which now spreads on route-event overwrite — see fix below).
+  - Bubble renders a subtle chip (`preview only` / `code change`) below assistant turns; `?debug=1` also shows the layer that fired (`regex` / `llm`). UNKNOWN stays invisible.
+  - CODE_CHANGE bubbles also carry an italic hint ("Want ORA to actually make this change? Start a loop run from the dashboard.") — no button yet, that's Phase 4 wiring.
+- `frontend/src/components/__tests__/OraIntentBadge.phase3.test.jsx` — 6 tests locking the SSE handler contract + Bubble rendering.
+
+**Bug fix uncovered during E2E:** The deep-research SSE path emits TWO `route` events (initial announce + a final one with `sources`). The frontend was **overwriting** `routeMeta` on the second event, wiping the `intent` field set between them. Fixed by spreading previous meta on route-event assignment in both `OraDirect.jsx` and `OraChatDrawer.jsx`. No regression risk — spreading is a superset of the previous behaviour.
+
+**Live-verified on preview:**
+- `POST /intent-classify` returns correct verdicts for CODE_CHANGE (regex), PREVIEW_ONLY (regex), and UNKNOWN → CODE_CHANGE via Gemini flash (llm, 3 output tokens).
+- `/message` SSE stream now includes `event: intent` between `event: route` events.
+- Screenshot confirms `preview only · regex` chip on a PREVIEW_ONLY turn; `code change` chip + "Start a loop" hint on a CODE_CHANGE turn.
+
+Ready for founder redeploy → prod verification → Phase 4 green-light.
+
+---
+
 ### 2026-02-07 · night — Phase 2 · Prod-Verify Follow-up (Issues 1 & 2) ✅
 
 Founder live-verified on prod, flagged two real bugs. Both fixed.
