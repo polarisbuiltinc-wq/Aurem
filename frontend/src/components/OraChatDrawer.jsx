@@ -17,6 +17,12 @@ import { MessageSquare, X, Send, RefreshCw, Zap, AlertTriangle,
 import { api } from "../lib/api";
 import { getToken } from "../lib/api";
 import OraChatHouseRulesPanel from "./OraChatHouseRulesPanel";
+// Feb 2026 · Phase 1 (Streamdown) — swap plain-text bubble body for a
+// streaming-safe markdown renderer (GFM, code blocks, LaTeX, Mermaid,
+// inline images, XSS-safe defaults). Chosen over react-markdown +
+// remark-gfm + rehype-highlight to reduce the dep surface + get
+// AI-streaming caret + hardened XSS defaults out of the box.
+import { Streamdown } from "streamdown";
 
 const BASE = `${process.env.REACT_APP_BACKEND_URL}/api/aurem-dev/ora-chat`;
 
@@ -578,11 +584,21 @@ function MessageBubble({ msg }) {
           ? "1px solid rgba(220,80,80,0.3)"
           : "1px solid rgba(255,255,255,0.06)",
         fontSize: 13, lineHeight: 1.55,
-        whiteSpace: "pre-wrap",
         wordBreak: "break-word",
       }}
     >
-      {msg.content}
+      {/* Phase 1 · Streamdown — user turns stay plain text (avoids
+          rendering their raw prompt as HTML). Assistant turns go
+          through Streamdown for GFM + code + math + inline images.
+          Streamdown sanitises by default (no arbitrary <script>,
+          <img onerror="..."> event handlers stripped). */}
+      {isUser ? (
+        <span style={{ whiteSpace: "pre-wrap" }}>{msg.content}</span>
+      ) : (
+        <div className="ora-md" data-testid="ora-chat-md">
+          <Streamdown>{msg.content || ""}</Streamdown>
+        </div>
+      )}
       {!isUser && Array.isArray(msg.ungrounded) && msg.ungrounded.length > 0 && (
         <div data-testid="ora-grounding-warning"
              style={{ marginTop: 8, padding: "6px 10px", borderRadius: 8,

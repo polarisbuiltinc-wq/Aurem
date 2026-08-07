@@ -24,7 +24,34 @@ before being called "done".
 
 ## Change Log
 
-### 2026-02-02 — Admin & User Sidebar Toggles (this session)
+### 2026-02-07 — Phase 1 · ORA Chat Rich Rendering (Streamdown) ✅
+
+**Goal:** Ship Claude-style rich markdown rendering to `/ora` admin chat with built-in XSS safety. Strict phase-gating: Phase 2+ blocked until founder confirms Phase 1 stable.
+
+**Changes:**
+- `yarn add streamdown@^2.5.0` — added to `frontend/package.json`.
+- `frontend/src/pages/OraDirect.jsx` — replaced raw `<span>{content}</span>` assistant rendering with `<Streamdown>{content}</Streamdown>` inside `.ora-md` wrapper. User turns stay plain (`whiteSpace: pre-wrap`) so raw prompts are never interpreted as HTML.
+- `frontend/src/components/OraChatDrawer.jsx` — same Streamdown swap for the admin drawer bubble so both chat surfaces stay consistent.
+- `frontend/src/components/__tests__/OraChat.streamdown_xss.test.jsx` — new vitest suite covering:
+  - GFM acceptance: `<h1>`, GFM `<table>`, fenced `<pre><code>`, inline `<img src=...>`, bold-syntax non-leak.
+  - XSS neutralisation: no `<script>` in DOM, no `onerror` attribute on rendered `<img>`, no `javascript:` href preserved, `window.__pwned` sentinel never set.
+
+**Verification (this session):**
+- `yarn test src/components/__tests__/OraChat.streamdown_xss.test.jsx` → 2/2 pass, 121ms.
+- Live smoke on `https://launch-pad-237.preview.emergentagent.com/ora` (PIN login → real LLM turn) confirmed:
+  - Assistant reply rendered a `<table>` with "Type | Example" headers.
+  - Fenced JS code block with `console.log('hello');` + code-copy/download affordances.
+  - Bold heading, ordered/unordered list items, bullet content — all rendered by Streamdown, not raw markdown.
+- No console errors, no XSS execution, budget pill still ticking.
+
+**Known cosmetic follow-up (non-blocking, tracked as P2):**
+- Streamdown `<ul>/<ol>` bullets/numbers appear muted because Tailwind's global preflight resets list markers. Fix belongs to a small `.ora-md ul { list-style: disc; padding-left: 1.25rem }` scoped CSS pass in a later polish batch — does NOT block Phase 1 acceptance.
+
+**Phase gating status:** Phase 1 ready for founder verification on preview. Phase 2 (`srcdoc` preview iframe) NOT started per explicit founder instruction.
+
+---
+
+### 2026-02-02 — Admin & User Sidebar Toggles
 
 **Feature 1: Admin hamburger sidebar toggle ✅**
 - `/app/frontend/src/pages/Admin.jsx` — added `sidebarOpen` state (persisted via `localStorage["aurem_admin_sidebar_open"]`), a hamburger button (`data-testid="admin-sidebar-toggle"`) in the sticky top bar, and a grid-column transition (`220px 1fr` ↔ `0 1fr`).

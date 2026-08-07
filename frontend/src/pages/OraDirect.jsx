@@ -18,6 +18,9 @@ import { useNavigate } from "react-router-dom";
 import { Lock, Settings, LogOut, ArrowUp, RefreshCw, Zap, Clock, Plus, Square, Copy } from "lucide-react";
 import { api, setToken, getToken } from "../lib/api";
 import OraChatHouseRulesPanel from "../components/OraChatHouseRulesPanel";
+// Feb 2026 · Phase 1 (Streamdown) — see OraChatDrawer.jsx for the full
+// rationale. XSS-safe defaults, streaming caret, GFM/LaTeX/Mermaid.
+import { Streamdown } from "streamdown";
 
 const BASE = `${process.env.REACT_APP_BACKEND_URL}/api/aurem-dev/ora-chat`;
 const PIN_LENGTH = 4;
@@ -670,8 +673,18 @@ function Bubble({ m }) {
                                      : isUser ? PAL.bubbleUser : PAL.bubbleAsst,
                       border: isUser ? "none" : `1px solid ${PAL.border}`,
                       color: PAL.text, fontSize: 14, lineHeight: 1.6,
-                      whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-        {m.content}
+                      wordBreak: "break-word" }}>
+        {/* Phase 1 · Streamdown — user turn stays plain text so the
+            user's raw prompt is never interpreted as HTML. Assistant
+            turn renders markdown (GFM + code + LaTeX + inline images)
+            with XSS-safe defaults from Streamdown. */}
+        {isUser ? (
+          <span style={{ whiteSpace: "pre-wrap" }}>{m.content}</span>
+        ) : (
+          <div className="ora-md" data-testid="ora-msg-md">
+            <Streamdown>{m.content || ""}</Streamdown>
+          </div>
+        )}
         {!isUser && Array.isArray(m.ungrounded) && m.ungrounded.length > 0 && (
           <div data-testid="ora-grounding-warning"
                style={{ marginTop: 8, padding: "6px 10px", borderRadius: 8,
