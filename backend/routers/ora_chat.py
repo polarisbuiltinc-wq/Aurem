@@ -1302,6 +1302,7 @@ class PreviewScanBody(BaseModel):
 
 @router.post("/preview-scan")
 async def preview_scan(body: PreviewScanBody,
+                       request: Request,
                        authorization: Optional[str] = Header(None)):
     """Vanguard-gate the srcdoc preview render path.
 
@@ -1312,7 +1313,13 @@ async def preview_scan(body: PreviewScanBody,
       - `blockers`:   CRITICAL findings (list[dict], severity/name/line/snippet).
       - `warnings`:   HIGH / MEDIUM findings — surfaced but non-blocking.
     """
-    await require_admin(authorization)
+    user = await require_admin(authorization)
+    # Iter 212m-268 · Feb 2026 — rate-limit extension (founder-flagged
+    # gap after Phase 2-5).  30 scans/min per user+IP — enough for a
+    # rapid streaming preview refresh loop but blocks scan-oracle abuse.
+    ip = client_ip_from_request(request)
+    if not check_rate_limit(f"ora_chat:preview-scan:{user['user_id']}:{ip}", 30):
+        raise HTTPException(429, "Rate limit — slow down for a minute.")
     lang = (body.lang or "").strip().lower()
     code = body.code or ""
 
@@ -1358,6 +1365,7 @@ class IntentClassifyBody(BaseModel):
 
 @router.post("/intent-classify")
 async def intent_classify(body: IntentClassifyBody,
+                          request: Request,
                           authorization: Optional[str] = Header(None)):
     """Two-layer intent classify (regex pre-filter → LLM fallback).
 
@@ -1365,7 +1373,13 @@ async def intent_classify(body: IntentClassifyBody,
     `PREVIEW_ONLY`, `CODE_CHANGE`, or `UNKNOWN`.  See
     services/ora_chat/intent_router.py for the full contract.
     """
-    await require_admin(authorization)
+    user = await require_admin(authorization)
+    # Iter 212m-268 — 60 classifies/min per user+IP.  Higher ceiling
+    # than /preview-scan because a legit UI-side "type-to-classify" flow
+    # can rack these up fast.
+    ip = client_ip_from_request(request)
+    if not check_rate_limit(f"ora_chat:intent:{user['user_id']}:{ip}", 60):
+        raise HTTPException(429, "Rate limit — slow down for a minute.")
     verdict = await ora_intent.classify_intent(
         body.text or "", one_shot_fn=one_shot,
     )
@@ -1400,6 +1414,7 @@ _ORA_UPLOAD_ALLOWED_EXTS = {
 @router.post("/upload")
 async def ora_upload(
     file: UploadFile = File(...),
+    request: Request = None,
     authorization: Optional[str] = Header(None),
 ):
     """Upload + convert-to-markdown for the /ora chat composer.
@@ -1415,6 +1430,13 @@ async def ora_upload(
         pill uses one code path.
     """
     user = await require_admin(authorization)
+    # Iter 212m-268 — 10 uploads/min per user+IP.  Uploads run through
+    # vision LLM (images) or MarkItDown (docs); both are heavy, so
+    # burst caps here directly protect LLM budget + CPU.
+    if request is not None:
+        ip = client_ip_from_request(request)
+        if not check_rate_limit(f"ora_chat:upload:{user['user_id']}:{ip}", 10):
+            raise HTTPException(429, "Upload rate limit — slow down for a minute.")
     tier = (user.get("tier") or "").strip().lower()
     is_founder = bool(user.get("is_founder") or user.get("is_admin")
                        or tier == "founder")
@@ -1552,8 +1574,16 @@ class ImageGenBody(BaseModel):
 
 @router.post("/image-generate")
 async def image_generate(body: ImageGenBody,
+                          request: Request,
                           authorization: Optional[str] = Header(None)):
     user = await require_admin(authorization)
+    # Iter 212m-268 — TIGHT rate limit on the endpoint that spends real
+    # OpenAI dollars.  6 requests/min per user+IP is enough for a
+    # normal human retry loop while making a scripted drain-attack
+    # obvious.  This is a belt on top of the $3/day + 10/mo gates.
+    ip = client_ip_from_request(request)
+    if not check_rate_limit(f"ora_chat:img-gen:{user['user_id']}:{ip}", 6):
+        raise HTTPException(429, "Image generation rate limit — try again in a minute.")
     tier = (user.get("tier") or "").strip().lower()
     is_founder = bool(user.get("is_founder") or user.get("is_admin")
                        or tier == "founder")
@@ -1619,10 +1649,15 @@ async def image_generate(body: ImageGenBody,
 
 
 @router.get("/image-status")
-async def image_status(authorization: Optional[str] = Header(None)):
+async def image_status(request: Request,
+                       authorization: Optional[str] = Header(None)):
     """Non-generating status peek so the frontend can badge remaining
     quota / daily spend without spending an image."""
     user = await require_admin(authorization)
+    # Iter 212m-268 — cheap read-only endpoint, generous ceiling.
+    ip = client_ip_from_request(request)
+    if not check_rate_limit(f"ora_chat:img-status:{user['user_id']}:{ip}", 60):
+        raise HTTPException(429, "Rate limit — slow down for a minute.")
     from cto_services.db import get_db
     db = get_db()
     return {
