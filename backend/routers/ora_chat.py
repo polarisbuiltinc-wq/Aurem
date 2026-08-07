@@ -24,7 +24,7 @@ import re
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, HTTPException, Header, Request, UploadFile, File
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
@@ -1369,3 +1369,136 @@ async def intent_classify(body: IntentClassifyBody,
         body.text or "", one_shot_fn=one_shot,
     )
     return {"ok": True, **verdict}
+
+
+# ── Phase 4 · Attach + Vision (Iter 212m-266 · Feb 2026) ────────────
+# Tier-gated file upload for the /ora chat.  Wraps the existing
+# /upload/convert vision + MarkItDown machinery but adds:
+#   · 10 MB hard cap (tighter than the generic 25 MB one — protects
+#     the chat context window even after markdown compression).
+#   · Pro / Team / Founder tier gate — free tier gets 402 with a
+#     structured upgrade payload.
+#   · Return shape matches /upload/convert so the frontend can share
+#     the attachment pill component.
+_ORA_UPLOAD_MAX_BYTES = 10 * 1024 * 1024   # 10 MB per Phase 4 brief
+_ORA_UPLOAD_ALLOWED_TIERS = {"pro", "team", "founder"}
+
+
+@router.post("/upload")
+async def ora_upload(
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(None),
+):
+    """Upload + convert-to-markdown for the /ora chat composer.
+
+    Contract:
+      · Multipart file (10 MB max).
+      · Auth: admin JWT (same as the rest of /ora-chat).
+      · Tier gate: Pro / Team / Founder only.  Free / Starter get 402
+        with a JSON body the frontend renders as an upgrade nudge.
+      · Response: `{ok, kind: "image"|"doc", filename, content_type,
+                    original_size, markdown, md_size, truncated}`
+        — mirrors /upload/convert exactly so the frontend attachment
+        pill uses one code path.
+    """
+    user = await require_admin(authorization)
+    tier = (user.get("tier") or "").strip().lower()
+    is_founder = bool(user.get("is_founder") or user.get("is_admin")
+                       or tier == "founder")
+    if not is_founder and tier not in _ORA_UPLOAD_ALLOWED_TIERS:
+        # 402 (structured) — same shape the /message endpoint uses for
+        # budget stops so the frontend can render both with one branch.
+        raise HTTPException(402, {
+            "error":   "tier_locked",
+            "feature": "file_upload",
+            "tier":    tier or "free",
+            "message": "File attachments are a Pro / Team feature. "
+                        "Upgrade to send images and documents to ORA.",
+            "upgrade_url": "/pricing",
+        })
+
+    raw = await file.read()
+    size = len(raw or b"")
+    if size == 0:
+        raise HTTPException(400, "Empty upload")
+    if size > _ORA_UPLOAD_MAX_BYTES:
+        raise HTTPException(413, {
+            "error":   "file_too_large",
+            "size":    size,
+            "max_mb":  _ORA_UPLOAD_MAX_BYTES // (1024 * 1024),
+            "message": f"File too large ({size // (1024 * 1024)}MB). "
+                        f"Max is {_ORA_UPLOAD_MAX_BYTES // (1024 * 1024)}MB.",
+        })
+
+    # Delegate to the shared conversion helpers so we don't duplicate
+    # the vision + MarkItDown paths.
+    from routers.upload import (
+        _describe_image_via_vision, IMAGE_EXTS, IMAGE_MIMES, MAX_MD_CHARS,
+    )
+    from pathlib import Path as _P
+    import tempfile as _tf
+
+    suffix = _P(file.filename or "").suffix.lower() or ""
+    ctype  = (file.content_type or "").lower()
+
+    # ── Image branch — vision LLM (Gemini 2.5 Flash-Lite → GPT-4o-mini) ──
+    if suffix in IMAGE_EXTS or ctype in IMAGE_MIMES:
+        description = await _describe_image_via_vision(
+            raw, ctype, file.filename or "image",
+        )
+        if not description:
+            description = (
+                "_(The user attached an image but vision OCR is "
+                "unavailable right now. Ask them to paste any visible "
+                "text or describe what they see in the image.)_"
+            )
+        text = description.strip()
+        truncated = False
+        if len(text) > MAX_MD_CHARS:
+            text = text[:MAX_MD_CHARS] + "\n\n... [truncated by server cap]"
+            truncated = True
+        return {
+            "ok":            True,
+            "kind":          "image",
+            "filename":      file.filename or "image",
+            "content_type":  ctype,
+            "original_size": size,
+            "md_size":       len(text),
+            "truncated":     truncated,
+            "markdown":      text,
+        }
+
+    # ── Document branch — MarkItDown ───────────────────────────────
+    with _tf.NamedTemporaryFile(suffix=suffix, delete=True) as tf:
+        tf.write(raw)
+        tf.flush()
+        try:
+            from markitdown import MarkItDown
+            md_client = MarkItDown()
+            result = md_client.convert(tf.name)
+        except ImportError:
+            raise HTTPException(500, "MarkItDown library missing on server")
+        except Exception as e:
+            raise HTTPException(415, f"Couldn't convert this file: {e}")
+
+    text = (getattr(result, "text_content", None) or "").strip()
+    if not text:
+        text = (
+            f"_(Attached `{file.filename}` — no extractable text. "
+            "Ask the user what they'd like ORA to do with it.)_"
+        )
+    truncated = False
+    if len(text) > MAX_MD_CHARS:
+        text = text[:MAX_MD_CHARS] + "\n\n... [truncated by server cap]"
+        truncated = True
+    return {
+        "ok":            True,
+        "kind":          "doc",
+        "filename":      file.filename or "document",
+        "content_type":  ctype,
+        "original_size": size,
+        "md_size":       len(text),
+        "truncated":     truncated,
+        "markdown":      text,
+    }
+

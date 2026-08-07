@@ -25,9 +25,47 @@ before being called "done".
 ## Backlog · Legal / Compliance
 - **MSA (Master Service Agreement)** — save-for-future-build (founder flagged 2026-02-08). Current `terms-of-service.md` covers self-serve; Team/Enterprise deals will need a standalone countersigned MSA + per-customer schedules (pricing, SLA, uptime, indemnity, IP ownership, order forms). DPA + subprocessor list + GDPR/CCPA/DPDP/PIPEDA references are already in place under `/app/frontend/public/policies/`. Suggested trigger: first Enterprise deal or first customer request for a signed MSA.
 
+## Backlog · Phase 3.1 · LLM Intent Classifier Calibration
+- **Symptom** (founder-verified 2026-02-08 on prod): Test 3 "hey there" — a plain greeting with zero preview/code intent — was promoted by the Gemini fallback classifier to `preview only · llm`. Chip stayed hidden because the badge only surfaces in `?debug=1`, but the underlying label is wrong.
+- **Cause**: The current LLM system prompt asks the model to pick ONE of two labels for every message. On genuinely neutral input the model defaults to PREVIEW_ONLY rather than saying "no evidence".
+- **Fix (planned)**: Tighten `_LLM_SYSTEM_PROMPT` in `backend/services/ora_chat/intent_router.py` to require **positive evidence** (a request-to-see-something for PREVIEW_ONLY, a request-to-modify-repo for CODE_CHANGE), and treat absence of evidence as an explicit `UNKNOWN` output. Expand `_sanitize_llm_label` to accept `UNKNOWN` as a valid label. Add a golden-eval test set of ~10 neutral / ambiguous / clear inputs to prevent regression.
+- **Trigger to unblock**: BEFORE we start using intent for user-visible tier-gating (Phase 4/5+). Non-blocking for the current chip UX.
+
 ---
 
 ## Change Log
+
+### 2026-02-08 · afternoon — Phase 4 · Upload + Vision (Tier-Gated) ✅
+
+**Deliverable:** Drag-drop file composer in /ora chat. Images run through the vision LLM (Gemini 2.5 Flash-Lite → GPT-4o-mini fallback); PDFs / DOCX / XLSX / PPTX / TXT / MD / CSV / HTML run through MarkItDown. Extracted markdown is prepended to the outgoing user message as clearly-framed ATTACHMENT blocks so the LLM never confuses doc contents with the founder's own words. Pro / Team / Founder tiers only — Free / Starter get a 402 with a structured upgrade payload.
+
+**Backend:**
+- New `POST /api/aurem-dev/ora-chat/upload` in `backend/routers/ora_chat.py`:
+  - Admin-gated (`require_admin`).
+  - `_ORA_UPLOAD_MAX_BYTES = 10 * 1024 * 1024` (matches the Phase 4 brief; tighter than the generic `/upload/convert`'s 25 MB cap).
+  - `_ORA_UPLOAD_ALLOWED_TIERS = {"pro", "team", "founder"}` — the strict allow-list. Free / Starter refused with a 402 whose detail body is `{error: "tier_locked", feature: "file_upload", tier, message, upgrade_url}` so the frontend can render an inline upgrade nudge with one branch.
+  - Reuses `_describe_image_via_vision`, `IMAGE_EXTS`, `IMAGE_MIMES`, `MAX_MD_CHARS` from `routers/upload.py` — no duplicated vision / MarkItDown code.
+  - Response shape mirrors `/upload/convert` exactly (`{ok, kind, filename, content_type, original_size, md_size, truncated, markdown}`) so the frontend attachment pill stays single-source.
+- `backend/tests/test_iter212m266_ora_upload_phase4.py` — 8 static contract tests locking admin gate, cap constant, tier allow-list, structured 402 / 413 bodies, shared-helper reuse, and response shape.
+
+**Frontend (`frontend/src/pages/OraDirect.jsx` + inline components):**
+- New `attachments[]` state in `ChatShell`. Per-file shape: `{id, filename, size, kind, status: 'uploading'|'ready'|'error', markdown, error}`.
+- `uploadOne(file)`: POSTs to `/ora-chat/upload`, transitions the pill through states, catches 402 into a persistent `tierError` banner (dismissible only via X), catches 413 / network errors into per-pill error state.
+- `send()` prepends `ready` attachments only (uploading + errored ones stay behind for retry / removal); wraps each in `--- IMAGE ATTACHMENT — filename ---` or `--- DOCUMENT ATTACHMENT — filename ---` fences; sends via existing `content: outbound` field.
+- New `InputCard` composer: paperclip button + hidden multi-file `<input type=file>`, dragover/drop handlers on the outer form, dashed drop-hint overlay while dragging, attachment pills stacked above the textarea, tier-lock upgrade banner above the composer.
+- New `AttachmentPill`: icon by kind (FileText / ImageIcon), Loader2 spinner while uploading, error-red variant, remove X per pill, size in KB for ready ones.
+- 6 vitest static contract tests (`OraAttachComposer.phase4.test.jsx`): testids present, ATTACHMENT block framing, ready-only send filter, correct endpoint URL.
+
+**Live-verified on preview (founder tier):**
+- Paperclip renders in the composer.
+- Picking a `.txt` file → pill flips `uploading → ready` within 6 s, shows "filename (KB size) [x]" with the doc icon.
+- Tier lock stays hidden for founder (correct); would fire the amber banner + Upgrade link + dismissible X on a `free`/`starter` account.
+
+**Tests:** 8 new backend + 6 new frontend, all green. Rolling totals: 47 backend pytest, 22 frontend vitest (Streamdown XSS 2, Phase 2 security 8, Phase 3 intent 6, Phase 4 attach 6).
+
+Ready for founder redeploy → prod verification → Phase 5 (image generation) gating.
+
+---
 
 ### 2026-02-08 · morning — Phase 3 · Two-Layer Intent Router ✅
 

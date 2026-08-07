@@ -15,7 +15,7 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Lock, Settings, LogOut, ArrowUp, RefreshCw, Zap, Clock, Plus, Square, Copy, Play } from "lucide-react";
+import { Lock, Settings, LogOut, ArrowUp, RefreshCw, Zap, Clock, Plus, Square, Copy, Play, Paperclip, X, FileText, Image as ImageIcon, Loader2 } from "lucide-react";
 import { api, setToken, getToken } from "../lib/api";
 import OraChatHouseRulesPanel from "../components/OraChatHouseRulesPanel";
 // Feb 2026 · Phase 1 (Streamdown) — see OraChatDrawer.jsx for the full
@@ -250,6 +250,65 @@ function ChatShell({ onLogout }) {
   const containerW = useContainerWidth();
   const debug = useDebugMode();
   const [previewBlock, setPreviewBlock] = useState(null); // {code, lang} | null
+  // Iter 212m-266 · Feb 2026 · Phase 4 — file attachments.  Uploaded
+  // via POST /ora-chat/upload which runs the vision LLM (images) or
+  // MarkItDown (docs) server-side and returns markdown the LLM can
+  // read.  Each attachment carries its own state so the founder sees
+  // per-file progress + errors instead of one blob spinner.
+  //   Shape: { id, file, kind: 'image'|'doc', status: 'uploading'|'ready'|'error',
+  //            markdown, error, filename, size }
+  const [attachments, setAttachments] = useState([]);
+  const [tierError, setTierError] = useState(null);
+
+  const uploadOne = async (file) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setAttachments(a => [...a, {
+      id, filename: file.name, size: file.size,
+      status: "uploading", markdown: "", kind: "doc",
+    }]);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const r = await fetch(`${BASE}/upload`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${getToken()}` },
+        body: fd,
+      });
+      if (r.status === 402) {
+        const d = await r.json().catch(() => ({}));
+        const detail = d?.detail || d;
+        setAttachments(a => a.filter(x => x.id !== id));
+        setTierError({
+          kind: "tier_locked",
+          message: detail?.message
+            || "File attachments are a Pro / Team feature.",
+          upgrade_url: detail?.upgrade_url || "/pricing",
+        });
+        return;
+      }
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        const detail = d?.detail || d;
+        setAttachments(a => a.map(x => x.id === id
+          ? { ...x, status: "error",
+              error: detail?.message || `HTTP ${r.status}` }
+          : x));
+        return;
+      }
+      const j = await r.json();
+      setAttachments(a => a.map(x => x.id === id
+        ? { ...x, status: "ready", markdown: j.markdown,
+            kind: j.kind, filename: j.filename }
+        : x));
+    } catch (e) {
+      setAttachments(a => a.map(x => x.id === id
+        ? { ...x, status: "error", error: e?.message || "upload_failed" }
+        : x));
+    }
+  };
+  const removeAttachment = (id) =>
+    setAttachments(a => a.filter(x => x.id !== id));
+  const clearAttachments = () => setAttachments([]);
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages]   = useState([]);
   const [input, setInput]         = useState("");
@@ -312,9 +371,31 @@ function ChatShell({ onLogout }) {
 
   const send = async () => {
     const text = input.trim();
-    if (!text || !sessionId || sending) return;
+    // Only "ready" attachments count towards the send.  Uploading /
+    // errored ones stay behind so the founder can retry / remove.
+    const readyAttachments = attachments.filter(a => a.status === "ready");
+    if ((!text && readyAttachments.length === 0) || !sessionId || sending) return;
+    // Iter 212m-266 · Feb 2026 · Phase 4 — prepend each attachment's
+    // markdown as a fenced ATTACHMENT block so the LLM can distinguish
+    // "user typed this" from "here's the doc/image content".  The
+    // visible user turn still shows the raw text they typed.
+    let outbound = text;
+    if (readyAttachments.length) {
+      const blocks = readyAttachments.map(a => {
+        const label = a.kind === "image"
+          ? `IMAGE ATTACHMENT — ${a.filename}`
+          : `DOCUMENT ATTACHMENT — ${a.filename}`;
+        return `--- ${label} ---\n${a.markdown}\n--- end ${label} ---`;
+      }).join("\n\n");
+      outbound = text ? `${blocks}\n\n${text}` : blocks;
+    }
     setInput("");
-    setMessages(m => [...m, { role: "user", content: text }]);
+    // Show the user their raw text + a compact attachment summary.
+    const userDisplay = readyAttachments.length
+      ? `${text}${text ? "\n\n" : ""}📎 ${readyAttachments.map(a => a.filename).join(", ")}`
+      : text;
+    setMessages(m => [...m, { role: "user", content: userDisplay }]);
+    clearAttachments();
     setStream({ buf: "", route: null, model: null });
     setSending(true);
     // Iter 212m-246 — AbortController lets the Stop button interrupt
@@ -333,7 +414,7 @@ function ChatShell({ onLogout }) {
           "Accept": "text/event-stream",
           ...(clientTz ? { "X-Client-TZ": clientTz } : {}),
         },
-        body: JSON.stringify({ session_id: sessionId, content: text }),
+        body: JSON.stringify({ session_id: sessionId, content: outbound }),
       });
       if (res.status === 402) {
         const b = await res.json().catch(() => ({}));
@@ -506,7 +587,12 @@ function ChatShell({ onLogout }) {
                 deterministic slash-commands.
               </p>
               <InputCard input={input} setInput={setInput} onSend={send}
-                          sending={sending} onStop={stop} large />
+                          sending={sending} onStop={stop} large
+                          attachments={attachments}
+                          onFilesPicked={(fs) => fs.forEach(uploadOne)}
+                          onRemoveAttachment={removeAttachment}
+                          tierError={tierError}
+                          onDismissTierError={() => setTierError(null)} />
               <div style={{ marginTop: 32, display: "flex", flexWrap: "wrap",
                               gap: 10, justifyContent: "center" }}>
                 {SUGGESTIONS.map(s => (
@@ -580,7 +666,12 @@ function ChatShell({ onLogout }) {
               <div style={{ maxWidth: containerW.maxW, width: containerW.pct,
                               margin: "0 auto" }}>
                 <InputCard input={input} setInput={setInput} onSend={send}
-                            sending={sending} onStop={stop} />
+                            sending={sending} onStop={stop}
+                            attachments={attachments}
+                            onFilesPicked={(fs) => fs.forEach(uploadOne)}
+                            onRemoveAttachment={removeAttachment}
+                            tierError={tierError}
+                            onDismissTierError={() => setTierError(null)} />
               </div>
             </div>
           </>
@@ -660,62 +751,215 @@ function ThinkingDots({ label }) {
   );
 }
 
-function InputCard({ input, setInput, onSend, sending, onStop, large = false }) {
-  // Iter 212m-246 — widened to 5 lines (was 3) so long prompts and
-  // multi-line context paste-ins stay comfortably readable without
-  // shrinking the message stream area. Auto-grows past 5 up to 12
-  // lines. Send button becomes a Stop button while streaming.
+function InputCard({ input, setInput, onSend, sending, onStop, large = false,
+                       attachments = [], onFilesPicked, onRemoveAttachment,
+                       tierError, onDismissTierError }) {
+  // Iter 212m-266 · Feb 2026 · Phase 4 — drag-drop composer.
+  //   · Paperclip button + hidden <input type=file multiple> for click
+  //     uploads.
+  //   · Drop zone: outer <form> catches dragover/drop for drag-and-drop.
+  //   · Attachment pills stack above the textarea with per-file status
+  //     (uploading spinner / ready checkmark + filename / error) and
+  //     an X to remove. Ready-only attachments are sent.
+  //   · 402 tier_locked errors surface as an inline upgrade banner
+  //     above the composer — non-dismissible except via the X so the
+  //     founder can't miss the paywall.
+  const fileInputRef = useRef(null);
+  const [dragActive, setDragActive] = useState(false);
+  const hasReady = attachments.some(a => a.status === "ready");
+  const canSend = !!input.trim() || hasReady;
+
+  const openPicker = () => fileInputRef.current?.click();
+  const onPick = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length && onFilesPicked) onFilesPicked(files);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+  const onDragOver = (e) => {
+    if (e.dataTransfer?.types?.includes("Files")) {
+      e.preventDefault();
+      setDragActive(true);
+    }
+  };
+  const onDragLeave = () => setDragActive(false);
+  const onDrop = (e) => {
+    e.preventDefault();
+    setDragActive(false);
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (files.length && onFilesPicked) onFilesPicked(files);
+  };
+
   return (
-    <form onSubmit={(e) => { e.preventDefault(); if (!sending) onSend(); }}
-          style={{ background: PAL.card,
-                     border: `1px solid ${PAL.border}`,
-                     borderRadius: 16,
-                     padding: "14px 16px",
-                     boxShadow: "0 4px 20px rgba(0,0,0,0.04)",
-                     display: "flex", alignItems: "flex-end", gap: 10 }}>
-      <textarea
-        data-testid="ora-input"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!sending) onSend(); } }}
-        placeholder={large ? "Ask ORA... (or /repo-tree, /find, /read)" : "Message ORA..."}
-        rows={5}
-        style={{ flex: 1, border: "none", outline: "none",
-                   fontFamily: "inherit", fontSize: 15,
-                   color: PAL.text, background: "transparent",
-                   resize: "none", padding: "4px 4px",
-                   lineHeight: 1.55,
-                   minHeight: `calc(1.55em * 5)`,
-                   maxHeight: `calc(1.55em * 12)`,
-                   overflowY: "auto",
-                   opacity: sending ? 0.65 : 1 }}
-        disabled={sending}
-      />
-      {sending ? (
-        <button type="button" onClick={onStop} data-testid="ora-stop"
-                title="Stop generating"
-                style={{ width: 38, height: 38, borderRadius: 999,
-                           background: "#E5E5DF", color: PAL.text,
-                           border: "none", cursor: "pointer",
-                           display: "flex", alignItems: "center", justifyContent: "center",
-                           flexShrink: 0, transition: "background 120ms" }}
-                onMouseEnter={(e) => e.currentTarget.style.background = "#D8D8D0"}
-                onMouseLeave={(e) => e.currentTarget.style.background = "#E5E5DF"}>
-          <Square size={14} fill={PAL.text} />
-        </button>
-      ) : (
-        <button type="submit" data-testid="ora-send" disabled={!input.trim()}
-                style={{ width: 38, height: 38, borderRadius: 999,
-                           background: input.trim() ? PAL.accent : PAL.chip,
-                           color: input.trim() ? "#fff" : PAL.faint,
-                           border: "none", cursor: "pointer",
-                           display: "flex", alignItems: "center", justifyContent: "center",
-                           flexShrink: 0, transition: "background 120ms",
-                           touchAction: "manipulation" }}>
-          <ArrowUp size={16} />
-        </button>
+    <div>
+      {/* Tier-lock upgrade banner — non-dismissible clue except X */}
+      {tierError && (
+        <div data-testid="ora-attach-tier-locked"
+             style={{ marginBottom: 10, padding: "10px 14px",
+                        borderRadius: 12, background: "#FBF1DC",
+                        border: "1px solid #E4C26B",
+                        color: "#7A5A0F", fontSize: 12.5,
+                        display: "flex", gap: 10, alignItems: "center" }}>
+          <Paperclip size={14} />
+          <span style={{ flex: 1 }}>{tierError.message}</span>
+          <a href={tierError.upgrade_url || "/pricing"}
+             data-testid="ora-attach-upgrade-link"
+             style={{ padding: "4px 10px", borderRadius: 999,
+                        background: "#7A5A0F", color: "#fff",
+                        textDecoration: "none", fontSize: 11, fontWeight: 600 }}>
+            Upgrade
+          </a>
+          <button type="button" onClick={onDismissTierError}
+                  data-testid="ora-attach-tier-dismiss"
+                  style={{ background: "transparent", border: "none",
+                             color: "#7A5A0F", cursor: "pointer",
+                             display: "flex", alignItems: "center" }}>
+            <X size={14} />
+          </button>
+        </div>
       )}
-    </form>
+      <form onSubmit={(e) => { e.preventDefault(); if (!sending && canSend) onSend(); }}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            data-testid="ora-input-form"
+            style={{ background: PAL.card,
+                       border: `1px solid ${dragActive ? PAL.accent : PAL.border}`,
+                       borderRadius: 16,
+                       padding: "14px 16px",
+                       boxShadow: dragActive
+                         ? "0 0 0 3px rgba(213,106,79,0.15)"
+                         : "0 4px 20px rgba(0,0,0,0.04)",
+                       transition: "border-color 120ms, box-shadow 120ms",
+                       position: "relative" }}>
+        {/* Attachment pills row */}
+        {attachments.length > 0 && (
+          <div data-testid="ora-attachment-list"
+               style={{ display: "flex", flexWrap: "wrap", gap: 6,
+                          marginBottom: 8 }}>
+            {attachments.map(a => (
+              <AttachmentPill key={a.id} a={a}
+                              onRemove={() => onRemoveAttachment(a.id)} />
+            ))}
+          </div>
+        )}
+        {/* Drag-active hint (visible only when actively dragging) */}
+        {dragActive && (
+          <div data-testid="ora-drop-hint"
+               style={{ position: "absolute", inset: 6, pointerEvents: "none",
+                          borderRadius: 12, background: "rgba(213,106,79,0.06)",
+                          border: `2px dashed ${PAL.accent}`,
+                          display: "flex", alignItems: "center",
+                          justifyContent: "center",
+                          color: PAL.accent, fontSize: 13, fontWeight: 500,
+                          zIndex: 2 }}>
+            Drop files to attach
+          </div>
+        )}
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>
+          <textarea
+            data-testid="ora-input"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!sending && canSend) onSend(); } }}
+            placeholder={large ? "Ask ORA... (or /repo-tree, /find, /read)" : "Message ORA..."}
+            rows={5}
+            style={{ flex: 1, border: "none", outline: "none",
+                       fontFamily: "inherit", fontSize: 15,
+                       color: PAL.text, background: "transparent",
+                       resize: "none", padding: "4px 4px",
+                       lineHeight: 1.55,
+                       minHeight: `calc(1.55em * 5)`,
+                       maxHeight: `calc(1.55em * 12)`,
+                       overflowY: "auto",
+                       opacity: sending ? 0.65 : 1 }}
+            disabled={sending}
+          />
+          <div style={{ display: "flex", flexDirection: "column", gap: 6,
+                          alignItems: "center", flexShrink: 0 }}>
+            <button type="button" onClick={openPicker}
+                    data-testid="ora-attach-btn"
+                    title="Attach a file (Pro / Team)"
+                    disabled={sending}
+                    style={{ width: 38, height: 38, borderRadius: 999,
+                               background: "transparent",
+                               border: `1px solid ${PAL.border}`,
+                               color: PAL.muted, cursor: sending ? "not-allowed" : "pointer",
+                               display: "flex", alignItems: "center",
+                               justifyContent: "center",
+                               transition: "background 120ms" }}
+                    onMouseEnter={(e) => { if (!sending) e.currentTarget.style.background = PAL.chip; }}
+                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+              <Paperclip size={15} />
+            </button>
+            <input ref={fileInputRef} type="file" multiple
+                   data-testid="ora-file-input"
+                   onChange={onPick}
+                   style={{ display: "none" }}
+                   accept=".png,.jpg,.jpeg,.webp,.gif,.bmp,.pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.html,image/*" />
+            {sending ? (
+              <button type="button" onClick={onStop} data-testid="ora-stop"
+                      title="Stop generating"
+                      style={{ width: 38, height: 38, borderRadius: 999,
+                                 background: "#E5E5DF", color: PAL.text,
+                                 border: "none", cursor: "pointer",
+                                 display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Square size={14} fill={PAL.text} />
+              </button>
+            ) : (
+              <button type="submit" data-testid="ora-send" disabled={!canSend}
+                      style={{ width: 38, height: 38, borderRadius: 999,
+                                 background: canSend ? PAL.accent : PAL.chip,
+                                 color: canSend ? "#fff" : PAL.faint,
+                                 border: "none",
+                                 cursor: canSend ? "pointer" : "not-allowed",
+                                 display: "flex", alignItems: "center", justifyContent: "center",
+                                 transition: "background 120ms",
+                                 touchAction: "manipulation" }}>
+                <ArrowUp size={16} />
+              </button>
+            )}
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// Iter 212m-266 · Feb 2026 · Phase 4 — per-attachment pill.  Icon
+// swaps by kind (image vs doc), a small spinner shows while
+// uploading, error banner replaces filename when the upload fails.
+function AttachmentPill({ a, onRemove }) {
+  const Icon = a.kind === "image" ? ImageIcon : FileText;
+  const isErr = a.status === "error";
+  const bg = isErr ? "#fdeeea" : PAL.chip;
+  const fg = isErr ? "#8C2E1C" : PAL.text;
+  return (
+    <div data-testid={`ora-attachment-pill-${a.status}`}
+         style={{ display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "5px 10px", borderRadius: 999,
+                    background: bg, color: fg, fontSize: 12,
+                    border: `1px solid ${isErr ? "#E4C26B" : PAL.border}`,
+                    maxWidth: 320 }}>
+      {a.status === "uploading"
+        ? <Loader2 size={12} className="animate-spin" />
+        : <Icon size={12} />}
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis",
+                       whiteSpace: "nowrap", maxWidth: 200 }}>
+        {isErr ? `Failed: ${a.error || "upload_failed"}` : a.filename}
+      </span>
+      {a.status === "ready" && (
+        <span style={{ fontSize: 10, color: PAL.faint }}>
+          ({(a.size / 1024).toFixed(0)} KB)
+        </span>
+      )}
+      <button type="button" onClick={onRemove}
+              data-testid={`ora-attachment-remove-${a.id}`}
+              style={{ background: "transparent", border: "none",
+                         color: PAL.faint, cursor: "pointer",
+                         display: "flex", alignItems: "center", padding: 0 }}>
+        <X size={12} />
+      </button>
+    </div>
   );
 }
 
