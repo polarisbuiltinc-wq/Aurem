@@ -1213,9 +1213,9 @@ async def rollback_loop(
         }},
     )
 
-    from services.loop_rollback import run_rollback
+    from services.loop_rollback import run_rollback_bg
     bg.add_task(
-        run_rollback,
+        run_rollback_bg,
         db=db, loop_id=loop_id, project=proj,
         commit_sha=full_sha, user_token=user_token,
     )

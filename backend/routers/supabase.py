@@ -25,6 +25,7 @@ from pydantic import BaseModel
 from cto_services.auth import current_dev
 from cto_services.db import get_db
 from services import supabase_provisioner as sp
+from services.bg_safe import safe_bg
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/supabase", tags=["Supabase — Personal Track Paid Tier"])
@@ -170,6 +171,7 @@ async def provision(
     }
 
 
+@safe_bg
 async def _run_migration(app_id: str, user_id: str, project_ref: str) -> None:
     """Background job — poll until the Postgres is reachable then
     migrate the free-tier data over. Writes progress into

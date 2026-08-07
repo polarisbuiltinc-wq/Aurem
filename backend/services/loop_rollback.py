@@ -43,6 +43,8 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
+from services.bg_safe import safe_bg
+
 logger = logging.getLogger(__name__)
 
 
@@ -180,7 +182,17 @@ async def run_rollback(
 ) -> None:
     """Perform the real GitHub revert. Runs as a BackgroundTask kicked
     from the router. NEVER raises — persists a `rollback_status=failed`
-    row on any exception."""
+    row on any exception.
+
+    Iter 386 · Error-Handling-Item-1: this function is also invoked via
+    FastAPI `BackgroundTasks.add_task` from three routers (loop.py,
+    user_rollback.py, admin_qa.py→rollback_manager.py). A `@safe_bg`
+    outer envelope (see `run_rollback_bg` alias below) guarantees any
+    exception that leaks past the internal try/except (e.g. a DB write
+    failure while persisting the failed-state row itself) is still
+    captured by Sentry with `kind=bg_task_failed` instead of vanishing
+    into the FastAPI background-runner void.
+    """
     from services.github_api_writer import revert_commit as gh_api_revert
 
     owner  = project.get("github_owner") or project.get("owner")
@@ -295,3 +307,26 @@ async def run_rollback(
             data={"error": safe, "status": "error"},
             state_str="failed",
         )
+
+
+
+# ── Iter 386 · Error-Handling-Item-1 · BG-task safety envelope ─────────
+#
+# `run_rollback` above has its own broad try/except that persists
+# `rollback_status=failed` on any exception. That's the FIRST line of
+# defence — user-visible state is always well-defined.
+#
+# `run_rollback_bg` is the SECOND line of defence: if the DB write that
+# persists the "failed" row itself throws (Mongo down, pymongo write-
+# concern timeout, etc.) the inner except body will re-raise. Without
+# this outer wrapper that exception would be caught by FastAPI's
+# BackgroundTasks runner and dropped on the floor — never reaching
+# Sentry.
+#
+# `safe_bg` wraps sync + async transparently; `run_rollback` is async
+# so the returned wrapper is also async. Callers that need the raw,
+# throw-if-broken version (unit tests, `asyncio.create_task` inside
+# `rollback_manager` where the exception is surfaced by the task's
+# `.exception()` accessor) should keep importing `run_rollback`.
+# Router `bg.add_task` sites SHOULD import `run_rollback_bg` instead.
+run_rollback_bg = safe_bg(run_rollback)

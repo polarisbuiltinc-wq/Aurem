@@ -37,6 +37,7 @@ from pydantic import BaseModel, Field
 
 from cto_services.auth import current_dev, require_admin
 from cto_services.db import get_db, require_db
+from services.bg_safe import safe_bg
 
 router = APIRouter(prefix="/suggestions", tags=["Founder Suggestions"])
 logger = logging.getLogger(__name__)
@@ -94,6 +95,7 @@ Rules:
 """
 
 
+@safe_bg
 async def _analyze_with_groq(suggestion_id: str, text: str) -> None:
     """Background task: call Groq, validate JSON shape, persist the
     result. Any failure sets `analysis_failed: true` and leaves

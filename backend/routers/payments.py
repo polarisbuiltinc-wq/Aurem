@@ -489,6 +489,45 @@ async def stripe_webhook(request: Request) -> dict:
         plan     = (obj.get("metadata") or {}).get("plan")
         sub_id   = obj.get("subscription")
         cust_id  = obj.get("customer")
+        session_id = obj.get("id")
+
+        # ── Iter 386 · Error-Handling-Item-3 · Stripe post-signature alert
+        #
+        # Signature is already verified above; from here down every
+        # failure means "user paid Stripe, but our DB didn't record
+        # the upgrade" — the WORST possible silent failure mode for
+        # billing. Historically these went to logger.warning only and
+        # never surfaced to Sentry with a distinct tag, so on-call had
+        # no way to grep for "paid users stuck on free tier". We now
+        # wrap each DB write with a dedicated try/except that:
+        #   • Sets scope tags `event=stripe_upgrade_failed`, `stage=…`
+        #     so a single Sentry search catches every variant.
+        #   • Attaches the Stripe session_id + user_id + plan as
+        #     context (no PII beyond the internal ids).
+        #   • RE-RAISES so Stripe's own retry machinery kicks in
+        #     (webhooks are idempotent thanks to session_id keying).
+        def _alert_upgrade_failure(exc: Exception, stage: str) -> None:
+            try:
+                import sentry_sdk
+                with sentry_sdk.push_scope() as scope:
+                    scope.set_tag("event", "stripe_upgrade_failed")
+                    scope.set_tag("stage", stage)
+                    if user_id:
+                        scope.set_tag("user_id", user_id)
+                    if plan:
+                        scope.set_tag("plan", plan)
+                    scope.set_context("stripe_session", {
+                        "session_id": session_id,
+                        "subscription": sub_id,
+                        "customer": cust_id,
+                    })
+                    sentry_sdk.capture_exception(exc)
+            except Exception:  # noqa: BLE001
+                # Sentry init failure MUST NOT mask the underlying
+                # billing error — swallow this alert-side exception
+                # only. The outer re-raise still fires below.
+                pass
+
         # Iter 352 — the webhook NEVER updated the cto_payments ledger
         # row (only /payments/status did, and only when the user's
         # browser survived to the success-redirect poll). Result: paid
@@ -496,7 +535,7 @@ async def stripe_webhook(request: Request) -> dict:
         # The webhook is the source of truth — sync the row here.
         try:
             await db.cto_payments.update_one(
-                {"session_id": obj.get("id")},
+                {"session_id": session_id},
                 {"$set": {
                     "payment_status": "paid",
                     "status":         "complete",
@@ -508,18 +547,39 @@ async def stripe_webhook(request: Request) -> dict:
                 }},
             )
         except Exception as e:                              # noqa: BLE001
-            logger.warning("[webhook] cto_payments sync failed: %r", e)
-        if user_id and plan:
-            await db.dev_users.update_one(
-                {"user_id": user_id},
-                {"$set": {
-                    "tier":               plan,
-                    "usage_tier":         plan,
-                    "stripe_sub_id":      sub_id,
-                    "stripe_customer_id": cust_id,
-                    "tier_updated_at":    datetime.now(timezone.utc).isoformat(),
-                }},
+            logger.exception(
+                "[webhook] cto_payments sync failed for session=%s user=%s",
+                session_id, user_id,
             )
+            _alert_upgrade_failure(e, stage="ledger_writeback")
+            # Ledger write is best-effort — the tier update below is
+            # the SOURCE OF TRUTH for customer-visible state, so we
+            # don't re-raise here. The Sentry tag is enough for
+            # on-call to reconcile the ledger manually.
+
+        if user_id and plan:
+            try:
+                await db.dev_users.update_one(
+                    {"user_id": user_id},
+                    {"$set": {
+                        "tier":               plan,
+                        "usage_tier":         plan,
+                        "stripe_sub_id":      sub_id,
+                        "stripe_customer_id": cust_id,
+                        "tier_updated_at":    datetime.now(timezone.utc).isoformat(),
+                    }},
+                )
+            except Exception as e:                          # noqa: BLE001
+                logger.exception(
+                    "[webhook] tier upgrade FAILED for user=%s plan=%s "
+                    "session=%s — user paid but was not upgraded",
+                    user_id, plan, session_id,
+                )
+                _alert_upgrade_failure(e, stage="tier_update")
+                # RE-RAISE so Stripe retries this webhook. Idempotent
+                # on session_id — no double-charge risk.
+                raise HTTPException(500, "tier_update_failed")
+
             # Iter 102 — referral reward on paid conversion.
             try:
                 from services.billing_cron import grant_referral_reward
@@ -528,6 +588,11 @@ async def stripe_webhook(request: Request) -> dict:
                     logger.info(f"[webhook] referral reward granted to {grant.get('referrer')}")
             except Exception as e:
                 logger.warning(f"[webhook] referral reward failed: {e!r}")
+                # Referral is a side-benefit — surface to Sentry with
+                # the same tag family so on-call can spot systemic
+                # failures, but don't re-raise (user is already
+                # upgraded correctly at this point).
+                _alert_upgrade_failure(e, stage="referral_reward")
     elif etype == "checkout.session.expired":
         # Iter 352 — abandoned checkouts previously stayed "pending"
         # forever (founder audit: 22 stuck rows, some 35 days old).

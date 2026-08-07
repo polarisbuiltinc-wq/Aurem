@@ -741,3 +741,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 
 - `loop_run_log kind='image'` — auto-detected in backend/routers/ora_chat.py (verify) [Iter 0, 2026-08-07T15:59:02.254592Z] <!-- inv:loop_run_log_kind:image -->
 - `loop_run_log kind='doc'` — auto-detected in backend/routers/ora_chat.py (verify) [Iter 0, 2026-08-07T15:59:02.254627Z] <!-- inv:loop_run_log_kind:doc -->
+- `services/bg_safe.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-07T21:00:54.456179Z] <!-- inv:service:services/bg_safe.py -->

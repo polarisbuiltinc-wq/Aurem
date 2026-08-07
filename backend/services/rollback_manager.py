@@ -170,10 +170,10 @@ async def execute_rollback(
         return {"ok": False, "reason": "state_write_failed",
                 "detail": str(e)[:200]}
 
-    from services.loop_rollback import run_rollback
+    from services.loop_rollback import run_rollback, run_rollback_bg
     if bg is not None:
         bg.add_task(
-            run_rollback,
+            run_rollback_bg,
             db=db, loop_id=loop_id, project=proj,
             commit_sha=commit_sha, user_token=user_token,
         )
@@ -181,6 +181,8 @@ async def execute_rollback(
         # No BackgroundTasks passed → schedule via asyncio directly.
         # Every caller SHOULD pass bg, but this preserves the
         # invariant that we NEVER return ok=True without staging.
+        # Uses raw `run_rollback` since asyncio.create_task surfaces
+        # exceptions via `.exception()` — no need for safe_bg's swallow.
         import asyncio
         asyncio.create_task(
             run_rollback(

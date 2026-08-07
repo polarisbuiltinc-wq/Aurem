@@ -175,9 +175,9 @@ async def revert_last_ship(
                   "rollback_commit_sha": commit_sha,
                   "rollback_triggered_by": "user_revert_last_ship"}},
     )
-    from services.loop_rollback import run_rollback
+    from services.loop_rollback import run_rollback_bg
     bg.add_task(
-        run_rollback,
+        run_rollback_bg,
         db=db, loop_id=loop_id, project=proj,
         commit_sha=commit_sha, user_token=user_token,
     )
