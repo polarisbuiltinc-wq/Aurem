@@ -24,6 +24,31 @@ before being called "done".
 
 ## Change Log
 
+### 2026-02-07 · night — Phase 2 · Prod-Verify Follow-up (Issues 1 & 2) ✅
+
+Founder live-verified on prod, flagged two real bugs. Both fixed.
+
+**Issue 1 — HIGH-severity findings were still shown as a passive banner on prod.**
+- Root cause: the click-through gate code was correct on preview (verified via reproduction: dangerouslySetInnerHTML → amber "1 HIGH-severity finding … Preview anyway" banner + `Preview blocked` empty state) but the prior prod deploy shipped an older bundle where the gate wasn't wired.
+- Verification path used on preview: `POST /ora-chat/preview-scan` with a `dangerouslySetInnerHTML` payload returns `severity: "HIGH"`; frontend `hasHigh` check flips iframe render off until the founder clicks `ora-preview-ack-btn`.
+- No further code change needed — just a fresh prod redeploy so the gate binary matches preview.
+
+**Issue 2 — JSX previews broke with "Cannot use import statement outside a module".**
+- Two-part root cause:
+  1. Adding `'unsafe-eval'` to `CSP_JSX` unblocked Babel's runtime transpile, but exposed the underlying bug.
+  2. `@babel/standalone`'s current default for `preset-react` is `runtime: 'automatic'`, which emits `import { jsx as _jsx } from "react/jsx-runtime"` in the compiled output. That ESM import statement then blows up inside `new Function(out, ...)` because Function bodies are script scope, not module scope.
+- Fix: pass explicit `presets: [['react', { runtime: 'classic' }]]` so Babel emits `React.createElement(...)` calls (script-safe, no imports).
+- Live-verified on preview: React counter component (`function App(){ const [n,setN]=React.useState(0); ... }`) renders inside the sandbox with a working +Increment button.
+- Also confirmed `'unsafe-eval'` is scoped ONLY to `CSP_JSX` — HTML/plain-JS previews still have the tighter `script-src 'unsafe-inline'` with no eval permission.
+
+**Tests (10 green):**
+- `OraPreviewPanel.phase2_security.test.jsx` extended to 8: HTML has no unpkg AND no `'unsafe-eval'`; JSX has both.
+- Streamdown XSS suite still 2/2.
+
+Ready for redeploy → prod verification of BOTH the HIGH-ack gate and JSX rendering.
+
+---
+
 ### 2026-02-07 · late-evening — Phase 2 · Security Hardening Follow-up ✅
 
 Founder review flagged two legitimate concerns after the initial Phase 2 build. Both fixed in this pass before prod redeploy.

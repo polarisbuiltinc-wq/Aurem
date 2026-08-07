@@ -73,19 +73,23 @@ describe("Phase 2 · OraPreviewPanel security contract", () => {
     await advance(50);
     const srcdoc = document.querySelector('[data-testid="ora-preview-iframe"]')
       .getAttribute("srcdoc") || "";
-    // HTML preview should have NO external host in script-src.
+    // HTML preview should have NO external host in script-src AND
+    // no 'unsafe-eval' — it doesn't need either.
     expect(srcdoc).toContain("script-src 'unsafe-inline';");
     expect(srcdoc.includes("https://unpkg.com")).toBe(false);
+    expect(srcdoc.includes("'unsafe-eval'")).toBe(false);
   });
 
-  it("JSX previews DO allow unpkg.com — required for React+Babel transpile", async () => {
+  it("JSX previews DO allow unpkg.com AND 'unsafe-eval' — required for Babel+new Function", async () => {
     render(<OraPreviewPanel code="const App = () => <h1>hi</h1>;" lang="jsx"
                              onClose={() => {}} />);
     await advance(400);
     await advance(50);
     const srcdoc = document.querySelector('[data-testid="ora-preview-iframe"]')
       .getAttribute("srcdoc") || "";
-    expect(srcdoc).toContain("script-src 'unsafe-inline' https://unpkg.com;");
+    // Both grants are required for JSX rendering to actually work.
+    expect(srcdoc).toContain("'unsafe-eval'");
+    expect(srcdoc).toContain("https://unpkg.com");
   });
 
   it("HIGH-severity Vanguard findings BLOCK render until user click-through", async () => {

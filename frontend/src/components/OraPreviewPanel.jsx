@@ -45,18 +45,30 @@ const RENDERABLE_LANGS = new Set([
 // Iter 212m-264 · Feb 2026 — CSP is split per-lang so the supply-chain
 // blast radius stays as small as possible:
 //
-//   HTML / JS previews  → script-src 'unsafe-inline'  (NO external hosts)
-//   JSX / TSX previews  → script-src 'unsafe-inline' https://unpkg.com
-//                          — needed to load React + Babel-standalone
-//                          for at-runtime JSX transpilation.
+//   HTML / JS previews  → script-src 'unsafe-inline'
+//                          (NO external hosts, NO 'unsafe-eval')
+//   JSX / TSX previews  → script-src 'unsafe-inline' 'unsafe-eval'
+//                          https://unpkg.com
+//                          — 'unsafe-eval' is REQUIRED because
+//                            @babel/standalone transpiles JSX at
+//                            runtime via `eval` / `new Function`,
+//                            and we then instantiate the transpiled
+//                            component via `new Function` as well.
+//                            Without it, JSX previews fail with
+//                            "Refused to compile" / "unsafe-eval"
+//                            CSP violations. Founder review flagged
+//                            this as Issue 2 of the prod-verify pass.
+//                          — unpkg.com is required to load the
+//                            React + ReactDOM + Babel bundles.
 //
 // `connect-src 'none'` is the anti-exfil hammer in BOTH variants —
 // even if unpkg were compromised, the payload cannot beacon out.
 // The outer iframe's `sandbox="allow-scripts"` (no allow-same-origin)
 // then keeps everything trapped away from the parent origin.
 //
-// Backlog / P2 improvement: bundle React + Babel into the app's own
-// static assets so JSX previews never hit unpkg at all.
+// Backlog / P2 improvement: bundle React + a pre-transpiled JSX
+// runtime into the app's own static assets so JSX previews never
+// hit unpkg AND we can drop `'unsafe-eval'` entirely.
 const _CSP_COMMON =
   "default-src 'none'; " +
   "style-src 'unsafe-inline'; " +
@@ -67,7 +79,7 @@ const _CSP_COMMON =
   "form-action 'none'; " +
   "frame-ancestors 'none';";
 const CSP_HTML_JS = "script-src 'unsafe-inline'; " + _CSP_COMMON;
-const CSP_JSX     = "script-src 'unsafe-inline' https://unpkg.com; " + _CSP_COMMON;
+const CSP_JSX     = "script-src 'unsafe-inline' 'unsafe-eval' https://unpkg.com; " + _CSP_COMMON;
 
 function _cspFor(lang) {
   const l = (lang || "").toLowerCase();
@@ -112,7 +124,15 @@ function buildSrcDoc(code, lang) {
 <script>
   try {
     var src = ${JSON.stringify(stripped)};
-    var out = Babel.transform(src, { presets: ['react'] }).code;
+    // Force runtime:'classic' so Babel emits React.createElement
+    // calls instead of the modern jsx-runtime output (which uses
+    // ESM imports and would blow up under new Function() with
+    // "Cannot use import statement outside a module"). Founder QA
+    // (Issue 2 of the Phase 2 prod-verify) surfaced this after we
+    // added 'unsafe-eval' to the JSX CSP.
+    var out = Babel.transform(src, {
+      presets: [['react', { runtime: 'classic' }]],
+    }).code;
     var fn = new Function('React','ReactDOM',
       out + '\\n; return (typeof __default__!=="undefined") ? __default__ : (typeof App!=="undefined" ? App : (typeof Component!=="undefined" ? Component : null));');
     var Comp = fn(React, ReactDOM);
