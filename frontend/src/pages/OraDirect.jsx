@@ -25,11 +25,10 @@ import { Streamdown } from "streamdown";
 const BASE = `${process.env.REACT_APP_BACKEND_URL}/api/aurem-dev/ora-chat`;
 const PIN_LENGTH = 4;
 
-// Iter 212m-243 — Responsive width contract:
-//   mobile  <768px  → 100% (edge-to-edge)
-//   tablet  768-1023 → 70%  (15% margin each side)
-//   desktop ≥1024   → 50%  (25% margin each side)
-// Same widths applied to the messages list AND the input row.
+// Iter 212m-263 · Feb 2026 — Claude-style layout: single readable
+// column, generous white-space, no hard-edged card around assistant
+// replies. Width matches Claude.ai chat body (~760px on desktop),
+// gracefully collapses on tablet/mobile.
 function useContainerWidth() {
   const [w, setW] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth : 1440);
@@ -39,12 +38,21 @@ function useContainerWidth() {
     return () => window.removeEventListener("resize", on);
   }, []);
   if (w < 768)   return { pct: "100%", maxW: "100%" };
-  if (w < 1024)  return { pct: "70%",  maxW: "70%"  };
-  // Iter 212m-257 — Fullscreen width **46%** (previous 40% chota lag
-  // raha tha). Har side ~27% margin, line-length ~78 chars — still
-  // within comfortable reading range but content ko zyada breathing
-  // space milta hai.
-  return             { pct: "46%",  maxW: "46%"  };
+  if (w < 1024)  return { pct: "92%",  maxW: "760px" };
+  return             { pct: "780px", maxW: "780px" };
+}
+
+// Iter 212m-263 · Feb 2026 — dev-mode gate. Internal routing/config
+// metadata (route name, temperature, per-message cost pill) is hidden
+// from the default chat view — same policy as the earlier "(via
+// /loop/active fallback)" leak we cleaned up. Add `?debug=1` to the
+// URL to bring them back for founder QA sessions.
+function useDebugMode() {
+  if (typeof window === "undefined") return false;
+  try {
+    const p = new URLSearchParams(window.location.search);
+    return p.get("debug") === "1";
+  } catch { return false; }
 }
 
 // ── Palette (matches /app/frontend/src/pages/personal/BuildHome.jsx) ──
@@ -215,6 +223,7 @@ const SUGGESTIONS = [
 
 function ChatShell({ onLogout }) {
   const containerW = useContainerWidth();
+  const debug = useDebugMode();
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages]   = useState([]);
   const [input, setInput]         = useState("");
@@ -339,7 +348,20 @@ function ChatShell({ onLogout }) {
             buf += obj.content || "";
             setStream(s => ({ ...s, buf }));
           } else if (evtType === "slash_result" || obj.type === "slash_result") {
-            buf += `\n${JSON.stringify(obj.result?.value, null, 2)}\n`;
+            // Iter 212m-263 · Feb 2026 — slash-command results whose
+            // `value` is already a preformatted string (e.g. /repo-tree
+            // returning a tree with REAL "\n" newlines) must NOT be
+            // JSON.stringify'd — that escapes every newline into a
+            // literal "\\n" glyph and produces one unreadable wall
+            // of text. Render strings verbatim inside a fenced code
+            // block so Streamdown preserves the whitespace; only
+            // objects/arrays fall through to JSON.stringify.
+            const _v = obj.result?.value;
+            if (typeof _v === "string") {
+              buf += `\n\`\`\`\n${_v}\n\`\`\`\n`;
+            } else {
+              buf += `\n\`\`\`json\n${JSON.stringify(_v, null, 2)}\n\`\`\`\n`;
+            }
             setStream(s => ({ ...s, buf }));
           } else if (evtType === "review_status" || obj.type === "review_status") {
             // Iter 268 — HIGH_STAKES turn being buffered + reviewed.
@@ -396,7 +418,7 @@ function ChatShell({ onLogout }) {
                           background: PAL.card }}>
         <div style={{ fontWeight: 700, letterSpacing: 2, fontSize: 15 }}>AUREM</div>
         <div style={{ flex: 1 }} />
-        {budget && (
+        {budget && debug && (
           <div data-testid="ora-budget-pill"
                title={`Today: $${budget.day_spent_usd} · Month: $${budget.month_spent_usd}`}
                style={{ fontSize: 11, padding: "4px 10px", borderRadius: 999,
@@ -495,12 +517,12 @@ function ChatShell({ onLogout }) {
                             padding: "24px 20px min(240px, 32vh)" }}>
               <div style={{ maxWidth: containerW.maxW, width: containerW.pct,
                               margin: "0 auto",
-                              display: "flex", flexDirection: "column", gap: 16 }}>
-                {messages.map((m, i) => <Bubble key={i} m={m} />)}
+                              display: "flex", flexDirection: "column", gap: 28 }}>
+                {messages.map((m, i) => <Bubble key={i} m={m} debug={debug} />)}
                 {sending && !stream.buf && <ThinkingDots label={stream.reviewing ? "verifying high-stakes response…" : undefined} />}
                 {stream.buf && (
                   <Bubble m={{ role: "assistant", content: stream.buf,
-                                 ...stream, streaming: true }} />
+                                 ...stream, streaming: true }} debug={debug} />
                 )}
               </div>
             </div>
@@ -638,7 +660,7 @@ function InputCard({ input, setInput, onSend, sending, onStop, large = false }) 
   );
 }
 
-function Bubble({ m }) {
+function Bubble({ m, debug = false }) {
   const isUser = m.role === "user";
   // Iter 212m-258 — copy toggle on bottom-outer of every bubble.
   // 2s "Copied!" flash confirms the clipboard write, then reverts.
@@ -661,19 +683,45 @@ function Bubble({ m }) {
   };
   const showCopy = !m.streaming && (m.content || "").trim().length > 0;
 
+  // Iter 212m-263 · Feb 2026 — Claude-style bubble treatment:
+  //  · Assistant messages: no border, no card background — text
+  //    flows directly on the page. Full column width. Generous
+  //    vertical padding + line-height for readable prose density.
+  //  · User messages: keep the subtle warm-chip background so the
+  //    two roles remain distinguishable, but drop to ~75% width so
+  //    long user paragraphs align right without dominating.
+  //  · Error bubbles retain a tinted background for signal.
+  const bubbleStyle = isUser
+    ? {
+        padding: "12px 16px",
+        borderRadius: 14,
+        background: m.isError ? "#fdeeea" : PAL.bubbleUser,
+        border: "none",
+        color: PAL.text,
+        fontSize: 15,
+        lineHeight: 1.65,
+        wordBreak: "break-word",
+      }
+    : {
+        padding: "4px 0",
+        borderRadius: 0,
+        background: m.isError ? "#fdeeea" : "transparent",
+        border: "none",
+        color: PAL.text,
+        fontSize: 15.5,
+        lineHeight: 1.75,
+        wordBreak: "break-word",
+      };
+
   return (
-    <div style={{ alignSelf: isUser ? "flex-end" : "flex-start",
-                    maxWidth: "85%", display: "flex",
+    <div style={{ alignSelf: isUser ? "flex-end" : "stretch",
+                    maxWidth: isUser ? "75%" : "100%",
+                    width: isUser ? "auto" : "100%",
+                    display: "flex",
                     flexDirection: "column",
-                    alignItems: isUser ? "flex-end" : "flex-start" }}>
-      <div data-testid={`ora-msg-${m.role}`}
-           style={{ padding: "12px 16px",
-                      borderRadius: 14,
-                      background: m.isError ? "#fdeeea"
-                                     : isUser ? PAL.bubbleUser : PAL.bubbleAsst,
-                      border: isUser ? "none" : `1px solid ${PAL.border}`,
-                      color: PAL.text, fontSize: 14, lineHeight: 1.6,
-                      wordBreak: "break-word" }}>
+                    alignItems: isUser ? "flex-end" : "flex-start",
+                    marginBottom: 6 }}>
+      <div data-testid={`ora-msg-${m.role}`} style={bubbleStyle}>
         {/* Phase 1 · Streamdown — user turn stays plain text so the
             user's raw prompt is never interpreted as HTML. Assistant
             turn renders markdown (GFM + code + LaTeX + inline images)
@@ -687,23 +735,28 @@ function Bubble({ m }) {
         )}
         {!isUser && Array.isArray(m.ungrounded) && m.ungrounded.length > 0 && (
           <div data-testid="ora-grounding-warning"
-               style={{ marginTop: 8, padding: "6px 10px", borderRadius: 8,
+               style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8,
                           background: "#FBF1DC", border: "1px solid #E4C26B",
-                          color: "#8A6512", fontSize: 11.5, lineHeight: 1.5 }}>
+                          color: "#8A6512", fontSize: 12, lineHeight: 1.5 }}>
             ⚠️ Unverified citations: <span style={{ fontFamily: "ui-monospace, monospace" }}>
             {m.ungrounded.join(", ")}</span> — ye paths repo mein exist nahi karte.
           </div>
         )}
         {!isUser && Array.isArray(m.review_caveats) && m.review_caveats.length > 0 && (
           <div data-testid="ora-review-caveat"
-               style={{ marginTop: 8, padding: "6px 10px", borderRadius: 8,
+               style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8,
                           background: "#EEF0F6", border: "1px solid #B9C2D8",
-                          color: "#4A5878", fontSize: 11.5, lineHeight: 1.5 }}>
+                          color: "#4A5878", fontSize: 12, lineHeight: 1.5 }}>
             ⚠︎ Review-flagged as unverified: {m.review_caveats.join(" · ")}
           </div>
         )}
-        {(m.route || m.streaming) && (
-          <div style={{ marginTop: 6, fontSize: 10, color: PAL.faint,
+        {/* Iter 212m-263 · Feb 2026 — internal route/temperature/model
+            metadata was leaking into the user-facing chat (same
+            category as the earlier "(via /loop/active fallback)" bug).
+            Gated behind ?debug=1 URL query so founder QA can still
+            inspect routing when needed, but default UX is Claude-clean. */}
+        {debug && (m.route || m.streaming) && (
+          <div style={{ marginTop: 8, fontSize: 10, color: PAL.faint,
                           display: "flex", gap: 6, alignItems: "center" }}>
             {m.route && (
               <span data-testid="ora-route-badge" style={{ padding: "1px 6px", borderRadius: 4,

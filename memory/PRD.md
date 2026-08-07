@@ -24,6 +24,37 @@ before being called "done".
 
 ## Change Log
 
+### 2026-02-07 · afternoon — Phase 1 · Post-Live Findings + Claude-Style Restructure ✅
+
+Founder QA on preview flagged 3 real bugs + a full UI restructure to match Claude.ai's chat aesthetic. Batched into a single Phase 1 close-out pass so the whole surface ships coherent.
+
+**Bug fixes:**
+- **`/repo-tree` "literal `\n` wall of text"** — `frontend/src/pages/OraDirect.jsx` + `frontend/src/components/OraChatDrawer.jsx`: `slash_result` handler was blindly `JSON.stringify`-ing the value, which escaped every real newline. Now: string values render verbatim inside a fenced code block (real newlines preserved), objects/arrays fall through to `\`\`\`json … \`\`\`` — one code path, one code fence, readable output.
+- **"general · t=0.4" internal metadata leak** — assistant route/temperature/downgrade badge below every message is now gated behind `?debug=1` URL param (`useDebugMode()` helper). Same policy as the earlier "(via /loop/active fallback)" cleanup.
+- **Header cost pill always-on** — `$0.0000 / $2.5` budget chip also gated behind `?debug=1`. Founder QA sessions add `?debug=1`; the default `/ora` surface is now Claude-clean.
+
+**Cross-turn content bleed (Finding 2) — RCA:**
+- `backend/services/ora_chat/session.py::build_llm_history` sends the full session history to the LLM until token ceiling; XSS payload from a prior turn appeared in context → model echoed it verbatim in the next unrelated reply. Streamdown neutralised the payload at render time (verified: sentinel `window.__pwned` never fires) — no security compromise, but a context-hygiene quirk.
+- Guidance: use "New chat" (`ora-picker-new`) for clean QA. No code change this session — session-level input sanitisation belongs to Phase 3 (intent detection has better hooks).
+
+**Claude-style layout (`OraDirect.jsx` + `index.css`):**
+- `useContainerWidth()` now returns fixed **780px** on desktop (was 46% viewport → wide-on-4K, cramped-on-13"). Tablet: 92% up to 760px. Mobile: 100%.
+- Assistant bubble rewritten: `border: none`, `background: transparent`, `padding: 4px 0`, `fontSize: 15.5`, `lineHeight: 1.75`, `alignSelf: stretch`, full-column width — Claude's borderless flow-on-page look.
+- User bubble kept as subtle warm-chip (`PAL.bubbleUser`), max 75% width, right-aligned — role separation via spacing + tint only, no hard-edged card.
+- Message-list `gap: 16 → 28` for airy vertical rhythm.
+- New `.ora-md` CSS block in `frontend/src/index.css` restores Tailwind-preflighted list markers, heading sizes, table borders, inline `<code>` chips, blockquote left-rule and paragraph rhythm — scoped so no other page is affected.
+
+**Verification (preview):**
+- `yarn test src/components/__tests__/OraChat.streamdown_xss.test.jsx` → 2/2 pass (unchanged).
+- ESLint on `OraDirect.jsx` → 0 issues.
+- Live smoke on `/ora` (fresh session):
+  - Rich-render prompt → GFM table + fenced code + bulleted list all rendered correctly, no metadata badge, no header cost pill.
+  - `/repo-tree` → hundreds of file paths rendered with real newlines inside a code fence, fully scannable.
+
+Ready for founder redeploy → prod re-verification.
+
+---
+
 ### 2026-02-07 — Phase 1 · ORA Chat Rich Rendering (Streamdown) ✅
 
 **Goal:** Ship Claude-style rich markdown rendering to `/ora` admin chat with built-in XSS safety. Strict phase-gating: Phase 2+ blocked until founder confirms Phase 1 stable.

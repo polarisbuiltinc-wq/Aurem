@@ -191,7 +191,15 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
             errored = obj.error || "stream_error";
             setStream(s => ({ ...s, err: errored }));
           } else if (evtType === "slash_result" || obj.type === "slash_result") {
-            assistantBuf += `\n${JSON.stringify(obj.result?.value, null, 2)}\n`;
+            // Iter 212m-263 · Feb 2026 — string values (e.g. /repo-tree)
+            // rendered verbatim inside a code fence; JSON.stringify only
+            // for objects/arrays. Prevents literal "\n" glyphs.
+            const _v = obj.result?.value;
+            if (typeof _v === "string") {
+              assistantBuf += `\n\`\`\`\n${_v}\n\`\`\`\n`;
+            } else {
+              assistantBuf += `\n\`\`\`json\n${JSON.stringify(_v, null, 2)}\n\`\`\`\n`;
+            }
             setStream(s => ({ ...s, buf: assistantBuf }));
           } else if (evtType === "review_status" || obj.type === "review_status") {
             routeMeta = { ...routeMeta, reviewing: true };
