@@ -55,8 +55,12 @@ Founder-requested 13-layer audit. Green layers are solid; the items below are th
 ### ✅ Green (Do NOT touch)
 Backend arch, LLM routing, Vanguard scanner, Phase 1-4 chat surface, tier-gated upload, iframe sandbox contract, JWT+bcrypt auth, PAT encryption, test suite (47 pytest + 22 vitest).
 
-## Backlog · Phase 3.1 · LLM Intent Classifier Calibration
-- **Symptom** (founder-verified 2026-02-08 on prod): Test 3 "hey there" — a plain greeting with zero preview/code intent — was promoted by the Gemini fallback classifier to `preview only · llm`. Chip stayed hidden because the badge only surfaces in `?debug=1`, but the underlying label is wrong.
+## Backlog · Phase 5.1 · Image-Bypass Regex Length Cap
+- **Symptom** (founder-flagged 2026-02-08, non-blocking): The `IMG_DATA_URI_RE` in `ImageGenBubbleContent` (`frontend/src/pages/OraDirect.jsx`) accepts an unbounded base64 payload — `[A-Za-z0-9+/=\r\n]+` has no upper length. A pathological input flagged with `imageGen:true` (would already require bypassing layers ① + ②) could theoretically hang the render on regex backtracking.
+- **Impact today**: Very low. The setter site is single-source (POST `/image-generate` success only). The backend caps `image_base64` to ≈1.4MB PNG output. Real-world payloads are always in a safe range.
+- **Fix (planned)**: Add a `{1,4000000}` bound to the base64 group, or a JS `dataUrl.length > 5_000_000` guard before the `<img src>` render. Trigger: when Phase 5 opens up beyond founder-only (Pro/Team access) — untrusted-flow makes DoS worth pre-empting.
+
+## Backlog · Phase 3.1 · LLM Intent Classifier Calibration- **Symptom** (founder-verified 2026-02-08 on prod): Test 3 "hey there" — a plain greeting with zero preview/code intent — was promoted by the Gemini fallback classifier to `preview only · llm`. Chip stayed hidden because the badge only surfaces in `?debug=1`, but the underlying label is wrong.
 - **Cause**: The current LLM system prompt asks the model to pick ONE of two labels for every message. On genuinely neutral input the model defaults to PREVIEW_ONLY rather than saying "no evidence".
 - **Fix (planned)**: Tighten `_LLM_SYSTEM_PROMPT` in `backend/services/ora_chat/intent_router.py` to require **positive evidence** (a request-to-see-something for PREVIEW_ONLY, a request-to-modify-repo for CODE_CHANGE), and treat absence of evidence as an explicit `UNKNOWN` output. Expand `_sanitize_llm_label` to accept `UNKNOWN` as a valid label. Add a golden-eval test set of ~10 neutral / ambiguous / clear inputs to prevent regression.
 - **Trigger to unblock**: BEFORE we start using intent for user-visible tier-gating (Phase 4/5+). Non-blocking for the current chip UX.
