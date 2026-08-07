@@ -1169,8 +1169,8 @@ async def chat_stream(
         )
         raise HTTPException(400, "This message cannot be processed")
     if not (bool(user.get("is_unlimited")) or user.get("tier") == "founder"):
-        from services.rate_limiter import check_rate_limit, client_ip_from_request
-        if not check_rate_limit(f"chat:{client_ip_from_request(request)}", 30):
+        from services.rate_limiter import check_rate_limit_async, client_ip_from_request
+        if not await check_rate_limit_async(f"chat:{client_ip_from_request(request)}", 30):
             raise HTTPException(429, "Rate limit exceeded: 30 chats/min/IP")
 
     # Iter 212m-58 — Loop-mode prompt enrichment. When the frontend

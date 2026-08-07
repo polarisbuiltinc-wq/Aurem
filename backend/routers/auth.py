@@ -24,7 +24,7 @@ from cto_services.auth import (
 from cto_services.db import get_db
 from services.usage import is_founder_email
 from services.mfa import verify_code, consume_backup_code
-from services.rate_limiter import check_rate_limit, client_ip_from_request
+from services.rate_limiter import check_rate_limit_async, client_ip_from_request
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -57,7 +57,7 @@ async def _enforce_login_guard(db, client_ip: str) -> None:
           for the remainder of the window. Survives restarts.
     """
     # Layer 1 — burst rate limit
-    if not check_rate_limit(f"login-ip:{client_ip}", _LOGIN_RATE_PER_MIN):
+    if not await check_rate_limit_async(f"login-ip:{client_ip}", _LOGIN_RATE_PER_MIN):
         raise HTTPException(
             429,
             f"Too many login attempts from this IP. "

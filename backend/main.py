@@ -223,7 +223,9 @@ if _SENTRY_DSN:
 
 # Iter 45 — slowapi rate limiting (per-IP). Hand-rolled to avoid
 # decorator/dep-injection collision.
-from services.rate_limiter import check_rate_limit, client_ip_from_request
+from services.rate_limiter import (
+    check_rate_limit, check_rate_limit_async, client_ip_from_request,
+)
 
 # Services
 from cto_services.db import set_db
@@ -1791,15 +1793,18 @@ async def _global_rate_limit_guard(request, call_next):
     # (they use `ora_chat:...`, `login-ip:...`, etc). One shared 60-s
     # sliding window per IP across ALL of that IP's non-skip requests.
     #
-    # Multi-pod note (2026-02-08): the underlying `_buckets` dict is
-    # PER-PROCESS. In a K8s deployment with N replicas each pod holds
-    # its own bucket, so the effective per-IP ceiling across the fleet
-    # is `_GLOBAL_RL_PER_MIN × N`. This still catches genuine abuse
-    # (any single pod hitting 300/min-per-IP is well above legit
-    # traffic and gets 429'd), but a coordinated multi-pod flood
-    # slips past. Shared-bucket (Redis) or edge-layer (Cloudflare)
-    # rate-limiting is the long-term fix — logged in the ROADMAP.
-    if not check_rate_limit(f"global-ip:{ip}", _GLOBAL_RL_PER_MIN):
+    # Iter 386 · Session 2 · Part 0 fix (2026-02-08): switched from
+    # the sync `check_rate_limit` to the async Redis-shared variant.
+    # Reason: the sync version stores state in a per-process dict,
+    # so on our K8s deployment with N pods behind a load balancer
+    # each pod had its own counter and no IP ever accumulated the
+    # 300+ requests needed to trip its ceiling (verified: 350 parallel
+    # curls against auremcto.com → 0 × 429). The async path uses a
+    # Redis sorted-set with an atomic Lua sliding-window script so
+    # every pod sees the SAME bucket. Falls back to per-process on
+    # Redis outage (fail-open — we never 429 legitimate users because
+    # our cache is sick).
+    if not await check_rate_limit_async(f"global-ip:{ip}", _GLOBAL_RL_PER_MIN):
         logger.warning(
             "global_rate_limit_hit ip=%s path=%s limit=%d/min",
             ip, request.url.path, _GLOBAL_RL_PER_MIN,

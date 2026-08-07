@@ -30,7 +30,7 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from cto_services.auth import require_admin, create_token
-from services.rate_limiter import check_rate_limit, client_ip_from_request
+from services.rate_limiter import check_rate_limit_async, client_ip_from_request
 from services.ora_chat import cost_tracker, session as ora_session
 from services.ora_chat import house_rules as ora_house_rules
 from services.ora_chat import deep_research as ora_deep
@@ -158,7 +158,7 @@ async def run_slash(body: SlashBody,
 
     # Rate + budget gates apply to slash-commands too (they still touch DB).
     ip = client_ip_from_request(request)
-    if not check_rate_limit(f"ora_chat:min:{user['user_id']}:{ip}", _BURST_PER_MIN):
+    if not await check_rate_limit_async(f"ora_chat:min:{user['user_id']}:{ip}", _BURST_PER_MIN):
         raise HTTPException(429, "Burst limit — slow down for a minute")
 
     parsed = parse_slash_command(body.command.strip())
@@ -289,7 +289,7 @@ async def send_message(body: MessageBody,
 
     # Rate + budget gates.
     ip = client_ip_from_request(request)
-    if not check_rate_limit(f"ora_chat:min:{user['user_id']}:{ip}", _BURST_PER_MIN):
+    if not await check_rate_limit_async(f"ora_chat:min:{user['user_id']}:{ip}", _BURST_PER_MIN):
         raise HTTPException(429, "Burst limit — slow down for a minute")
     b_status = await cost_tracker.budget_status()
     if b_status["mode"] == "spike_hard_stop":
@@ -1318,7 +1318,7 @@ async def preview_scan(body: PreviewScanBody,
     # gap after Phase 2-5).  30 scans/min per user+IP — enough for a
     # rapid streaming preview refresh loop but blocks scan-oracle abuse.
     ip = client_ip_from_request(request)
-    if not check_rate_limit(f"ora_chat:preview-scan:{user['user_id']}:{ip}", 30):
+    if not await check_rate_limit_async(f"ora_chat:preview-scan:{user['user_id']}:{ip}", 30):
         raise HTTPException(429, "Rate limit — slow down for a minute.")
     lang = (body.lang or "").strip().lower()
     code = body.code or ""
@@ -1378,7 +1378,7 @@ async def intent_classify(body: IntentClassifyBody,
     # than /preview-scan because a legit UI-side "type-to-classify" flow
     # can rack these up fast.
     ip = client_ip_from_request(request)
-    if not check_rate_limit(f"ora_chat:intent:{user['user_id']}:{ip}", 60):
+    if not await check_rate_limit_async(f"ora_chat:intent:{user['user_id']}:{ip}", 60):
         raise HTTPException(429, "Rate limit — slow down for a minute.")
     verdict = await ora_intent.classify_intent(
         body.text or "", one_shot_fn=one_shot,
@@ -1435,7 +1435,7 @@ async def ora_upload(
     # burst caps here directly protect LLM budget + CPU.
     if request is not None:
         ip = client_ip_from_request(request)
-        if not check_rate_limit(f"ora_chat:upload:{user['user_id']}:{ip}", 10):
+        if not await check_rate_limit_async(f"ora_chat:upload:{user['user_id']}:{ip}", 10):
             raise HTTPException(429, "Upload rate limit — slow down for a minute.")
     tier = (user.get("tier") or "").strip().lower()
     is_founder = bool(user.get("is_founder") or user.get("is_admin")
@@ -1582,7 +1582,7 @@ async def image_generate(body: ImageGenBody,
     # normal human retry loop while making a scripted drain-attack
     # obvious.  This is a belt on top of the $3/day + 10/mo gates.
     ip = client_ip_from_request(request)
-    if not check_rate_limit(f"ora_chat:img-gen:{user['user_id']}:{ip}", 6):
+    if not await check_rate_limit_async(f"ora_chat:img-gen:{user['user_id']}:{ip}", 6):
         raise HTTPException(429, "Image generation rate limit — try again in a minute.")
     tier = (user.get("tier") or "").strip().lower()
     is_founder = bool(user.get("is_founder") or user.get("is_admin")
@@ -1656,7 +1656,7 @@ async def image_status(request: Request,
     user = await require_admin(authorization)
     # Iter 212m-268 — cheap read-only endpoint, generous ceiling.
     ip = client_ip_from_request(request)
-    if not check_rate_limit(f"ora_chat:img-status:{user['user_id']}:{ip}", 60):
+    if not await check_rate_limit_async(f"ora_chat:img-status:{user['user_id']}:{ip}", 60):
         raise HTTPException(429, "Rate limit — slow down for a minute.")
     from cto_services.db import get_db
     db = get_db()

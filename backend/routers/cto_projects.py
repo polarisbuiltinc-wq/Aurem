@@ -1653,8 +1653,8 @@ async def submit_task(
     # the whole "founder = full access" rule.
     _is_unlimited = bool(me.get("is_unlimited")) or me.get("tier") == "founder"
     if not _is_unlimited:
-        from services.rate_limiter import check_rate_limit, client_ip_from_request
-        if not check_rate_limit(f"submit:{client_ip_from_request(request)}", 10):
+        from services.rate_limiter import check_rate_limit_async, client_ip_from_request
+        if not await check_rate_limit_async(f"submit:{client_ip_from_request(request)}", 10):
             raise HTTPException(429, "Rate limit exceeded: 10 code tasks/min/IP")
     # THING 1 — hard-stop token enforcement. Raises HTTP 402 if the user has
     # spent their plan_limit + any admin-granted bonus. The AI is NEVER
