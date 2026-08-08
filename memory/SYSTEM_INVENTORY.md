@@ -744,3 +744,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `services/bg_safe.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-07T21:00:54.456179Z] <!-- inv:service:services/bg_safe.py -->
 - `GLOBAL_RATE_LIMIT_PER_MIN` — auto-detected in backend/tests/test_iter386_global_rate_limit.py (verify) (default: unset) [Iter 0, 2026-08-07T21:59:35.058676Z] <!-- inv:envvar:GLOBAL_RATE_LIMIT_PER_MIN -->
 - `REDIS_URL` — auto-detected in backend/tests/test_iter386_redis_rate_limiter.py (verify) (default: unset) [Iter 0, 2026-08-07T22:44:26.506308Z] <!-- inv:envvar:REDIS_URL -->
+
+### Iter 0 · 2026-08-08
+
+| `routers/migrations_admin.py` | `/admin/migrations` | 5 | auto-detected new router (verify) (Iter 0, 2026-08-08T17:11:45.141764Z) | <!-- inv:router:routers/migrations_admin.py -->
