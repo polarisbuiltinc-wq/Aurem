@@ -20,6 +20,9 @@ Founder-facing. Numbered. Cross-referenced with full design docs when they exist
 | # | Feature | Priority | Trigger to start | Design doc |
 |---|---|---|---|---|
 | 1 | **Object-storage / CDN pattern for user media** — persist ORA-generated images + optional chat-upload archive. Two build routes specced (Emergent-managed vs GridFS-own). | 🟠 P1 | Founder green-light OR first user report that a generated-image link went dead in their gallery. | [`GRIDFS_MEDIA_STORAGE_DESIGN.md`](./GRIDFS_MEDIA_STORAGE_DESIGN.md) |
+| 2 | **DB Schema Normalization Audit (A- → A)** — Full collection ownership map (`DB_SCHEMA_MAP.md`), flag denormalized fields (e.g. user email cached in multiple docs), write dedupe cleanup script. ~2h. | 🟡 P2 | After migration framework lands so schema changes can be tracked. | *TBD — no design doc yet* |
+| 3 | **Index Registry Consolidation (A → A polish)** — Merge 71 scattered `create_index` calls into single declarative source-of-truth. Add `scripts/audit_indexes.py` using `$indexStats` to find dead/duplicate indexes. ~2h. | 🟡 P2 | After migration framework so index changes are versioned. | *TBD — no design doc yet* |
+| 4 | **Query Optimization Observability (B- → A)** — Slow-query middleware (>500ms → Sentry breadcrumb), P95 latency logging on hot endpoints, `db.setProfilingLevel` toggle, weekly slow-query digest. ~4h. | 🟡 P2 | Founder notices perf degradation OR after 100+ paying users. | *TBD — no design doc yet* |
 
 ---
 
