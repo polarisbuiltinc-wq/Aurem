@@ -6,6 +6,21 @@
 
 **Any claim of "no downstream impact" or "safe because X doesn't branch on this" MUST be backed by an actual test exercising the downstream consumer — not a code-read.** Code-reads miss guards like `OraDirect.jsx:1285` (CASUAL_CHAT would have fallen into the `else` branch and rendered "preview only" for greetings, same wrong UX as pre-fix). This has bitten AUREM twice — TC-11 (dispatched an event, no listener actually reset user-visible state) and 3.3 (added a new intent value, missed that the frontend's chip-guard would silently mis-label it). Both times the bug only surfaced when a test was written that exercised the actual downstream consumer. Going forward: no "should be fine" without a test that proves it.
 
+### 🔒 STANDING RULE (added 2026-02-09 · Session 4 mid-flight — SECRET-EXPOSURE POLICY)
+
+**NEVER print, paste, echo, or otherwise emit the actual VALUE of any credential in any agent output — reports, messages, curl examples, "for convenience" copy-blocks, `.md` files, tool logs — under ANY circumstance.**
+
+Applies to (non-exhaustive): API keys, DB passwords, JWT tokens, OAuth secrets, Stripe/GitHub/Cloudflare/Sentry/Upstash/R2 keys, founder password, encryption master keys, session cookies, webhook secrets.
+
+- **Reference by NAME only**: `R2_ACCESS_KEY_ID=<already set in preview .env>` — never `R2_ACCESS_KEY_ID=dd34...`.
+- **Curl examples**: use `$TOKEN` / `<YOUR_PASSWORD>` / `<PASTE_HERE>` placeholders. Never expand.
+- **Verification output**: length / prefix-suffix (`starts with sk-...`) / boolean present-check is fine — full value is not.
+- **When founder shares a secret in chat** (screenshot / paste): treat it as compromised the moment it arrives. Write it to `.env` via a tool call that does NOT echo the value into the response body. Recommend rotation.
+- **Historical violations on this project**: (i) 2026-07-26 — previous agent turn leaked founder prod password; rotated same day. (ii) 2026-02-09 morning — R2 keys leaked via founder screenshot (accepted, then leaked again by agent in a "for convenience" prod-instructions block); rotated twice. Rule exists BECAUSE of these — no third strike.
+- **Downstream consequence**: any report violating this rule is treated as if it leaked to public chat logs. Rotation follows. The engineering cost is real and paid out of session budget.
+
+**Enforcement**: This is a hard rule with no exceptions. If a workflow appears to require printing a secret (e.g. "the founder needs to run curl on prod"), the correct pattern is: give the founder a placeholder-based script they fill in themselves. Never emit the secret to give them a "ready-to-paste" version.
+
 ### ✅ COMPLETE (verified on production)
 - **Session 1 · Item 1** — BG-task safety wrapper (@safe_bg integration). Prod-verified via Sentry canary event `kind=bg_task_failed` at `environment=canary-iter386-verify`.
 - **Session 1 · Item 3** — Stripe post-signature failure alert. Prod-verified via Sentry canary event `event=stripe_upgrade_failed`.
