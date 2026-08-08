@@ -1283,7 +1283,8 @@ function Bubble({ m, debug = false, onOpenPreview }) {
             automatically (that lives in Phase 4 wiring), it just
             makes the affordance discoverable. */}
         {!isUser && !m.streaming && m.intent
-          && m.intent !== "UNKNOWN" && (
+          && m.intent !== "UNKNOWN"
+          && m.intent !== "CASUAL_CHAT" && (
           <div data-testid={`ora-intent-${m.intent}`}
                style={{ marginTop: 10, display: "flex", gap: 8,
                           alignItems: "center", flexWrap: "wrap" }}>
