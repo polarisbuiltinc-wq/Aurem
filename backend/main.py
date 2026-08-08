@@ -37,6 +37,7 @@ from routers.cto_projects import router as cto_projects_router
 from routers.automations import router as automations_router
 from routers.upload import router as upload_router
 from routers.admin import router as admin_router
+from routers.migrations_admin import router as migrations_admin_router  # Feb 2026 — admin-gated migration framework endpoints (see backend/migrations/README.md)
 from routers.admin_public import router as admin_public_router  # Iter 358 — public /admin/errors/report sink
 from routers.admin_qa import router as admin_qa_router          # Iter 303 (/admin/qa dashboard)
 from routers.admin_health import router as admin_health_router  # Feb 2026 — unified health registry aggregator
@@ -2377,6 +2378,7 @@ app.include_router(cto_projects_router, prefix="/api/aurem-dev")
 app.include_router(automations_router, prefix="/api/aurem-dev")
 app.include_router(upload_router,        prefix="/api/aurem-dev")
 app.include_router(admin_router,         prefix="/api/aurem-dev")
+app.include_router(migrations_admin_router, prefix="/api/aurem-dev")  # /api/aurem-dev/admin/migrations/*
 app.include_router(admin_public_router,  prefix="/api/aurem-dev")  # Iter 358 — un-gated /admin/errors/report
 app.include_router(admin_qa_router,      prefix="/api/aurem-dev")  # Iter 303 — /admin/qa dashboard
 app.include_router(admin_health_router,  prefix="/api")             # Feb 2026 — /api/aurem-dev/admin/status/*
