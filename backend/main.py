@@ -9,7 +9,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -2235,7 +2235,6 @@ async def health_ora_breaker():
 #   }
 #
 # If `backend == "in_memory"` on prod → alert: Redis unreachable from
-# this pod → multi-pod gap is back. Escalate to Emergent Support.
 @app.get("/api/aurem-dev/health/rate-limiter", tags=["Health"])
 async def health_rate_limiter():
     """Return the rate-limiter backend state. Zero upstream calls;
@@ -2266,6 +2265,39 @@ async def health_rate_limiter():
             "last_attempt_ts": diag["last_attempt_ts"],
         },
     }
+
+
+# Iter 386 · Session 2 · Part reconcile — Diagnostic echo endpoint used
+# for reconciling burst-test discrepancies. Returns EXACTLY what the
+# global rate-limiter sees as the source-IP for this request (via the
+# same `client_ip_from_request()` helper), plus every IP-related header
+# CF/K8s could set. Fire 50 parallel requests to this endpoint and
+# count `distinct effective_ip` to prove whether the client's egress
+# is single-IP or a rotating proxy pool — the exact reconciliation
+# needed after 400-req burst tests give different results from
+# different observers. Zero DB/upstream work; skip-listed via the
+# `/api/aurem-dev/health` prefix so hitting it doesn't itself pollute
+# the rate-limit bucket.
+@app.get("/api/aurem-dev/health/echo-ip", tags=["Health"])
+async def health_echo_ip(request: Request):
+    """Echo back the IP the rate-limiter would key on for this request."""
+    from services.rate_limiter import client_ip_from_request
+    h = request.headers
+    return {
+        # This is EXACTLY the value main.py:1792 keys the sliding-window
+        # bucket on. If two burst requests return two different values
+        # here, they get two different budgets.
+        "effective_ip": client_ip_from_request(request),
+        # Raw signals — useful to spot proxy chains / IP rewrites.
+        "socket_client_host":  getattr(request.client, "host", None),
+        "x_forwarded_for":     h.get("x-forwarded-for"),
+        "x_real_ip":           h.get("x-real-ip"),
+        "cf_connecting_ip":    h.get("cf-connecting-ip"),
+        "true_client_ip":      h.get("true-client-ip"),
+        "forwarded":           h.get("forwarded"),
+        "user_agent":          h.get("user-agent"),
+    }
+
 
 
 # Iter 140 — Versioned health endpoint. Stable contract for v1 API
