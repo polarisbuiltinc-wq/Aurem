@@ -38,9 +38,10 @@ logger = logging.getLogger(__name__)
 
 INTENT_PREVIEW      = "PREVIEW_ONLY"
 INTENT_CODE_CHANGE  = "CODE_CHANGE"
+INTENT_CASUAL       = "CASUAL_CHAT"
 INTENT_UNKNOWN      = "UNKNOWN"
 
-ALL_INTENTS = (INTENT_PREVIEW, INTENT_CODE_CHANGE, INTENT_UNKNOWN)
+ALL_INTENTS = (INTENT_PREVIEW, INTENT_CODE_CHANGE, INTENT_CASUAL, INTENT_UNKNOWN)
 
 
 # ── Layer 1 · Deterministic regex pre-filter ────────────────────────
@@ -91,14 +92,31 @@ def classify_intent_regex(text: str) -> tuple[str, list[str]]:
 _LLM_SYSTEM_PROMPT = (
     "You are an intent classifier for the ORA chat used by AUREM's "
     "founder. Read the user's message and reply with EXACTLY ONE of "
-    "these two label words, and nothing else:\n"
+    "these THREE label words, and nothing else:\n"
     "  PREVIEW_ONLY  — the user is exploring, asking to see, generate, "
     "                   sample, mock up, or preview a code snippet or "
     "                   UI element. No repository edit is being requested.\n"
     "  CODE_CHANGE   — the user is asking you to modify their real "
     "                   repository: commit, apply, push, update a file, "
     "                   fix a bug in the codebase, kick off a loop run, "
-    "                   open a PR, ship, deploy, etc.\n"
+    "                   open a PR, ship, deploy, etc. Short imperative "
+    "                   confirmations that clearly continue a prior "
+    "                   edit request ('fix it', 'do it', 'ship it', "
+    "                   'go ahead', 'make that change') ALSO count as "
+    "                   CODE_CHANGE — they are the user telling you to "
+    "                   proceed with a code action, not casual chat.\n"
+    "  CASUAL_CHAT   — the user is greeting, thanking, small-talk, or "
+    "                   their message contains NO concrete code/"
+    "                   preview/edit request and NO short imperative "
+    "                   confirmation of a code action. Includes: 'hi', "
+    "                   'hello', 'thanks', 'ok', 'yo', 'what's up', "
+    "                   'can you help' (unspecific), 'what can you "
+    "                   do?', 'test' (single-word probe).\n"
+    "When a message is ambiguous between CODE_CHANGE and CASUAL_CHAT "
+    "(e.g. 'do it', 'go ahead' with no visible prior context), prefer "
+    "CODE_CHANGE — false-CODE_CHANGE just offers an extra loop CTA "
+    "the user can ignore, whereas false-CASUAL swallows a real edit "
+    "intent silently. Same tie-break rule as the regex layer.\n"
     "Reply with the label ONLY. No punctuation, no explanation, no code."
 )
 
@@ -116,6 +134,8 @@ def _sanitize_llm_label(raw: str) -> str:
         return INTENT_PREVIEW
     if stripped == INTENT_CODE_CHANGE:
         return INTENT_CODE_CHANGE
+    if stripped == INTENT_CASUAL:
+        return INTENT_CASUAL
     return INTENT_UNKNOWN
 
 
