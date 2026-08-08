@@ -45,9 +45,18 @@ from services.ora_chat            import cost_tracker
 
 logger = logging.getLogger(__name__)
 
-_HTTP_TIMEOUT = 12.0
+_HTTP_TIMEOUT = float(os.getenv("ORA_HTTP_TIMEOUT", "20.0"))
 _MAX_PARALLEL = 4
 _DOWNGRADE_MARGIN = 0.50  # USD — if remaining daily budget < this, downgrade
+
+# Iter 386 · Session 2.7 · Fix D — Sonar/web-search timeout was 12s
+# which produced 4 × "Sources didn't respond in time" in one prod
+# session (2026-02-08). Bumped to 20s + slow-call telemetry so we
+# can spot upstream degradation before it becomes user-visible. The
+# constant is env-tunable so on-call can raise it further without a
+# code deploy in an incident.
+_SONAR_SLOW_THRESHOLD_S = float(
+    os.getenv("ORA_SONAR_SLOW_THRESHOLD_S", "5.0"))
 
 
 def use_claude_tools() -> bool:
@@ -656,23 +665,83 @@ async def _fetch_reddit(query: str) -> dict:
 
 
 async def _fetch_sonar(query: str) -> dict:
-    """Perplexity Sonar via existing research route."""
+    """Perplexity Sonar via existing research route.
+
+    Iter 386 · Session 2.7 · Fix D — 3-part upgrade to the previous
+    single-attempt bare call:
+      1. Timeout uses `_HTTP_TIMEOUT` (was implicit in `one_shot`,
+         now surfaced as a bounded wall-clock via `asyncio.wait_for`).
+      2. One automatic retry on timeout (was zero — a hiccup meant
+         a user-visible "Sources didn't respond in time").
+      3. Slow-call telemetry — any Sonar call >`_SONAR_SLOW_THRESHOLD_S`
+         seconds gets a Sentry warning so on-call sees upstream
+         degradation BEFORE it becomes an outage.
+    """
+    import time as _t
     cfg = resolve("research")
-    text, u, err = await one_shot(
-        model=cfg["model"],
-        messages=[{"role": "user", "content": query[:400]}],
-        temperature=cfg["temperature"], top_p=cfg["top_p"],
-        presence_penalty=cfg["presence_penalty"],
-        max_tokens=cfg["max_tokens"],
-    )
-    if err:
-        return {"tool": "web", "ok": False, "error": err}
-    return {
-        "tool": "web", "ok": True, "text": text or "",
-        "usage": u, "cost_usd": cost_tracker.compute_cost_usd(
-            cfg["model"], u.get("input_tokens", 0), u.get("output_tokens", 0)
-        ) if u else 0.0,
-    }
+
+    async def _one_attempt() -> dict:
+        text, u, err = await one_shot(
+            model=cfg["model"],
+            messages=[{"role": "user", "content": query[:400]}],
+            temperature=cfg["temperature"], top_p=cfg["top_p"],
+            presence_penalty=cfg["presence_penalty"],
+            max_tokens=cfg["max_tokens"],
+        )
+        if err:
+            return {"tool": "web", "ok": False, "error": err}
+        return {
+            "tool": "web", "ok": True, "text": text or "",
+            "usage": u, "cost_usd": cost_tracker.compute_cost_usd(
+                cfg["model"], u.get("input_tokens", 0),
+                u.get("output_tokens", 0),
+            ) if u else 0.0,
+        }
+
+    start = _t.monotonic()
+    try:
+        res = await asyncio.wait_for(_one_attempt(), timeout=_HTTP_TIMEOUT)
+    except asyncio.TimeoutError:
+        # One retry on timeout — network hiccups are common, a single
+        # retry saves the user-facing "didn't respond in time" for
+        # persistent outages only.
+        logger.warning(
+            "sonar: timeout after %.1fs, retrying once", _HTTP_TIMEOUT)
+        try:
+            res = await asyncio.wait_for(
+                _one_attempt(), timeout=_HTTP_TIMEOUT)
+        except asyncio.TimeoutError:
+            elapsed = _t.monotonic() - start
+            _sonar_alert_sentry(
+                query=query, kind="timeout_after_retry",
+                elapsed=elapsed)
+            return {"tool": "web", "ok": False,
+                    "error": f"timeout_after_retry_{_HTTP_TIMEOUT:.0f}s"}
+    elapsed = _t.monotonic() - start
+    if elapsed >= _SONAR_SLOW_THRESHOLD_S:
+        _sonar_alert_sentry(
+            query=query, kind="slow_call", elapsed=elapsed)
+    return res
+
+
+def _sonar_alert_sentry(*, query: str, kind: str, elapsed: float) -> None:
+    """Non-blocking Sentry breadcrumb for slow / timed-out Sonar calls.
+    Kind = `slow_call` | `timeout_after_retry`."""
+    try:
+        import sentry_sdk
+        with sentry_sdk.push_scope() as scope:
+            scope.set_tag("event", "sonar_upstream_degraded")
+            scope.set_tag("kind", kind)
+            scope.set_context("sonar", {
+                "elapsed_s": round(elapsed, 2),
+                "query_preview": (query or "")[:120],
+                "threshold_s": _SONAR_SLOW_THRESHOLD_S,
+                "hard_timeout_s": _HTTP_TIMEOUT,
+            })
+            sentry_sdk.capture_message(
+                f"Sonar {kind} ({elapsed:.1f}s)", level="warning")
+    except Exception:
+        pass
 
 
 async def _fetch_codebase(query: str) -> dict:

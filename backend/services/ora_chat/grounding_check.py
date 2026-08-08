@@ -202,9 +202,25 @@ def extract_line_claims(reply: str) -> list[tuple[str, int]]:
 
 def extract_unknown_commands(reply: str) -> list[str]:
     """Slash-command tokens in the reply that are NOT real ORA
-    commands (e.g. an invented `/deploy-production`)."""
+    commands (e.g. an invented `/deploy-production`).
+
+    Iter 386 · Session 2.7 · Fix B — the "known" set MUST include
+    client-side intercepted commands like `/image` (handled by
+    `OraDirect.jsx`, never reaches the backend `KNOWN_COMMANDS`
+    tuple). Without this, every legitimate `/image` recommendation
+    from ORA gets scary-warned as unverified — the exact false-
+    positive founder saw on 2026-02-08.
+    """
     from services.ora_chat.safety import KNOWN_COMMANDS
-    known = {c.lstrip("/") for c in KNOWN_COMMANDS}
+    # KNOWN_COMMANDS are backend-executed slash-commands.
+    # _CLIENT_SIDE_COMMANDS are frontend-intercepted (never reach
+    # the backend safety parser) but are still legitimate ORA
+    # recommendations. Keep this list in sync with the intercept
+    # regex in `frontend/src/pages/OraDirect.jsx` — adding a new
+    # client-side command MUST be paired with an addition here.
+    _CLIENT_SIDE_COMMANDS = {"image"}
+    known = ({c.lstrip("/") for c in KNOWN_COMMANDS}
+             | _CLIENT_SIDE_COMMANDS)
     out = []
     for m in _SLASH_CMD_RE.finditer(reply or ""):
         tok = m.group(1)

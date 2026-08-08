@@ -13,7 +13,7 @@
  * /api/aurem-dev/ora-chat/pin-login. Reuses existing session /
  * streaming / budget / house-rules backend.
  */
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock, Settings, LogOut, ArrowUp, RefreshCw, Zap, Clock, Plus, Square, Copy, Play, Paperclip, X, FileText, Image as ImageIcon, Loader2 } from "lucide-react";
 import { api, setToken, getToken } from "../lib/api";
@@ -369,23 +369,19 @@ function ChatShell({ onLogout }) {
     } catch { /* ignore */ }
   };
 
-  const send = async () => {
-    const text = input.trim();
-    // Only "ready" attachments count towards the send.  Uploading /
-    // errored ones stay behind so the founder can retry / remove.
-    const readyAttachments = attachments.filter(a => a.status === "ready");
-    if ((!text && readyAttachments.length === 0) || !sessionId || sending) return;
-
-    // ── Phase 5 · Feb 2026 — client-side /image slash-command ─────
-    //   `/image <prompt>` short-circuits to the JSON image-generate
-    //   endpoint (founder-only, gpt-image-1 low, $3/day + 10/mo caps).
-    //   We handle it in the client so the SSE pipeline stays a pure
-    //   text stream — no binary blobs threaded through delta events.
-    const _imageSlash = text.match(/^\/image(?:-gen)?\s+([\s\S]+)$/i);
-    if (_imageSlash) {
-      const prompt = _imageSlash[1].trim();
-      setInput("");
-      setMessages(m => [...m, { role: "user", content: text }]);
+  // Iter 386 · Session 2.7 · Fix A — shared image-slash runner.
+  //
+  // The typed `/image <prompt>` intercept AND the tap-to-run buttons
+  // rendered by `OraSlashCmdButtons` both call this. Keeping the fetch
+  // + result-shaping in ONE place means the two entry points can NEVER
+  // drift apart (a bug in one could otherwise leak stale caches or a
+  // stale prompt into the LLM context).
+  const _runImageSlashPrompt = useCallback(
+    async (prompt, fromTypedCommand = false, userTypedText = null) => {
+      if (!prompt || !sessionId || sending) return;
+      const displayed = userTypedText
+        || (fromTypedCommand ? `/image ${prompt}` : `/image ${prompt}`);
+      setMessages(m => [...m, { role: "user", content: displayed }]);
       setSending(true);
       try {
         const r = await fetch(`${BASE}/image-generate`, {
@@ -398,20 +394,23 @@ function ChatShell({ onLogout }) {
         if (!r.ok) {
           const detail = j?.detail || j;
           const kind   = detail?.error || `HTTP_${r.status}`;
-          const msg    = detail?.message || `Image generation failed (${r.status}).`;
+          const msg    = detail?.message
+            || `Image generation failed (${r.status}).`;
           setMessages(m => [...m, {
             role: "assistant",
             content: `**Image generation blocked** · \`${kind}\`\n\n${msg}`,
             isError: true,
           }]);
         } else {
-          const dataUrl = `data:${j.mime || "image/png"};base64,${j.image_base64}`;
+          const dataUrl =
+            `data:${j.mime || "image/png"};base64,${j.image_base64}`;
           const quotaLine = j.user_month_status
             ? `_${j.user_month_status.used}/${j.user_month_status.cap} images used this month · $${(j.daily_status?.spent_usd || 0).toFixed(3)} / $${j.daily_status?.cap_usd?.toFixed?.(2) || "3.00"} today._`
             : "";
           setMessages(m => [...m, {
             role: "assistant",
-            content: `![${prompt.slice(0, 80)}](${dataUrl})\n\n${quotaLine}`,
+            content:
+              `![${prompt.slice(0, 80)}](${dataUrl})\n\n${quotaLine}`,
             imageGen: true,
           }]);
         }
@@ -424,6 +423,43 @@ function ChatShell({ onLogout }) {
       } finally {
         setSending(false);
       }
+    },
+    [BASE, sessionId, sending],
+  );
+
+  // Expose the runner via a stable window bridge so the Bubble-level
+  // `OraSlashCmdButtons` can invoke it without having to thread the
+  // callback through Bubble's props (which are shared across every
+  // message and would otherwise force a re-render whenever `sending`
+  // toggles).
+  useEffect(() => {
+    window.__oraRunImageSlash = _runImageSlashPrompt;
+    return () => { delete window.__oraRunImageSlash; };
+  }, [_runImageSlashPrompt]);
+
+  const send = async () => {
+    const text = input.trim();
+    // Only "ready" attachments count towards the send.  Uploading /
+    // errored ones stay behind so the founder can retry / remove.
+    const readyAttachments = attachments.filter(a => a.status === "ready");
+    if ((!text && readyAttachments.length === 0) || !sessionId || sending) return;
+
+    // ── Phase 5 · Feb 2026 — client-side /image slash-command ─────
+    //   `/image <prompt>` short-circuits to the JSON image-generate
+    //   endpoint (founder-only, gpt-image-1 low, $3/day + 10/mo caps).
+    //   We handle it in the client so the SSE pipeline stays a pure
+    //   text stream — no binary blobs threaded through delta events.
+    //
+    //   Iter 386 · Session 2.7 · Fix A — factored the fetch into a
+    //   closure `_runImageSlashPrompt` so the OraSlashCmdButtons
+    //   component can share the exact same code path when a user
+    //   taps ORA's inline `/image ...` recommendation. Zero duplicate
+    //   logic; button and typed-command produce identical results.
+    const _imageSlash = text.match(/^\/image(?:-gen)?\s+([\s\S]+)$/i);
+    if (_imageSlash) {
+      const prompt = _imageSlash[1].trim();
+      setInput("");
+      await _runImageSlashPrompt(prompt, /*fromTypedCommand=*/ true, text);
       return;
     }
 
@@ -982,6 +1018,79 @@ function InputCard({ input, setInput, onSend, sending, onStop, large = false,
   );
 }
 
+// Iter 386 · Session 2.7 · Fix A — Slash-command button extractor.
+//
+// ORA's response (per the CORE_SAFETY_RULES capability-discipline
+// clause) writes recommended slash-commands as an inline-code block
+// like `` `/image <prompt>` ``. This helper regex-matches those,
+// dedupes, and returns them as an array so the Bubble component
+// can render a "Run" button per suggestion — turning ORA's advice
+// into a real one-click action, matching the Claude/Gemini pattern.
+//
+// Scoped to `/image` for now (Phase 5's client-side intercept).
+// Extending to `/read /find /defs /repo-tree /loop-stats` follows
+// the same shape but they're already tap-typable via /help so lower
+// urgency. See PRD.md for the roadmap.
+const _ORA_IMAGE_CMD_RE = /`\s*\/image(?:-gen)?\s+([^`\n]{3,200}?)\s*`/gi;
+
+function _extractImageSlashPrompts(content) {
+  if (!content) return [];
+  const out = [];
+  const seen = new Set();
+  let m;
+  // Reset lastIndex — regex is /g, module-scoped, so mid-stream calls
+  // could otherwise skip matches on the same content.
+  _ORA_IMAGE_CMD_RE.lastIndex = 0;
+  while ((m = _ORA_IMAGE_CMD_RE.exec(content)) !== null) {
+    const p = (m[1] || "").trim();
+    if (p && !seen.has(p)) {
+      seen.add(p);
+      out.push(p);
+    }
+    if (out.length >= 3) break;      // cap: at most 3 buttons per turn
+  }
+  return out;
+}
+
+function OraSlashCmdButtons({ content, onRun }) {
+  const prompts = _extractImageSlashPrompts(content);
+  if (prompts.length === 0) return null;
+  return (
+    <div data-testid="ora-slash-cmd-buttons"
+         style={{ marginTop: 10, display: "flex", flexDirection: "column",
+                    gap: 6, alignItems: "flex-start" }}>
+      {prompts.map((p, i) => (
+        <button
+          key={i}
+          type="button"
+          data-testid={`ora-run-image-slash-${i}`}
+          onClick={() => onRun?.(p)}
+          style={{
+            padding: "6px 12px", borderRadius: 8, border: "1px solid #D0D5DD",
+            background: "#F9FAFB", color: "#1D2939",
+            fontSize: 12, fontWeight: 500, cursor: "pointer",
+            fontFamily: "ui-sans-serif, system-ui",
+            display: "inline-flex", alignItems: "center", gap: 6,
+          }}
+          title={`Generate: ${p}`}
+        >
+          <span style={{ fontFamily: "ui-monospace, monospace",
+                         fontSize: 11, color: "#667085" }}>▸</span>
+          Generate image: <em style={{ color: "#475467",
+                                        fontWeight: 400,
+                                        maxWidth: 320,
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap" }}>
+            {p.length > 60 ? p.slice(0, 60) + "…" : p}
+          </em>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+
 // Iter 212m-267 · Feb 2026 · Phase 5 — render an image-gen assistant
 // message: parse the first `![alt](data:…)` line into a real <img>,
 // keep the remaining italic quota-line rendered by Streamdown so it
@@ -1148,6 +1257,22 @@ function Bubble({ m, debug = false, onOpenPreview }) {
         ) : (
           <div className="ora-md" data-testid="ora-msg-md">
             <Streamdown>{m.content || ""}</Streamdown>
+            {/* ── Iter 386 · Session 2.7 · Fix A — buttonify /image ─
+                When ORA's reply contains an inline-code `/image <prompt>`
+                block, render a tap-to-run button that fires the same
+                image-generate endpoint used by the client-side slash
+                intercept. This turns ORA's recommendation into a real,
+                one-click action — the founder no longer has to copy
+                the command back into the composer. Pattern-matched on
+                the shipped markdown so this works with any LLM that
+                follows the CORE_SAFETY_RULES capability-discipline
+                clause (Session 2.7). */}
+            {!m.streaming && (
+              <OraSlashCmdButtons
+                content={m.content || ""}
+                onRun={(prompt) => window.__oraRunImageSlash?.(prompt)}
+              />
+            )}
           </div>
         )}
         {/* Iter 212m-265 · Feb 2026 · Phase 3 — intent verdict from

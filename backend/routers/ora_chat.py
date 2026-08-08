@@ -1490,6 +1490,38 @@ async def ora_upload(
     )
     from pathlib import Path as _P
     import tempfile as _tf
+    # Iter 386 · Session 2.7 · Fix F — credential redaction on every
+    # extraction path. Vision LLM can OCR a screenshot that happens to
+    # show `test_credentials.md` on a side monitor; MarkItDown can
+    # extract inline secrets from a PDF onboarding doc. Both flows
+    # now pass through `upload_redactor.redact` BEFORE the text is
+    # returned / persisted / echoed to the LLM.
+    from services.ora_chat.upload_redactor import redact as _redact_creds
+
+    def _apply_redaction(raw_text: str, source: str) -> tuple[str, dict]:
+        """Wrap redact() with observability. `source` = "vision"|"doc" —
+        included in the Sentry breadcrumb so on-call can tell WHICH
+        upload path was smuggling credentials."""
+        redacted, hits = _redact_creds(raw_text or "")
+        if hits:
+            try:
+                import sentry_sdk
+                with sentry_sdk.push_scope() as scope:
+                    scope.set_tag("event", "upload_credential_redacted")
+                    scope.set_tag("source", source)
+                    scope.set_tag("user_id", user.get("user_id") or "?")
+                    scope.set_context("redaction_hits", hits)
+                    sentry_sdk.capture_message(
+                        "Credentials redacted from user upload — "
+                        f"source={source} hits={hits}",
+                        level="warning",
+                    )
+            except Exception:
+                pass
+            logger.warning(
+                "upload_redactor: credentials scrubbed from %s upload "
+                "user=%s hits=%s", source, user.get("user_id"), hits)
+        return redacted, hits
 
     suffix = _P(file.filename or "").suffix.lower() or ""
     ctype  = (file.content_type or "").lower()
@@ -1505,6 +1537,9 @@ async def ora_upload(
                 "unavailable right now. Ask them to paste any visible "
                 "text or describe what they see in the image.)_"
             )
+        # Redact BEFORE truncation — else we could truncate a partial
+        # secret and still leak it.
+        description, _hits = _apply_redaction(description, "vision")
         text = description.strip()
         truncated = False
         if len(text) > MAX_MD_CHARS:
@@ -1535,6 +1570,8 @@ async def ora_upload(
             raise HTTPException(415, f"Couldn't convert this file: {e}")
 
     text = (getattr(result, "text_content", None) or "").strip()
+    # Same redaction pass on the doc branch.
+    text, _hits = _apply_redaction(text, "doc")
     if not text:
         text = (
             f"_(Attached `{file.filename}` — no extractable text. "
