@@ -38,6 +38,7 @@ from routers.automations import router as automations_router
 from routers.upload import router as upload_router
 from routers.admin import router as admin_router
 from routers.migrations_admin import router as migrations_admin_router  # Feb 2026 — admin-gated migration framework endpoints (see backend/migrations/README.md)
+from routers.backups_admin import router as backups_admin_router  # 2026-02-09 — admin-gated R2 backup endpoints (item #5)
 from routers.admin_public import router as admin_public_router  # Iter 358 — public /admin/errors/report sink
 from routers.admin_qa import router as admin_qa_router          # Iter 303 (/admin/qa dashboard)
 from routers.admin_health import router as admin_health_router  # Feb 2026 — unified health registry aggregator
@@ -745,19 +746,27 @@ async def lifespan(app: FastAPI):
             logger.warning("nudge_cron not started: %r", e)
     else:
         app.state.nudge_task = None
-    # Iter 153 — nightly MongoDB backup (03:00 UTC, keeps 7 days).
-    # Guarded behind ENABLE_DB_BACKUP=1 so dev environments without
-    # mongodump installed don't spam warnings.
+    # Iter 153 — nightly MongoDB backup. Refactored 2026-02-09 (item #5):
+    # writes to Cloudflare R2 (offsite, durable), 30-day retention default,
+    # 03:00 UTC default. The cron passes `db` on each invocation so the
+    # scratch DB and backup_history live in the same Mongo cluster.
+    # Guarded behind ENABLE_DB_BACKUP=1 so environments without R2
+    # configured don't spam warnings.
     if os.environ.get("ENABLE_DB_BACKUP", "1").lower() in ("1", "true", "yes"):
         try:
             from services.db_backup import backup_cron
             app.state.backup_task = _supervise(
-                backup_cron(),
+                backup_cron(db_getter=lambda: app.state.db),
                 name="db_backup",
                 db_getter=lambda: app.state.db,
                 long_lived=True,
             )
-            logger.info("🗄️ nightly DB backup cron enabled (03:00 UTC, 7-day retention)")
+            retention = os.environ.get("BACKUP_RETENTION_DAYS", "30")
+            hour = os.environ.get("BACKUP_SCHEDULE_UTC_HOUR", "3")
+            logger.info(
+                "🗄️  nightly DB backup cron enabled → R2 (%s:00 UTC, %s-day retention)",
+                hour, retention,
+            )
         except Exception as e:
             app.state.backup_task = None
             logger.warning("db backup cron not started: %r", e)
@@ -2411,6 +2420,7 @@ app.include_router(automations_router, prefix="/api/aurem-dev")
 app.include_router(upload_router,        prefix="/api/aurem-dev")
 app.include_router(admin_router,         prefix="/api/aurem-dev")
 app.include_router(migrations_admin_router, prefix="/api/aurem-dev")  # /api/aurem-dev/admin/migrations/*
+app.include_router(backups_admin_router,    prefix="/api/aurem-dev")  # /api/aurem-dev/admin/backups/*
 app.include_router(admin_public_router,  prefix="/api/aurem-dev")  # Iter 358 — un-gated /admin/errors/report
 app.include_router(admin_qa_router,      prefix="/api/aurem-dev")  # Iter 303 — /admin/qa dashboard
 app.include_router(admin_health_router,  prefix="/api")             # Feb 2026 — /api/aurem-dev/admin/status/*
