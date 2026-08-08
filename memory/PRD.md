@@ -827,6 +827,14 @@ Prevents future copy-paste drift when Council A swaps primary models.
   feature-list confirmation from founder)
 - Re-investigate `test_iter267_url_fetch_retry.py` (SSRF pre-check
   timing issue)
+- **Object-storage / CDN pattern for user media** — currently ORA
+  generated images use OpenAI ephemeral URLs (expire 1-2h) and chat
+  uploads discard binaries entirely. Two build options fully specced:
+  - Option A (recommended): Emergent-managed storage — CDN built-in.
+  - Option B (fallback): GridFS on our own MongoDB — full spec at
+    `/app/memory/GRIDFS_MEDIA_STORAGE_DESIGN.md` (~15 hours effort).
+  Trigger to start: founder green-light OR first user report that a
+  generated image link went dead in their gallery.
 
 ### Overnight Session — Feb 2026 — LOC + Test Score Deltas
 - `services/llm/__init__.py`: 1591 → 426 LOC (**−73%**)
