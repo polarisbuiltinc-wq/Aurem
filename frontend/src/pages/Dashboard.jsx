@@ -73,7 +73,7 @@ export default function Dashboard() {
 }
 
 function DashboardV2Body() {
-  const { sessionId, refreshSessions } = useChatSession();
+  const { sessionId, setSessionId, refreshSessions } = useChatSession();
   const activeProject = useActiveProject();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -428,8 +428,28 @@ function DashboardV2Body() {
     return () => window.removeEventListener("aurem:open-add-repo", onOpen);
   }, []);
   const handleNewRun   = useCallback(() => {
-    window.dispatchEvent(new CustomEvent("aurem:chat-session-reset"));
-  }, []);
+    // TC-11 fix (Feb 2026) — Rotate the sessionId so ChatPanel's
+    // `useEffect([sessionId])` at line 1181 fetches fresh (empty)
+    // history and paints [WELCOME]. That effect ALSO fires
+    // ChatPanel:374 which dispatches `aurem:chat-session-reset`
+    // downstream — so the cosmetic listeners (chatActive,
+    // toolbarHidden, hiddenForTyping) still flip correctly as a
+    // second-order side effect. No need to dispatch the event
+    // manually here anymore; doing so caused a double-dispatch that
+    // fired the cosmetic flags before sessionId had settled.
+    if (typeof setSessionId === "function") {
+      const newId =
+        (typeof crypto !== "undefined" && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      setSessionId(newId);
+    } else {
+      // Fallback for any environment where the context isn't wired
+      // (shouldn't happen in prod — Shell always provides it) so we
+      // at least keep the pre-fix cosmetic reset firing.
+      window.dispatchEvent(new CustomEvent("aurem:chat-session-reset"));
+    }
+  }, [setSessionId]);
   const handleTogglePreview = useCallback(() => {
     // Iter 212m-143 — flip the state instead of hard-setting open:true
     // so consecutive clicks on the topbar Preview tab actually toggle

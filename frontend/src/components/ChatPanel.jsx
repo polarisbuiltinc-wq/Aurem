@@ -373,6 +373,12 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   // user actually sends something.
   useEffect(() => {
     sessionStartedRef.current = false;
+    // TC-11 fix (Feb 2026) — clear the textarea composer whenever the
+    // session rotates so the "New run" button leaves the composer
+    // visibly empty. Without this, rotating `sessionId` cleared the
+    // messages list but the user's last unsent draft lingered in the
+    // input area, making the button look non-responsive.
+    setInput("");
     try { window.dispatchEvent(new CustomEvent("aurem:chat-session-reset")); }
     catch { /* ignore */ }
   }, [sessionId]);
