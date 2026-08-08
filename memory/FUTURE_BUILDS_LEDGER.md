@@ -23,6 +23,7 @@ Founder-facing. Numbered. Cross-referenced with full design docs when they exist
 | 2 | **DB Schema Normalization Audit (A- → A)** — Full collection ownership map (`DB_SCHEMA_MAP.md`), flag denormalized fields (e.g. user email cached in multiple docs), write dedupe cleanup script. ~2h. | 🟡 P2 | After migration framework lands so schema changes can be tracked. | *TBD — no design doc yet* |
 | 3 | **Index Registry Consolidation (A → A polish)** — Merge 71 scattered `create_index` calls into single declarative source-of-truth. Add `scripts/audit_indexes.py` using `$indexStats` to find dead/duplicate indexes. ~2h. | 🟡 P2 | After migration framework so index changes are versioned. | *TBD — no design doc yet* |
 | 4 | **Query Optimization Observability (B- → A)** — Slow-query middleware (>500ms → Sentry breadcrumb), P95 latency logging on hot endpoints, `db.setProfilingLevel` toggle, weekly slow-query digest. ~4h. | 🟡 P2 | Founder notices perf degradation OR after 100+ paying users. | *TBD — no design doc yet* |
+| 5 | **Backup Hardening (D+ → A) 🔴 CRITICAL** — Current `mongodump` writes to `/tmp/backups/` which is **ephemeral pod disk** (wiped on pod restart). Add offsite destination (Emergent-managed / R2 / S3 / encrypted GitHub tarball — founder to choose), weekly restore-drill script, Sentry alert on 2+ consecutive fails, encryption-at-rest. ~5h. | 🔴 **P0 (silent data-loss risk)** | Founder picks backup destination (a/b/c/d from the plan). Until then, current `/tmp/` backup runs but is unreliable. | *TBD — spec once destination chosen* |
 
 ---
 
