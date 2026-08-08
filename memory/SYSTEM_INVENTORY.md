@@ -748,3 +748,9 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 ### Iter 0 · 2026-08-08
 
 | `routers/migrations_admin.py` | `/admin/migrations` | 5 | auto-detected new router (verify) (Iter 0, 2026-08-08T17:11:45.141764Z) | <!-- inv:router:routers/migrations_admin.py -->
+- `BACKUP_RETENTION_DAYS` — auto-detected in backend/main.py (verify) (default: unset) [Iter 0, 2026-08-08T23:11:31.598245Z] <!-- inv:envvar:BACKUP_RETENTION_DAYS -->
+- `BACKUP_SCHEDULE_UTC_HOUR` — auto-detected in backend/main.py (verify) (default: unset) [Iter 0, 2026-08-08T23:11:31.598276Z] <!-- inv:envvar:BACKUP_SCHEDULE_UTC_HOUR -->
+| `routers/backups_admin.py` | `/admin/backups` | 4 | auto-detected new router (verify) (Iter 0, 2026-08-08T23:11:31.598290Z) | <!-- inv:router:routers/backups_admin.py -->
+- `R2_BUCKET` — auto-detected in backend/routers/backups_admin.py (verify) (default: unset) [Iter 0, 2026-08-08T23:11:31.598308Z] <!-- inv:envvar:R2_BUCKET -->
+- `SENTRY_ENV` — auto-detected in backend/services/db_backup.py (verify) (default: unset) [Iter 0, 2026-08-08T23:11:31.598325Z] <!-- inv:envvar:SENTRY_ENV -->
+- `services/db_restore.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-08T23:11:31.598341Z] <!-- inv:service:services/db_restore.py -->

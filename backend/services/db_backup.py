@@ -81,7 +81,8 @@ def _capture_sentry(exc: BaseException, extra: Optional[dict] = None) -> None:
     try:
         import sentry_sdk  # type: ignore
         if extra:
-            with sentry_sdk.push_scope() as scope:
+            # sentry_sdk 2.x — new scope API (push_scope is deprecated).
+            with sentry_sdk.new_scope() as scope:
                 for k, v in extra.items():
                     scope.set_extra(k, v)
                 sentry_sdk.capture_exception(exc)
