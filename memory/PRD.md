@@ -2,6 +2,10 @@
 
 ## Master Status Audit (2026-02-08, founder-issued)
 
+### 🧭 STANDING RULE (added 2026-02-08 · Session 3 close)
+
+**Any claim of "no downstream impact" or "safe because X doesn't branch on this" MUST be backed by an actual test exercising the downstream consumer — not a code-read.** Code-reads miss guards like `OraDirect.jsx:1285` (CASUAL_CHAT would have fallen into the `else` branch and rendered "preview only" for greetings, same wrong UX as pre-fix). This has bitten AUREM twice — TC-11 (dispatched an event, no listener actually reset user-visible state) and 3.3 (added a new intent value, missed that the frontend's chip-guard would silently mis-label it). Both times the bug only surfaced when a test was written that exercised the actual downstream consumer. Going forward: no "should be fine" without a test that proves it.
+
 ### ✅ COMPLETE (verified on production)
 - **Session 1 · Item 1** — BG-task safety wrapper (@safe_bg integration). Prod-verified via Sentry canary event `kind=bg_task_failed` at `environment=canary-iter386-verify`.
 - **Session 1 · Item 3** — Stripe post-signature failure alert. Prod-verified via Sentry canary event `event=stripe_upgrade_failed`.
