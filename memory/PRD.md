@@ -43,6 +43,10 @@ Applies to (non-exhaustive): API keys, DB passwords, JWT tokens, OAuth secrets, 
 
 **Enforcement**: This is a hard rule with no exceptions. If a workflow appears to require printing a secret (e.g. "the founder needs to run curl on prod"), the correct pattern is: give the founder a placeholder-based script they fill in themselves. Never emit the secret to give them a "ready-to-paste" version.
 
+**Generalization (added 2026-02-09 close)**: The R2-keys episode is the canonical example, but the discipline applies **verbatim to every future credential** — no exceptions for "small" or "webhook-only" secrets. Specifically flagged for the next session:
+- **Resend webhook signing secret** (Part B of item #34) follows the SAME rule: never pasted in chat by either party, written directly to `.env` by founder on the specific pod that needs it, verified present via `grep -c "^RESEND_WEBHOOK_SECRET" .env` + length shape-check by the agent, **considered done only after that verify passes**. Confirm prod-vs-preview `.env` separation BEFORE assuming a single write covers both — same disk-separation trap that caused the "R2 keys saved 3 times, grep shows 0" saga on 2026-02-09.
+- The same pattern applies to any Sentry DSN, uptime-monitor API key, Stripe rotation, LLM provider key rotation, Cloudflare token rotation, or new integration credential added going forward. Discipline > convenience.
+
 ### ✅ COMPLETE (verified on production)
 - **Session 1 · Item 1** — BG-task safety wrapper (@safe_bg integration). Prod-verified via Sentry canary event `kind=bg_task_failed` at `environment=canary-iter386-verify`.
 - **Session 1 · Item 3** — Stripe post-signature failure alert. Prod-verified via Sentry canary event `event=stripe_upgrade_failed`.
