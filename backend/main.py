@@ -767,6 +767,31 @@ async def lifespan(app: FastAPI):
                 "🗄️  nightly DB backup cron enabled → R2 (%s:00 UTC, %s-day retention)",
                 hour, retention,
             )
+            # 2026-02-09 — Diagnostic: log which mongodump/mongorestore
+            # binaries the runtime can see. Was pure guesswork earlier
+            # when prod threw FileNotFoundError with no useful trace.
+            # This logs on every boot so we know at a glance whether
+            # the base image has the tools.
+            import shutil as _shutil
+            for _bin in ("mongodump", "mongorestore"):
+                _path = _shutil.which(_bin)
+                if _path:
+                    try:
+                        import subprocess as _sub
+                        _ver = _sub.run(
+                            [_path, "--version"], capture_output=True,
+                            text=True, timeout=5,
+                        ).stdout.splitlines()[0][:80]
+                    except Exception:
+                        _ver = "(--version failed)"
+                    logger.info("🗄️  found %s at %s — %s", _bin, _path, _ver)
+                else:
+                    logger.warning(
+                        "🗄️  %s NOT found on PATH — backups will fail with "
+                        "MISSING BINARY error until installed via "
+                        ".emergent/system_deps.txt or bundled in repo",
+                        _bin,
+                    )
         except Exception as e:
             app.state.backup_task = None
             logger.warning("db backup cron not started: %r", e)

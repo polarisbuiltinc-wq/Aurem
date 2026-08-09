@@ -754,3 +754,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `R2_BUCKET` — auto-detected in backend/routers/backups_admin.py (verify) (default: unset) [Iter 0, 2026-08-08T23:11:31.598308Z] <!-- inv:envvar:R2_BUCKET -->
 - `SENTRY_ENV` — auto-detected in backend/services/db_backup.py (verify) (default: unset) [Iter 0, 2026-08-08T23:11:31.598325Z] <!-- inv:envvar:SENTRY_ENV -->
 - `services/db_restore.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-08T23:11:31.598341Z] <!-- inv:service:services/db_restore.py -->
+
+### Iter 0 · 2026-08-09
+
+- `PATH` — auto-detected in backend/services/db_backup.py (verify) (default: unset) [Iter 0, 2026-08-09T00:14:32.840995Z] <!-- inv:envvar:PATH -->
