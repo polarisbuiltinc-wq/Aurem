@@ -67,21 +67,39 @@ def _run_mongorestore(
     successfully. We detect that case by checking for
     "0 document(s) failed to restore" in stderr, which mongorestore
     always emits when data is intact.
+
+    Special error contract:
+      - Missing binary (FileNotFoundError on subprocess.run) → returns
+        rc=127 with a stderr describing exactly which binary is missing.
+        Same 2026-02-09 lesson as _run_mongodump_to_gz.
     """
-    proc = subprocess.run(
-        [
-            "mongorestore",
-            f"--uri={mongo_url}",
-            "--archive=" + archive_path,
-            "--gzip",
-            "--nsFrom", f"{source_db}.*",
-            "--nsTo",   f"{scratch_db}.*",
-            # `--drop` ensures we don't merge into a stale scratch DB
-            # from a prior run — every test-restore starts clean.
-            "--drop",
-        ],
-        capture_output=True, text=True, timeout=1800,
-    )
+    try:
+        proc = subprocess.run(
+            [
+                "mongorestore",
+                f"--uri={mongo_url}",
+                "--archive=" + archive_path,
+                "--gzip",
+                "--nsFrom", f"{source_db}.*",
+                "--nsTo",   f"{scratch_db}.*",
+                # `--drop` ensures we don't merge into a stale scratch DB
+                # from a prior run — every test-restore starts clean.
+                "--drop",
+            ],
+            capture_output=True, text=True, timeout=1800,
+        )
+    except FileNotFoundError as e:
+        path_searched = os.environ.get("PATH", "<PATH unset>")
+        msg = (
+            f"MISSING BINARY: 'mongorestore' not found on PATH. "
+            f"errno={e.errno} strerror={e.strerror!r} filename={e.filename!r}. "
+            f"PATH searched: {path_searched}. "
+            f"FIX: install mongodb-database-tools in the Docker image."
+        )
+        return 127, msg, False
+    except OSError as e:
+        return 127, f"OSError spawning mongorestore: {e!r}", False
+
     stderr = (proc.stderr or "")[-1500:]
     effective_ok = (
         proc.returncode == 0

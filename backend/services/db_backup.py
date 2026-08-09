@@ -122,13 +122,38 @@ def _run_mongodump_to_gz(out_path: str, mongo_url: str) -> tuple[int, str]:
     Returns (returncode, stderr_tail). Times out at 30 min — a
     healthy AUREM DB dumps in seconds; 30 min ceiling is generous
     protection against a hung Mongo endpoint.
+
+    Special error contracts:
+      - Missing binary (FileNotFoundError on Popen) → returncode 127,
+        stderr_tail describing exactly which binary was missing +
+        the PATH searched. This is the historically-common failure
+        mode (Dockerfile without mongodb-database-tools installed).
     """
     # Two-process pipeline: dump → gzip. Using `--archive` streams
     # a single BSON archive on stdout (not a directory tree).
-    dump = subprocess.Popen(
-        ["mongodump", f"--uri={mongo_url}", "--archive", "--gzip"],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-    )
+    try:
+        dump = subprocess.Popen(
+            ["mongodump", f"--uri={mongo_url}", "--archive", "--gzip"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+    except FileNotFoundError as e:
+        # errno 2 — mongodump binary not on $PATH. This is the exact
+        # failure mode that bit prod on 2026-02-09 (Dockerfile did
+        # not install mongodb-database-tools). Return a rich stderr
+        # so backup_history records the actionable diagnosis, not
+        # just the exception class name.
+        path_searched = os.environ.get("PATH", "<PATH unset>")
+        msg = (
+            f"MISSING BINARY: 'mongodump' not found on PATH. "
+            f"errno={e.errno} strerror={e.strerror!r} filename={e.filename!r}. "
+            f"PATH searched: {path_searched}. "
+            f"FIX: install mongodb-database-tools in the Docker image "
+            f"(see backend/Dockerfile MongoDB apt-repo block)."
+        )
+        return 127, msg
+    except OSError as e:
+        return 127, f"OSError spawning mongodump: errno={e.errno} strerror={e.strerror!r} {e!r}"
+
     with open(out_path, "wb") as fh:
         # Read in 1 MB chunks so we don't pin memory on large dumps.
         assert dump.stdout is not None
@@ -212,9 +237,20 @@ async def run_backup(db) -> dict:
             _run_mongodump_to_gz, tmp_path, mongo_url,
         )
         if rc != 0:
-            err = f"mongodump rc={rc}: {stderr[:400]}"
+            # rc=127 = missing binary (rich diagnosis in stderr from
+            # _run_mongodump_to_gz). rc=124 = timeout. Others = mongo
+            # side. Preserve the FULL stderr rather than truncating to
+            # 400 chars — the truncation is what hid the missing-
+            # binary diagnosis in the 2026-02-09 prod incident.
+            err = f"mongodump rc={rc}: {stderr[:1500]}"
             logger.error(err)
             duration_ms = int((time.monotonic() - started) * 1000)
+            # Also send to Sentry so subprocess failures are visible
+            # in error monitoring, not just the DB history table.
+            try:
+                raise RuntimeError(f"mongodump failed rc={rc}: {stderr[:200]}")
+            except RuntimeError as _e:
+                _capture_sentry(_e, {"stage": "mongodump", "rc": rc, "r2_key": r2_key})
             await _write_history(
                 db, r2_key=r2_key, status="failed", size_bytes=0,
                 duration_ms=duration_ms, error=err,
@@ -257,13 +293,21 @@ async def run_backup(db) -> dict:
         }
     except Exception as e:
         duration_ms = int((time.monotonic() - started) * 1000)
+        # Capture the full traceback into the backup_history error
+        # field so `GET /admin/backups/status` shows an actionable
+        # diagnosis, not just the exception class name. The old
+        # behaviour (repr(e)[:400]) truncated FileNotFoundError's
+        # filename attribute — 2026-02-09 prod incident.
+        import traceback
+        tb = traceback.format_exc()
+        error_str = f"{type(e).__name__}: {e!r}\n{tb}"[:1800]
         logger.exception("backup failed")
         _capture_sentry(e, {"stage": "run_backup", "r2_key": r2_key})
         await _write_history(
             db, r2_key=r2_key, status="failed", size_bytes=0,
-            duration_ms=duration_ms, error=repr(e)[:400],
+            duration_ms=duration_ms, error=error_str,
         )
-        return {"ok": False, "error": repr(e), "r2_key": r2_key}
+        return {"ok": False, "error": error_str, "r2_key": r2_key}
     finally:
         # Never leave the temp file lying around — /tmp/ is where
         # the old bug lived; we do NOT want any /tmp/ backup residue.
