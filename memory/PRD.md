@@ -1,5 +1,19 @@
 # AUREM CTO — PRD (Product Requirements & Change Log)
 
+## 🚀 IN-PROGRESS (Session 4 · 2026-02-09 close)
+
+- **Backup Hardening (item #5)** — Option B (Python-native pymongo, no subprocess) BUILT + preview-verified. 121/122 collection parity across 33,820 docs, all BSON edge cases pass individually. `aurem-native-v1` format. Files: `services/db_backup.py`, `services/db_restore.py`, `routers/backups_admin.py`, `tests/test_db_backup.py`. **Not shipped to prod** — bundled with #31 for single deploy window per founder ruling.
+- **First-50 Signup Promo + Email Verification (item #31, NEW)** — Meta ads live, hardcoded 498/500 on Landing.jsx is a real liability. Founder approved Option X (proper email verification, no shortcuts). Q1-Q5 approvals: global counter / no card+verification / 30d Pro→free / real counter / promo-full+waitlist. Spec locked, code NOT yet started. **P0 tied to real ad spend.** Est. 4-6h build.
+- **Deploy Runbook** — `/app/memory/DEPLOY_RUNBOOK.md` written. Blue/green NOT supported on Emergent (support-agent confirmed 30-60s downtime per deploy). Auto-rollback authority granted, narrowly scoped: (a) health-gate failure post-deploy, or (b) sustained 5xx >2 min. Immediate notification required when it fires.
+- **Standing rule (SECRET-EXPOSURE)** — added to PRD.md top. Triple-leaked R2 keys this session (once by founder via screenshot, twice by agent). All rotated. Rule: never emit credential values in any output. Enforcement is hard.
+
+### 📌 NEXT SESSION MUST-DOs (in order)
+
+1. Track 3 build on preview (item #31) — email verification endpoint + Resend template + `email_verified` field on dev_users + atomic founder-spot claim gated on verification + `/api/founder-spots/status` counter + `Landing.jsx` rewire + prod env note `SIGNUP_RATE_LIMIT_PER_IP=3` + full 48→51 test **including verification click step**.
+2. Bundle Track 1 (item #5) + Track 3 into single prod deploy in founder-chosen window (founder still checking Meta Ads Manager for audience timezone).
+3. Post-deploy: health-gate check per runbook (uptime<300s, no dead supervised_tasks, DB connected, backup endpoints 401/405 not 404), prove counter reflects reality on real signups, mark #5 and #31 shipped.
+4. Return to Phase 1 tail: #22 Incident Runbook, #21 Uptime Monitoring provider pick, #20 Frontend Sentry DSN.
+
 ## Master Status Audit (2026-02-08, founder-issued)
 
 ### 🧭 STANDING RULE (added 2026-02-08 · Session 3 close)
