@@ -2140,7 +2140,37 @@ async def health():
         # list of long-lived crons that terminated unexpectedly since
         # pod start (each also gets a Guard 20 incident row).
         "supervised_tasks": _supervised_tasks_health_snapshot(),
+        # 2026-02-09 — Backup-tools presence diagnostic. Surfaces
+        # mongodump/mongorestore binary paths + versions so we can
+        # confirm .emergent/system_deps.txt actually installed them
+        # without needing shell access to prod. This replaces the
+        # guesswork that led to the 2026-02-09 FileNotFoundError
+        # incident. If either is null → backups WILL fail until the
+        # base image / system_deps is fixed.
+        "backup_tools": _backup_tools_snapshot(),
     }
+
+
+def _backup_tools_snapshot() -> dict:
+    """Return {'mongodump': {'path': ..., 'version': ...} | None, ...}
+    Called from /api/health — must be fast + never raise."""
+    import shutil as _shutil
+    import subprocess as _sub
+    out: dict = {}
+    for name in ("mongodump", "mongorestore"):
+        path = _shutil.which(name)
+        if not path:
+            out[name] = None
+            continue
+        try:
+            ver = _sub.run(
+                [path, "--version"], capture_output=True, text=True,
+                timeout=3,
+            ).stdout.splitlines()[0][:120]
+        except Exception as e:
+            ver = f"(--version failed: {e!r})"
+        out[name] = {"path": path, "version": ver}
+    return out
 
 
 # Iter 120 — Fast probe endpoint for Kubernetes liveness/readiness.
