@@ -296,7 +296,7 @@ const JSON_LD = {
   "@context": "https://schema.org",
   "@type": "WebPage",
   "name": "ORA Bug Hunt — AI Security Scanner for GitHub Repositories",
-  "description": "ORA Bug Hunt detects 50+ security vulnerabilities in your codebase using static analysis. Finds secrets (15 types), vulnerable code patterns (20), exposed endpoints (10), and CVE-vulnerable dependencies (11). Used by 500+ developers. $9/month.",
+  "description": "ORA Bug Hunt detects 50+ security vulnerabilities in your codebase using static analysis. Finds secrets (15 types), vulnerable code patterns (20), exposed endpoints (10), and CVE-vulnerable dependencies (11). Flat $9/month pricing, 10 free scans, no credit card.",
   "url": "https://auremcto.com/bug-hunt",
   "keywords": "detect log4shell in code, AWS key detection in repository, CVE scanner requirements.txt, AI security scanner GitHub, find secrets in code, vulnerability scanner Python, security audit codebase, detect hardcoded API keys",
   "mainEntity": {
@@ -539,7 +539,7 @@ export default function BugHunt() {
           <Link className="btn-primary" to="/signup" data-testid="bh-final-cta">
             Start free — auremcto.com
           </Link>
-          <div className="cta-foot">498 of 500 founder spots remaining at $9/month</div>
+          <div className="cta-foot">$9/month · flat pricing · 10 free scans, no credit card</div>
         </section>
 
       </div>

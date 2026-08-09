@@ -664,7 +664,7 @@ const FAQS = [
     a: "You approve first. ORA runs a 5-phase Loop — Plan → Execute → Verify → Scan → Ship — and Ship requires your manual click. Nothing lands in your repo until you press Ship, and every ship generates a real commit (not a force-push) that can be rolled back in one click." },
 
   { q: "How much does ORA cost?",
-    a: "ORA starts at $9/month flat, and there are 10 tasks free with no credit card. The $9 plan has no token metering and no per-seat pricing — the same monthly price whether ORA runs 5 tasks or 500. Founder pricing is limited to the first 500 users; check the pricing page for the current spots-remaining count." },
+    a: "ORA starts at $9/month flat, and there are 10 tasks free with no credit card. The $9 plan has no token metering and no per-seat pricing — the same monthly price whether ORA runs 5 tasks or 500 per month. The first 50 verified signups get 30 days of Pro free, no card required — after 30 days, automatically moves to the free tier. Upgrade to $9/month anytime if you want to keep Pro features." },
 
   { q: "What happens if ORA can't verify a change?",
     a: "ORA self-heals up to 2 times, then fails cleanly — no infinite loop. When the verify step (ruff / eslint / type checks) fails, ORA re-writes the file with the actual lint errors as context; if 2 attempts still fail, the loop terminates and shows you the exact ruff/eslint errors and which files failed so you can either fix manually or send a more specific follow-up prompt." },
@@ -721,18 +721,14 @@ export default function Landing() {
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
-  // Replace the placeholder tag on the founder-price feature card
-  // with the live counter. When promo is sold out we swap the tag to
-  // a waitlist affordance instead of an implausibly-full one.
+  // Session 5 · 2026-02-09 — hero chip owns the live counter now.
+  // Card tag becomes static "founder price · $9/month flat" so we
+  // don't render two live counters on the same page (single source
+  // of truth). The card still owns the waitlist form when sold out —
+  // the hero chip's sold-out state links back to this section via
+  // the `#promo-waitlist` anchor.
   const promoSoldOut = Boolean(promo && (!promo.is_active || promo.remaining <= 0));
-  const promoTag = (() => {
-    if (!promo) return "founder price · loading …";
-    const { remaining, total, is_active } = promo;
-    if (!is_active || remaining <= 0) {
-      return "founder price · waitlist open";
-    }
-    return `founder price · ${remaining}/${total} left`;
-  })();
+  const promoTag = "founder price · $9/month flat";
   const teamsWithPromo = TEAMS.map((t) =>
     t.tag === "__PROMO_TAG__" ? { ...t, tag: promoTag } : t
   );
@@ -817,6 +813,62 @@ export default function Landing() {
 
         {/* ─── HERO ─── */}
         <section className="hero">
+          {promo && (
+            <div style={{ textAlign: "center", marginBottom: 14 }}>
+              {promo.is_active && promo.remaining > 0 ? (
+                <div
+                  data-testid="hero-promo-chip"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "7px 14px",
+                    borderRadius: 999,
+                    background: "rgba(234,179,8,0.08)",
+                    border: "1px solid rgba(234,179,8,0.32)",
+                    color: "#eab308",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    letterSpacing: 0.2,
+                    fontFamily: "'JetBrains Mono', monospace",
+                  }}
+                >
+                  <span style={{
+                    display: "inline-block", width: 6, height: 6,
+                    borderRadius: 999, background: "#eab308",
+                    boxShadow: "0 0 6px rgba(234,179,8,0.9)",
+                  }}></span>
+                  <span data-testid="hero-promo-chip-text">
+                    First-50 · <b>{promo.remaining}/{promo.total}</b> founder spots left
+                  </span>
+                </div>
+              ) : (
+                <a
+                  href="#promo-waitlist"
+                  data-testid="hero-promo-chip-soldout"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "7px 14px",
+                    borderRadius: 999,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    color: "#e8e8e8",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    letterSpacing: 0.2,
+                    textDecoration: "none",
+                    fontFamily: "'JetBrains Mono', monospace",
+                  }}
+                >
+                  <span data-testid="hero-promo-chip-text">
+                    First-50 promo full · Join waitlist ↓
+                  </span>
+                </a>
+              )}
+            </div>
+          )}
           <div style={{ textAlign: "center" }}>
             <div className="hero-badge">▸ Developers Choice</div>
           </div>
@@ -1282,6 +1334,7 @@ export default function Landing() {
               <div
                 className="team-card"
                 key={i}
+                id={isPromoCard ? "promo-waitlist" : undefined}
                 data-testid={isPromoCard ? "landing-promo-card" : undefined}
               >
                 <div className="team-icon">{t.icon}</div>
@@ -1296,6 +1349,16 @@ export default function Landing() {
                     data-testid="landing-waitlist"
                     style={{ marginTop: 16 }}
                   >
+                    <div
+                      style={{
+                        fontSize: 12, fontWeight: 600, color: "#eab308",
+                        letterSpacing: 0.6, textTransform: "uppercase",
+                        marginBottom: 8,
+                      }}
+                      data-testid="landing-waitlist-header"
+                    >
+                      First-50 promo full — join the waitlist
+                    </div>
                     {waitlistState === "ok" ? (
                       <div
                         data-testid="landing-waitlist-ok"
