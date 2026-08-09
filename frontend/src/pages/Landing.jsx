@@ -724,6 +724,7 @@ export default function Landing() {
   // Replace the placeholder tag on the founder-price feature card
   // with the live counter. When promo is sold out we swap the tag to
   // a waitlist affordance instead of an implausibly-full one.
+  const promoSoldOut = Boolean(promo && (!promo.is_active || promo.remaining <= 0));
   const promoTag = (() => {
     if (!promo) return "founder price · loading …";
     const { remaining, total, is_active } = promo;
@@ -735,6 +736,32 @@ export default function Landing() {
   const teamsWithPromo = TEAMS.map((t) =>
     t.tag === "__PROMO_TAG__" ? { ...t, tag: promoTag } : t
   );
+
+  // Track 3 · waitlist inline input — only rendered inside the
+  // founder-price feature card when the promo is sold out. Founder-
+  // locked scope: email capture only, no other fields, no automatic
+  // conversion logic. Idempotent upsert on the backend so a repeat
+  // click doesn't spawn dupes.
+  const [waitlistEmail, setWaitlistEmail]   = useState("");
+  const [waitlistState, setWaitlistState]   = useState("idle"); // idle|sending|ok|err
+  const [waitlistError, setWaitlistError]   = useState("");
+  const submitWaitlist = async (e) => {
+    e.preventDefault();
+    if (waitlistState === "sending") return;
+    setWaitlistState("sending");
+    setWaitlistError("");
+    try {
+      await api.post("/promo/first50/waitlist", { email: waitlistEmail.trim() });
+      setWaitlistState("ok");
+    } catch (err) {
+      const msg =
+        err?.response?.data?.detail?.message ||
+        err?.response?.data?.message ||
+        "Something went wrong. Please try again.";
+      setWaitlistError(msg);
+      setWaitlistState("err");
+    }
+  };
 
   // SEO/AEO title + description sync (preserved from Iter 175).
   useEffect(() => {
@@ -1249,21 +1276,91 @@ export default function Landing() {
           <h2 className="section-title">Built like a teammate, not a chat bot</h2>
           <p className="section-sub">Six things ORA does that the autocompletes don&apos;t. <b>All shipped, all in production.</b></p>
           <div className="teams-grid">
-            {teamsWithPromo.map((t, i) => (
+            {teamsWithPromo.map((t, i) => {
+              const isPromoCard = t.tag && t.tag.startsWith("founder price");
+              return (
               <div
                 className="team-card"
                 key={i}
-                data-testid={t.tag && t.tag.startsWith("founder price") ? "landing-promo-card" : undefined}
+                data-testid={isPromoCard ? "landing-promo-card" : undefined}
               >
                 <div className="team-icon">{t.icon}</div>
                 <div
                   className="team-tag"
-                  data-testid={t.tag && t.tag.startsWith("founder price") ? "landing-promo-tag" : undefined}
+                  data-testid={isPromoCard ? "landing-promo-tag" : undefined}
                 >{t.tag}</div>
                 <div className="team-title">{t.title}</div>
                 <div className="team-desc">{t.desc}</div>
+                {isPromoCard && promoSoldOut && (
+                  <div
+                    data-testid="landing-waitlist"
+                    style={{ marginTop: 16 }}
+                  >
+                    {waitlistState === "ok" ? (
+                      <div
+                        data-testid="landing-waitlist-ok"
+                        style={{
+                          fontSize: 13, color: "#22c55e",
+                          padding: "8px 12px",
+                          background: "rgba(34,197,94,0.08)",
+                          border: "1px solid rgba(34,197,94,0.3)",
+                          borderRadius: 8,
+                        }}
+                      >
+                        You&apos;re on the waitlist. We&apos;ll reach out if a spot opens.
+                      </div>
+                    ) : (
+                      <form
+                        onSubmit={submitWaitlist}
+                        style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                      >
+                        <input
+                          type="email"
+                          required
+                          placeholder="your@email.com"
+                          value={waitlistEmail}
+                          onChange={(e) => setWaitlistEmail(e.target.value)}
+                          data-testid="landing-waitlist-input"
+                          style={{
+                            flex: "1 1 200px",
+                            padding: "9px 12px",
+                            background: "rgba(255,255,255,0.03)",
+                            border: "1px solid rgba(234,179,8,0.25)",
+                            borderRadius: 8,
+                            color: "#e8e8e8", fontSize: 13,
+                          }}
+                        />
+                        <button
+                          type="submit"
+                          disabled={waitlistState === "sending"}
+                          data-testid="landing-waitlist-submit"
+                          style={{
+                            padding: "9px 16px",
+                            background: "#eab308", color: "#0b0b0b",
+                            border: "none", borderRadius: 8,
+                            fontWeight: 600, fontSize: 13,
+                            cursor: waitlistState === "sending" ? "wait" : "pointer",
+                          }}
+                        >
+                          {waitlistState === "sending" ? "…" : "Join waitlist"}
+                        </button>
+                        {waitlistState === "err" && (
+                          <div
+                            data-testid="landing-waitlist-err"
+                            style={{
+                              flexBasis: "100%", fontSize: 12, color: "#f87171",
+                            }}
+                          >
+                            {waitlistError}
+                          </div>
+                        )}
+                      </form>
+                    )}
+                  </div>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 

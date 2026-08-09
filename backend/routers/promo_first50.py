@@ -31,15 +31,19 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 
 from cto_services.auth import current_dev
 from cto_services.db import get_db
+from services.rate_limiter import check_rate_limit_async, client_ip_from_request
+from services.signup_guards import _disposable_hit, _extract_domain
 from services.verification_email import (
     send_verification_email, create_verification_token,
 )
@@ -291,3 +295,90 @@ async def downgrade_cron(interval_seconds: int = 3600) -> None:
         except Exception as e:                          # noqa: BLE001
             logger.warning("downgrade_cron tick failed: %r", e)
         await asyncio.sleep(interval_seconds)
+
+
+# ── Waitlist ─────────────────────────────────────────────────────────
+# Scope (founder-locked 2026-02-09): email capture only. Same
+# disposable/rate-limit guards as signup. NO automatic conversion when
+# a spot frees up — founder does manual outreach for now. Reason: at
+# current scale we do not yet know demand shape, so no autopilot logic
+# gets built. Note on "can a spot free up?": today, no code path
+# decrements `promo_first50_state.spots_claimed` beyond the internal
+# race-compensation branch in `verify_email`. Admin user deletes via
+# /api/aurem-dev/admin/users/{user_id} do NOT roll the counter back —
+# so spots effectively don't free up automatically. If founder ever
+# wants to open more spots they either bump the singleton `total`
+# directly in Mongo or reach out to the waitlist manually.
+
+_WAITLIST_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# `check_rate_limit_async` is a per-minute sliding window (60s hard-
+# coded). We pick 5/min per IP → a generous 300/hour ceiling that
+# still blocks abusive scripted flooding while leaving humans headroom.
+# Idempotent upsert handles duplicate submits from the same address.
+WAITLIST_RATE_PER_IP_MIN = int(os.environ.get("WAITLIST_RATE_PER_IP_MIN", "5"))
+
+
+class _WaitlistBody(BaseModel):
+    email: str
+
+
+@router.post("/promo/first50/waitlist")
+async def first50_waitlist(
+    body: _WaitlistBody,
+    request: Request,
+) -> dict:
+    """Public — capture email when the promo is sold out. Idempotent,
+    disposable-blocked, per-IP rate-limited. Never leaks whether an
+    email is already on the list (prevents enumeration)."""
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "database unavailable")
+
+    email = (body.email or "").strip().lower()
+    if not email or not _WAITLIST_RE.match(email) or len(email) > 254:
+        raise HTTPException(400, {
+            "error":   "invalid_email",
+            "message": "Please enter a valid email address.",
+        })
+
+    # Disposable-email block (reuse the signup allow-list for parity).
+    if _disposable_hit(email):
+        raise HTTPException(400, {
+            "error":   "disposable_email",
+            "message": ("Please use a permanent email address — "
+                        "disposable inboxes are not accepted."),
+        })
+
+    # Per-IP rate limit — 5/minute (~300/hour ceiling). Reuses the same
+    # Redis-backed limiter every other endpoint uses.
+    client_ip = client_ip_from_request(request)
+    if not await check_rate_limit_async(
+        f"waitlist-ip:{client_ip}", WAITLIST_RATE_PER_IP_MIN,
+    ):
+        raise HTTPException(429, {
+            "error":   "too_many_requests",
+            "message": (
+                "Too many waitlist submissions from this network. "
+                "Try again in a minute."
+            ),
+        })
+
+    now = _now()
+    # Upsert so a repeat submission is idempotent (bumps `last_touch_at`
+    # + a click_count without spawning duplicate rows). `created_at`
+    # sticks via $setOnInsert.
+    await db.promo_first50_waitlist.update_one(
+        {"email": email},
+        {
+            "$setOnInsert": {
+                "email":       email,
+                "created_at":  now,
+                "signup_ip":   client_ip,
+                "converted":   False,
+            },
+            "$set": {"last_touch_at": now},
+            "$inc": {"touch_count": 1},
+        },
+        upsert=True,
+    )
+    return {"ok": True}
