@@ -183,6 +183,28 @@ async def grant_referral_reward(db, new_user_id: str) -> dict:
             resend_key = os.environ.get("RESEND_API_KEY") or ""
             from_addr = os.environ.get("RESEND_FROM_EMAIL", "AUREM <ora@aurem.live>")
             if resend_key and referrer.get("email"):
+                _ref_name = referrer.get("name") or "there"
+                _ref_link = f"https://auremcto.com/?ref={referrer_uid}"
+                _referral_text = (
+                    f"Hi {_ref_name},\n\n"
+                    f"One of your referrals just upgraded to a paid plan — "
+                    f"and as promised, your next 30 days are on us. "
+                    f"Your subscription's renewal date has been pushed "
+                    f"30 days. No action needed.\n\n"
+                    f"Keep the link going: {_ref_link}\n\n"
+                    f"— Tejinder Sandhu, Founder, Aurem\n"
+                )
+                _referral_html = (
+                    f"<p>Hi {_ref_name},</p>"
+                    f"<p>One of your referrals just upgraded to a paid "
+                    f"plan — and as promised, <b>your next 30 days "
+                    f"are on us</b>. Your subscription's renewal date "
+                    f"has been pushed 30 days. No action needed.</p>"
+                    f"<p>Keep the link going: "
+                    f"<a href='{_ref_link}'>"
+                    f"auremcto.com/?ref={referrer_uid}</a></p>"
+                    f"<p>— Tejinder Sandhu, Founder, Aurem</p>"
+                )
                 async with httpx.AsyncClient(timeout=8) as c:
                     await c.post(
                         "https://api.resend.com/emails",
@@ -192,17 +214,8 @@ async def grant_referral_reward(db, new_user_id: str) -> dict:
                             "from":    from_addr,
                             "to":      [referrer["email"]],
                             "subject": "You earned 1 free month on AUREM 🎉",
-                            "html":    (
-                                f"<p>Hi {referrer.get('name') or 'there'},</p>"
-                                f"<p>One of your referrals just upgraded to a paid "
-                                f"plan — and as promised, <b>your next 30 days "
-                                f"are on us</b>. Your subscription's renewal date "
-                                f"has been pushed 30 days. No action needed.</p>"
-                                f"<p>Keep the link going: "
-                                f"<a href='https://auremcto.com/?ref={referrer_uid}'>"
-                                f"auremcto.com/?ref={referrer_uid}</a></p>"
-                                f"<p>— Team AUREM</p>"
-                            ),
+                            "text":    _referral_text,
+                            "html":    _referral_html,
                         },
                     )
         except Exception as e:

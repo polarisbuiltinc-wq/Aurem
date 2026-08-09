@@ -95,7 +95,7 @@ def render_text(user: dict) -> str:
         "Here's what happens when you do:\n"
         "→ Your codebase gets mapped instantly\n"
         "→ Free SEO fix applied automatically\n"
-        "→ One of 500 founder spots — yours\n"
+        "→ One of 50 founder spots — yours\n"
         "\n"
         f"Connect your repo → {cta}\n"
         "\n"
@@ -127,7 +127,7 @@ font-family:'Helvetica Neue',Arial,sans-serif;line-height:1.55;">
           Here's what happens when you do:<br>
           &rarr; Your codebase gets mapped instantly<br>
           &rarr; Free SEO fix applied automatically<br>
-          &rarr; <strong>One of 500 founder spots — yours</strong><br><br>
+          &rarr; <strong>One of 50 founder spots — yours</strong><br><br>
           <a href="{cta}"
              style="display:inline-block;padding:12px 22px;background:#eab308;
                     color:#0b0b0b;text-decoration:none;font-weight:600;
