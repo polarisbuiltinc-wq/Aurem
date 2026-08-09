@@ -170,6 +170,21 @@ async def verify_email(token: str = ""):
         logger.warning("verify: user %s not found for token", user_id)
         return _redirect_to_frontend("error", reason="user_not_found")
 
+    # Track 3 (item #33) — fire the post-verification welcome email
+    # as a safe_bg task. Idempotent by campaign + user_id inside the
+    # welcome module itself, so a second verify click is a no-op.
+    try:
+        from services.welcome_email import send_welcome_email
+        from services.bg_safe import safe_bg
+        import asyncio as _asyncio
+        _asyncio.create_task(safe_bg(send_welcome_email)(db, {
+            "user_id": user_doc["user_id"],
+            "email":   user_doc.get("email", ""),
+            "name":    user_doc.get("name", ""),
+        }))
+    except Exception as e:                              # noqa: BLE001
+        logger.warning("welcome email dispatch failed: %r", e)
+
     already_claimed = bool(user_doc.get("promo_first50_claimed"))
     if already_claimed:
         return _redirect_to_frontend("ok", claimed=True,
