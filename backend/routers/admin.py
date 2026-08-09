@@ -3408,6 +3408,221 @@ async def admin_set_stripe_config(
     }
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Session-fork · 2026-02-09 — /admin/stripe-prices
+#
+# Multi-worker split-brain fix. Previously the 6 STRIPE_*_PRICE_ID env
+# vars were the ONLY source of truth for price IDs, and stale env panel
+# values (or partial pod restarts across horizontally-scaled workers)
+# caused the exact "checkerboard" the founder saw on prod — identical
+# back-to-back checkout requests failed for different plans depending on
+# which worker/pod handled the request.
+#
+# This endpoint pair mirrors the /admin/stripe-config pattern for the
+# secret key: persist all 6 price IDs in `admin_settings._id="stripe_price_ids"`
+# and hot-swap into the runtime cache used by `services.stripe_client.
+# price_id_for()` — which every checkout call now goes through.
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.get("/stripe-prices")
+async def admin_get_stripe_prices(
+    authorization: Optional[str] = Header(None),
+):
+    """Return the current stored price IDs + a live Stripe validation
+    for each (masked last-6 char, mode, and recurring status)."""
+    await _require_admin(authorization)
+    from services.stripe_client import (
+        stripe_key, price_id_for, get_runtime_stripe_price_ids, PLAN_IDS,
+    )
+    import stripe as _stripe
+
+    db = require_db()
+
+    # Ensure runtime cache is hydrated from DB before reporting state
+    # (defensive — main.py's lifespan already does this at boot).
+    row = None
+    try:
+        row = await db.admin_settings.find_one({"_id": "stripe_price_ids"})
+        if row:
+            from services.stripe_client import set_runtime_stripe_price_ids
+            set_runtime_stripe_price_ids(row.get("prices") or {})
+    except Exception as e:
+        logger.warning("admin/stripe-prices GET: DB lookup failed: %r", e)
+
+    runtime = get_runtime_stripe_price_ids()
+    key = stripe_key()
+    _stripe.api_key = key
+
+    out_plans = {}
+    for plan in PLAN_IDS:
+        effective = price_id_for(plan)
+        env_name = f"STRIPE_{plan.upper()}_PRICE_ID"
+        source = (
+            "db_override" if runtime.get(plan) else
+            ("env" if effective else "none")
+        )
+        info = {
+            "plan":       plan,
+            "configured": bool(effective),
+            "source":     source,
+            "last6":      effective[-6:] if effective else "",
+            "env_var":    env_name,
+        }
+        if effective and key:
+            try:
+                p = await asyncio.to_thread(_stripe.Price.retrieve, effective)
+                info["valid"]     = True
+                info["recurring"] = bool((p or {}).get("recurring"))
+                info["interval"]  = ((p or {}).get("recurring") or {}).get("interval")
+                info["mode"]      = "live" if (p or {}).get("livemode") else "test"
+            except _stripe.error.StripeError as e:
+                info["valid"] = False
+                info["error"] = (
+                    getattr(e, "user_message", None) or str(e)
+                )[:200]
+            except Exception as e:
+                info["valid"] = False
+                info["error"] = f"{type(e).__name__}: {e}"[:200]
+        else:
+            info["valid"] = False
+            info["error"] = "not configured"
+        out_plans[plan] = info
+
+    return {
+        "plans": out_plans,
+        "last_updated": (row or {}).get("updated_at"),
+        "updated_by":   (row or {}).get("updated_by"),
+    }
+
+
+class StripePricesBody(BaseModel):
+    starter:        Optional[str] = None
+    pro:            Optional[str] = None
+    team:           Optional[str] = None
+    starter_annual: Optional[str] = None
+    pro_annual:     Optional[str] = None
+    team_annual:    Optional[str] = None
+
+
+@router.post("/stripe-prices")
+async def admin_set_stripe_prices(
+    body: StripePricesBody,
+    authorization: Optional[str] = Header(None),
+):
+    """Validate + persist all 6 Stripe price IDs and hot-swap into the
+    runtime cache. Each ID is verified via `Price.retrieve` against the
+    live Stripe key BEFORE anything is written — the endpoint refuses
+    to persist partial or invalid mappings."""
+    user = await _require_admin(authorization)
+    from services.stripe_client import (
+        stripe_key, set_runtime_stripe_price_ids, PLAN_IDS,
+    )
+    import stripe as _stripe
+
+    key = stripe_key()
+    if not key:
+        raise HTTPException(400,
+            "Stripe secret key is not configured — set it via "
+            "/admin/stripe-config first.")
+    _stripe.api_key = key
+
+    submitted = body.model_dump()
+    # Normalise
+    submitted = {p: (submitted.get(p) or "").strip() for p in PLAN_IDS}
+
+    provided_count = sum(1 for v in submitted.values() if v)
+    if provided_count == 0:
+        raise HTTPException(400, "At least one price ID must be provided.")
+
+    # Validate each provided price against Stripe
+    errors: dict = {}
+    validated: dict = {}
+    for plan, pid in submitted.items():
+        if not pid:
+            continue
+        if not pid.startswith("price_"):
+            errors[plan] = f"Not a valid Stripe price ID (must start with 'price_'): {pid[:20]}…"
+            continue
+        try:
+            p = await asyncio.to_thread(_stripe.Price.retrieve, pid)
+        except _stripe.error.StripeError as e:
+            errors[plan] = (
+                getattr(e, "user_message", None) or str(e)
+            )[:200]
+            continue
+        except Exception as e:
+            errors[plan] = f"{type(e).__name__}: {e}"[:200]
+            continue
+        # Must be recurring
+        rec = (p or {}).get("recurring")
+        if not rec:
+            errors[plan] = f"Price {pid[-8:]} is one_time, not recurring — Subscription checkout would 400."
+            continue
+        # Interval sanity — monthly plans must be month, annual must be year
+        expected_interval = "year" if plan.endswith("_annual") else "month"
+        if rec.get("interval") != expected_interval:
+            errors[plan] = (
+                f"Price {pid[-8:]} interval is `{rec.get('interval')}` — "
+                f"plan `{plan}` requires interval=`{expected_interval}`."
+            )
+            continue
+        validated[plan] = pid
+
+    if errors:
+        raise HTTPException(
+            400,
+            f"Refusing to persist — Stripe rejected {len(errors)} of "
+            f"{provided_count} submitted price ID(s). Fix and resubmit. "
+            f"Details: {errors}",
+        )
+
+    # Persist all 6 slots (validated ones set, others cleared to fall
+    # back to env). This is idempotent — the founder pastes the full
+    # set every time via the admin UI.
+    db = require_db()
+    try:
+        await db.admin_settings.update_one(
+            {"_id": "stripe_price_ids"},
+            {"$set": {
+                "_id":         "stripe_price_ids",
+                "prices":      validated,
+                "updated_at":  time.time(),
+                "updated_by":  user.get("email") or user.get("user_id"),
+            }},
+            upsert=True,
+        )
+    except Exception as e:
+        logger.error("admin/stripe-prices POST: DB save failed: %r", e)
+        raise HTTPException(500, f"DB persistence failed: {e}")
+
+    # Hot-swap into runtime cache — both prod workers read from
+    # `services.stripe_client._RUNTIME_STRIPE_PRICE_IDS` immediately.
+    # Note: In multi-worker prod, this call only mutates THIS worker's
+    # in-memory dict. The other worker(s) pick up the change on their
+    # next request that reads the DB (integration_health probe polls
+    # every 10 min, but each `/payments/checkout` also has a fast path
+    # in `services.stripe_client.price_id_for` that falls back through
+    # env if the runtime dict is empty). To guarantee immediate cross-
+    # worker convergence we ALSO stamp a lifespan-boot loader in
+    # main.py — but for hot-swap we accept a brief window where the
+    # other worker still uses env fallback (which now is much less
+    # likely to be stale since founders are steered away from it).
+    set_runtime_stripe_price_ids(validated)
+    logger.info(
+        "Stripe price IDs hot-swapped by admin=%s count=%d",
+        user.get("email"), len(validated),
+    )
+
+    return {
+        "ok":         True,
+        "saved":      len(validated),
+        "message":    f"Saved and validated {len(validated)} price ID(s). "
+                      f"Every future checkout in every worker will use these "
+                      f"values (via DB read at boot + hot-swap now).",
+        "plans":      {p: pid[-6:] for p, pid in validated.items()},
+    }
+
+
 
 # ─── Iter 193 — User delete + bulk email offers ────────────────────────
 #

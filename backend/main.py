@@ -1035,6 +1035,46 @@ async def lifespan(app: FastAPI):
         except Exception as _e:
             logger.warning(f"github_deploy_service.set_db failed: {_e}")
 
+        # ── Session-fork · 2026-02-09 — Stripe DB-override boot loader ──
+        # Hydrate the runtime Stripe overrides (secret key + 6 price IDs)
+        # from `admin_settings` at boot in EVERY worker. This is the
+        # critical fix for the multi-worker "checkerboard" that used to
+        # leave one uvicorn worker serving current price IDs while the
+        # other served stale ones — both workers now start from the same
+        # Mongo-persisted source of truth. Fail-open: if Mongo is down,
+        # `stripe_client.price_id_for()` still falls back to `os.environ`.
+        try:
+            from services.stripe_client import (
+                set_runtime_stripe_key,
+                set_runtime_stripe_price_ids,
+            )
+            key_row = await app.state.db.admin_settings.find_one(
+                {"_id": "stripe_api_key"},
+            )
+            if key_row and (key_row.get("value") or "").strip():
+                set_runtime_stripe_key(key_row["value"])
+                logger.info(
+                    "🔑 Stripe secret key hydrated from admin_settings "
+                    "(mode=%s, last4=%s)",
+                    key_row.get("mode", "?"),
+                    (key_row.get("value") or "")[-4:],
+                )
+            prices_row = await app.state.db.admin_settings.find_one(
+                {"_id": "stripe_price_ids"},
+            )
+            if prices_row and prices_row.get("prices"):
+                set_runtime_stripe_price_ids(prices_row["prices"])
+                logger.info(
+                    "💵 Stripe price IDs hydrated from admin_settings "
+                    "(%d plans, updated_by=%s)",
+                    len(prices_row["prices"]),
+                    prices_row.get("updated_by", "?"),
+                )
+        except Exception as _e:                                # noqa: BLE001
+            logger.warning(
+                "stripe boot hydration failed (falls back to env): %r", _e,
+            )
+
         # Iter 328 — SYSTEM_INVENTORY auto-append (Ripple miss #3 close-out).
         # On every boot (which happens after every Emergent auto-commit), scan
         # the last commit range for inventory-worthy additions (new routers,

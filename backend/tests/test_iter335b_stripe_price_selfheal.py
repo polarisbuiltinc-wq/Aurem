@@ -5,9 +5,14 @@ Prod deploy logs: 404 `No such price` on the three MONTHLY price IDs
 worked. Fix: checkout pre-flight now auto-discovers the correct live
 price (product name + interval + USD, unambiguous match only) and
 uses it, logging a loud STALE ENV error.
+
+Session-fork · 2026-02-09 — updated to reflect the removal of the
+per-process `_RESOLVED_PRICES` module cache. The cache was the root
+cause of the multi-worker checkerboard failures the founder observed
+on prod. Heal is now stateless: every request re-validates through
+`Price.retrieve` and (on 404) re-runs auto-discovery. Both prod
+workers now converge on the same result for the same input.
 """
-import asyncio
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -58,14 +63,10 @@ class TestMatcher:
 
 
 class TestPreflightHeal:
-    def setup_method(self):
-        pay._RESOLVED_PRICES.clear()
-
     async def test_valid_price_passes_through(self):
         with patch.object(pay, "_stripe_call", new=AsyncMock(return_value={"id": "ok"})):
             out = await pay._preflight_price("pro", "price_env_ok")
         assert out == "price_env_ok"
-        assert pay._RESOLVED_PRICES == {}
 
     async def test_stale_env_heals_via_discovery(self):
         calls = {"n": 0}
@@ -79,14 +80,35 @@ class TestPreflightHeal:
         with patch.object(pay, "_stripe_call", new=fake_stripe_call):
             out = await pay._preflight_price("pro", "price_stale_old_acct")
         assert out == "price_pro_m"
-        assert pay._RESOLVED_PRICES["pro"] == "price_pro_m"
 
-    async def test_healed_price_cached_no_repeat_lookup(self):
-        pay._RESOLVED_PRICES["team"] = "price_team_m"
-        boom = AsyncMock(side_effect=AssertionError("must not call stripe"))
-        with patch.object(pay, "_stripe_call", new=boom):
-            out = await pay._preflight_price("team", "whatever")
-        assert out == "price_team_m"
+    async def test_heal_is_stateless_every_request_reevaluates(self):
+        """Session-fork · 2026-02-09 regression guard.
+
+        Prior behaviour cached the healed price in a module-level dict,
+        which caused the multi-worker checkerboard. Now every call must
+        do the retrieve+heal round-trip fresh — that's how both workers
+        converge on the same output for the same input. Verifies no
+        module-level cache is short-circuiting the second call.
+        """
+        calls = {"n": 0}
+
+        async def fake_stripe_call(fn, *a, **kw):
+            calls["n"] += 1
+            # Every retrieve raises "No such price" so heal runs.
+            # Odd calls are retrieves, even calls are lists.
+            if calls["n"] % 2 == 1:
+                raise HTTPException(502, "No such price")
+            return {"data": LIVE_PRICES}
+
+        with patch.object(pay, "_stripe_call", new=fake_stripe_call):
+            out1 = await pay._preflight_price("pro", "stale1")
+            out2 = await pay._preflight_price("pro", "stale2")
+
+        assert out1 == "price_pro_m"
+        assert out2 == "price_pro_m"
+        # 2 requests × (1 retrieve + 1 list) = 4 stripe calls.
+        # If a cache short-circuited, we'd see fewer than 4.
+        assert calls["n"] == 4
 
     async def test_no_match_raises_precise_503(self):
         calls = {"n": 0}
@@ -101,4 +123,6 @@ class TestPreflightHeal:
             with pytest.raises(HTTPException) as ei:
                 await pay._preflight_price("pro", "price_stale")
         assert ei.value.status_code == 503
+        # New message references the admin card first, env fallback second.
         assert "STRIPE_PRO_PRICE_ID" in ei.value.detail
+        assert "Stripe Price IDs" in ei.value.detail

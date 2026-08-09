@@ -39,6 +39,29 @@ from typing import Optional
 # ── Runtime override (populated at boot or via /admin/stripe-config) ─
 _RUNTIME_STRIPE_KEY: str = ""
 
+# ── Runtime override for Stripe PRICE IDs (Session-fork · 2026-02-09) ─
+# Multi-worker split-brain fix. Previously price IDs were sourced from
+# `os.environ` per-request AND `routers/payments.py::_RESOLVED_PRICES`
+# was a module-level (per-process) cache — so each of the 2 prod uvicorn
+# workers could diverge on which plan-id it served (checkerboard failures
+# across identical back-to-back checkout tests). This dict mirrors the
+# secret-key pattern: single Mongo doc `admin_settings._id="stripe_price_ids"`
+# → hydrated at boot into all workers, hot-swapped via admin endpoint.
+# Any per-process caching is now forbidden — always read from here.
+_RUNTIME_STRIPE_PRICE_IDS: dict[str, str] = {}
+
+# Canonical plan → env-var mapping (single source of truth for the
+# env-fallback path). Kept in sync with routers/payments.py::STRIPE_PRICES.
+_PLAN_ENV = {
+    "starter":        "STRIPE_STARTER_PRICE_ID",
+    "pro":            "STRIPE_PRO_PRICE_ID",
+    "team":           "STRIPE_TEAM_PRICE_ID",
+    "starter_annual": "STRIPE_STARTER_ANNUAL_PRICE_ID",
+    "pro_annual":     "STRIPE_PRO_ANNUAL_PRICE_ID",
+    "team_annual":    "STRIPE_TEAM_ANNUAL_PRICE_ID",
+}
+PLAN_IDS = tuple(_PLAN_ENV.keys())
+
 
 def stripe_key() -> str:
     """Return the effective Stripe secret key.
@@ -108,4 +131,62 @@ def stripe_client():
     return _stripe
 
 
-__all__ = ["stripe_key", "set_runtime_stripe_key", "stripe_client"]
+# ── Price-ID resolution (single source of truth) ────────────────────
+def price_id_for(plan: str) -> str:
+    """Return the effective Stripe price ID for a plan.
+
+    Resolution order (matches the secret-key ladder above):
+      1. Runtime override — populated at boot from
+         `admin_settings._id="stripe_price_ids"` OR live-swapped via
+         POST /admin/stripe-prices. Wins over env because it's the
+         Mongo-persisted "single truth" across workers/pods.
+      2. `STRIPE_<PLAN>_PRICE_ID` env var — legacy per-pod fallback.
+
+    Returns `""` when neither yields a usable price id.
+    """
+    plan = (plan or "").strip().lower()
+    if plan not in _PLAN_ENV:
+        return ""
+    v = (_RUNTIME_STRIPE_PRICE_IDS.get(plan) or "").strip()
+    if v:
+        return v
+    env_name = _PLAN_ENV[plan]
+    return (os.environ.get(env_name) or "").strip()
+
+
+def set_runtime_stripe_price_ids(mapping: dict) -> None:
+    """Hot-swap the Stripe price-ID runtime overrides for this process.
+
+    Accepts a dict `{plan: price_id, ...}` — any keys outside the 6
+    canonical plans are silently ignored. Empty/missing values are
+    treated as "unset the override for that plan", falling back to env
+    on the next `price_id_for()` call.
+
+    Used by:
+      * `main.py` lifespan — boot-time hydration from Mongo.
+      * `POST /admin/stripe-prices` — founder rotates without restart.
+    """
+    global _RUNTIME_STRIPE_PRICE_IDS
+    m = mapping or {}
+    _RUNTIME_STRIPE_PRICE_IDS = {
+        plan: (m.get(plan) or "").strip()
+        for plan in _PLAN_ENV
+        if (m.get(plan) or "").strip()
+    }
+
+
+def get_runtime_stripe_price_ids() -> dict:
+    """Return a copy of the current runtime price-ID override dict.
+    Empty dict if none set. Used by the admin UI to show what's live."""
+    return dict(_RUNTIME_STRIPE_PRICE_IDS)
+
+
+__all__ = [
+    "stripe_key",
+    "set_runtime_stripe_key",
+    "stripe_client",
+    "price_id_for",
+    "set_runtime_stripe_price_ids",
+    "get_runtime_stripe_price_ids",
+    "PLAN_IDS",
+]

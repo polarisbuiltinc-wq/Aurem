@@ -164,14 +164,25 @@ def _require_stripe() -> None:
 
 
 STRIPE_PRICES = {
-    "starter":         lambda: os.environ.get("STRIPE_STARTER_PRICE_ID"),
-    "pro":             lambda: os.environ.get("STRIPE_PRO_PRICE_ID"),
-    "team":            lambda: os.environ.get("STRIPE_TEAM_PRICE_ID"),
+    # Session-fork · 2026-02-09 — routed through
+    # `services.stripe_client.price_id_for()` so that the DB override
+    # (populated at boot from `admin_settings._id="stripe_price_ids"` OR
+    # via POST /admin/stripe-prices) wins over `os.environ`. This kills
+    # the multi-worker env-drift split-brain that used to leave 2 uvicorn
+    # workers serving different price IDs for the same plan.
+    "starter":         lambda: _price_id_for("starter"),
+    "pro":             lambda: _price_id_for("pro"),
+    "team":            lambda: _price_id_for("team"),
     # Iter 101 — annual variants (20% discount, pre-paid yearly).
-    "starter_annual":  lambda: os.environ.get("STRIPE_STARTER_ANNUAL_PRICE_ID"),
-    "pro_annual":      lambda: os.environ.get("STRIPE_PRO_ANNUAL_PRICE_ID"),
-    "team_annual":     lambda: os.environ.get("STRIPE_TEAM_ANNUAL_PRICE_ID"),
+    "starter_annual":  lambda: _price_id_for("starter_annual"),
+    "pro_annual":      lambda: _price_id_for("pro_annual"),
+    "team_annual":     lambda: _price_id_for("team_annual"),
 }
+
+
+def _price_id_for(plan: str) -> str:
+    from services.stripe_client import price_id_for
+    return price_id_for(plan)
 
 
 # Iter 212m-15 — boot-time price config audit.
@@ -205,7 +216,14 @@ _BOOT_AUDIT_DONE = False
 # checkout 503 until a human rotates env vars, we auto-discover the
 # right price in the LIVE account (product name + interval + USD) and
 # use it for this process, logging loudly so the env still gets fixed.
-_RESOLVED_PRICES: dict = {}
+#
+# Session-fork · 2026-02-09 — the previous `_RESOLVED_PRICES: dict = {}`
+# process-local cache has been REMOVED. It caused the exact multi-worker
+# split-brain the founder observed (workers A and B held different heal
+# state → identical checkout requests randomly succeed/fail depending on
+# which worker got the request). Auto-discovery is still available as a
+# per-request fallback for the rare case when neither DB override nor
+# env yields a valid price, but the result is NOT cached in memory.
 
 _PLAN_MATCH = {
     "starter":        ("starter", "month"),
@@ -251,9 +269,13 @@ async def _discover_price_id(plan: str) -> Optional[str]:
 async def _preflight_price(plan: str, price_id: str) -> str:
     """Validate the configured price against Stripe BEFORE Checkout;
     on `No such price` (stale prod env), attempt one auto-discovery
-    heal. Returns a usable price_id or raises the precise 503."""
-    if _RESOLVED_PRICES.get(plan):
-        return _RESOLVED_PRICES[plan]
+    heal. Returns a usable price_id or raises the precise 503.
+
+    Session-fork · 2026-02-09 — no in-process caching. Every call
+    re-validates via a real Stripe round-trip. This is cheap
+    (Price.retrieve is a single GET) and guarantees both prod workers
+    behave identically for the same input (killed the checkerboard).
+    """
     try:
         await _stripe_call(stripe.Price.retrieve, price_id)
         return price_id
@@ -271,11 +293,11 @@ async def _preflight_price(plan: str, price_id: str) -> str:
         )
     healed = await _discover_price_id(plan)
     if healed:
-        _RESOLVED_PRICES[plan] = healed
         logger.error(
-            "⚠ STALE STRIPE ENV: STRIPE_%s_PRICE_ID=…%s is invalid — "
-            "auto-discovered live price …%s and using it. FIX the env "
-            "var in the Emergent dashboard.",
+            "⚠ STALE STRIPE PRICE: plan=%s configured price ID …%s is invalid — "
+            "auto-discovered live price …%s and using it for this request. "
+            "Persist the fix via POST /admin/stripe-prices so future workers "
+            "don't need to re-heal.",
             plan.upper(), price_id[-6:], healed[-6:],
         )
         return healed
@@ -285,8 +307,9 @@ async def _preflight_price(plan: str, price_id: str) -> str:
         f"price ID does not exist or is from a different "
         f"(test/live) mode than the Stripe secret key, and "
         f"auto-discovery found no unambiguous match. Admin: "
-        f"check STRIPE_{plan.upper()}_PRICE_ID env var in the "
-        f"Emergent dashboard against the Stripe dashboard.",
+        f"paste the correct 6 price IDs via Admin → Settings → "
+        f"Stripe Price IDs card (or set STRIPE_{plan.upper()}_PRICE_ID "
+        f"env var as fallback).",
     )
 
 

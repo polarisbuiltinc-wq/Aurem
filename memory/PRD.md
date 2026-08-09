@@ -3,9 +3,51 @@
 ## 🚀 IN-PROGRESS (Session 6 fork · 2026-02-09 continuation)
 
 ### Session-fork updates (2026-02-09)
-- **Admin.jsx billing tab** — verified on Preview post `search_replace`. Renders 4 monthly plans (Free display-only + Starter/Pro/Team upgradable) and 3 annual plans (Starter/Pro/Team annual with 20% off pricing). Each button carries a unique `data-testid=upgrade-{tier}` and calls `POST /payments/checkout` with `origin_url = window.location.origin`. Backend `_PRICE_LOOKUP` (`routers/payments.py:167-173`) already handles all 6 tier ids. **Preview UI screenshot: PASS.**
-- **Integration Health Bug (P1)** — FIXED. `services/integration_health.py::_probe_stripe` now sources its key from `services.stripe_client.stripe_key()` (which honours the DB runtime override) before falling back to `_safe_env` and dotenv. Preview refresh returned `status=ok · LIVE mode · all 6 configured price IDs verified recurring · loader=os_environ:STRIPE_API_KEY`. On Prod (where DB override is active), the diagnostic tail will show `loader=runtime_override_db` instead of a false "TEST mode" warning. Lint: clean.
-- **Stripe Prod checkouts** — 4/6 tiers passing (`starter`, `starter_annual`, `pro_annual`, `team_annual` → `cs_live_…`). Remaining 2 fail with 503 misconfigured: `STRIPE_PRO_PRICE_ID`, `STRIPE_TEAM_PRICE_ID` (Monthly Pro $19 and Monthly Team $49). Fix path documented for founder: Stripe Dashboard (acct_1TfXM98hCoXRH6yr LIVE) → Products → Pro Monthly $19 and Team Monthly $49 → copy `price_1…` → replace ONLY those two env vars in Emergent panel → restart pod → re-run 6-plan checkout loop.
+
+**🎯 MULTI-WORKER STRIPE SPLIT-BRAIN — ROOT-CAUSED + FIXED (built + preview-verified, awaiting prod deploy + founder verification)**
+
+Founder observation across two identical back-to-back prod checkout tests: same 6-plan payload, same key, no deploy between runs, but different plans succeeded/failed each time (`starter/pro/team` swapped between OK and 503; annuals also flipped). No env-panel edits between runs.
+
+**Root cause** (three overlapping issues):
+1. `routers/payments.py:208` had a module-level `_RESOLVED_PRICES: dict = {}` cache. In prod's 2-uvicorn-worker configuration (documented in `main.py:270`), each worker held its own copy → workers diverged on which plans they had "healed" via auto-discovery.
+2. Price IDs were sourced strictly from `os.environ` per-request (`STRIPE_PRICES` dict of lambdas). No DB override layer existed — unlike the secret key which already had `admin_settings._id="stripe_api_key"` + a runtime cache.
+3. `_discover_price_id` requires exactly one active USD price match per (product name, interval); the founder's account has legacy + new prices for some products → ambiguity → heal silently 503s on some workers, succeeds on others → checkerboard.
+
+**Fix (mirror the secret-key pattern for price IDs)**:
+- `services/stripe_client.py` — added `_RUNTIME_STRIPE_PRICE_IDS: dict[str, str]`, `price_id_for(plan)`, `set_runtime_stripe_price_ids(mapping)`, `get_runtime_stripe_price_ids()`, `PLAN_IDS`.
+- `routers/payments.py` — deleted `_RESOLVED_PRICES` module cache; `STRIPE_PRICES[plan]()` now routes through `services.stripe_client.price_id_for(plan)` (DB override → env → ""). `_preflight_price` is now stateless — no in-process cache; every request re-validates through `Price.retrieve` + auto-discovery heal (heal remains but never cached, so both workers do the same work for the same input).
+- `routers/admin.py` — new `GET/POST /admin/stripe-prices` (auth-guarded, admin gate + router-level). POST validates each of the 6 IDs via `Price.retrieve` + `.recurring` + interval match (month vs year) BEFORE persistence. Refuses partial invalid batches. Persists to `admin_settings._id="stripe_price_ids"` and hot-swaps the runtime.
+- `main.py` lifespan — new boot-time hydrator loads BOTH `stripe_api_key` AND `stripe_price_ids` from Mongo into runtime caches in every worker. Emits `💵 Stripe price IDs hydrated from admin_settings (N plans, updated_by=…)` on success. Fail-open falls back to env.
+- `services/integration_health.py` — `_probe_stripe` now uses `services.stripe_client.stripe_key()` (which honours the DB runtime override) instead of only reading env; prod's DB-override live key will no longer trip false "TEST mode" alarms.
+- `frontend/src/pages/Admin.jsx` — new `<StripePriceIdsCard />` in Settings tab (below the existing `<StripeApiKeyCard />`). Shows all 6 plans, source (`db_override` / `env` / `none`), live validity + interval, last-6 chars, last-updated audit. Edit modal has 6 paste-fields; Save & Hot-swap validates each with Stripe then persists + hot-swaps runtime.
+- `backend/tests/test_stripe_price_id_override.py` — 18 new tests (resolution ladder, set/get, router integration, split-brain regression guard, worker-convergence simulation).
+- `backend/tests/test_iter335b_stripe_price_selfheal.py` — updated to reflect stateless heal (regression guard: heal must NOT cache across calls, or the split-brain returns).
+
+**Preview verification (single-worker):** ALL PASS
+- 27/27 unit tests green (`test_stripe_price_id_override.py` 18 + `test_iter335b_stripe_price_selfheal.py` 9)
+- 75/75 payment/stripe/admin-related tests green
+- 159/162 full suite passing (2 unrelated Mongo timeouts, 1 skip)
+- `POST /admin/stripe-prices` → 6/6 IDs validated + saved to Mongo
+- `GET /admin/stripe-prices` → all 6 flipped `source=env` → `source=db_override`
+- 6/6 checkouts return `cs_live_…` on Preview via DB override
+- Backend restart → boot loader hydrates from Mongo → 6/6 checkouts still work with ZERO manual intervention (env-independent proof)
+- Admin UI card renders correctly (screenshot verified)
+
+**Prod verification plan (multi-worker):**
+1. Deploy this session-fork bundle to prod.
+2. Founder opens `Admin → Settings → Stripe Price IDs` card. Confirms it shows source=env (initial state, no DB doc yet) OR the currently persisted DB values.
+3. Founder clicks Edit, pastes all 6 correct LIVE-mode price IDs (from Stripe Dashboard → Products), clicks Save & Hot-swap.
+4. Response should be `{ok: true, saved: 6}`. Refresh → all 6 show `db override`, `valid`, correct interval.
+5. Run the 6-plan checkout loop 3 times back-to-back. All 18 attempts must return `cs_live_…` (no checkerboard).
+6. Force a pod restart via Emergent panel. Boot logs should show `💵 Stripe price IDs hydrated from admin_settings (6 plans, updated_by=founder@…)`. Re-run the 6-plan loop → still 6/6 without any manual step. Env vars can now be left alone forever.
+
+**Old STRIPE_*_PRICE_ID env vars stay as fallback** (per founder rule) — code path is DB → env → "".
+
+**⚠️ Prior planning items still open (from Session 5):**
+
+- **Admin.jsx billing tab UI** — 4 monthly + 3 annual plans render correctly with `data-testid=upgrade-{tier}` wired to `POST /payments/checkout`. Preview screenshot: PASS.
+- **Integration Health Bug (P1)** — FIXED earlier in this session-fork.
+- **Bundle deploy (Track 1+3+Guard 18+Welcome Email+Tier 1)** — still BLOCKED on founder deploy-window timezone. Now bundled together with this session-fork's Stripe price DB override.
 
 ## 🚀 IN-PROGRESS (Session 5 · 2026-02-09 close)
 

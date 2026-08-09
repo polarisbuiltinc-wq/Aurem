@@ -1954,6 +1954,7 @@ function SettingsPage() {
       {/* Iter 191 — Stripe API key card with edit/save + live ping
           (green/red status light, account info, error reason). */}
       <StripeApiKeyCard />
+      <StripePriceIdsCard />
 
       {/* Iter 158 — thinking-hint manager (tier-aware upsell pills
           shown next to the chat spinner). Full CRUD + global toggle
@@ -2181,6 +2182,234 @@ function StripeApiKeyCard() {
         }
       `}</style>
     </Card>
+  );
+}
+
+// ─── Session-fork · 2026-02-09 — Stripe Price IDs card ────────────────
+// Multi-worker split-brain fix. All 6 price IDs live in Mongo
+// (admin_settings._id="stripe_price_ids") and are hydrated into every
+// worker at boot. This UI is the ONLY correct place to rotate prices —
+// env-panel edits require a full pod recycle and race between workers.
+const PRICE_PLAN_LABELS = [
+  { id: "starter",        label: "Starter",         interval: "month" },
+  { id: "pro",            label: "Pro",             interval: "month" },
+  { id: "team",           label: "Team",            interval: "month" },
+  { id: "starter_annual", label: "Starter Annual",  interval: "year"  },
+  { id: "pro_annual",     label: "Pro Annual",      interval: "year"  },
+  { id: "team_annual",    label: "Team Annual",     interval: "year"  },
+];
+
+function StripePriceIdsCard() {
+  const [data, setData] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [inputs, setInputs] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  async function refresh() {
+    try {
+      const r = await api.get("/admin/stripe-prices");
+      setData(r.data);
+    } catch (e) {
+      setData({ plans: {},
+                error: e?.response?.data?.detail || "Could not load Stripe prices" });
+    }
+  }
+  useEffect(() => { refresh(); }, []);
+
+  function startEdit() {
+    // Pre-populate empty so a paste replaces cleanly.
+    setInputs(Object.fromEntries(PRICE_PLAN_LABELS.map(p => [p.id, ""])));
+    setEditing(true);
+  }
+
+  async function save() {
+    const trimmed = Object.fromEntries(
+      Object.entries(inputs).map(([k, v]) => [k, (v || "").trim()])
+    );
+    const anyProvided = Object.values(trimmed).some(v => v);
+    if (!anyProvided) {
+      toast({ message: "Paste at least one price ID first", kind: "warning" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await api.post("/admin/stripe-prices", trimmed);
+      toast({ message: `Saved ${r.data.saved} price ID(s) ✓`, kind: "success" });
+      setEditing(false);
+      setInputs({});
+      await refresh();
+    } catch (e) {
+      toast({
+        message: e?.response?.data?.detail || "Save failed",
+        kind: "error",
+      });
+    } finally { setSaving(false); }
+  }
+
+  if (!data) {
+    return (
+      <Card style={{ padding: 18, marginTop: 24 }}>
+        <div style={{ color: "var(--text-faint)", fontSize: 12 }}>
+          Loading Stripe price IDs…
+        </div>
+      </Card>
+    );
+  }
+
+  const plans = data.plans || {};
+  const anyDbOverride = Object.values(plans).some(p => p.source === "db_override");
+  const anyBroken = Object.values(plans).some(p => !p.valid);
+
+  return (
+    <div data-testid="admin-stripe-prices-card">
+    <Card style={{ padding: 18, marginTop: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+                    marginBottom: 12, gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{
+            width: 12, height: 12, borderRadius: "50%",
+            background: anyBroken ? "#ef4444" : "#22c55e",
+            boxShadow: anyBroken
+              ? "0 0 0 4px rgba(239,68,68,0.35), 0 0 12px #ef4444"
+              : "0 0 0 4px rgba(34,197,94,0.35), 0 0 12px #22c55e",
+            flexShrink: 0,
+          }} />
+          <h3 style={{ fontSize: 13, margin: 0 }}>Stripe Price IDs</h3>
+          <Badge color={anyDbOverride ? "var(--ok)" : "var(--warn)"}>
+            {anyDbOverride ? "db override" : "env fallback"}
+          </Badge>
+        </div>
+        {!editing && (
+          <button
+            data-testid="admin-stripe-prices-edit"
+            className="btn-secondary"
+            style={{ fontSize: 12, padding: "6px 14px" }}
+            onClick={startEdit}>
+            Edit
+          </button>
+        )}
+      </div>
+
+      {!editing && (
+        <>
+          <div style={{ padding: "8px 12px", marginBottom: 10,
+                        background: "rgba(255,138,42,0.06)",
+                        border: "1px solid rgba(255,138,42,0.18)",
+                        borderRadius: 8, fontSize: 11,
+                        color: "var(--text-faint)", lineHeight: 1.5 }}>
+            Store all 6 price IDs here (in Mongo) instead of env vars. This
+            eliminates the multi-worker split-brain where different uvicorn
+            workers could serve different price IDs after an env-panel edit.
+            Values are hot-swapped into every worker on Save + hydrated at boot.
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "160px 100px 90px 1fr",
+                        gap: "6px 14px", fontSize: 11,
+                        fontFamily: "'JetBrains Mono', monospace" }}>
+            <span style={{ color: "var(--text-faint)" }}>PLAN</span>
+            <span style={{ color: "var(--text-faint)" }}>SOURCE</span>
+            <span style={{ color: "var(--text-faint)" }}>STATUS</span>
+            <span style={{ color: "var(--text-faint)" }}>DETAIL</span>
+            {PRICE_PLAN_LABELS.map(({ id, label, interval }) => {
+              const info = plans[id] || {};
+              const src = info.source || "none";
+              const valid = info.valid;
+              return (
+                <React.Fragment key={id}>
+                  <span style={{ color: "var(--text)" }}
+                        data-testid={`admin-price-plan-${id}`}>
+                    {label} <span style={{ color: "var(--text-faint)" }}>· {interval}</span>
+                  </span>
+                  <span style={{
+                    color: src === "db_override" ? "#86efac"
+                         : src === "env"         ? "#fbbf24"
+                         : "#fca5a5",
+                    fontSize: 10, textTransform: "uppercase" }}>
+                    {src}
+                  </span>
+                  <span data-testid={`admin-price-valid-${id}`}
+                        style={{ color: valid ? "#86efac" : "#fca5a5" }}>
+                    {valid ? "● valid" : "● broken"}
+                  </span>
+                  <span style={{ color: "var(--text-faint)" }}>
+                    {info.last6 ? `…${info.last6}` : "—"}
+                    {info.interval && info.interval !== interval && (
+                      <span style={{ color: "#fca5a5", marginLeft: 6 }}>
+                        (interval={info.interval}, expected {interval})
+                      </span>
+                    )}
+                    {info.error && (
+                      <span style={{ color: "#fca5a5", marginLeft: 6 }}>
+                        {info.error}
+                      </span>
+                    )}
+                  </span>
+                </React.Fragment>
+              );
+            })}
+          </div>
+          {data.updated_by && (
+            <div style={{ marginTop: 10, fontSize: 10, color: "var(--text-faint)",
+                          fontFamily: "'JetBrains Mono', monospace" }}>
+              Last updated by {data.updated_by} at{" "}
+              {new Date((data.last_updated || 0) * 1000).toISOString()}
+            </div>
+          )}
+        </>
+      )}
+
+      {editing && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ padding: "8px 12px", marginBottom: 12,
+                        background: "rgba(59,130,246,0.06)",
+                        border: "1px solid rgba(59,130,246,0.2)",
+                        borderRadius: 8, fontSize: 11,
+                        color: "#93c5fd", lineHeight: 1.5 }}>
+            Paste all 6 LIVE-mode price IDs from Stripe Dashboard → Products.
+            Each is validated (recurring + correct interval) before persistence.
+            Empty fields fall back to the corresponding STRIPE_*_PRICE_ID env var.
+          </div>
+          {PRICE_PLAN_LABELS.map(({ id, label, interval }) => (
+            <div key={id} style={{ display: "flex", alignItems: "center",
+                                    gap: 10, marginBottom: 8 }}>
+              <label style={{ width: 160, fontSize: 11,
+                              color: "var(--text-faint)",
+                              fontFamily: "'JetBrains Mono', monospace",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.06em" }}>
+                {label} · {interval}
+              </label>
+              <input
+                data-testid={`admin-price-input-${id}`}
+                className="input"
+                value={inputs[id] || ""}
+                onChange={(e) => setInputs({ ...inputs, [id]: e.target.value })}
+                placeholder={`price_… (${interval}ly)`}
+                style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace",
+                         fontSize: 12 }} />
+            </div>
+          ))}
+          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+            <button
+              data-testid="admin-stripe-prices-save"
+              className="btn-primary"
+              onClick={save}
+              disabled={saving}
+              style={{ fontSize: 12 }}>
+              {saving ? "Validating each with Stripe…" : "Save & Hot-swap"}
+            </button>
+            <button
+              data-testid="admin-stripe-prices-cancel"
+              className="btn-secondary"
+              onClick={() => { setEditing(false); setInputs({}); }}
+              disabled={saving}
+              style={{ fontSize: 12 }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </Card>
+    </div>
   );
 }
 
