@@ -130,17 +130,23 @@ async def _probe_stripe() -> dict:
         import stripe
         stripe.api_key = key
         # Session 5 · 2026-02-09 diagnostic (item S5-D1): distinguish
-        # "Emergent panel value not propagated to os.environ → we fell
-        # back to reading the container .env and picked up a stale
-        # legacy sk_test_* value" from "wrong key configured entirely".
-        # NEVER exposes the key value itself — only the loader
-        # attribution and prefix category. Enables the founder to
-        # decide between "restart pod / clear .env fallback" and
-        # "swap the key in the Emergent panel".
-        key_source = "os_environ" if (
-            (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
-            or (os.environ.get("STRIPE_API_KEY") or "").strip()
-        ) else "dotenv_fallback"
+        # "runtime override winning" (DB-persisted admin_settings key
+        # hot-swapped into _RUNTIME_STRIPE_KEY) from "Emergent panel value
+        # not propagated to os.environ → .env fallback fires" from
+        # "wrong key configured entirely". NEVER exposes the key value —
+        # only the loader attribution and prefix category. Enables the
+        # founder to decide between "clear DB override / clear .env
+        # fallback / restart pod" and "swap the key in the Emergent
+        # panel or /admin/stripe-config".
+        from services.stripe_client import _RUNTIME_STRIPE_KEY as _rk
+        if _rk and key == _rk:
+            key_source = "runtime_override_db"
+        elif (os.environ.get("STRIPE_SECRET_KEY") or "").strip() == key:
+            key_source = "os_environ:STRIPE_SECRET_KEY"
+        elif (os.environ.get("STRIPE_API_KEY") or "").strip() == key:
+            key_source = "os_environ:STRIPE_API_KEY"
+        else:
+            key_source = "dotenv_fallback"
         key_prefix = "sk_live" if key.startswith("sk_live_") else (
             "sk_test" if key.startswith("sk_test_") else "unknown"
         )
