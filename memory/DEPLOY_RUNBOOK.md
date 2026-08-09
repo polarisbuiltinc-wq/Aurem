@@ -102,5 +102,16 @@ Enforcement: after every deploy completion signal from the deployer, before decl
 
 ---
 
+## Platform reality (support-agent confirmed 2026-02-09)
+
+- **No blue/green / zero-downtime**: every deploy has a **30-60 sec stop-then-start window**. Health-gate curl must include sleep + retry loop, not fire immediately.
+- **No canary / rolling / drain**: single-pod cutover only.
+- **Rollback path (verified)**: Deployer dashboard → Home → deployed apps → **Rollback** button. Also available via chat clock-icon. No cost.
+- **No deploy-failure webhook**: only manual dashboard checking or /api/health polling. Agent must actively verify after every deploy, no notification will arrive.
+
+**Practical impact for ad traffic**: expect 30-60 sec of 503s per deploy. Every prod deploy = burning that many seconds of ad-spend on failed page loads. Minimize deploy frequency. Batch changes.
+
+---
+
 **Last updated**: 2026-02-09
 **Owner**: agent + founder (dual sign-off on any deploy that crosses these gates)
