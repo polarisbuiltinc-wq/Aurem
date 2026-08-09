@@ -1,0 +1,28 @@
+{
+  "summary": "Track 3 (Ledger #31) First-50 Signup Promo + Email Verification — full backend + frontend verification. All 8 existing pytest cases pass. Added 5 public-URL integration tests hitting the preview REACT_APP_BACKEND_URL (status shape, invalid/missing token 302, 51st-user cap enforcement via total=3 override) — all pass. Added 2 resend-verification endpoint tests (unverified→429 cooldown & already-verified→ok) — both pass. Frontend Playwright tested: Landing page dynamic promo tag renders 'founder price · 50/50 left' from live polling (no '498/500' anywhere in DOM); /verify page correctly renders all 4 states (claimed=1, promo_full, already_verified, error/invalid_token). DB was reset after tests: singleton total=50, spots_claimed=0, is_active=true; zero leftover test users. Preview state is clean.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_promo_first50_verification.py",
+    "/app/backend/tests/test_promo_first50_public_url.py",
+    "/app/backend/tests/test_promo_first50_resend.py",
+    "/app/test_reports/pytest/promo_first50_public.xml",
+    "/app/test_reports/pytest/promo_first50_resend.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PROMO_TOTAL_SPOTS constant is read from env at router import time (routers/promo_first50.py:51). The atomic $expr claim in verify_email correctly uses the stored doc.total (line 179), so the DB singleton drives the cap — good. However, _ensure_singleton() only sets total on first insert; if PROMO_FIRST50_TOTAL env changes later, existing singleton keeps old total. Acceptable for launch but worth documenting.",
+    "verify_email race-handling (routers/promo_first50.py:200-207): when a concurrent verify wins the user-level claim, the losing request decrements spots_claimed. This is correct but is not covered by a test — consider a concurrency test in future.",
+    "downgrade_cron has no jitter/backoff on repeated failures; a Mongo outage will retry every 3600s but silently log — that's fine for hourly cron.",
+    "verification_email._resend_send short-circuits @example.com/.org/.net domains — this is intentional and documented; production emails still hit Resend. Good pattern.",
+    "Verify.jsx renders inline styles instead of the site's design tokens; visually consistent but drifts from Landing's CSS variables. Cosmetic only."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (15/15 tests: 8 existing + 5 new public-URL + 2 resend)", "frontend": "100% (Landing + 4 Verify states)"},
+  "test_credentials": "Not required — anonymous /promo/first50/status + /auth/verify; signup used fresh promo-test-*@example.com / promo51-*@example.com (Resend short-circuit).",
+  "seed_data_creation": "None persisted. All test dev_users + email_verifications + onboarding_emails rows deleted post-test. Singleton reset to {total:50, spots_claimed:0, is_active:true}.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Track 3 is production-ready for preview. Preview state left clean: promo counter shows 50/50. Next testing agent can re-run /app/backend/tests/test_promo_first50_verification.py (localhost:8001) + test_promo_first50_public_url.py (public URL) + test_promo_first50_resend.py. The public_url + resend tests hit real /api/aurem-dev/auth/signup so each run creates test users — they self-clean at the end. FOUNDER_EMAILS env is present; is_founder_email path was asserted via test 8.",
+  "rca of the issue": "N/A — no bugs found. All specified features work as designed."
+}

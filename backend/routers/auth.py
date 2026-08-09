@@ -255,7 +255,30 @@ async def signup(body: SignupBody, request: Request) -> dict:
         # Iter 365 — signup abuse audit trail. IP used by the per-IP
         # rate-limiter on subsequent /signup calls.
         "signup_ip":  client_ip,
+        # Track 3 (item #31) — email verification gate. Founders are
+        # auto-verified so their signup UX isn't blocked; everyone else
+        # starts unverified and claims the First-50 promo spot only on
+        # verification click.
+        "email_verified":       bool(is_founder),
+        "promo_first50_claimed": False,
     })
+    # Track 3 — fire verification email as a background task so the
+    # signup response returns immediately. Skipped for founders (they
+    # are auto-verified above). Errors are best-effort and NEVER crash
+    # the signup response.
+    if not is_founder:
+        try:
+            from services.verification_email import send_verification_email
+            from services.bg_safe import safe_bg
+            import asyncio
+            _safe_send = safe_bg(send_verification_email)
+            asyncio.create_task(_safe_send(
+                db,
+                {"user_id": user_id, "email": email,
+                 "name": body.name or email.split("@")[0]},
+            ))
+        except Exception as e:                          # noqa: BLE001
+            logger.warning("verification email dispatch failed: %r", e)
     # Iter 365 · Phase 3 — funnel event so /admin/funnel can compute
     # signup→first_chat and signup→first_ship conversion rates.
     await emit_funnel_event(
@@ -275,6 +298,7 @@ async def signup(body: SignupBody, request: Request) -> dict:
         "is_admin": is_founder,
         "is_unlimited": is_founder,
         "created_at": created_iso,
+        "email_verified": bool(is_founder),
     }
 
 

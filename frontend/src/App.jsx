@@ -41,6 +41,7 @@ const VisualFixtures    = lazy(() => import("./pages/VisualFixtures"));
 const AdminQADashboard  = lazy(() => import("./pages/AdminQADashboard"));
 const Login             = lazy(() => import("./pages/Login"));
 const Signup            = lazy(() => import("./pages/Signup"));
+const Verify            = lazy(() => import("./pages/Verify"));  // Track 3 (item #31) — email verification landing
 const WhyOra            = lazy(() => import("./pages/WhyOra"));
 import { initTheme } from "./services/theme";
 
@@ -212,6 +213,7 @@ export default function App() {
           <Route path="/demo"            element={<Demo />} />
           <Route path="/login"           element={<Login />} />
           <Route path="/signup"          element={<Signup />} />
+          <Route path="/verify"          element={<Verify />} />
           <Route path="/dashboard"       element={<Dashboard />} />
           {/* Iter 212m-235 — Personal Track routes */}
           <Route path="/choose-track"    element={<ChooseTrack />} />

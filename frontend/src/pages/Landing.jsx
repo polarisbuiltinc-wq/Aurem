@@ -624,7 +624,7 @@ const TEAMS = [
   { icon: "🧠", tag: "UNIQUE · self-learning",
     title: "ORA Learns Your Codebase",
     desc: "ORA Council tracks every interaction across 5 modes (chat, advice, code, debug, audit) and fine-tunes ORA on your specific patterns. The more you use ORA, the better it gets at your codebase." },
-  { icon: "💎", tag: "founder price · 498/500 left",
+  { icon: "💎", tag: "__PROMO_TAG__",
     title: "$9/Month. No Surprises.",
     desc: "No IDE to install. No token meters to watch. No per-seat pricing. Flat pricing: 10/50/300/400 tasks per month across Free/Starter/Pro/Team — 55% cheaper than Copilot. 98% cheaper than Devin." },
 ];
@@ -696,12 +696,45 @@ export default function Landing() {
   // excluded). No hardcoded marketing stats. Section hides if the
   // endpoint is unavailable rather than showing fabricated numbers.
   const [proof, setProof] = useState(null);
+  // Track 3 (item #31) — real-time First-50 signup promo counter.
+  // Was hardcoded "498/500" — now polled from
+  // /api/aurem-dev/promo/first50/status every 30s so the badge on
+  // the pricing card reflects live claims. Null while loading; the
+  // TEAMS card falls back to a neutral tag until data arrives.
+  const [promo, setPromo] = useState(null);
 
   useEffect(() => {
     api.get("/usage/public/stats")
       .then((r) => { if (r.data?.available) setProof(r.data); })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchPromo = () => {
+      api.get("/promo/first50/status")
+        .then((r) => { if (!cancelled && r.data) setPromo(r.data); })
+        .catch(() => {});
+    };
+    fetchPromo();
+    const id = setInterval(fetchPromo, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  // Replace the placeholder tag on the founder-price feature card
+  // with the live counter. When promo is sold out we swap the tag to
+  // a waitlist affordance instead of an implausibly-full one.
+  const promoTag = (() => {
+    if (!promo) return "founder price · loading …";
+    const { remaining, total, is_active } = promo;
+    if (!is_active || remaining <= 0) {
+      return "founder price · waitlist open";
+    }
+    return `founder price · ${remaining}/${total} left`;
+  })();
+  const teamsWithPromo = TEAMS.map((t) =>
+    t.tag === "__PROMO_TAG__" ? { ...t, tag: promoTag } : t
+  );
 
   // SEO/AEO title + description sync (preserved from Iter 175).
   useEffect(() => {
@@ -1216,10 +1249,17 @@ export default function Landing() {
           <h2 className="section-title">Built like a teammate, not a chat bot</h2>
           <p className="section-sub">Six things ORA does that the autocompletes don&apos;t. <b>All shipped, all in production.</b></p>
           <div className="teams-grid">
-            {TEAMS.map((t, i) => (
-              <div className="team-card" key={i}>
+            {teamsWithPromo.map((t, i) => (
+              <div
+                className="team-card"
+                key={i}
+                data-testid={t.tag && t.tag.startsWith("founder price") ? "landing-promo-card" : undefined}
+              >
                 <div className="team-icon">{t.icon}</div>
-                <div className="team-tag">{t.tag}</div>
+                <div
+                  className="team-tag"
+                  data-testid={t.tag && t.tag.startsWith("founder price") ? "landing-promo-tag" : undefined}
+                >{t.tag}</div>
                 <div className="team-title">{t.title}</div>
                 <div className="team-desc">{t.desc}</div>
               </div>
