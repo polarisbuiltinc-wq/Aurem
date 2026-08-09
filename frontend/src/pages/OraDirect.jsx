@@ -269,10 +269,15 @@ function ChatShell({ onLogout }) {
     const fd = new FormData();
     fd.append("file", file);
     try {
+      // Guard 18 · Feb 2026 — 60s AbortSignal.timeout so a hung
+      // /upload (Cloudflare edge stall, backend R2 upload deadlock,
+      // etc.) can't leave the attachment stuck in "uploading" forever.
+      // 60s is comfortable for the largest file we accept.
       const r = await fetch(`${BASE}/upload`, {
         method: "POST",
         headers: { "Authorization": `Bearer ${getToken()}` },
         body: fd,
+        signal: AbortSignal.timeout(60_000),
       });
       if (r.status === 402) {
         const d = await r.json().catch(() => ({}));
@@ -301,8 +306,15 @@ function ChatShell({ onLogout }) {
             kind: j.kind, filename: j.filename }
         : x));
     } catch (e) {
+      // Guard 18 · surface AbortError (timeout) with a distinct
+      // user-facing message so the founder knows to retry vs a
+      // generic "upload_failed". Any error still marks the attachment
+      // as error so it doesn't sit in "uploading" state forever.
+      const msg = e?.name === "TimeoutError" || e?.name === "AbortError"
+        ? "Upload timed out after 60s — try again or use a smaller file"
+        : (e?.message || "upload_failed");
       setAttachments(a => a.map(x => x.id === id
-        ? { ...x, status: "error", error: e?.message || "upload_failed" }
+        ? { ...x, status: "error", error: msg }
         : x));
     }
   };
@@ -384,11 +396,18 @@ function ChatShell({ onLogout }) {
       setMessages(m => [...m, { role: "user", content: displayed }]);
       setSending(true);
       try {
+        // Guard 18 · Feb 2026 — 90s AbortSignal.timeout for image
+        // generation. gpt-image-1 typically responds in 5-20s but
+        // long prompts + retries can stretch to 60s legitimately;
+        // 90s guards against a fully-hung LLM call while giving
+        // real requests headroom. `finally: setSending(false)`
+        // below ensures the send button re-enables even on timeout.
         const r = await fetch(`${BASE}/image-generate`, {
           method: "POST",
           headers: { "Content-Type": "application/json",
                      "Authorization": `Bearer ${getToken()}` },
           body: JSON.stringify({ prompt }),
+          signal: AbortSignal.timeout(90_000),
         });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) {
@@ -415,9 +434,16 @@ function ChatShell({ onLogout }) {
           }]);
         }
       } catch (e) {
+        // Guard 18 · surface AbortError (timeout) with a distinct
+        // user-facing message. `finally` below still re-enables
+        // the send button so the UI is never stuck on a hang.
+        const isTimeout = e?.name === "TimeoutError" || e?.name === "AbortError";
+        const msg = isTimeout
+          ? "Image generation timed out after 90s — please try again"
+          : (e?.message || "network error");
         setMessages(m => [...m, {
           role: "assistant",
-          content: `**Image generation failed** — ${e?.message || "network error"}`,
+          content: `**Image generation failed** — ${msg}`,
           isError: true,
         }]);
       } finally {
