@@ -12,7 +12,8 @@
 1. Track 3 build on preview (item #31) — email verification endpoint + Resend template + `email_verified` field on dev_users + atomic founder-spot claim gated on verification + `/api/founder-spots/status` counter + `Landing.jsx` rewire + prod env note `SIGNUP_RATE_LIMIT_PER_IP=3` + full 48→51 test **including verification click step**.
 2. Bundle Track 1 (item #5) + Track 3 into single prod deploy in founder-chosen window (founder still checking Meta Ads Manager for audience timezone).
 3. Post-deploy: health-gate check per runbook (uptime<300s, no dead supervised_tasks, DB connected, backup endpoints 401/405 not 404), prove counter reflects reality on real signups, mark #5 and #31 shipped.
-4. Return to Phase 1 tail: #22 Incident Runbook, #21 Uptime Monitoring provider pick, #20 Frontend Sentry DSN.
+4. **Referral Program (item #32)** — build AFTER Track 3 ships and is prod-verified. **Do NOT build a separate email-verification path** — reuse the same `email_verified` gate from #31. **Do NOT start code until founder pastes the full referral spec** — the checkpoint entry only has summary contract; detailed decisions (referral-code format, attribution window, abuse guards, cap per referrer, credit-application logic, UI surfaces) all pending founder ratification.
+5. Return to Phase 1 tail: #22 Incident Runbook, #21 Uptime Monitoring provider pick, #20 Frontend Sentry DSN.
 
 ## Master Status Audit (2026-02-08, founder-issued)
 
