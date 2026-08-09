@@ -266,10 +266,31 @@ async def _check_g18_timeout_audit() -> dict:
     # (including /admin/pulse which only does Mongo queries). Wrap in
     # asyncio.to_thread so the scan runs off-loop and the per-check
     # asyncio.wait_for timeout can actually enforce cancellation.
+    #
+    # 2026-02-09 · bugfix — `run_audit()` returns
+    # `{"violations": [list_of_dicts], "total_call_sites": int,
+    #   "covered": int, "pass": bool}`. There is NO `unbounded_count`
+    # key. The previous impl did `int(r.get("unbounded_count") or
+    # r.get("violations") or 0)` which short-circuited to the raw
+    # LIST when `unbounded_count` was absent, then blew up with
+    # `int([...])` → TypeError. This was firing on every /admin/pulse
+    # request in prod, hidden inside a health-check try/except but
+    # spamming logs and causing g18 to always be gray. Use `len()` on
+    # the list — or `total_call_sites - covered`, both give the same
+    # number and are safe regardless of shape.
     import asyncio
     from scripts.timeout_audit import run_audit
     r = (await asyncio.to_thread(run_audit)) or {}
-    unbounded = int(r.get("unbounded_count") or r.get("violations") or 0)
+    violations = r.get("violations") or []
+    if not isinstance(violations, list):
+        # Defensive: if audit signature ever changes to return a
+        # count directly, tolerate it.
+        try:
+            unbounded = int(violations)
+        except (TypeError, ValueError):
+            unbounded = 0
+    else:
+        unbounded = len(violations)
     if unbounded > 0:
         return result_red(f"{unbounded} unbounded I/O sites detected")
     return result_green("all I/O sites have a timeout budget")
