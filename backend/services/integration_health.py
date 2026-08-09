@@ -129,6 +129,21 @@ async def _probe_stripe() -> dict:
     def _sync_probe() -> dict:
         import stripe
         stripe.api_key = key
+        # Session 5 · 2026-02-09 diagnostic (item S5-D1): distinguish
+        # "Emergent panel value not propagated to os.environ → we fell
+        # back to reading the container .env and picked up a stale
+        # legacy sk_test_* value" from "wrong key configured entirely".
+        # NEVER exposes the key value itself — only the loader
+        # attribution and prefix category. Enables the founder to
+        # decide between "restart pod / clear .env fallback" and
+        # "swap the key in the Emergent panel".
+        key_source = "os_environ" if (
+            (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
+            or (os.environ.get("STRIPE_API_KEY") or "").strip()
+        ) else "dotenv_fallback"
+        key_prefix = "sk_live" if key.startswith("sk_live_") else (
+            "sk_test" if key.startswith("sk_test_") else "unknown"
+        )
         acct = stripe.Account.retrieve()
         prices = stripe.Price.list(active=True, limit=5)
         # ── Iter 326 B · Per-price .recurring verification ──────────
@@ -157,10 +172,19 @@ async def _probe_stripe() -> dict:
         # Detect mode
         mode = "live" if key.startswith("sk_live_") else "test"
         summary = f"{mode.upper()} mode • {acct.business_profile.name if acct.business_profile else acct.id}"
+        # Diagnostic tail — appears on ALL branches so founder can grep
+        # a single line to identify the loader. `acct=…` reveals the
+        # Stripe account id which is a public identifier (safe to log)
+        # and is exactly what we need to compare against the known-
+        # healthy preview account (acct_1TKUU90Exg9gU93t).
+        diag = (
+            f" [loader={key_source} key_prefix={key_prefix} "
+            f"acct={acct.id}]"
+        )
         if not acct.charges_enabled:
             return _result("stripe", "Stripe", "warn",
-                           summary=f"{summary} (charges DISABLED)",
-                           detail="Stripe account exists but cannot accept payments.",
+                           summary=f"{summary} (charges DISABLED)" + diag,
+                           detail="Stripe account exists but cannot accept payments." + diag,
                            fix_hint="Complete onboarding at dashboard.stripe.com/account")
         if missing_prices:
             return _result("stripe", "Stripe", "warn",
@@ -242,7 +266,7 @@ async def _probe_stripe() -> dict:
         return _result("stripe", "Stripe", "ok",
                        summary=summary,
                        detail=f"acct={acct.id} • charges enabled • {len(prices.data)} active prices • "
-                              f"all 6 configured price IDs verified recurring")
+                              f"all 6 configured price IDs verified recurring" + diag)
 
     try:
         return await asyncio.to_thread(_sync_probe)
