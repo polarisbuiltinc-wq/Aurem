@@ -1848,28 +1848,73 @@ function SettingsPage() {
   return (
     <div style={{ padding: 24, maxWidth: 960 }}>
       <h3 style={{ fontSize: 13, margin: "0 0 14px" }}>Upgrade your plan</h3>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+
+      {/* Monthly (4 tiers: Free is display-only, Starter/Pro/Team are clickable) */}
+      <div style={{ fontSize: 11, color: "var(--text-faint)",
+                     textTransform: "uppercase", letterSpacing: ".08em",
+                     margin: "0 0 8px" }}>Monthly</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
+                     gap: 10, marginBottom: 18 }}>
         {[
-          { id: "pro", label: "Pro", price: "$29/mo" },
-          { id: "team", label: "Team", price: "$99/mo" },
+          { id: "free",    label: "Free",    price: "$0/mo",  clickable: false },
+          { id: "starter", label: "Starter", price: "$9/mo",  clickable: true  },
+          { id: "pro",     label: "Pro",     price: "$19/mo", clickable: true  },
+          { id: "team",    label: "Team",    price: "$49/mo", clickable: true  },
         ].map((p) => (
           <Card key={p.id} style={{ padding: 14 }}>
             <div style={{ fontSize: 14, fontWeight: 600 }}>{p.label}</div>
-            <div style={{ fontSize: 11, color: "var(--text-faint)", marginBottom: 10 }}>{p.price}</div>
+            <div style={{ fontSize: 11, color: "var(--text-faint)",
+                          marginBottom: 10 }}>{p.price}</div>
+            {p.clickable ? (
+              <button
+                data-testid={`upgrade-${p.id}`}
+                onClick={() => upgrade(p.id)}
+                disabled={upgrading === p.id}
+                className="btn-primary"
+                style={{ width: "100%" }}>
+                {upgrading === p.id ? "redirecting…" : `Upgrade → ${p.label}`}
+              </button>
+            ) : (
+              <button
+                disabled
+                className="btn-primary"
+                style={{ width: "100%", opacity: 0.4, cursor: "not-allowed" }}>
+                Current baseline
+              </button>
+            )}
+          </Card>
+        ))}
+      </div>
+
+      {/* Annual (3 tiers, 20% discount) */}
+      <div style={{ fontSize: 11, color: "var(--text-faint)",
+                     textTransform: "uppercase", letterSpacing: ".08em",
+                     margin: "0 0 8px" }}>Annual · 20% off</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)",
+                     gap: 10, marginBottom: 20 }}>
+        {[
+          { id: "starter_annual", label: "Starter", price: "$86.40/yr"  },
+          { id: "pro_annual",     label: "Pro",     price: "$182.40/yr" },
+          { id: "team_annual",    label: "Team",    price: "$470.40/yr" },
+        ].map((p) => (
+          <Card key={p.id} style={{ padding: 14 }}>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>{p.label}</div>
+            <div style={{ fontSize: 11, color: "var(--text-faint)",
+                          marginBottom: 10 }}>{p.price}</div>
             <button
               data-testid={`upgrade-${p.id}`}
               onClick={() => upgrade(p.id)}
               disabled={upgrading === p.id}
               className="btn-primary"
               style={{ width: "100%" }}>
-              {upgrading === p.id ? "redirecting…" : `Upgrade → ${p.label}`}
+              {upgrading === p.id ? "redirecting…" : `Upgrade → ${p.label} annual`}
             </button>
           </Card>
         ))}
       </div>
 
       <h3 style={{ fontSize: 13, margin: "20px 0 14px" }}>Token limits per plan</h3>
-      {["free", "pro", "team"].map((plan) => (
+      {["free", "starter", "pro", "team"].map((plan) => (
         <div key={plan} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
           <span style={{ width: 80, textTransform: "capitalize", fontSize: 12 }}>{plan}</span>
           <input
@@ -1882,7 +1927,7 @@ function SettingsPage() {
         </div>
       ))}
       <h3 style={{ fontSize: 13, margin: "20px 0 14px" }}>Pricing ($/mo)</h3>
-      {["free", "pro", "team"].map((plan) => (
+      {["free", "starter", "pro", "team"].map((plan) => (
         <div key={plan} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
           <span style={{ width: 80, textTransform: "capitalize", fontSize: 12 }}>{plan}</span>
           <input

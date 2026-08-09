@@ -102,8 +102,23 @@ async def _run(coro: Awaitable, id_: str, name: str,
 # ────────────────────────────────────────────────────────────────────────
 
 async def _probe_stripe() -> dict:
-    key = _safe_env("STRIPE_SECRET_KEY", "STRIPE_API_KEY")
-    # Also reach into .env directly to dodge the platform's stale placeholder.
+    # ── Session-fork · 2026-02-09 · Fix "Integration Health Bug" ──────
+    # The probe MUST use the same key-resolution as actual checkouts,
+    # otherwise the admin dashboard shows "TEST mode" or "missing" while
+    # /payments/checkout is happily creating cs_live_… sessions with the
+    # DB-overridden key. Canonical source of truth is
+    # `services.stripe_client.stripe_key()` — it already honours the
+    # runtime DB override → env → dotenv fallback ladder.
+    try:
+        from services.stripe_client import stripe_key as _stripe_key
+        key = (_stripe_key() or "").strip()
+    except Exception:
+        key = ""
+    # Preserve legacy dotenv/_safe_env fallback as absolute last resort
+    # (should never trigger since stripe_key() already handles them,
+    # but keeps the probe robust to import failures during boot).
+    if not key:
+        key = _safe_env("STRIPE_SECRET_KEY", "STRIPE_API_KEY")
     if not key:
         try:
             from dotenv import dotenv_values
