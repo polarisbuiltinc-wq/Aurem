@@ -1,5 +1,28 @@
 # AUREM CTO — PRD (Product Requirements & Change Log)
 
+## 🚀 IN-PROGRESS (Session 5 · 2026-02-09 close)
+
+- **Track 3 · First-50 Signup Promo + Email Verification (item #31)** — BUILT + preview-verified. 15/15 backend pytests pass (8 core lifecycle + 5 public-URL integration + 2 resend-verification cooldown), 4 frontend states verified via Playwright, DB left clean (`promo_first50_state = {total:50, spots_claimed:0}`). Files: `services/verification_email.py`, `routers/promo_first50.py`, `routers/auth.py:signup` (adds `email_verified/promo_first50_claimed`, fires bg verification email for non-founders), `frontend/src/pages/Verify.jsx`, `frontend/src/pages/Landing.jsx` (dynamic promo tag via 30s poll of `/promo/first50/status`, hardcoded "498/500" gone), `frontend/src/App.jsx` (new `/verify` route). Atomic spot claim via `findOneAndUpdate` with `$expr $lt` guard — race-safe. 30-day Pro grant auto-downgraded via hourly `downgrade_cron`. **Not yet deployed** — bundled with Backup Hardening (#5) + Guard 18 fix per founder ruling; still waiting on deploy-window timezone from Meta Ads Manager.
+- **Backup Hardening (item #5)** — Option B (Python-native pymongo, no subprocess) BUILT + preview-verified in Session 4. 121/122 collection parity across 33,820 docs. **Not shipped to prod** — bundled with #31 for single deploy window per founder ruling.
+- **Deploy Runbook** — `/app/memory/DEPLOY_RUNBOOK.md` written Session 4. Blue/green NOT supported on Emergent. Auto-rollback authority granted, narrowly scoped.
+- **Standing rule (SECRET-EXPOSURE)** — enforced. No secret values in outputs. Rotations logged in Session 4.
+
+### 📌 NEXT SESSION MUST-DOs (in order)
+
+**⚠️ STANDING AWARENESS NOTE (unchanged from Session 4)**:
+- Prod still runs the **OLD `/tmp/`-based backup code** AND the **hardcoded 498/500 spot counter**, WHILE live Meta ad traffic is actively hitting `auremcto.com`. Known, accepted short-term risk until the Track 1 + Track 3 + Guard 18 bundle deploys.
+- Preview is production-ready for Track 3. The single blocker to shipping is the deploy window timezone from Meta Ads Manager.
+
+1. **DEPLOY THE BUNDLE** — the moment founder confirms deploy window: single deploy shipping (a) Track 1 (backup R2 rewrite), (b) Track 3 (promo + verification + Landing rewire), (c) Guard 18 fetch timeouts on OraDirect.jsx. Post-deploy: `/api/health` gate + `/api/aurem-dev/promo/first50/status` sanity check + prod env set `SIGNUP_RATE_LIMIT_PER_IP=3` (currently 999 on prod — MUST change during deploy).
+2. **Guard 18 UI verification** (founder-owned, 2 min manual browser test — block `*image-generate*` in DevTools, verify Send button re-enables).
+3. **Referral Program (item #32)** — build AFTER Track 3 ships and is prod-verified. Reuses `email_verified` gate from #31. Blocked on founder spec paste.
+4. **Automated Welcome Email (item #33)** — build AFTER Track 3 ships. EXTENSION of `services/onboarding_email.py`. New campaign `signup_welcome` fires on verification-click (NOT signup — reuses the same trigger point I built for the promo claim). Content contract locked from Session 4.
+5. **Email Delivery Visibility (item #34)** — Part A: "Email Activity" admin panel; Part B: Resend webhook wiring for delivery truthiness.
+6. **Admin Panel Full Accuracy Audit (item #35)** — 16 sections, read-only. P0 slice: Payments & Revenue, LLM Credits, Token P&L, Feature Flags.
+7. Return to Phase 1 tail: #22 Incident Runbook, #21 Uptime Monitoring provider pick, #20 Frontend Sentry DSN.
+
+---
+
 ## 🚀 IN-PROGRESS (Session 4 · 2026-02-09 close)
 
 - **Backup Hardening (item #5)** — Option B (Python-native pymongo, no subprocess) BUILT + preview-verified. 121/122 collection parity across 33,820 docs, all BSON edge cases pass individually. `aurem-native-v1` format. Files: `services/db_backup.py`, `services/db_restore.py`, `routers/backups_admin.py`, `tests/test_db_backup.py`. **Not shipped to prod** — bundled with #31 for single deploy window per founder ruling.
