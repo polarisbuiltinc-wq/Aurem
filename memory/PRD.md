@@ -13,13 +13,31 @@
 - Prod still runs the **OLD `/tmp/`-based backup code** AND the **hardcoded 498/500 spot counter**, WHILE live Meta ad traffic is actively hitting `auremcto.com`. Known, accepted short-term risk until the Track 1 + Track 3 + Guard 18 bundle deploys.
 - Preview is production-ready for Track 3. The single blocker to shipping is the deploy window timezone from Meta Ads Manager.
 
-1. **DEPLOY THE BUNDLE** — the moment founder confirms deploy window: single deploy shipping (a) Track 1 (backup R2 rewrite), (b) Track 3 (promo + verification + Landing rewire), (c) Guard 18 fetch timeouts on OraDirect.jsx. Post-deploy: `/api/health` gate + `/api/aurem-dev/promo/first50/status` sanity check + prod env set `SIGNUP_RATE_LIMIT_PER_IP=3` (currently 999 on prod — MUST change during deploy).
-2. **Guard 18 UI verification** (founder-owned, 2 min manual browser test — block `*image-generate*` in DevTools, verify Send button re-enables).
-3. **Referral Program (item #32)** — build AFTER Track 3 ships and is prod-verified. Reuses `email_verified` gate from #31. Blocked on founder spec paste.
-4. **Automated Welcome Email (item #33)** — build AFTER Track 3 ships. EXTENSION of `services/onboarding_email.py`. New campaign `signup_welcome` fires on verification-click (NOT signup — reuses the same trigger point I built for the promo claim). Content contract locked from Session 4.
+**🆕 SESSION 5 P0 STACK — SEPARATE "PAYMENTS ACCURACY" DEPLOY TOMORROW** (founder ruling: do NOT bundle into tonight's Track 1+3+Guard 18 window). All four are ~1h 20min combined, safe to batch:
+- `admin.py:1117-1122` — Payments "Revenue (mo)" + "Net profit" cards render literal `0` regardless of Stripe income.
+- `pages/BugHunt.jsx:542` — `"498 of 500 founder spots remaining at $9/month"` hardcoded on the /bug-hunt page (Meta-ad-adjacent).
+- `pages/BugHunt.jsx:299` — JSON-LD schema.org `"Used by 500+ developers"` (SEO-indexed false claim; real count 30 prod / 74 preview).
+- `pages/Landing.jsx:667` — FAQ contradicts the new First-50 promo counter with "founder pricing limited to the first 500 users."
+
+**🆕 SESSION 5 P1 STACK** (any time, no urgency):
+- `admin.py:1096` — Token P&L cost-per-1k table is 2024-era; unknown-agent rows silently priced at deepseek rate.
+- `admin.py:1265` — Payments list capped at last 100 rows; lifetime revenue truncates past #100.
+- `services/onboarding_email.py:130` — nudge email body promises "One of 500 founder spots" (1,485 rows already sent; audit for post-cap sends).
+- `components/FounderOfferPill.jsx / ConnectRepoBanner.jsx / FounderOfferCard.jsx` — hardcoded `500` denominators alongside live remaining numerators.
+- Feature Flags 60s per-process cache — latent multi-pod drift, resolves with Redis pub/sub at horizontal scale.
+
+**🆕 SESSION 5 P1/P2 ADMIN AUDIT CONTINUATION** — 12 sidebar sections spot-checked LIVE at endpoint level but sub-cards not verified: Cockpit, Overview, Parliament Live, QA Health, Architecture, BIN Tracker, Users (Legacy), Support, Suggestions, Audit Log, House Rules V2, Robot Guide. Full findings in `/app/memory/ADMIN_AUDIT_2026-02-09.md`.
+
+**🆕 FIELD-NAME QUESTION RESOLVED** — `cto_payments` always co-writes both `payment_status` and `status` in a stable pair (checked all 5 write sites in `payments.py` + `admin.py:reconcile`, plus preview data snapshot). No revenue-numbers-are-off bug. Canonical field for future filters: `payment_status == "paid"` (Stripe's explicit paid-boolean; more stable than piggy-backing on `session.status == "complete"`).
+
+1. **DEPLOY THE BUNDLE** — the moment founder confirms deploy window: single deploy shipping (a) Track 1 (backup R2 rewrite), (b) Track 3 (promo + verification + Landing rewire + waitlist), (c) Guard 18 fetch timeouts on OraDirect.jsx, (d) Welcome Email #33. Post-deploy: `/api/health` gate + `/api/aurem-dev/promo/first50/status` sanity check + one live signup with founder inbox + prod env set `SIGNUP_RATE_LIMIT_PER_IP=3` (currently 999 on prod — MUST change during deploy).
+2. **"Payments Accuracy" follow-up deploy TOMORROW** — the 4 P0 items above, batched.
+3. **Guard 18 UI verification** (founder-owned, 2 min manual browser test — block `*image-generate*` in DevTools, verify Send button re-enables).
+4. **Referral Program (item #32)** — build AFTER Track 3 ships and is prod-verified. Reuses `email_verified` gate from #31. Blocked on founder spec paste.
 5. **Email Delivery Visibility (item #34)** — Part A: "Email Activity" admin panel; Part B: Resend webhook wiring for delivery truthiness.
-6. **Admin Panel Full Accuracy Audit (item #35)** — 16 sections, read-only. P0 slice: Payments & Revenue, LLM Credits, Token P&L, Feature Flags.
-7. Return to Phase 1 tail: #22 Incident Runbook, #21 Uptime Monitoring provider pick, #20 Frontend Sentry DSN.
+6. **Admin Panel Audit P1/P2 continuation (item #35)** — deep-read remaining 12 sections, one section per pass.
+7. **Cockpit First-50 live cell (item #36)** — post-deploy add.
+8. Return to Phase 1 tail: #22 Incident Runbook, #21 Uptime Monitoring provider pick, #20 Frontend Sentry DSN.
 
 ---
 

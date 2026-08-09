@@ -138,3 +138,56 @@ Existing partial audit from Session 4: user list is live from `db.dev_users`; pe
 ---
 
 **Read-only pass complete.** No code was modified. P1/P2 deferred sections logged as ledger item continuation work.
+
+---
+
+## Addendum — 2026-02-09 · Codebase-wide hardcoded-marketing-value grep
+
+**Scope**: read-only sweep for the "498/500" class of drift — any
+static counter, testimonial number, or marketing metric that could
+outlive its truth. Frontend + backend.
+
+### 🔴 P0 — direct contradictions with Track 3 or SEO-indexed false claims
+
+| # | File · line | Hardcoded string | Why it matters |
+|---|---|---|---|
+| H1 | `pages/BugHunt.jsx:542` | `"498 of 500 founder spots remaining at $9/month"` | **Static text on a public marketing page**. Same exact drift as the Landing.jsx tag we just fixed — just moved to the /bug-hunt landing page. Ad campaigns pointing anywhere near this page carry the identical fraud/misrepresentation risk. |
+| H2 | `pages/BugHunt.jsx:299` | `"Used by 500+ developers"` inside the `JSON_LD` schema.org description | **SEO-indexed marketing claim**. Google will scrape this into search snippets. If real dev count is <500 (Session 4 PRD says 30 prod / 74 preview) this is a factually false schema.org claim, indexable and citable. Higher FTC exposure than a visible-only claim because it's structured data. |
+| H3 | `pages/Landing.jsx:667` | FAQ answer: `"Founder pricing is limited to the first 500 users; check the pricing page for the current spots-remaining count."` | **Direct contradiction with the just-shipped First-50 promo.** A visitor reading the FAQ sees "500", the promo card now says "50/50 left" (or "N/50" once claims start). Two authoritative-looking numbers on the same page conflict — worse than a single hardcode. |
+
+### 🟠 P1 — hardcoded totals inside live-remaining components (drift the moment we change the cap)
+
+| # | File · line | Pattern | Why it's fragile |
+|---|---|---|---|
+| H4 | `components/FounderOfferPill.jsx:41` | `` `{s.remaining} of 500 founder spots remaining` `` | Numerator polled live from `/founder-offer/status`, denominator hardcoded `500`. If backend `TOTAL_SPOTS` ever changes (currently `500` in `routers/founder_offer.py:41`), the two numbers drift silently. |
+| H5 | `components/ConnectRepoBanner.jsx:106` | `` `${remaining} of 500 founder spots remaining` `` | Same pattern, same fragility. |
+| H6 | `components/FounderOfferCard.jsx:114` | `"Sold out — all 500 spots have been claimed."` | Static error-message string. Fires only on backend `action==="sold_out"` response, so it IS live-triggered, but the number `500` is baked into the message. |
+| H7 | `services/onboarding_email.py:130` | Email HTML body: `"→ One of 500 founder spots — yours"` | The connect-repo nudge email body. Every nudge sent past the 500 mark would send an outright false promise. Currently 1,485 rows in the collection so this has already fired at scale — worth checking if any went out post-cap. |
+
+### 🟡 P2 — soft claims (marketing tone, low legal risk)
+
+- `pages/CodebaseHealth.jsx:635` — `"Most codebases have 20-50 issues that developers don't know about"` — generic marketing claim, no counter drift.
+- `pages/Integrations.jsx:305` — `"VS Code 1.100+ with MCP support required"` — factual version requirement, safe.
+
+### 🟢 Backend — clean
+
+Backend has no user-facing hardcoded marketing numbers. All `total`/`count` occurrences are either `$inc` counters, empty-state defaults, or MongoDB projections — legitimate. The `cost_per_1k` table in Token P&L is the only stale hardcode and is already logged in the main P0 audit.
+
+---
+
+## Founder-actionable priority stack (all findings, combined)
+
+| Prio | Item | Effort | Where |
+|---|---|---|---|
+| 🔴 **P0** | Payments "Revenue (mo)" + "Net profit" = `0` hardcodes | ~1h | `admin.py:1117-1122` — main P0 slice |
+| 🔴 **P0** | H1 · BugHunt "498 of 500 founder spots" static text | 5 min | `pages/BugHunt.jsx:542` — delete, or wire to `/promo/first50/status` |
+| 🔴 **P0** | H2 · BugHunt JSON-LD "Used by 500+ developers" | 5 min | `pages/BugHunt.jsx:299` — replace with truthful count or remove the sentence |
+| 🔴 **P0** | H3 · Landing FAQ contradicts the new promo counter | 10 min | `pages/Landing.jsx:667` — rewrite FAQ to match "First-50" promo |
+| 🟠 P1 | Token P&L cost-per-1k table is 2024-era | ~1h | `admin.py:1096` — externalise rates |
+| 🟠 P1 | Payments list capped at last 100 rows | ~30 min | `admin.py:1265` — count_documents on full collection |
+| 🟠 P1 | H7 · onboarding email body promises "One of 500 founder spots" | ~15 min | `services/onboarding_email.py:130` — replace with First-50-aware copy |
+| 🟠 P1 | H4-H6 · hardcoded "500" denominators in live-counter components | ~30 min combined | Wire denominator from backend response instead of literal |
+| 🟠 P1 | Feature Flags 60s per-process cache — multi-pod drift latent | ~2h | Layer 11 horizontal-scaling doc |
+
+**Combined P0 fix window (all four)**: ~1h 20min. Small enough to fit into the "Payments accuracy" follow-up deploy tomorrow WITHOUT stretching it. Recommend: bundle P0 items P0-1 through P0-4 into that single follow-up.
+
