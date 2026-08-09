@@ -9,6 +9,11 @@
 
 ### 📌 NEXT SESSION MUST-DOs (in order)
 
+**⚠️ STANDING AWARENESS NOTE (founder-issued 2026-02-09 close, read before starting)**:
+- Prod is currently running the **OLD `/tmp/`-based backup code** AND the **hardcoded 498/500 spot counter**, WHILE live Meta ad traffic is actively hitting `auremcto.com`. This is **known, accepted short-term risk** while Track 3 (item #31) builds — NOT an oversight, NOT a bug to fix separately from the Track 3 delivery.
+- **Do NOT let #33's faster estimate (~2-3h vs original 4h) become a reason to skip any of Track 3's originally-scoped verification testing.** The full 48→51 flow test MUST include (a) the actual verification-click step, not just signup, and (b) fraud-guard simulation (rate-limiter enforcement at `SIGNUP_RATE_LIMIT_PER_IP=3`, disposable-email domain block, honeypot). Faster plumbing on the welcome-email side (because infra already exists) does not compress the test bar on the promo/verification side (which is what actually gates ad spend integrity).
+- Every hour of live ads without email verification + real counter = measurable fraud/misrepresentation risk. Treat #31 as **urgent-but-not-rushed**: fast execution, full test coverage, no shortcuts.
+
 1. Track 3 build on preview (item #31) — email verification endpoint + Resend template + `email_verified` field on dev_users + atomic founder-spot claim gated on verification + `/api/founder-spots/status` counter + `Landing.jsx` rewire + prod env note `SIGNUP_RATE_LIMIT_PER_IP=3` + full 48→51 test **including verification click step**.
 2. Bundle Track 1 (item #5) + Track 3 into single prod deploy in founder-chosen window (founder still checking Meta Ads Manager for audience timezone).
 3. Post-deploy: health-gate check per runbook (uptime<300s, no dead supervised_tasks, DB connected, backup endpoints 401/405 not 404), prove counter reflects reality on real signups, mark #5 and #31 shipped.
