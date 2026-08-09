@@ -1,34 +1,38 @@
 """
-services/db_restore.py — Restore Verification (item #5 requirement).
+services/db_restore.py — Python-native restore for aurem-native-v1
+gzipped BSON archives written by db_backup.py.
 
-Downloads a backup archive from R2 and restores it into a **scratch
-throwaway database** so we can prove the backup is genuinely
-recoverable. Nothing here ever touches the live database.
+No `mongorestore` subprocess. Parses the archive stream, inserts
+each collection's BSON docs into a scratch throwaway DB, returns
+per-collection doc counts as proof of round-trip integrity.
 
-Design:
-  1. Download the `.archive.gz` from R2 by key.
-  2. `mongorestore --archive --gzip --nsFrom=<src>.* --nsTo=<scratch>.*`
-     rewrites every collection into the scratch DB name.
-  3. Count docs per collection in the scratch DB and return them.
-  4. Optionally drop the scratch DB after verification.
-
-Founder's explicit requirement (2026-02-09):
-  "a backup nobody has ever restored from isn't verified" — the admin
-  `/backups/test-restore` endpoint uses THIS module to prove a real
-  round-trip, and returns per-collection doc counts in the response.
+Format is documented in db_backup.py. Restore contract:
+  1. Read gzip → line 1 = header JSON. Validate `format == aurem-native-v1`.
+  2. For each collection header line: read the declared number of
+     BSON documents (each is 4-byte-length-prefixed self-delimiting)
+     and bulk-insert into the scratch DB.
+  3. Empty collections get an explicit `create_collection` so they
+     show up in `list_collection_names()` on the scratch DB — proves
+     they weren't silently dropped.
+  4. Batch inserts at INSERT_BATCH docs at a time to keep memory bounded.
 """
 from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import gzip
+import json
 import logging
 import os
-import subprocess
+import struct
 from typing import Optional
 
+import bson
 from motor.motor_asyncio import AsyncIOMotorClient
 
 logger = logging.getLogger("db_restore")
+
+INSERT_BATCH = 500
 
 
 def _r2_client():
@@ -48,64 +52,30 @@ def _r2_client():
     )
 
 
-def _mongo_uri_source_db() -> tuple[str, str]:
-    """Return (mongo_url, source_db_name). Source db is DB_NAME from
-    env — that's the DB whose contents the backup archive contains."""
-    return os.environ["MONGO_URL"], os.environ["DB_NAME"]
+def _read_bson_doc(fh) -> Optional[bytes]:
+    """Read one length-prefixed BSON document from a binary stream.
+    Returns raw bytes (still valid to `bson.decode`), or None on EOF.
 
-
-def _run_mongorestore(
-    archive_path: str, mongo_url: str, source_db: str, scratch_db: str,
-) -> tuple[int, str, bool]:
-    """Restore the archive into `scratch_db`, rewriting namespaces.
-
-    Returns (returncode, stderr_tail, effective_ok).
-
-    `effective_ok` handles mongorestore's noisy exit behavior: it can
-    return rc=1 for benign warnings (metadata quirks, index-already-
-    exists on --drop retries) even when every document restored
-    successfully. We detect that case by checking for
-    "0 document(s) failed to restore" in stderr, which mongorestore
-    always emits when data is intact.
-
-    Special error contract:
-      - Missing binary (FileNotFoundError on subprocess.run) → returns
-        rc=127 with a stderr describing exactly which binary is missing.
-        Same 2026-02-09 lesson as _run_mongodump_to_gz.
+    BSON's spec: the first 4 bytes are a little-endian int32 giving
+    the total document size INCLUDING those 4 bytes. So we read 4,
+    parse, read the rest, return the concatenation.
     """
-    try:
-        proc = subprocess.run(
-            [
-                "mongorestore",
-                f"--uri={mongo_url}",
-                "--archive=" + archive_path,
-                "--gzip",
-                "--nsFrom", f"{source_db}.*",
-                "--nsTo",   f"{scratch_db}.*",
-                # `--drop` ensures we don't merge into a stale scratch DB
-                # from a prior run — every test-restore starts clean.
-                "--drop",
-            ],
-            capture_output=True, text=True, timeout=1800,
+    prefix = fh.read(4)
+    if not prefix:
+        return None
+    if len(prefix) < 4:
+        raise ValueError(f"truncated BSON prefix ({len(prefix)} bytes)")
+    total_len = struct.unpack("<i", prefix)[0]
+    if total_len < 5 or total_len > 32 * 1024 * 1024:
+        # BSON doc has a hard 16MB cap per Mongo. Guard against
+        # corruption yielding an insane length that would OOM us.
+        raise ValueError(f"bogus BSON doc length: {total_len}")
+    rest = fh.read(total_len - 4)
+    if len(rest) != total_len - 4:
+        raise ValueError(
+            f"truncated BSON body (want {total_len - 4}, got {len(rest)})"
         )
-    except FileNotFoundError as e:
-        path_searched = os.environ.get("PATH", "<PATH unset>")
-        msg = (
-            f"MISSING BINARY: 'mongorestore' not found on PATH. "
-            f"errno={e.errno} strerror={e.strerror!r} filename={e.filename!r}. "
-            f"PATH searched: {path_searched}. "
-            f"FIX: install mongodb-database-tools in the Docker image."
-        )
-        return 127, msg, False
-    except OSError as e:
-        return 127, f"OSError spawning mongorestore: {e!r}", False
-
-    stderr = (proc.stderr or "")[-1500:]
-    effective_ok = (
-        proc.returncode == 0
-        or "0 document(s) failed to restore" in stderr
-    )
-    return proc.returncode, stderr, effective_ok
+    return prefix + rest
 
 
 async def restore_to_scratch(
@@ -113,42 +83,26 @@ async def restore_to_scratch(
     scratch_db_name: Optional[str] = None,
     drop_scratch_after: bool = True,
 ) -> dict:
-    """Download `r2_key` from R2 and restore into a scratch DB.
-
-    Returns a proof dict:
-      {
-        ok:            bool,
-        r2_key:        str,
-        scratch_db:    str,
-        collection_counts: {name: int, ...},
-        total_docs:    int,
-        total_collections: int,
-        source_size_bytes: int,
-        duration_ms:   int,
-        error:         Optional[str],
-      }
-
-    If `drop_scratch_after=True`, the scratch DB is dropped after
-    verification so it doesn't linger. Set False if you want to
-    inspect the restored data manually.
-    """
     started = dt.datetime.now(dt.timezone.utc)
-    mongo_url, source_db = _mongo_uri_source_db()
+    mongo_url = os.environ["MONGO_URL"]
+    source_db = os.environ["DB_NAME"]
     scratch_db = scratch_db_name or (
         f"aurem_scratch_restore_{started.strftime('%Y%m%d_%H%M%S')}"
     )
-    tmp_path = f"/tmp/restore_{scratch_db}.archive.gz"
+    tmp_path = f"/tmp/restore_{scratch_db}.gz"
 
     result: dict = {
-        "ok":              False,
-        "r2_key":          r2_key,
-        "scratch_db":      scratch_db,
-        "collection_counts": {},
-        "total_docs":      0,
-        "total_collections": 0,
-        "source_size_bytes": 0,
-        "duration_ms":     0,
-        "error":           None,
+        "ok":                 False,
+        "r2_key":             r2_key,
+        "scratch_db":         scratch_db,
+        "source_db":          source_db,
+        "collection_counts":  {},
+        "total_docs":         0,
+        "total_collections":  0,
+        "source_size_bytes":  0,
+        "duration_ms":        0,
+        "format":             None,
+        "error":              None,
     }
 
     try:
@@ -160,55 +114,103 @@ async def restore_to_scratch(
         except Exception as e:
             result["error"] = f"R2 download failed: {e!r}"
             return result
-
         result["source_size_bytes"] = os.path.getsize(tmp_path)
 
-        # 2. mongorestore into scratch DB.
-        rc, stderr, effective_ok = await asyncio.to_thread(
-            _run_mongorestore, tmp_path, mongo_url, source_db, scratch_db,
-        )
-        if not effective_ok:
-            result["error"] = f"mongorestore rc={rc}: {stderr}"
-            return result
-        if rc != 0:
-            # Data restored but mongorestore whined — surface it as a
-            # note but don't fail the restore.
-            logger.info("mongorestore rc=%d (benign, docs restored): %s", rc, stderr[-200:])
-
-        # 3. Count docs per collection in scratch DB — this is the
-        #    proof requirement: not "restore succeeded", but actual
-        #    numbers per collection so the founder can verify.
-        client_motor = AsyncIOMotorClient(mongo_url)
+        # 2. Parse + insert. Uses a fresh Motor client so we don't
+        #    touch the live app's pool.
+        motor_client = AsyncIOMotorClient(mongo_url)
         try:
-            sdb = client_motor[scratch_db]
-            names = await sdb.list_collection_names()
-            names.sort()
+            sdb = motor_client[scratch_db]
+            # Ensure clean scratch — --drop equivalent.
+            try:
+                await motor_client.drop_database(scratch_db)
+            except Exception:
+                pass
+
             counts: dict[str, int] = {}
-            for name in names:
+            with gzip.open(tmp_path, "rb") as gz:
+                # Header
+                header_line = gz.readline()
+                if not header_line:
+                    result["error"] = "archive empty (no header)"
+                    return result
                 try:
-                    counts[name] = await sdb[name].count_documents({})
+                    header = json.loads(header_line.decode("utf-8").strip())
                 except Exception as e:
-                    counts[name] = -1
-                    logger.warning("count %s failed: %r", name, e)
+                    result["error"] = f"invalid header JSON: {e!r}"
+                    return result
+                result["format"] = header.get("format")
+                if header.get("format") != "aurem-native-v1":
+                    result["error"] = (
+                        f"unknown archive format: {header.get('format')!r}"
+                    )
+                    return result
+
+                # Per-collection loop
+                while True:
+                    coll_line = gz.readline()
+                    if not coll_line:
+                        break  # clean EOF
+                    try:
+                        meta = json.loads(coll_line.decode("utf-8").strip())
+                    except Exception as e:
+                        result["error"] = f"bad collection header: {e!r}"
+                        return result
+                    coll_name = meta["collection"]
+                    expected = int(meta["doc_count"])
+
+                    if expected == 0:
+                        # Explicit create so empty collections still
+                        # show up in list_collection_names().
+                        try:
+                            await sdb.create_collection(coll_name)
+                        except Exception:
+                            pass  # already exists (shouldn't after drop)
+                        counts[coll_name] = 0
+                        continue
+
+                    # Read `expected` BSON docs and bulk insert.
+                    inserted = 0
+                    batch: list[dict] = []
+                    for _ in range(expected):
+                        raw = _read_bson_doc(gz)
+                        if raw is None:
+                            result["error"] = (
+                                f"unexpected EOF in collection '{coll_name}' "
+                                f"(inserted={inserted}, expected={expected})"
+                            )
+                            return result
+                        doc = bson.decode(raw)
+                        batch.append(doc)
+                        if len(batch) >= INSERT_BATCH:
+                            await sdb[coll_name].insert_many(
+                                batch, ordered=False,
+                            )
+                            inserted += len(batch)
+                            batch.clear()
+                    if batch:
+                        await sdb[coll_name].insert_many(batch, ordered=False)
+                        inserted += len(batch)
+                    counts[coll_name] = inserted
+
             result["collection_counts"] = counts
             result["total_collections"] = len(counts)
-            result["total_docs"] = sum(v for v in counts.values() if v >= 0)
+            result["total_docs"] = sum(counts.values())
+            result["ok"] = True
 
-            # 4. Cleanup scratch DB unless caller wants to inspect.
+            # 3. Cleanup scratch unless caller wants to inspect.
             if drop_scratch_after:
-                await client_motor.drop_database(scratch_db)
+                await motor_client.drop_database(scratch_db)
                 logger.info("dropped scratch DB %s", scratch_db)
         finally:
-            client_motor.close()
+            motor_client.close()
 
-        result["ok"] = True
         return result
     except Exception as e:
         logger.exception("restore_to_scratch failed")
         result["error"] = repr(e)
         return result
     finally:
-        # Delete the downloaded archive — no /tmp/ residue.
         try:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
@@ -219,10 +221,8 @@ async def restore_to_scratch(
 
 
 async def source_collection_counts() -> dict:
-    """Return the LIVE source-DB collection counts. Used by the admin
-    endpoint to compare restored counts against source to make the
-    proof self-contained ("source had X docs, restore has X docs")."""
-    mongo_url, source_db = _mongo_uri_source_db()
+    mongo_url = os.environ["MONGO_URL"]
+    source_db = os.environ["DB_NAME"]
     client = AsyncIOMotorClient(mongo_url)
     try:
         sdb = client[source_db]

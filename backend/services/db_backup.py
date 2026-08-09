@@ -1,70 +1,70 @@
 """
-services/db_backup.py — Backup Hardening (item #5, D+ → A).
+services/db_backup.py — Backup Hardening (item #5), Python-native.
 
-Nightly full MongoDB backup, streamed directly to Cloudflare R2 (S3-compatible).
+Full DB backup via motor/pymongo directly. No `mongodump` subprocess.
+No base-image dependency. Uploads a gzipped BSON stream to Cloudflare R2.
 
-Design:
-  1. `mongodump --uri=$MONGO_URL --archive` streams a BSON archive to stdout.
-  2. gzip'd on the fly (subprocess pipeline).
-  3. boto3 uploads the resulting archive to R2 with key
-       `mongo/aurem_<YYYYMMDD_HHMMSS>.tar.gz`.
-  4. After success, prune R2 objects older than BACKUP_RETENTION_DAYS.
-  5. Every attempt writes a `backup_history` doc so we have a durable audit
-     trail even if R2 or the pod dies mid-run.
+Format (aurem-native-v1) — designed for round-trip within AUREM only,
+NOT compatible with the official `mongorestore` CLI:
 
-Why R2 (not /tmp/):
-  Prior implementation wrote to `/tmp/backups/` which is pod-ephemeral —
-  a redeploy or OOM wipes every "backup" we ever took. R2 is durable,
-  offsite, and versioned.
+  Gzip wrapper contains:
+    Line 1 (JSON):
+      {"format":"aurem-native-v1","created_at":"<iso>",
+       "source_db":"<name>","total_collections":<n>}
+    For each collection (in list_collection_names() order):
+      Line: {"collection":"<name>","doc_count":<n>}
+      Then <n> BSON documents concatenated (each self-delimiting via
+      its 4-byte length prefix — BSON's native framing).
 
-Env config (all required except retention/hour which have sensible defaults):
-  R2_ACCOUNT_ID
-  R2_ACCESS_KEY_ID
-  R2_SECRET_ACCESS_KEY
-  R2_BUCKET
-  R2_ENDPOINT                     https://<account>.r2.cloudflarestorage.com
-  BACKUP_RETENTION_DAYS           default 30
-  BACKUP_SCHEDULE_UTC_HOUR        default 3
+Design rationale:
+  - Newline-separated JSON headers keep boundaries greppable.
+  - BSON-per-document preserves ALL native types the way pymongo
+    stores them: ObjectId, datetime, Decimal128, embedded docs,
+    arrays, Binary, UUID, MinKey/MaxKey. No JSON conversion layer =
+    no lossy round-trip.
+  - Concatenated BSON documents work because each starts with a
+    4-byte little-endian length that INCLUDES the length itself —
+    parse the prefix, read the rest, done.
+  - Empty collections write only their header line, no BSON.
 
-Failure semantics:
-  Never crashes the app. On failure: logs ERROR, captures to Sentry if
-  wired, and writes a `status=failed` doc to `backup_history`. The
-  admin `/backups/status` endpoint surfaces recent failures so the
-  founder sees them without digging through supervisor logs.
+Env config: unchanged from the previous mongodump-based version.
 """
 from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import gzip
+import io
+import json
 import logging
 import os
-import subprocess
 import time
 from typing import Optional
 
+import bson
+from motor.motor_asyncio import AsyncIOMotorClient
+
 logger = logging.getLogger("db_backup")
 
-# ── R2 object-key convention ─────────────────────────────────────────
-# All Mongo backups live under a `mongo/` prefix so the same bucket can
-# safely be used for other artifact types later without collision.
 R2_PREFIX = "mongo/"
+FORMAT_VERSION = "aurem-native-v1"
+
+# Streaming knobs. Kept small so peak RSS stays bounded on a
+# collection with millions of docs (each cursor batch = one
+# .write() worth of bytes before gc).
+DUMP_CURSOR_BATCH = 500        # docs per motor cursor batch
 
 
 def _r2_client():
-    """Return a boto3 S3 client wired for Cloudflare R2.
-
-    R2 requires path-style addressing when using the account-scoped
-    endpoint (`<account>.r2.cloudflarestorage.com`) — the default
-    virtual-hosted-style produces SignatureDoesNotMatch. Baked here so
-    no caller can accidentally break it.
-    """
+    """S3-compatible boto3 client for Cloudflare R2. Path-style
+    addressing is required with the account-scoped endpoint
+    (`<account>.r2.cloudflarestorage.com`) — the default virtual-
+    hosted style produces SignatureDoesNotMatch."""
     import boto3
     from botocore.config import Config
-
-    endpoint = os.environ["R2_ENDPOINT"]
     return boto3.client(
         "s3",
-        endpoint_url=endpoint,
+        endpoint_url=os.environ["R2_ENDPOINT"],
         aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
         aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
         region_name="auto",
@@ -81,7 +81,6 @@ def _capture_sentry(exc: BaseException, extra: Optional[dict] = None) -> None:
     try:
         import sentry_sdk  # type: ignore
         if extra:
-            # sentry_sdk 2.x — new scope API (push_scope is deprecated).
             with sentry_sdk.new_scope() as scope:
                 for k, v in extra.items():
                     scope.set_extra(k, v)
@@ -94,17 +93,16 @@ def _capture_sentry(exc: BaseException, extra: Optional[dict] = None) -> None:
 
 async def _write_history(
     db, *, r2_key: str, status: str, size_bytes: int, duration_ms: int,
-    error: Optional[str] = None,
+    error: Optional[str] = None, doc_count: Optional[int] = None,
 ) -> None:
-    """Append a backup_history doc. Idempotency not required —
-    every run gets its own row so status='failed' entries persist for
-    audit. This is the only source of durable backup audit history."""
     doc = {
         "r2_key":       r2_key,
         "status":       status,
         "size_bytes":   size_bytes,
         "duration_ms":  duration_ms,
         "error":        error,
+        "doc_count":    doc_count,
+        "format":       FORMAT_VERSION,
         "created_at":   dt.datetime.now(dt.timezone.utc).isoformat(),
         "env":          os.environ.get("SENTRY_ENV") or "unknown",
         "bucket":       os.environ.get("R2_BUCKET"),
@@ -112,150 +110,94 @@ async def _write_history(
     try:
         await db.backup_history.insert_one(doc)
     except Exception as e:
-        # Even the history-write failed — log loudly but don't crash.
         logger.error("backup_history insert failed: %r", e)
 
 
-def _run_mongodump_to_gz(out_path: str, mongo_url: str) -> tuple[int, str]:
-    """Spawn `mongodump | gzip` and stream to `out_path`.
+async def _dump_db_to_gzip_file(mongo_url: str, source_db: str, out_path: str) -> dict:
+    """Iterate every collection in `source_db` and write a
+    gzipped aurem-native-v1 stream to `out_path`.
 
-    Returns (returncode, stderr_tail). Times out at 30 min — a
-    healthy AUREM DB dumps in seconds; 30 min ceiling is generous
-    protection against a hung Mongo endpoint.
-
-    Special error contracts:
-      - Missing binary (FileNotFoundError on Popen) → returncode 127,
-        stderr_tail describing exactly which binary was missing +
-        the PATH searched. This is the historically-common failure
-        mode (Dockerfile without mongodb-database-tools installed).
+    Returns {"total_docs": int, "total_collections": int, "per_collection": {name: count}}.
+    Uses a fresh Motor client so this can be called from anywhere
+    without interfering with the app-level connection pool.
     """
-    # Two-process pipeline: dump → gzip. Using `--archive` streams
-    # a single BSON archive on stdout (not a directory tree).
+    client = AsyncIOMotorClient(mongo_url)
+    per_collection: dict[str, int] = {}
+    total_docs = 0
     try:
-        dump = subprocess.Popen(
-            ["mongodump", f"--uri={mongo_url}", "--archive", "--gzip"],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
-    except FileNotFoundError as e:
-        # errno 2 — mongodump binary not on $PATH. This is the exact
-        # failure mode that bit prod on 2026-02-09 (Dockerfile did
-        # not install mongodb-database-tools). Return a rich stderr
-        # so backup_history records the actionable diagnosis, not
-        # just the exception class name.
-        path_searched = os.environ.get("PATH", "<PATH unset>")
-        msg = (
-            f"MISSING BINARY: 'mongodump' not found on PATH. "
-            f"errno={e.errno} strerror={e.strerror!r} filename={e.filename!r}. "
-            f"PATH searched: {path_searched}. "
-            f"FIX: install mongodb-database-tools in the Docker image "
-            f"(see backend/Dockerfile MongoDB apt-repo block)."
-        )
-        return 127, msg
-    except OSError as e:
-        return 127, f"OSError spawning mongodump: errno={e.errno} strerror={e.strerror!r} {e!r}"
-
-    with open(out_path, "wb") as fh:
-        # Read in 1 MB chunks so we don't pin memory on large dumps.
-        assert dump.stdout is not None
-        while True:
-            chunk = dump.stdout.read(1024 * 1024)
-            if not chunk:
-                break
-            fh.write(chunk)
-    try:
-        dump.wait(timeout=1800)  # 30 min
-    except subprocess.TimeoutExpired:
-        dump.kill()
-        return 124, "mongodump timed out after 30m"
-    stderr = ""
-    if dump.stderr is not None:
-        try:
-            stderr = dump.stderr.read().decode("utf-8", errors="replace")[-800:]
-        except Exception:
-            pass
-    return dump.returncode, stderr
-
-
-def _prune_old(client, bucket: str, retention_days: int) -> int:
-    """Delete R2 objects under R2_PREFIX older than retention_days.
-    Returns count of deleted objects. Never raises — logs and moves on."""
-    if retention_days <= 0:
-        return 0
-    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=retention_days)
-    deleted = 0
-    try:
-        paginator = client.get_paginator("list_objects_v2")
-        to_delete: list[dict] = []
-        for page in paginator.paginate(Bucket=bucket, Prefix=R2_PREFIX):
-            for obj in page.get("Contents") or []:
-                if obj["LastModified"] < cutoff:
-                    to_delete.append({"Key": obj["Key"]})
-        # boto3 delete_objects caps at 1000 keys per call.
-        for i in range(0, len(to_delete), 1000):
-            batch = to_delete[i:i + 1000]
-            client.delete_objects(Bucket=bucket, Delete={"Objects": batch})
-            deleted += len(batch)
-    except Exception as e:
-        logger.warning("prune skipped: %r", e)
-        _capture_sentry(e, {"stage": "prune"})
-    return deleted
+        sdb = client[source_db]
+        names = sorted(await sdb.list_collection_names())
+        # Header line first (BEFORE any per-collection data) so a
+        # reader can validate the format without seeking.
+        header = {
+            "format": FORMAT_VERSION,
+            "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "source_db": source_db,
+            "total_collections": len(names),
+        }
+        # gzip.open in text-then-binary mixed writes is awkward, so
+        # we open binary and encode ourselves — keeps offsets exact.
+        with gzip.open(out_path, "wb", compresslevel=6) as gz:
+            gz.write((json.dumps(header) + "\n").encode("utf-8"))
+            for name in names:
+                coll = sdb[name]
+                # Count first for the header line — cheap on Mongo
+                # because it uses metadata not a full scan for small
+                # collections; for very large collections we accept
+                # this cost as the price of a self-describing archive.
+                doc_count = await coll.count_documents({})
+                per_collection[name] = doc_count
+                total_docs += doc_count
+                gz.write((json.dumps({
+                    "collection": name, "doc_count": doc_count,
+                }) + "\n").encode("utf-8"))
+                if doc_count == 0:
+                    # Empty collection — header only, no BSON body.
+                    continue
+                # Stream all docs. motor's cursor batches internally.
+                cursor = coll.find({}, batch_size=DUMP_CURSOR_BATCH)
+                async for doc in cursor:
+                    gz.write(bson.encode(doc))
+    finally:
+        client.close()
+    return {
+        "total_docs": total_docs,
+        "total_collections": len(per_collection),
+        "per_collection": per_collection,
+    }
 
 
 async def run_backup(db) -> dict:
-    """Perform a single backup end-to-end. Returns a result dict:
-       {ok, r2_key, size_bytes, duration_ms, pruned, error}
+    """Perform a single backup end-to-end.
 
-    `db` is the AsyncIOMotorDatabase used to write history. Called
-    both from the daily cron AND from the admin `/backups/run`
-    endpoint, so it must be safe to invoke on demand.
+    Returns:
+      {ok, r2_key, size_bytes, duration_ms, pruned, total_docs,
+       total_collections, error}
     """
     started = time.monotonic()
     mongo_url = os.environ.get("MONGO_URL")
-    if not mongo_url:
-        return {"ok": False, "error": "MONGO_URL missing"}
+    db_name = os.environ.get("DB_NAME")
+    if not mongo_url or not db_name:
+        err = "MONGO_URL or DB_NAME missing"
+        await _write_history(db, r2_key="", status="failed", size_bytes=0,
+                             duration_ms=0, error=err)
+        return {"ok": False, "error": err}
 
     for k in ("R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_ENDPOINT"):
         if not os.environ.get(k):
             err = f"{k} missing — R2 not configured"
             logger.error(err)
-            await _write_history(
-                db, r2_key="", status="failed", size_bytes=0,
-                duration_ms=0, error=err,
-            )
+            await _write_history(db, r2_key="", status="failed", size_bytes=0,
+                                 duration_ms=0, error=err)
             return {"ok": False, "error": err}
 
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d_%H%M%S")
-    r2_key = f"{R2_PREFIX}aurem_{stamp}.archive.gz"
+    r2_key = f"{R2_PREFIX}aurem_{stamp}.aurem-native-v1.gz"
     tmp_path = f"/tmp/{r2_key.replace('/', '_')}"
 
     try:
-        # 1. Dump + gzip locally to a temp file first (streaming an
-        #    unknown-size gzip directly to R2 is more brittle than
-        #    doing it in two steps — the temp file is deleted in
-        #    finally: below, so no persistent /tmp/ residue).
-        rc, stderr = await asyncio.to_thread(
-            _run_mongodump_to_gz, tmp_path, mongo_url,
-        )
-        if rc != 0:
-            # rc=127 = missing binary (rich diagnosis in stderr from
-            # _run_mongodump_to_gz). rc=124 = timeout. Others = mongo
-            # side. Preserve the FULL stderr rather than truncating to
-            # 400 chars — the truncation is what hid the missing-
-            # binary diagnosis in the 2026-02-09 prod incident.
-            err = f"mongodump rc={rc}: {stderr[:1500]}"
-            logger.error(err)
-            duration_ms = int((time.monotonic() - started) * 1000)
-            # Also send to Sentry so subprocess failures are visible
-            # in error monitoring, not just the DB history table.
-            try:
-                raise RuntimeError(f"mongodump failed rc={rc}: {stderr[:200]}")
-            except RuntimeError as _e:
-                _capture_sentry(_e, {"stage": "mongodump", "rc": rc, "r2_key": r2_key})
-            await _write_history(
-                db, r2_key=r2_key, status="failed", size_bytes=0,
-                duration_ms=duration_ms, error=err,
-            )
-            return {"ok": False, "error": err, "r2_key": r2_key}
+        # 1. Dump every collection to a local gz file.
+        dump_stats = await _dump_db_to_gzip_file(mongo_url, db_name, tmp_path)
 
         size_bytes = os.path.getsize(tmp_path)
 
@@ -266,9 +208,12 @@ async def run_backup(db) -> dict:
             client.put_object(
                 Bucket=bucket, Key=r2_key, Body=fh,
                 ContentType="application/gzip",
-                # Server-side encryption is provided by Cloudflare R2
-                # by default — no header needed. Add it if we ever
-                # switch to a provider that doesn't encrypt at rest.
+                Metadata={
+                    "aurem-format": FORMAT_VERSION,
+                    "aurem-source-db": db_name,
+                    "aurem-doc-count": str(dump_stats["total_docs"]),
+                    "aurem-coll-count": str(dump_stats["total_collections"]),
+                },
             )
 
         # 3. Prune old objects per retention policy.
@@ -277,27 +222,26 @@ async def run_backup(db) -> dict:
 
         duration_ms = int((time.monotonic() - started) * 1000)
         await _write_history(
-            db, r2_key=r2_key, status="success",
-            size_bytes=size_bytes, duration_ms=duration_ms,
+            db, r2_key=r2_key, status="success", size_bytes=size_bytes,
+            duration_ms=duration_ms, doc_count=dump_stats["total_docs"],
         )
         logger.info(
-            "backup OK → r2://%s/%s (%.2f MB, %dms, pruned=%d)",
-            bucket, r2_key, size_bytes / 1024 / 1024, duration_ms, pruned,
+            "backup OK → r2://%s/%s (%.2f MB, %d docs across %d colls, %dms, pruned=%d)",
+            bucket, r2_key, size_bytes / 1024 / 1024,
+            dump_stats["total_docs"], dump_stats["total_collections"],
+            duration_ms, pruned,
         )
         return {
-            "ok":           True,
-            "r2_key":       r2_key,
-            "size_bytes":   size_bytes,
-            "duration_ms":  duration_ms,
-            "pruned":       pruned,
+            "ok":                 True,
+            "r2_key":             r2_key,
+            "size_bytes":         size_bytes,
+            "duration_ms":        duration_ms,
+            "pruned":             pruned,
+            "total_docs":         dump_stats["total_docs"],
+            "total_collections":  dump_stats["total_collections"],
         }
     except Exception as e:
         duration_ms = int((time.monotonic() - started) * 1000)
-        # Capture the full traceback into the backup_history error
-        # field so `GET /admin/backups/status` shows an actionable
-        # diagnosis, not just the exception class name. The old
-        # behaviour (repr(e)[:400]) truncated FileNotFoundError's
-        # filename attribute — 2026-02-09 prod incident.
         import traceback
         tb = traceback.format_exc()
         error_str = f"{type(e).__name__}: {e!r}\n{tb}"[:1800]
@@ -309,8 +253,6 @@ async def run_backup(db) -> dict:
         )
         return {"ok": False, "error": error_str, "r2_key": r2_key}
     finally:
-        # Never leave the temp file lying around — /tmp/ is where
-        # the old bug lived; we do NOT want any /tmp/ backup residue.
         try:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
@@ -318,14 +260,29 @@ async def run_backup(db) -> dict:
             pass
 
 
-async def backup_cron(db_getter=None) -> None:
-    """Runs forever, kicks off `run_backup` once/day at
-    BACKUP_SCHEDULE_UTC_HOUR (default 03:00 UTC).
+def _prune_old(client, bucket: str, retention_days: int) -> int:
+    if retention_days <= 0:
+        return 0
+    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=retention_days)
+    deleted = 0
+    try:
+        paginator = client.get_paginator("list_objects_v2")
+        to_delete: list[dict] = []
+        for page in paginator.paginate(Bucket=bucket, Prefix=R2_PREFIX):
+            for obj in page.get("Contents") or []:
+                if obj["LastModified"] < cutoff:
+                    to_delete.append({"Key": obj["Key"]})
+        for i in range(0, len(to_delete), 1000):
+            batch = to_delete[i:i + 1000]
+            client.delete_objects(Bucket=bucket, Delete={"Objects": batch})
+            deleted += len(batch)
+    except Exception as e:
+        logger.warning("prune skipped: %r", e)
+        _capture_sentry(e, {"stage": "prune"})
+    return deleted
 
-    Launched from FastAPI lifespan via `_supervise(...)` so it dies
-    with the process. Never raises — outer loop catches everything
-    so one failure doesn't kill the cron for the rest of the day.
-    """
+
+async def backup_cron(db_getter=None) -> None:
     target_hour = int(os.environ.get("BACKUP_SCHEDULE_UTC_HOUR", "3"))
     while True:
         try:
@@ -336,9 +293,6 @@ async def backup_cron(db_getter=None) -> None:
             sleep_s = max(60.0, (target - now).total_seconds())
             logger.info("next backup in %.0fs (target %s UTC)", sleep_s, target)
             await asyncio.sleep(sleep_s)
-
-            # `db_getter` lets the cron re-fetch a live db handle each
-            # cycle so if the app-level db reconnects, we still work.
             db = db_getter() if db_getter else None
             if db is None:
                 logger.warning("backup_cron: no db available — skipping this cycle")
@@ -355,4 +309,4 @@ async def backup_cron(db_getter=None) -> None:
                 raise
 
 
-__all__ = ["run_backup", "backup_cron", "R2_PREFIX"]
+__all__ = ["run_backup", "backup_cron", "R2_PREFIX", "FORMAT_VERSION"]

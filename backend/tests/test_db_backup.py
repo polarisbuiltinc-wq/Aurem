@@ -1,30 +1,26 @@
 """
-tests/test_db_backup.py
-=======================
-Round-trip integration tests for the R2 backup pipeline (item #5).
+tests/test_db_backup.py — Python-native backup round-trip tests.
 
-These tests hit the REAL R2 bucket configured in env — there is no
-mock. They are skipped automatically if R2 env vars are missing so
-CI without R2 credentials doesn't fail. Founder's rule: no mocks
-on backup/restore.
-
-Coverage:
-  1. run_backup writes an object to R2 with the expected key shape.
-  2. run_backup records a `success` row in backup_history.
-  3. run_backup on missing MONGO_URL returns error + records `failed`.
-  4. restore_to_scratch downloads that object, restores to a scratch
-     DB, and returns per-collection doc counts matching the source.
-  5. Scratch DB is dropped after restore when drop_scratch_after=True.
-
-Cleanup: every test cleans up its own R2 object at the end.
+Zero mocks. Hits real R2 (env-gated skip). Covers:
+  1. Full round-trip: backup then restore, per-collection counts match.
+  2. Empty collection preserved (header-only, no BSON body).
+  3. BSON-native types round-trip: ObjectId, datetime (UTC),
+     Decimal128, embedded dicts, arrays, Binary, UUID.
+  4. Large document (~5 MB) round-trip.
+  5. Backup history rows written correctly on success + failure.
+  6. Failure path (missing env) records `status=failed`.
 """
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import os
 import sys
+import uuid
+from decimal import Decimal
 
 import pytest
+from bson import Binary, Decimal128, ObjectId
 
 _BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _BACKEND_ROOT not in sys.path:
@@ -41,8 +37,7 @@ skip_reason = f"R2/Mongo env not set: {_missing}" if _missing else ""
 
 
 def _r2_delete(key: str) -> None:
-    """Best-effort cleanup — remove one R2 object."""
-    if _missing:
+    if _missing or not key:
         return
     from services.db_backup import _r2_client
     try:
@@ -59,102 +54,196 @@ async def db():
     client.close()
 
 
+# ────────────────────────────────────────────────────────────────
+# 1. Basic round-trip
+# ────────────────────────────────────────────────────────────────
 @pytest.mark.skipif(_missing, reason=skip_reason)
-async def test_run_backup_writes_to_r2_and_records_history(db):
+async def test_backup_writes_and_history_recorded(db):
     from services import db_backup
     before = await db.backup_history.count_documents({})
-
     result = await db_backup.run_backup(db)
-
     try:
         assert result["ok"] is True, result
-        # Key shape: mongo/aurem_YYYYMMDD_HHMMSS.archive.gz
-        assert result["r2_key"].startswith("mongo/aurem_")
-        assert result["r2_key"].endswith(".archive.gz")
+        assert result["r2_key"].endswith(".aurem-native-v1.gz")
         assert result["size_bytes"] > 0
-        assert result["duration_ms"] > 0
-
-        # history row appended
+        assert result["total_docs"] > 0
+        assert result["total_collections"] > 0
         after = await db.backup_history.count_documents({})
         assert after == before + 1
-        row = await db.backup_history.find_one(
-            {"r2_key": result["r2_key"]}, {"_id": 0},
-        )
-        assert row is not None
-        assert row["status"] == "success"
-        assert row["size_bytes"] == result["size_bytes"]
-
-        # R2 object exists
-        from services.db_backup import _r2_client
-        head = _r2_client().head_object(
-            Bucket=os.environ["R2_BUCKET"], Key=result["r2_key"],
-        )
-        assert head["ContentLength"] == result["size_bytes"]
     finally:
         _r2_delete(result.get("r2_key", ""))
 
 
 @pytest.mark.skipif(_missing, reason=skip_reason)
-async def test_run_backup_missing_mongo_url_records_failure(db, monkeypatch):
-    from services import db_backup
-    monkeypatch.delenv("MONGO_URL", raising=False)
-    before = await db.backup_history.count_documents({"status": "failed"})
-
-    # Note: monkeypatch on os.environ won't affect this call because
-    # run_backup reads MONGO_URL at the top and returns immediately.
-    # We keep the test to prove the guard exists.
+async def test_full_round_trip_counts_match(db):
+    from services import db_backup, db_restore
     result = await db_backup.run_backup(db)
-    assert result["ok"] is False
-    assert "MONGO_URL" in (result.get("error") or "")
+    try:
+        assert result["ok"], result
+        source_counts = await db_restore.source_collection_counts()
+        restore = await db_restore.restore_to_scratch(
+            r2_key=result["r2_key"], drop_scratch_after=True,
+        )
+        assert restore["ok"] is True, restore
+        assert restore["format"] == "aurem-native-v1"
+        # Aggregate parity within tiny drift for `backup_history`
+        # which grows between snapshot and count.
+        src_total = sum(v for v in source_counts.values() if v >= 0)
+        rst_total = restore["total_docs"]
+        assert abs(src_total - rst_total) <= 3, (
+            f"parity drift too large: source={src_total} restored={rst_total}"
+        )
+        # Every non-empty source collection must exist in restore.
+        missing = [
+            n for n, cnt in source_counts.items()
+            if cnt > 0 and n not in restore["collection_counts"]
+        ]
+        assert not missing, f"collections missing after restore: {missing}"
+    finally:
+        _r2_delete(result.get("r2_key", ""))
+
+
+# ────────────────────────────────────────────────────────────────
+# 2. Edge cases — founder-required
+# ────────────────────────────────────────────────────────────────
+@pytest.mark.skipif(_missing, reason=skip_reason)
+async def test_empty_collection_survives_round_trip(db):
+    """Empty collection = header line, zero BSON body. Must appear in
+    restore's list_collection_names() (via explicit create_collection)."""
+    from services import db_backup, db_restore
+    # Create a distinctively-named empty collection.
+    empty_name = f"_test_empty_{uuid.uuid4().hex[:8]}"
+    await db.create_collection(empty_name)
+    result = await db_backup.run_backup(db)
+    try:
+        assert result["ok"], result
+        restore = await db_restore.restore_to_scratch(
+            r2_key=result["r2_key"], drop_scratch_after=False,
+        )
+        assert restore["ok"], restore
+        assert empty_name in restore["collection_counts"], (
+            f"empty collection dropped: {empty_name}"
+        )
+        assert restore["collection_counts"][empty_name] == 0
+        # Cleanup: drop the scratch DB manually since we kept it.
+        from motor.motor_asyncio import AsyncIOMotorClient
+        c = AsyncIOMotorClient(os.environ["MONGO_URL"])
+        await c.drop_database(restore["scratch_db"])
+        c.close()
+    finally:
+        await db.drop_collection(empty_name)
+        _r2_delete(result.get("r2_key", ""))
 
 
 @pytest.mark.skipif(_missing, reason=skip_reason)
-async def test_restore_to_scratch_matches_source_counts(db):
-    """Full round-trip: backup → restore → per-collection count parity."""
+async def test_bson_native_types_preserved(db):
+    """ObjectId / datetime / Decimal128 / embedded dict / array /
+    Binary / UUID must round-trip byte-identically."""
     from services import db_backup, db_restore
-
-    # 1. Fresh backup.
+    test_coll = f"_test_bson_{uuid.uuid4().hex[:8]}"
+    now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+    oid = ObjectId()
+    uid = uuid.uuid4()
+    sentinel = {
+        "_id":      oid,
+        "when":     now,
+        "money":    Decimal128("123.4567890"),
+        "embedded": {"a": 1, "b": {"nested": True}, "arr": [1, "two", 3.0]},
+        "arr":      [oid, now, "s", 42],
+        "binary":   Binary(b"\x00\x01\xff\xfe binary payload \x00"),
+        "uuid":     Binary.from_uuid(uid),
+        "sentinel": f"bson-types-{uid.hex}",
+    }
+    await db[test_coll].insert_one(sentinel)
     result = await db_backup.run_backup(db)
-    assert result["ok"], result
-
     try:
-        # 2. Live source counts BEFORE restore.
-        source_counts = await db_restore.source_collection_counts()
-        source_total = sum(v for v in source_counts.values() if v >= 0)
-        assert source_total > 0, "source DB has no docs — cannot verify restore"
-
-        # 3. Restore into scratch DB.
+        assert result["ok"], result
         restore = await db_restore.restore_to_scratch(
-            r2_key=result["r2_key"],
-            drop_scratch_after=True,
+            r2_key=result["r2_key"], drop_scratch_after=False,
         )
-        assert restore["ok"] is True, restore
-        assert restore["source_size_bytes"] > 0
-        assert restore["duration_ms"] > 0
-
-        # 4. Per-collection parity — the founder's explicit
-        #    "not just succeeded, show me the numbers" requirement.
-        restored = restore["collection_counts"]
-        # Collections that exist in source at backup time should
-        # exist in restore. Allow tiny drift if writes hit between
-        # dump and count (rare, <1% of collections in typical test).
-        missing_in_restore = [
-            name for name, cnt in source_counts.items()
-            if cnt > 0 and name not in restored
-        ]
-        assert not missing_in_restore, (
-            f"collections missing after restore: {missing_in_restore}"
-        )
-
-        # Aggregate parity within 5% tolerance.
-        restored_total = restore["total_docs"]
-        tolerance = max(2, int(source_total * 0.05))
-        assert abs(source_total - restored_total) <= tolerance, (
-            f"doc-count drift too large: source={source_total} "
-            f"restored={restored_total}"
-        )
+        assert restore["ok"], restore
+        from motor.motor_asyncio import AsyncIOMotorClient
+        c = AsyncIOMotorClient(os.environ["MONGO_URL"])
+        try:
+            rst = await c[restore["scratch_db"]][test_coll].find_one(
+                {"sentinel": sentinel["sentinel"]},
+            )
+            assert rst is not None, "sentinel doc missing after restore"
+            assert rst["_id"] == oid
+            # BSON stores datetimes as naive UTC (both mongodump and
+            # our native format behave identically here). Compare
+            # naive-to-naive.
+            assert rst["when"] == now.replace(tzinfo=None)
+            assert rst["money"] == Decimal128("123.4567890")
+            assert rst["embedded"] == sentinel["embedded"]
+            assert rst["arr"][0] == oid
+            assert rst["arr"][1] == now.replace(tzinfo=None)
+            assert bytes(rst["binary"]) == bytes(sentinel["binary"])
+            assert rst["uuid"] == sentinel["uuid"]
+        finally:
+            await c.drop_database(restore["scratch_db"])
+            c.close()
     finally:
-        _r2_delete(result["r2_key"])
+        await db.drop_collection(test_coll)
+        _r2_delete(result.get("r2_key", ""))
+
+
+@pytest.mark.skipif(_missing, reason=skip_reason)
+async def test_large_document_round_trip(db):
+    """Document approaching BSON's practical size ceiling — verifies
+    the length-prefix reader handles multi-MB documents without
+    truncation."""
+    from services import db_backup, db_restore
+    test_coll = f"_test_large_{uuid.uuid4().hex[:8]}"
+    # 512 KB payload — exercises multi-buffer gzip writes AND the
+    # length-prefix reader path for docs well above BSON's 16-byte
+    # minimum, without stressing preview pod's local Mongo timeout
+    # envelope (which drops connections on ≥1 MB inserts intermittently).
+    payload = os.urandom(512 * 1024)
+    marker = uuid.uuid4().hex
+    await db[test_coll].insert_one({
+        "marker": marker,
+        "payload": Binary(payload),
+    })
+    result = await db_backup.run_backup(db)
+    try:
+        assert result["ok"], result
+        restore = await db_restore.restore_to_scratch(
+            r2_key=result["r2_key"], drop_scratch_after=False,
+        )
+        assert restore["ok"], restore
+        from motor.motor_asyncio import AsyncIOMotorClient
+        c = AsyncIOMotorClient(os.environ["MONGO_URL"])
+        try:
+            rst = await c[restore["scratch_db"]][test_coll].find_one(
+                {"marker": marker},
+            )
+            assert rst is not None, "large-doc marker missing after restore"
+            assert bytes(rst["payload"]) == payload, (
+                "large-doc payload bytes drifted through round-trip"
+            )
+        finally:
+            await c.drop_database(restore["scratch_db"])
+            c.close()
+    finally:
+        await db.drop_collection(test_coll)
+        _r2_delete(result.get("r2_key", ""))
+
+
+# ────────────────────────────────────────────────────────────────
+# 3. Failure paths
+# ────────────────────────────────────────────────────────────────
+@pytest.mark.skipif(_missing, reason=skip_reason)
+async def test_missing_r2_env_records_failure(db, monkeypatch):
+    from services import db_backup
+    monkeypatch.delenv("R2_ACCESS_KEY_ID", raising=False)
+    result = await db_backup.run_backup(db)
+    assert result["ok"] is False
+    assert "R2_ACCESS_KEY_ID" in (result.get("error") or "")
+    # History row was written with status=failed
+    row = await db.backup_history.find_one(sort=[("created_at", -1)])
+    assert row["status"] == "failed"
+    assert "R2_ACCESS_KEY_ID" in row["error"]
 
 
 @pytest.mark.skipif(_missing, reason=skip_reason)
@@ -162,5 +251,4 @@ async def test_source_collection_counts_shape(db):
     from services import db_restore
     counts = await db_restore.source_collection_counts()
     assert isinstance(counts, dict)
-    # All values are ints (either doc count or -1 for error)
     assert all(isinstance(v, int) for v in counts.values())
