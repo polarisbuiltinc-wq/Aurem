@@ -3624,6 +3624,289 @@ async def admin_set_stripe_prices(
 
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# 2026-02-10 — /admin/github-app-config
+#
+# GitHub App credential store (Phase 1.2/1.3 of the PAT → App migration).
+# Same DB-override pattern as `/admin/stripe-config` + `/admin/stripe-prices`:
+# a single Mongo doc `admin_settings._id="github_app_config"` is the truth,
+# every uvicorn worker hydrates it at boot, POST hot-swaps into the
+# runtime cache (`services.github_app_config._RUNTIME_GITHUB_APP`).
+#
+# POST validates by signing a short-lived RS256 JWT with the submitted
+# private key and calling `GET https://api.github.com/app` — GitHub
+# returns 200 + our App metadata if the App ID + PEM pair is real and
+# matches. Refuses to persist unless every field is validated.
+#
+# The webhook_secret is opaque to us at store time (only HMAC verify
+# uses it later inside the future webhook route) — but we still
+# require it non-empty here so partial configs cannot land.
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.get("/github-app-config")
+async def admin_get_github_app_config(
+    authorization: Optional[str] = Header(None),
+):
+    """Return the current GitHub App config state.
+
+    NEVER echoes the raw private key or webhook secret back to the
+    client — only presence flags + last-6 fingerprint of the key and
+    an on-demand live probe (`GET /app`) so the admin knows whether
+    the current credentials still authenticate against GitHub.
+    """
+    await _require_admin(authorization)
+    from services.github_app_config import (
+        get_runtime_github_app_config, REQUIRED_FIELDS,
+    )
+
+    db = require_db()
+
+    # Defensive re-hydration in case this worker missed the boot-time
+    # load (fresh pod, race with a prior POST on another worker).
+    row = None
+    try:
+        row = await db.admin_settings.find_one({"_id": "github_app_config"})
+        if row:
+            from services.github_app_config import set_runtime_github_app_config
+            set_runtime_github_app_config({
+                f: row.get(f) for f in REQUIRED_FIELDS
+            })
+    except Exception as e:
+        logger.warning("admin/github-app-config GET: DB lookup failed: %r", e)
+
+    runtime = get_runtime_github_app_config()
+    configured = bool(runtime)
+
+    # Presence-only summary (no secrets).
+    summary = {
+        "configured":      configured,
+        "app_id":          runtime.get("app_id") or "",
+        "app_slug":        runtime.get("app_slug") or "",
+        "install_url":     (
+            f"https://github.com/apps/{runtime['app_slug']}/installations/new"
+            if runtime.get("app_slug") else ""
+        ),
+        "private_key_last6":   (runtime.get("private_key") or "").strip()[-6:]
+                                if runtime.get("private_key") else "",
+        "webhook_secret_last4": (runtime.get("webhook_secret") or "").strip()[-4:]
+                                 if runtime.get("webhook_secret") else "",
+        "last_updated": (row or {}).get("updated_at"),
+        "updated_by":   (row or {}).get("updated_by"),
+    }
+
+    # Live probe — sign a JWT with the stored private key, call
+    # `GET /app` on GitHub. Any RS256/PEM issue surfaces as "invalid".
+    if configured:
+        try:
+            live = await _github_app_live_probe(
+                runtime["app_id"], runtime["private_key"],
+            )
+            summary["live"] = live
+        except Exception as e:                                  # noqa: BLE001
+            summary["live"] = {
+                "ok": False,
+                "error": f"{type(e).__name__}: {e}"[:200],
+            }
+    else:
+        summary["live"] = {"ok": False, "error": "not configured"}
+
+    return summary
+
+
+class GitHubAppConfigBody(BaseModel):
+    """Every field is required and validated together. Partial writes
+    are refused so the runtime cache never lands in a half-set state."""
+    app_id:         str
+    app_slug:       str
+    private_key:    str  # full PEM, `-----BEGIN … -----END …-----` block
+    webhook_secret: str
+
+
+async def _github_app_live_probe(
+    app_id: str, private_key_pem: str,
+) -> dict:
+    """Sign a 60-second App JWT with `private_key_pem` and call
+    `GET https://api.github.com/app`. Returns a small summary dict.
+
+    Kept INSIDE routers/admin.py by design — the full GitHub App
+    service module (JWT caching, installation-token minting, etc.) is
+    Phase 1.1 and doesn't exist yet. This inline probe is the minimum
+    needed to validate a paste before persistence.
+    """
+    import jwt as _jwt          # PyJWT 2.10.0 (already in requirements)
+    import httpx as _httpx
+
+    now = int(time.time())
+    payload = {
+        # GitHub allows ±60s clock skew; use 30s in the past to be safe.
+        "iat": now - 30,
+        "exp": now + 60,
+        "iss": str(app_id).strip(),
+    }
+    try:
+        token = _jwt.encode(payload, private_key_pem, algorithm="RS256")
+    except Exception as e:      # noqa: BLE001
+        return {"ok": False, "error": f"JWT sign failed: {type(e).__name__}: {e}"[:200]}
+
+    # PyJWT ≥2 returns str; ≤1 returned bytes. Normalise.
+    if isinstance(token, bytes):
+        token = token.decode("utf-8")
+
+    try:
+        async with _httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(
+                "https://api.github.com/app",
+                headers={
+                    "Authorization":        f"Bearer {token}",
+                    "Accept":               "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                    "User-Agent":           "aurem-admin-probe",
+                },
+            )
+    except _httpx.RequestError as e:
+        return {"ok": False, "error": f"Network error: {type(e).__name__}: {e}"[:200]}
+
+    if r.status_code == 401:
+        return {"ok": False, "error": "GitHub returned 401 — App ID and private key do not match."}
+    if r.status_code == 404:
+        return {"ok": False, "error": "GitHub returned 404 — App ID not found."}
+    if r.status_code != 200:
+        return {"ok": False, "error": f"GitHub returned HTTP {r.status_code}: {r.text[:120]}"}
+
+    try:
+        data = r.json() or {}
+    except Exception:
+        data = {}
+    return {
+        "ok":            True,
+        "app_id":        data.get("id"),
+        "app_slug":      data.get("slug"),
+        "app_name":      data.get("name"),
+        "owner_login":   ((data.get("owner") or {}).get("login") or ""),
+        "owner_type":    ((data.get("owner") or {}).get("type") or ""),
+        "html_url":      data.get("html_url"),
+        "permissions":   data.get("permissions") or {},
+        "events":        data.get("events") or [],
+    }
+
+
+@router.post("/github-app-config")
+async def admin_set_github_app_config(
+    body: GitHubAppConfigBody,
+    authorization: Optional[str] = Header(None),
+):
+    """Validate + persist the GitHub App credentials. Every field is
+    checked non-empty; the PEM is functionally tested against GitHub
+    (`GET /app` with a freshly-minted App JWT) BEFORE the row is
+    written. Hot-swaps into the runtime cache on success.
+
+    The webhook_secret is stored verbatim but not probed here (only
+    the future webhook handler exercises it). It is required non-empty
+    so `is_configured()` becomes a single boolean truth.
+    """
+    user = await _require_admin(authorization)
+
+    from services.github_app_config import (
+        set_runtime_github_app_config, REQUIRED_FIELDS,
+    )
+
+    # Normalise
+    app_id         = (body.app_id or "").strip()
+    app_slug       = (body.app_slug or "").strip().lower()
+    private_key    = (body.private_key or "").strip()
+    webhook_secret = (body.webhook_secret or "").strip()
+
+    # Basic shape checks BEFORE the live probe so obvious mistakes
+    # fail fast without hitting GitHub.
+    errors: dict = {}
+    if not app_id.isdigit():
+        errors["app_id"] = "App ID must be numeric (see GitHub App settings header)."
+    if not app_slug or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,38}", app_slug):
+        errors["app_slug"] = ("App slug must be the lowercase kebab-case name "
+                              "from the App's public URL (github.com/apps/<slug>).")
+    if "BEGIN" not in private_key or "PRIVATE KEY" not in private_key:
+        errors["private_key"] = "Private key must be a full PEM block (BEGIN/END PRIVATE KEY)."
+    if len(webhook_secret) < 8:
+        errors["webhook_secret"] = "Webhook secret must be at least 8 characters."
+
+    if errors:
+        raise HTTPException(400, {
+            "error":   "invalid_input",
+            "details": errors,
+            "message": ("Fix the highlighted field(s) and retry. All four fields "
+                        "are required — partial configs are refused so the "
+                        "GitHub App integration cannot half-enable."),
+        })
+
+    # Live probe against GitHub — proves the PEM matches this App ID.
+    probe = await _github_app_live_probe(app_id, private_key)
+    if not probe.get("ok"):
+        raise HTTPException(400, {
+            "error":   "github_probe_failed",
+            "message": ("Refusing to persist — GitHub rejected the App JWT signed "
+                        "with this private key. " + probe.get("error", "")),
+        })
+    # Extra sanity: the ID returned by GitHub must match the pasted ID.
+    if str(probe.get("app_id") or "") != app_id:
+        raise HTTPException(400, {
+            "error":   "app_id_mismatch",
+            "message": (f"Pasted App ID `{app_id}` but GitHub returned App ID "
+                        f"`{probe.get('app_id')}` for this private key — the key "
+                        "belongs to a different App."),
+        })
+    # Slug sanity — GitHub is canonical for the slug; correct silently
+    # if the admin pasted a variant with different casing/hyphens.
+    canonical_slug = (probe.get("app_slug") or "").lower()
+    if canonical_slug and canonical_slug != app_slug:
+        logger.info(
+            "admin/github-app-config: correcting slug '%s' → '%s' (from GitHub /app)",
+            app_slug, canonical_slug,
+        )
+        app_slug = canonical_slug
+
+    # Persist. All-or-nothing on the doc — a POST always overwrites the
+    # full 4-field set (mirrors the Stripe pattern).
+    db = require_db()
+    doc = {
+        "_id":            "github_app_config",
+        "app_id":         app_id,
+        "app_slug":       app_slug,
+        "private_key":    private_key,
+        "webhook_secret": webhook_secret,
+        "updated_at":     time.time(),
+        "updated_by":     user.get("email") or user.get("user_id"),
+    }
+    try:
+        await db.admin_settings.update_one(
+            {"_id": "github_app_config"}, {"$set": doc}, upsert=True,
+        )
+    except Exception as e:
+        logger.error("admin/github-app-config POST: DB save failed: %r", e)
+        raise HTTPException(500, f"DB persistence failed: {e}")
+
+    # Hot-swap into runtime cache on THIS worker. Other workers pick
+    # up the same doc on their next request that reads it (or on
+    # their next boot via main.py lifespan hydrator).
+    set_runtime_github_app_config({f: doc.get(f) for f in REQUIRED_FIELDS})
+    logger.info(
+        "🐙 GitHub App config hot-swapped by admin=%s app_id=%s slug=%s",
+        user.get("email"), app_id, app_slug,
+    )
+
+    return {
+        "ok":         True,
+        "message":    ("GitHub App credentials validated against GitHub and saved. "
+                       "Every future request in this worker uses these; other "
+                       "workers hydrate on their next boot or admin GET."),
+        "app_id":     app_id,
+        "app_slug":   app_slug,
+        "install_url": f"https://github.com/apps/{app_slug}/installations/new",
+        "live":       probe,
+    }
+
+
+
+
 # ─── Iter 193 — User delete + bulk email offers ────────────────────────
 #
 # DELETE /admin/users/{user_id}       — hard-delete a user + cascade

@@ -1955,6 +1955,7 @@ function SettingsPage() {
           (green/red status light, account info, error reason). */}
       <StripeApiKeyCard />
       <StripePriceIdsCard />
+      <GitHubAppConfigCard />
 
       {/* Iter 158 — thinking-hint manager (tier-aware upsell pills
           shown next to the chat spinner). Full CRUD + global toggle
@@ -2412,6 +2413,350 @@ function StripePriceIdsCard() {
     </div>
   );
 }
+
+// ─── 2026-02-10 — GitHub App credential card ─────────────────────────
+// Mirrors the Stripe cards: presence-only summary (never echoes secrets),
+// live probe pill, edit modal with 4 paste fields, validates against
+// GitHub before persisting. Used to bootstrap the Phase 1.1 service and
+// wizard integration that come next.
+function GitHubAppConfigCard() {
+  const [data, setData] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [inputs, setInputs] = useState({
+    app_id: "", app_slug: "", private_key: "", webhook_secret: "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  async function refresh() {
+    try {
+      const r = await api.get("/admin/github-app-config");
+      setData(r.data);
+    } catch (e) {
+      setData({
+        configured: false,
+        error: e?.response?.data?.detail || "Could not load GitHub App config",
+      });
+    }
+  }
+  useEffect(() => { refresh(); }, []);
+
+  function startEdit() {
+    setInputs({
+      app_id: data?.app_id || "",
+      app_slug: data?.app_slug || "",
+      private_key: "",       // never pre-fill secrets
+      webhook_secret: "",    // never pre-fill secrets
+    });
+    setEditing(true);
+  }
+
+  async function save() {
+    const trimmed = {
+      app_id:         (inputs.app_id || "").trim(),
+      app_slug:       (inputs.app_slug || "").trim().toLowerCase(),
+      private_key:    (inputs.private_key || "").trim(),
+      webhook_secret: (inputs.webhook_secret || "").trim(),
+    };
+    if (!trimmed.app_id || !trimmed.app_slug
+        || !trimmed.private_key || !trimmed.webhook_secret) {
+      toast({
+        message: "All four fields are required — partial configs are refused.",
+        kind: "warning",
+      });
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await api.post("/admin/github-app-config", trimmed);
+      toast({
+        message: `GitHub App @${r.data.app_slug} validated & saved ✓`,
+        kind: "success",
+      });
+      setEditing(false);
+      setInputs({ app_id: "", app_slug: "", private_key: "", webhook_secret: "" });
+      await refresh();
+    } catch (e) {
+      const d = e?.response?.data?.detail;
+      const msg = typeof d === "string"
+        ? d
+        : (d?.message || "Save failed");
+      toast({ message: msg, kind: "error" });
+    } finally { setSaving(false); }
+  }
+
+  if (!data) {
+    return (
+      <Card style={{ padding: 18, marginTop: 24 }}>
+        <div style={{ color: "var(--text-faint)", fontSize: 12 }}>
+          Loading GitHub App config…
+        </div>
+      </Card>
+    );
+  }
+
+  const live = data.live || {};
+  const configured = !!data.configured;
+  const healthy = configured && live.ok;
+
+  return (
+    <div data-testid="admin-github-app-config-card">
+    <Card style={{ padding: 18, marginTop: 16 }}>
+      <div style={{ display: "flex", alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 12, gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{
+            width: 12, height: 12, borderRadius: "50%",
+            background: !configured ? "#71717a"
+                      : healthy      ? "#22c55e"
+                      : "#ef4444",
+            boxShadow: !configured
+              ? "0 0 0 4px rgba(113,113,122,0.25)"
+              : healthy
+                ? "0 0 0 4px rgba(34,197,94,0.35), 0 0 12px #22c55e"
+                : "0 0 0 4px rgba(239,68,68,0.35), 0 0 12px #ef4444",
+            flexShrink: 0,
+          }} />
+          <h3 style={{ fontSize: 13, margin: 0 }}>GitHub App</h3>
+          <Badge color={configured ? (healthy ? "var(--ok)" : "var(--danger)") : "var(--warn)"}>
+            {!configured ? "not configured"
+              : healthy   ? "connected"
+              : "invalid"}
+          </Badge>
+        </div>
+        {!editing && (
+          <button
+            data-testid="admin-github-app-edit"
+            className="btn-secondary"
+            style={{ fontSize: 12, padding: "6px 14px" }}
+            onClick={startEdit}>
+            {configured ? "Rotate credentials" : "Paste credentials"}
+          </button>
+        )}
+      </div>
+
+      {!editing && (
+        <>
+          <div style={{ padding: "8px 12px", marginBottom: 10,
+                        background: "rgba(255,138,42,0.06)",
+                        border: "1px solid rgba(255,138,42,0.18)",
+                        borderRadius: 8, fontSize: 11,
+                        color: "var(--text-faint)", lineHeight: 1.5 }}>
+            Credentials for the <strong>Aurem GitHub App</strong> (installable
+            App, not the OAuth App). Stored in Mongo — every uvicorn worker
+            hydrates on boot, POST hot-swaps immediately. The private key is
+            never echoed back after paste; only a last-6 fingerprint is shown.
+            Once configured, the PAT-vs-App gate in{" "}
+            <code style={{ margin: "0 4px", fontSize: 10 }}>
+              cto_projects.py::/projects/add
+            </code>
+            will accept either.
+          </div>
+
+          <div style={{ display: "grid",
+                        gridTemplateColumns: "160px 1fr",
+                        gap: "6px 14px", fontSize: 11,
+                        fontFamily: "'JetBrains Mono', monospace" }}>
+            <span style={{ color: "var(--text-faint)" }}>APP ID</span>
+            <span data-testid="gh-app-appid">
+              {data.app_id || <em style={{ color: "var(--text-faint)" }}>—</em>}
+            </span>
+
+            <span style={{ color: "var(--text-faint)" }}>SLUG</span>
+            <span data-testid="gh-app-slug">
+              {data.app_slug
+                ? <>
+                    {data.app_slug}
+                    {data.install_url && (
+                      <a href={data.install_url}
+                         target="_blank" rel="noopener noreferrer"
+                         style={{ marginLeft: 10, color: "var(--accent)",
+                                  fontSize: 10 }}>
+                        install URL ↗
+                      </a>
+                    )}
+                  </>
+                : <em style={{ color: "var(--text-faint)" }}>—</em>}
+            </span>
+
+            <span style={{ color: "var(--text-faint)" }}>PRIVATE KEY</span>
+            <span style={{ color: data.private_key_last6 ? "var(--text)"
+                                                          : "var(--text-faint)" }}>
+              {data.private_key_last6
+                ? `…${data.private_key_last6} (fingerprint)`
+                : "—"}
+            </span>
+
+            <span style={{ color: "var(--text-faint)" }}>WEBHOOK SECRET</span>
+            <span style={{ color: data.webhook_secret_last4 ? "var(--text)"
+                                                             : "var(--text-faint)" }}>
+              {data.webhook_secret_last4
+                ? `…${data.webhook_secret_last4}`
+                : "—"}
+            </span>
+
+            <span style={{ color: "var(--text-faint)" }}>LIVE PROBE</span>
+            <span data-testid="gh-app-live" style={{
+              color: live.ok ? "#86efac" : "#fca5a5",
+            }}>
+              {live.ok
+                ? <>● GitHub returned 200 · App name: <strong>{live.app_name}</strong>
+                    {live.owner_login && <> · owner: {live.owner_login} ({live.owner_type})</>}</>
+                : <>● {live.error || "not tested"}</>}
+            </span>
+
+            {live.ok && live.permissions && (
+              <>
+                <span style={{ color: "var(--text-faint)" }}>PERMISSIONS</span>
+                <span style={{ color: "var(--text-faint)", fontSize: 10 }}>
+                  {Object.entries(live.permissions)
+                    .map(([k, v]) => `${k}:${v}`).join(" · ") || "—"}
+                </span>
+                <span style={{ color: "var(--text-faint)" }}>EVENTS</span>
+                <span style={{ color: "var(--text-faint)", fontSize: 10 }}>
+                  {(live.events || []).join(", ") || "—"}
+                </span>
+              </>
+            )}
+          </div>
+
+          {data.updated_by && (
+            <div style={{ marginTop: 10, fontSize: 10, color: "var(--text-faint)",
+                          fontFamily: "'JetBrains Mono', monospace" }}>
+              Last updated by {data.updated_by} at{" "}
+              {new Date((data.last_updated || 0) * 1000).toISOString()}
+            </div>
+          )}
+        </>
+      )}
+
+      {editing && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ padding: "8px 12px", marginBottom: 12,
+                        background: "rgba(59,130,246,0.06)",
+                        border: "1px solid rgba(59,130,246,0.2)",
+                        borderRadius: 8, fontSize: 11,
+                        color: "#93c5fd", lineHeight: 1.5 }}>
+            Paste all 4 credentials from your GitHub App settings page
+            (<code style={{ fontSize: 10 }}>
+              github.com/organizations/&lt;org&gt;/settings/apps/&lt;slug&gt;
+            </code>).
+            The private key + App ID are validated against GitHub
+            (<code style={{ fontSize: 10 }}>GET /app</code>) before anything
+            is written. Partial configs are refused.
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center",
+                        gap: 10, marginBottom: 10 }}>
+            <label style={{ width: 160, fontSize: 11,
+                            color: "var(--text-faint)",
+                            fontFamily: "'JetBrains Mono', monospace",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.06em" }}>
+              App ID
+            </label>
+            <input
+              data-testid="admin-gh-app-input-appid"
+              className="input"
+              inputMode="numeric"
+              value={inputs.app_id}
+              onChange={(e) => setInputs({ ...inputs, app_id: e.target.value })}
+              placeholder="e.g. 12345678 (numeric, from App settings header)"
+              style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace",
+                       fontSize: 12 }} />
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center",
+                        gap: 10, marginBottom: 10 }}>
+            <label style={{ width: 160, fontSize: 11,
+                            color: "var(--text-faint)",
+                            fontFamily: "'JetBrains Mono', monospace",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.06em" }}>
+              App slug
+            </label>
+            <input
+              data-testid="admin-gh-app-input-slug"
+              className="input"
+              value={inputs.app_slug}
+              onChange={(e) => setInputs({ ...inputs, app_slug: e.target.value })}
+              placeholder="aurem-devops (lowercase, from github.com/apps/<slug>)"
+              style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace",
+                       fontSize: 12 }} />
+          </div>
+
+          <div style={{ display: "flex", alignItems: "flex-start",
+                        gap: 10, marginBottom: 10 }}>
+            <label style={{ width: 160, fontSize: 11,
+                            color: "var(--text-faint)",
+                            fontFamily: "'JetBrains Mono', monospace",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.06em",
+                            paddingTop: 8 }}>
+              Private key (PEM)
+            </label>
+            <textarea
+              data-testid="admin-gh-app-input-pem"
+              className="input"
+              value={inputs.private_key}
+              onChange={(e) => setInputs({ ...inputs, private_key: e.target.value })}
+              placeholder={"-----BEGIN RSA PRIVATE KEY-----\n... paste full PEM ...\n-----END RSA PRIVATE KEY-----"}
+              rows={8}
+              style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace",
+                       fontSize: 11, resize: "vertical", minHeight: 140,
+                       whiteSpace: "pre" }} />
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center",
+                        gap: 10, marginBottom: 12 }}>
+            <label style={{ width: 160, fontSize: 11,
+                            color: "var(--text-faint)",
+                            fontFamily: "'JetBrains Mono', monospace",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.06em" }}>
+              Webhook secret
+            </label>
+            <input
+              data-testid="admin-gh-app-input-webhook"
+              className="input"
+              type="password"
+              autoComplete="off"
+              value={inputs.webhook_secret}
+              onChange={(e) => setInputs({ ...inputs, webhook_secret: e.target.value })}
+              placeholder="opaque random string (min 8 chars)"
+              style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace",
+                       fontSize: 12 }} />
+          </div>
+
+          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+            <button
+              data-testid="admin-gh-app-save"
+              className="btn-primary"
+              onClick={save}
+              disabled={saving}
+              style={{ fontSize: 12 }}>
+              {saving ? "Validating against GitHub…" : "Validate & Save"}
+            </button>
+            <button
+              data-testid="admin-gh-app-cancel"
+              className="btn-secondary"
+              onClick={() => {
+                setEditing(false);
+                setInputs({ app_id: "", app_slug: "", private_key: "", webhook_secret: "" });
+              }}
+              disabled={saving}
+              style={{ fontSize: 12 }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </Card>
+    </div>
+  );
+}
+
+
 
 function ThinkingHintsConfigCard() {
   const [cfg, setCfg] = useState(null);

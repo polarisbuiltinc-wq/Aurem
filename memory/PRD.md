@@ -2,6 +2,29 @@
 
 ## 🚀 IN-PROGRESS (Session 6 fork · 2026-02-09 continuation)
 
+### 2026-02-10 · GitHub App migration — Phase 1.2 + 1.3 delivered
+
+**Context**: Sign-up → repo-connect funnel drop-off root-caused to the forced-PAT wizard architecture. Founder confirmed replacement plan (GitHub App install, additive, PAT preserved). Manual App registration underway (Aurem org, "AUREM DevOps" or fallback).
+
+**Delivered this turn** (secure paste target for pending credentials):
+- `services/github_app_config.py` — new. In-process runtime cache (`_RUNTIME_GITHUB_APP`), all-or-nothing hydration semantics, `set/get_runtime_github_app_config()`, `is_configured()`. Mirrors `stripe_client` price-ID cache pattern exactly.
+- `routers/admin.py` — new endpoints:
+  - `GET  /admin/github-app-config` — presence-only summary + live GitHub `GET /app` probe. Never echoes secrets; only `private_key_last6` fingerprint + `webhook_secret_last4`.
+  - `POST /admin/github-app-config` — Pydantic-validated (all 4 required), shape-checked, then live probe (inline PyJWT RS256 sign → `GET https://api.github.com/app`); mismatched App ID vs. private key is refused. Persists to `admin_settings._id="github_app_config"` + hot-swaps runtime.
+  - `_github_app_live_probe()` inline (Phase 1.1 service intentionally not started yet per founder boundary).
+- `main.py` lifespan — new GitHub App boot hydrator: reads `admin_settings._id="github_app_config"`, calls `set_runtime_github_app_config()` in every uvicorn worker. Fail-open.
+- `frontend/src/pages/Admin.jsx` — new `<GitHubAppConfigCard/>` mounted below `<StripePriceIdsCard/>` in Settings tab. Status pill (`not configured` / `connected` / `invalid`), install-URL deep-link, live-probe details (App name, owner, permissions, events). Edit modal with 4 paste fields + textarea PEM; validates against GitHub before save.
+
+**Verified (curl + screenshot smoke)**:
+- Unauth GET/POST → 401 ✓
+- Empty body → 422 Pydantic ✓
+- Bad shape (non-numeric ID, invalid slug regex, non-PEM, short webhook) → 400 with per-field details ✓
+- Well-shaped but fake creds (valid PEM generated via cryptography lib, App ID 999999) → 400 with `github_probe_failed` (401 from GitHub) — proof the JWT signing works AND real GitHub validation is happening ✓
+- Admin.jsx card element resolved by locator in Settings tab ✓
+- Backend boots clean, no lint errors from new code ✓
+
+**Awaiting founder**: manual GitHub App registration on the Aurem org side. Once App ID, slug, private key PEM, webhook secret are pasted via the card → integration boot-loads on next request and Phase 1.1 (`services/github_app.py` full service) unblocks.
+
 ### Session-fork updates (2026-02-09)
 
 **🎯 MULTI-WORKER STRIPE SPLIT-BRAIN — ROOT-CAUSED + FIXED (built + preview-verified, awaiting prod deploy + founder verification)**
