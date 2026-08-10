@@ -3906,6 +3906,170 @@ async def admin_set_github_app_config(
 
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# 2026-02-10 — /admin/github-app-diagnostics  (Phase 1.1 E2E prover)
+#
+# Read-only. Exercises services/github_app.py end-to-end against the
+# real GitHub API using the currently-configured App credentials:
+#
+#   1. app_jwt()                — proves RS256 signing + cache work.
+#   2. GET /app                 — proves the JWT authenticates.
+#   3. GET /app/installations   — lists every installation of our App
+#                                 (empty list is a valid pass — no user
+#                                 has installed the App yet).
+#   4. If any installation exists → get_installation_token() for it,
+#      then list_installation_repos() to prove short-lived token minting
+#      + repo listing pipeline works.
+#
+# Nothing is written; no user state is touched. Safe to hit repeatedly.
+# Use this endpoint on preview + prod to verify the service before
+# building the install router on top of it.
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.get("/github-app-diagnostics")
+async def admin_github_app_diagnostics(
+    authorization: Optional[str] = Header(None),
+):
+    """End-to-end health probe of services/github_app.py against real
+    GitHub. Read-only; safe to spam. Returns a per-step summary so a
+    partial failure clearly points at the exact hop that broke."""
+    await _require_admin(authorization)
+
+    from services import github_app as _ga
+    from services.github_app_config import is_configured
+
+    result: dict = {
+        "configured":       is_configured(),
+        "steps":            [],
+        "install_url":      None,
+        "installations":    [],
+        "sample_repos":     None,
+    }
+
+    if not result["configured"]:
+        result["steps"].append({
+            "step":  "config_check",
+            "ok":    False,
+            "error": "GitHub App is not configured yet — paste credentials via the admin card first.",
+        })
+        return result
+
+    # STEP 1 — mint App JWT (RS256 sign)
+    try:
+        jwt_token = _ga.app_jwt()
+        result["steps"].append({
+            "step":       "app_jwt",
+            "ok":         True,
+            "jwt_prefix": jwt_token[:20] + "…",
+            "jwt_length": len(jwt_token),
+        })
+    except Exception as e:                                       # noqa: BLE001
+        result["steps"].append({
+            "step":  "app_jwt",
+            "ok":    False,
+            "error": f"{type(e).__name__}: {e}",
+        })
+        return result
+
+    # STEP 2 — install URL build
+    try:
+        result["install_url"] = _ga.install_url()
+        result["steps"].append({"step": "install_url", "ok": True})
+    except Exception as e:                                       # noqa: BLE001
+        result["steps"].append({
+            "step":  "install_url",
+            "ok":    False,
+            "error": f"{type(e).__name__}: {e}",
+        })
+
+    # STEP 3 — list installations via App JWT
+    try:
+        installs = await _ga.list_installations()
+        summary = [
+            {
+                "id":             inst.get("id"),
+                "account_login":  ((inst.get("account") or {}).get("login") or ""),
+                "account_type":   ((inst.get("account") or {}).get("type") or ""),
+                "target_type":    inst.get("target_type"),
+                "repository_selection": inst.get("repository_selection"),
+                "created_at":     inst.get("created_at"),
+                "suspended_at":   inst.get("suspended_at"),
+            }
+            for inst in installs
+        ]
+        result["installations"] = summary
+        result["steps"].append({
+            "step":  "list_installations",
+            "ok":    True,
+            "count": len(installs),
+        })
+    except Exception as e:                                       # noqa: BLE001
+        result["steps"].append({
+            "step":  "list_installations",
+            "ok":    False,
+            "error": f"{type(e).__name__}: {e}",
+        })
+        return result
+
+    # STEP 4 — if any installation exists, prove token minting + repo listing
+    if result["installations"]:
+        first_id = result["installations"][0]["id"]
+        try:
+            token, expires_at = await _ga.get_installation_token(int(first_id))
+            result["steps"].append({
+                "step":              "get_installation_token",
+                "ok":                True,
+                "installation_id":   first_id,
+                "token_prefix":      token[:8] + "…",
+                "expires_at_epoch":  expires_at,
+                "expires_in_seconds": int(expires_at - time.time()),
+            })
+        except Exception as e:                                   # noqa: BLE001
+            result["steps"].append({
+                "step":  "get_installation_token",
+                "ok":    False,
+                "error": f"{type(e).__name__}: {e}",
+            })
+            return result
+
+        try:
+            repos = await _ga.list_installation_repos(int(first_id))
+            result["sample_repos"] = [
+                {
+                    "id":            r.get("id"),
+                    "full_name":     r.get("full_name"),
+                    "private":       r.get("private"),
+                    "default_branch": r.get("default_branch"),
+                }
+                for r in repos[:5]                               # cap payload
+            ]
+            result["steps"].append({
+                "step":  "list_installation_repos",
+                "ok":    True,
+                "count": len(repos),
+            })
+        except Exception as e:                                   # noqa: BLE001
+            result["steps"].append({
+                "step":  "list_installation_repos",
+                "ok":    False,
+                "error": f"{type(e).__name__}: {e}",
+            })
+    else:
+        result["steps"].append({
+            "step":  "get_installation_token",
+            "ok":    "skipped",
+            "note":  "No installations yet — install the App on any account to exercise this step.",
+        })
+
+    result["all_green"] = all(
+        (s.get("ok") is True or s.get("ok") == "skipped")
+        for s in result["steps"]
+    )
+    return result
+
+
+
+
 
 # ─── Iter 193 — User delete + bulk email offers ────────────────────────
 #

@@ -759,3 +759,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 
 - `PATH` — auto-detected in backend/services/db_backup.py (verify) (default: unset) [Iter 0, 2026-08-09T00:14:32.840995Z] <!-- inv:envvar:PATH -->
 - `WAITLIST_RATE_PER_IP_MIN` — auto-detected in backend/routers/promo_first50.py (verify) (default: unset) [Iter 0, 2026-08-09T04:39:42.059927Z] <!-- inv:envvar:WAITLIST_RATE_PER_IP_MIN -->
+
+### Iter 0 · 2026-08-10
+
+- `services/github_app_config.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-10T02:13:57.897884Z] <!-- inv:service:services/github_app_config.py -->
