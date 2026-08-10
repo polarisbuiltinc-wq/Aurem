@@ -41,6 +41,10 @@ STAGES = (
     "callback_received",
     "linked",
     "repo_selected",
+    # 2026-02-10 · Phase 2 · GitHub App install flow stages.
+    "app_install_redirect",  # server: /github/app/install → GitHub
+    "app_installed",         # server: /github/app/callback success
+    "app_repo_selected",     # client: user picks a repo from installation
 )
 
 # Sources where the CTA lives — used to segment drop-off by entry point.

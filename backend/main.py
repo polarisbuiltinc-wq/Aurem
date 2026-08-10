@@ -33,6 +33,7 @@ from routers.mfa import router as mfa_router  # Iter 212m-20 — admin 2FA
 from routers.chat import router as chat_router
 from routers.github_oauth import router as github_oauth_router
 from routers.github_funnel import router as github_funnel_router  # 2026-08-01 CTA drop-off telemetry
+from routers.github_app import router as github_app_router  # 2026-02-10 · Phase 2 · install router + webhook
 from routers.cto_projects import router as cto_projects_router
 from routers.automations import router as automations_router
 from routers.upload import router as upload_router
@@ -553,6 +554,42 @@ async def lifespan(app: FastAPI):
         except Exception as e:                            # noqa: BLE001
             logger.warning("fix_jobs orphan sweep failed: %r", e)
     _asyncio.create_task(_orphan_running_fix_jobs())
+
+    # ── 2026-02-10 · Phase 2 · GitHub App collections ────────────────
+    # Two new collections + their indexes. Idempotent (create_index is
+    # a no-op if the index already exists). Wrapped in try/except so a
+    # single index-creation failure never blocks boot — everything
+    # downstream falls back to full-scan behaviour without breaking.
+    async def _github_app_indexes():
+        try:
+            if app.state.db is None:
+                return
+            # github_installations — source of truth for App installs.
+            await app.state.db.github_installations.create_index(
+                [("installation_id", 1)],
+                unique=True, name="ux_github_installations_installation_id",
+            )
+            await app.state.db.github_installations.create_index(
+                [("user_id", 1), ("active", 1)],
+                name="ix_github_installations_user_active",
+            )
+            await app.state.db.github_installations.create_index(
+                [("github_login", 1)],
+                name="ix_github_installations_login",
+            )
+            # webhook_deliveries — idempotency guard for GitHub App
+            # webhook POSTs. TTL 7 days on `received_at`.
+            await app.state.db.webhook_deliveries.create_index(
+                [("received_at", 1)],
+                expireAfterSeconds=7 * 24 * 60 * 60,
+                name="ttl_webhook_deliveries_received_at",
+            )
+            logger.info(
+                "🐙 github_installations + webhook_deliveries indexes ensured",
+            )
+        except Exception as e:                            # noqa: BLE001
+            logger.warning("github_app index setup failed: %r", e)
+    _asyncio.create_task(_github_app_indexes())
 
     # Iter 212m-222 — created_at backfill for dev_users.  Three
     # signup paths historically wrote created_at in three different
@@ -2561,6 +2598,7 @@ app.include_router(mfa_router,          prefix="/api/aurem-dev")  # Iter 212m-20
 app.include_router(chat_router,         prefix="/api/aurem-dev")
 app.include_router(github_oauth_router, prefix="/api/aurem-dev")
 app.include_router(github_funnel_router, prefix="/api/aurem-dev")  # 2026-08-01 CTA drop-off telemetry
+app.include_router(github_app_router, prefix="/api/aurem-dev")  # 2026-02-10 · Phase 2 · install router + webhook
 app.include_router(cto_projects_router, prefix="/api/aurem-dev")
 app.include_router(automations_router, prefix="/api/aurem-dev")
 app.include_router(upload_router,        prefix="/api/aurem-dev")
