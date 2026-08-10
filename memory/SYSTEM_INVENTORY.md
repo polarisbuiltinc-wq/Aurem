@@ -763,3 +763,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 ### Iter 0 · 2026-08-10
 
 - `services/github_app_config.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-10T02:13:57.897884Z] <!-- inv:service:services/github_app_config.py -->
+- `services/github_app.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-10T02:35:50.554224Z] <!-- inv:service:services/github_app.py -->

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from typing import Callable, Optional
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,12 @@ class Service:
     env_keys:       tuple[str, ...] = field(default_factory=tuple)
     probe_url:      str | None      = None
     always_probe:   bool            = False  # True for public APIs (GitHub etc.)
+    # 2026-02-10 — some integrations aren't env-backed (e.g. GitHub App
+    # credentials live in Mongo `admin_settings`, not `.env`). When set,
+    # `custom_configured` overrides the env-based check entirely: it MUST
+    # return True iff the integration is fully wired. Must be a zero-arg
+    # callable so it can be evaluated cheaply on every /architecture hit.
+    custom_configured: Optional[Callable[[], bool]] = None
 
 
 # Order = order shown in the External services card (left → right).
@@ -131,11 +138,44 @@ REGISTRY: tuple[Service, ...] = (
                   "AUREM_ORG_DEFAULT_BRANCH"),
         probe_url=None,     # no unauth probe URL — auth-only surface
     ),
+    # 2026-02-10 — GitHub App (AUREM DevOps, org: AuremHQ). Credentials
+    # are DB-backed (`admin_settings._id="github_app_config"`) rather
+    # than env-backed, so `is_configured` short-circuits to the runtime
+    # cache check. Full live status is on the Settings tab in
+    # <GitHubAppConfigCard/>; this entry is what makes the Integrations
+    # grid on the Architecture tab accurate.
+    Service(
+        display_name="GitHub App (AUREM DevOps)",
+        integration_id="github_app",
+        env_keys=(),        # not env-backed
+        probe_url=None,     # auth-only surface (App JWT); live probe
+                            # lives in <GitHubAppConfigCard/>
+        custom_configured=(
+            lambda: _is_github_app_configured()
+        ),
+    ),
 )
 
 
+def _is_github_app_configured() -> bool:
+    """Late import so a registry decode never triggers the config
+    module at import time (avoids circulars during pytest collection)."""
+    try:
+        from services.github_app_config import is_configured as _cfg
+        return bool(_cfg())
+    except Exception:                                            # noqa: BLE001
+        return False
+
+
 def is_configured(svc: Service) -> bool:
-    """A service is configured iff EVERY env_key it declares is set."""
+    """A service is configured iff EVERY env_key it declares is set,
+    OR — for DB-backed services — the `custom_configured` callable
+    returns True."""
+    if svc.custom_configured is not None:
+        try:
+            return bool(svc.custom_configured())
+        except Exception:                                        # noqa: BLE001
+            return False
     if not svc.env_keys:
         return True   # services with no required keys are always "configured"
     return all(bool(os.getenv(k)) for k in svc.env_keys)
