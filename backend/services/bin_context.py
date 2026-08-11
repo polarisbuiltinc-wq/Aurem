@@ -179,41 +179,38 @@ async def build_bin_context(
 
     branch = (proj.get("branch") or "main").strip() or "main"
 
-    raw_token = proj.get("github_token") or ""
-    if not raw_token:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "No PAT configured for this project. Open Projects → "
-                "Edit and paste a fine-grained GitHub PAT."
-            ),
-        )
-
-    # Reuse existing decrypt helper — never re-implement crypto here.
-    # Local import so this module doesn't create a hard coupling to
-    # the router package at import time (bin_context.py is imported
-    # by services/, routers/, and services/tests).
-    from services.pat_vault import decrypt_pat as _decrypt_pat, get_user_gh_token as _user_gh_token   # iter 212m-225 boundary fix
-    pat = await _decrypt_pat(user_id, raw_token)
+    # 2026-02-11 · Phase 3b (Bug 2 fix) — dual-auth credential resolution.
+    # Legacy PAT rows: `github_token` is the encrypted ciphertext.
+    # App-installed rows: `github_token` is None; `installation_id` set
+    # and `get_repo_token()` mints a fresh installation access token.
+    # `get_repo_token` returns str|None and never raises — matches the
+    # existing fallback contract at line 197.
+    from services.pat_vault import (
+        get_repo_token as _get_repo_token,
+        get_user_gh_token as _user_gh_token,   # legacy OAuth fallback
+    )
+    pat = await _get_repo_token(proj)
     if not pat:
-        # Fall back to the user's OAuth github.access_token — the legacy
-        # OAuth-only projects (pre-Iter 211) never stored a per-project
-        # PAT.  If both fail, hard-403 so the caller knows to re-connect.
+        # Legacy OAuth-only rows (pre-Iter 211) never stored a per-project
+        # PAT AND aren't App-installed either — fall through to the
+        # user-level OAuth token.
         pat = await _user_gh_token(user_id)
 
     if not pat:
         logger.warning(
-            "build_bin_context: PAT decrypt + OAuth fallback both empty "
-            "for user=%s project=%s (owner=%s/%s)",
+            "build_bin_context: credential resolution failed for "
+            "user=%s project=%s (owner=%s/%s) auth_method=%s",
             user_id, pid_clean, owner, repo,
+            proj.get("auth_method") or "pat",
         )
         raise HTTPException(
             status_code=403,
             detail=(
-                "GitHub credentials failed. The stored PAT for this "
-                "project could not be decrypted or has been revoked. "
-                "Open Projects → Edit and paste a fresh fine-grained "
-                "PAT with Contents: Read and write."
+                "This project's GitHub credentials aren't available. If "
+                "installed via the GitHub App, the installation may have "
+                "been revoked — reinstall it. If using a PAT, open "
+                "Projects → Edit and paste a fresh fine-grained PAT with "
+                "Contents: Read and write."
             ),
         )
 

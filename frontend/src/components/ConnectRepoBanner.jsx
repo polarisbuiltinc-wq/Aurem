@@ -141,64 +141,27 @@ export default function ConnectRepoBanner({ onConnect }) {
         </div>
       </div>
 
-      {/* Expanded — 3-step PAT guide */}
+      {/* 2026-02-11 · Phase 4b — banner walkthrough now points at the
+          wizard as the single source of truth for the connect UX.
+          The wizard itself is App-first (one-click install) with a
+          PAT disclosure fallback for private/legacy repos. */}
       {!collapsed && (
         <div
           data-testid="connect-repo-banner-steps"
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: 12,
-            paddingTop: 8,
+            paddingTop: 10,
             borderTop: "1px dashed rgba(234,179,8,0.30)",
+            fontSize: 12.5,
+            color: "var(--text-dim, #b8b8b8)",
+            lineHeight: 1.6,
           }}
         >
-          <StepCard
-            n={1}
-            title="Open GitHub PAT page"
-            body={
-              <>
-                Go to{" "}
-                <a
-                  href="https://github.com/settings/tokens?type=beta"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-testid="connect-repo-banner-pat-link"
-                  style={{
-                    color: "var(--accent-2, #ffb347)",
-                    textDecoration: "underline",
-                  }}
-                >
-                  github.com/settings/tokens
-                </a>
-                {" "}→ <strong>Fine-grained tokens</strong> → <em>Generate new token</em>.
-              </>
-            }
-          />
-          <StepCard
-            n={2}
-            title="Set permissions"
-            body={
-              <>
-                Under <strong>Repository permissions</strong>, set{" "}
-                <code style={codeStyle}>Contents</code> →{" "}
-                <strong>Read &amp; Write</strong>. Limit access to the one repo
-                you&apos;re connecting.
-              </>
-            }
-          />
-          <StepCard
-            n={3}
-            title="Paste token below"
-            body={
-              <>
-                Click <strong>Connect repo →</strong> above, paste the{" "}
-                <code style={codeStyle}>ghp_…</code> /{" "}
-                <code style={codeStyle}>github_pat_…</code> token in the
-                wizard, and we&apos;ll handle the rest.
-              </>
-            }
-          />
+          Click <strong>Connect repo →</strong> above. The wizard offers
+          two ways to connect:{" "}
+          <strong>GitHub App</strong> (recommended — one click, no token
+          to manage) or a{" "}
+          <strong>Personal Access Token</strong> (for private / legacy
+          repos). You&apos;ll pick whichever fits.
         </div>
       )}
     </div>

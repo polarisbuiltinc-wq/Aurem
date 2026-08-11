@@ -184,16 +184,21 @@ async def _resolve_project(user_id: str, project_id: str) -> dict | None:
     if proj is None:
         return None
 
-    # Decrypt the per-project PAT (if present), else fall back to OAuth.
+    # 2026-02-11 · Phase 3b (Bug 2 fix) — dual-auth credential resolution.
+    # `get_repo_token(proj)` handles both PAT (decrypt) and App-install
+    # (fresh installation token). Falls back to org OAuth token when
+    # neither is configured (legacy pre-Iter-211 rows).
     try:
-        from services.pat_vault import decrypt_pat as _decrypt_pat, get_user_gh_token as _user_gh_token   # iter 212m-225 boundary fix
-        raw_token = proj.get("github_token") or ""
-        decrypted = await _decrypt_pat(user_id, raw_token) if raw_token else None
+        from services.pat_vault import (
+            get_repo_token as _get_repo_token,
+            get_user_gh_token as _user_gh_token,
+        )
+        decrypted = await _get_repo_token(proj)
         if not decrypted:
             decrypted = await _user_gh_token(user_id)
         proj["github_token"] = decrypted or None
     except Exception as e:                       # noqa: BLE001
-        logger.warning("local_tools._resolve_project: token decrypt failed: %r", e)
+        logger.warning("local_tools._resolve_project: token resolve failed: %r", e)
         proj["github_token"] = None
     return proj
 
