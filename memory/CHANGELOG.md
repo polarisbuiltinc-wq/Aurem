@@ -1,6 +1,65 @@
 # AUREM Dev / Aurem CTO — Changelog
 
 Append-only iteration log. See `PRD.md` for the original problem
+
+---
+
+## 2026-02-11 · Session · Phase 3b Chunk A — GitHub App downstream sweep (P0 customer-blocking fix)
+
+### Context
+Real customer (`polarisbuiltinc-wq/auremdev-update`) was FULL-BLOCKED on their App-installed project in prod — every action (chat about repo, resume paused loop, health-scan, security-scan, rollback, admin brain replay, MCP tools) returned `HTTP 400 "No PAT configured for this project. Open Projects -> Edit and paste a fine-grained GitHub PAT."`
+
+### Root cause
+15+ backend callsites in `services/` and `routers/` were reading `proj.get("github_token")` directly and passing it to `_decrypt_pat(user_id, ...)` — bypassing the `services.pat_vault.get_repo_token(project)` dispatcher that mints a fresh App installation access token for `auth_method="github_app"` projects. Phases 1-3a (Project-add gate rewrite) shipped correctly, but this Chunk A downstream sweep was missed in that bundle.
+
+### Files touched (18 total)
+**services/** (10 sites across 8 files):
+- `repo_context.py:274` (per-turn repo briefing — highest-frequency hot path)
+- `repo_heal.py:189` + projection expanded
+- `finding_fix_applier.py:257` + projection expanded
+- `rollback_manager.py:133` (switched import from `routers.cto_projects` → `services.pat_vault`)
+- `seo/orchestrator.py:122`
+- `repo_indexing.py:160` (also removed `_maybe_decrypt` double-decrypt)
+- `codebase_indexer.py:266`
+- `loop_engine.py` (7 sites at lines 541, 1150, 2782, 2785, 3925, 4076, 4206 — plan/execute/ship/ship-fallback/graph-refresh/scan/diff-scan) + all 6 projections expanded
+
+**routers/** (11 sites across 10 files):
+- `fix_pipeline.py:653` + projection expanded
+- `loop.py:1198` (loop rollback / resume — **THIS was the customer's active blocker**)
+- `user_rollback.py:160`
+- `codebase_health.py:708` + projection expanded
+- `admin.py:1752 + 2371` (admin brain replay both sites)
+- `admin_bin.py:101` + projection expanded (BIN Tracker admin probe)
+- `repo_status.py:174` + projection expanded (sidebar green-dot poll — hits every page mount)
+- `chat.py:1424 + 1747` + projection expanded (chat pre-hook + Mode-D/E)
+- `security_scan.py:388` + projection expanded
+- `mcp.py:799 + 1224` (MCP tools + connected-flag display)
+- `cto_projects.py:817-820` projection expanded (was `get_repo_token` at 823 but missing dispatch fields)
+
+**Pattern:**
+- `FROM`: `token = await _decrypt_pat(user_id, proj.get("github_token"))` OR raw `token = proj.get("github_token") or None`
+- `TO`: `from services.pat_vault import get_repo_token; token = await get_repo_token(proj)`
+- Every Mongo projection expanded to include `auth_method: 1, installation_id: 1, user_id: 1` alongside `github_token: 1`
+
+### Verification
+- **79/79 pytest green**: 15 new Phase 3b dispatch tests at `/app/backend/tests/test_iter363_phase3b_github_app_dispatch.py` (unit-level `get_repo_token` dispatch contract + 7 App-installed happy-path endpoints against synthetic Mongo project + 4 PAT regression endpoints) + 64 pre-existing GitHub App suite still green.
+- Lint clean on all 18 files
+- Backend restart clean, no import errors
+- Downstream GitHub 401 from synthetic fake `installation_id=99999999` is expected & acceptable — the point is the PAT gate is PASSED
+
+### Testing agent findings (all resolved before deploy)
+- 3 projection completeness gaps caught by `testing_agent` iter363 report (`services/repo_heal.py:174`, `routers/admin_bin.py:88`, `services/loop_engine.py:2777`, plus `routers/cto_projects.py:819` self-caught) — all fixed and re-tested green
+
+### Deploy
+Queued to `emergent__send_to_deployer` at 2026-02-11 (job_id `92e41e3e-9fa0-4499-a913-f3e3d1530c79`).
+Zero .env changes. Zero DB migrations. Pure code redeploy.
+
+### Task 2 (open) — Resume paused loop on `polarisbuiltinc-wq/auremdev-update`
+- Failing file: `backend/aurem_cto/routers/__init__.py`, invalid-syntax at 1:1
+- **Blocked on:** Chunk A landing in prod. Once deploy is live, customer retries from UI. Founder's rule: no impersonation tokens, diagnose from logs only.
+- Full playbook: `/app/memory/OPEN_CUSTOMER_TASKS_2026-02-11.md`
+
+
 statement and historical context; this file captures recent feature
 work in date-stamped chunks so PRD.md stays focused.
 
