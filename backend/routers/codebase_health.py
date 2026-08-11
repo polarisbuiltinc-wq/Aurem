@@ -44,6 +44,7 @@ from fastapi.responses import JSONResponse
 
 from cto_services.auth import current_dev, require_admin
 from cto_services.db import get_db
+from services.http import ext_client
 from routers.security_scan import (
     _decrypt_pat, _list_repo_tree, _list_repo_tree_with_sha, _fetch_file,
     _MAX_FILES, _MAX_BYTES_PER_FILE, _SCAN_EXTS, _SKIP_DIRS,
@@ -556,7 +557,7 @@ async def _build_text_cache(owner: str, repo: str, pat: str) -> dict[str, str]:
     _files = 0
 
     _timeout = httpx.Timeout(45.0, connect=6.0, read=15.0)
-    async with httpx.AsyncClient(timeout=_timeout) as client:
+    async with ext_client("github", timeout=httpx.Timeout(45.0, connect=6.0, read=15.0)) as client:
         blobs, tree_sha = await _list_repo_tree_with_sha(
             client, owner, repo, pat,
         )

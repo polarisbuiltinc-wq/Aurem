@@ -1,5 +1,7 @@
 # AUREM CTO — Changelog (append-only)
 
+See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
+
 ## 2026-02-12 (Batch 8a → 8b day)
 
 - **Iter 314 — BUILD_INFO.txt lag fixed** + Deploy Verification Checklist rewrite
