@@ -334,7 +334,7 @@ class TestCallback:
             follow_redirects=False,
         )
         assert r.status_code == 302
-        assert "app_pending=1" in r.headers["location"]
+        assert "status=pending" in r.headers["location"]
 
     def test_missing_installation_id_soft_redirect(self, configured, client):
         r = client.get(
@@ -353,7 +353,7 @@ class TestCallback:
                 follow_redirects=False,
             )
         assert r.status_code == 302
-        assert "install=success" in r.headers["location"]
+        assert "status=success" in r.headers["location"]
         assert "install_id=1001" in r.headers["location"]
 
         # State consumed (single-use)
@@ -705,3 +705,41 @@ class TestListAndDelete:
         assert r.json()["revoked_installation_id"] == 88
         assert fake_db.github_installations.rows[0]["active"] is False
         assert fake_db.cto_projects.rows[0]["installation_active"] is False
+
+
+# ═════════════════════════════════════════════════════════════════════
+# Phase 4 · Bridge page (popup ↔ parent handshake)
+# ═════════════════════════════════════════════════════════════════════
+
+class TestInstalledBridge:
+    def test_success_bridge_returns_html_with_postmessage(self, configured, client):
+        r = client.get(
+            "/api/aurem-dev/github/app/installed?status=success&install_id=42",
+        )
+        assert r.status_code == 200
+        assert "text/html" in r.headers.get("content-type", "")
+        body = r.text
+        # Payload keys the wizard listens for
+        assert "aurem-app-installed" in body
+        assert "window.opener.postMessage" in body
+        # install_id echoed into the client script
+        assert "install_id" in body
+        # Non-popup fallback path present
+        assert "/dashboard" in body
+
+    def test_err_bridge_still_returns_200(self, configured, client):
+        # Errors from callback (invalid_state, github_probe_failed) all
+        # route through the bridge — the page decides UX. Backend never
+        # returns non-200 for the bridge itself.
+        r = client.get(
+            "/api/aurem-dev/github/app/installed?status=err&err=invalid_state",
+        )
+        assert r.status_code == 200
+        assert "aurem-app-installed" in r.text
+
+    def test_pending_bridge(self, configured, client):
+        r = client.get(
+            "/api/aurem-dev/github/app/installed?status=pending",
+        )
+        assert r.status_code == 200
+        assert "aurem-app-installed" in r.text

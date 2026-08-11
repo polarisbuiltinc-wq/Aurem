@@ -65,10 +65,11 @@ _WEBHOOK_DELIVERY_TTL_SECONDS = 7 * 24 * 60 * 60
 
 # Frontend deep-links (relative — the caller's browser resolves against
 # the domain they're currently on, so multi-domain deploys just work).
-_DEEP_LINK_SUCCESS       = "/dashboard?flow=connect-repo&install=success&install_id={iid}"
-_DEEP_LINK_ERR_STATE     = "/dashboard?flow=connect-repo&err=invalid_state"
-_DEEP_LINK_ERR_PROBE     = "/dashboard?flow=connect-repo&err=github_probe_failed"
-_DEEP_LINK_APP_PENDING   = "/dashboard?flow=connect-repo&app_pending=1"
+_BRIDGE_PATH             = "/api/aurem-dev/github/app/installed"
+_DEEP_LINK_SUCCESS       = _BRIDGE_PATH + "?status=success&install_id={iid}"
+_DEEP_LINK_ERR_STATE     = _BRIDGE_PATH + "?status=err&err=invalid_state"
+_DEEP_LINK_ERR_PROBE     = _BRIDGE_PATH + "?status=err&err=github_probe_failed"
+_DEEP_LINK_APP_PENDING   = _BRIDGE_PATH + "?status=pending"
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -211,7 +212,9 @@ async def install_kickoff(
 
     Query params:
       auth  — legacy pass-through for `?auth=<jwt>` navigations (some
-              chrome-less flows can't set Authorization header).
+              chrome-less flows can't set Authorization header). Also
+              used by the Phase 4 wizard popup, which can't set the
+              header on a `window.open()` navigation.
       fs    — optional funnel session_id to stitch client + server events.
     """
     if not _app_configured():
@@ -624,6 +627,90 @@ async def install_webhook(request: Request):
         "action":      action,
         "delivery_id": delivery_id,
     }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# 3b. GET /installed — popup ↔ parent handshake bridge (Phase 4)
+# ═════════════════════════════════════════════════════════════════════
+
+_BRIDGE_HTML = """<!doctype html>
+<html><head><meta charset="utf-8"><title>Aurem · GitHub App installed</title>
+<style>
+  html,body{margin:0;padding:0;background:#0b0b0d;color:#e5e5e5;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    height:100%;display:flex;align-items:center;justify-content:center}
+  .box{max-width:420px;text-align:center;padding:32px;line-height:1.6}
+  .ok{color:#6dd4a1}.err{color:#ff6b6b}.hint{color:#71717a;font-size:12px;margin-top:16px}
+</style></head><body>
+<div class="box">
+  <div id="msg">Finishing up…</div>
+  <div class="hint">You can close this window.</div>
+</div>
+<script>
+(function() {
+  var qs = new URLSearchParams(window.location.search);
+  var status = qs.get('status') || 'err';
+  var installId = qs.get('install_id') || null;
+  var err = qs.get('err') || null;
+
+  var msg = document.getElementById('msg');
+  if (status === 'success') {
+    msg.innerHTML = '<span class="ok">\u2713 GitHub App installed</span>';
+  } else if (status === 'pending') {
+    msg.innerHTML = 'Installation is pending your org admin\\'s approval.';
+  } else {
+    msg.innerHTML = '<span class="err">Install did not complete</span>' +
+      (err ? '<div class="hint">Reason: ' + err + '</div>' : '');
+  }
+
+  var payload = { type: 'aurem-app-installed', status: status,
+                  install_id: installId ? Number(installId) : null,
+                  err: err };
+
+  // 1. Popup case — postMessage back to opener, then close self.
+  if (window.opener && !window.opener.closed) {
+    try { window.opener.postMessage(payload, '*'); } catch (e) {}
+    setTimeout(function(){ try { window.close(); } catch (e) {} }, 400);
+    return;
+  }
+
+  // 2. Non-popup fallback — meta-refresh to /dashboard so the user
+  //    still lands somewhere sensible.
+  var tail = '';
+  if (status === 'success' && installId) {
+    tail = '?flow=connect-repo&install=success&install_id=' + installId;
+  } else if (status === 'pending') {
+    tail = '?flow=connect-repo&app_pending=1';
+  } else {
+    tail = '?flow=connect-repo&err=' + (err || 'unknown');
+  }
+  setTimeout(function(){ window.location.replace('/dashboard' + tail); }, 1200);
+})();
+</script>
+</body></html>"""
+
+
+@router.get("/installed")
+async def install_bridge(
+    status: Optional[str] = Query(default="err"),
+    install_id: Optional[int] = Query(default=None),
+    err: Optional[str] = Query(default=None),
+):
+    """Tiny HTML bridge served after `/callback` completes.
+
+    Detects `window.opener` — if the browser is a popup opened by the
+    wizard, it posts an `aurem-app-installed` message back to the
+    parent and closes itself. Otherwise it meta-refreshes to
+    `/dashboard?flow=connect-repo&…` so the user still lands on the
+    right screen.
+
+    Query params (all optional):
+      status      — "success" | "pending" | "err"
+      install_id  — populated on success
+      err         — reason on failure
+    """
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(_BRIDGE_HTML)
 
 
 # ═════════════════════════════════════════════════════════════════════

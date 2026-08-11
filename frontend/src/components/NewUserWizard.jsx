@@ -63,6 +63,22 @@ export default function NewUserWizard({ onComplete }) {
   const pollRef = useRef(null);
   const popupRef = useRef(null);
 
+  // ─── 2026-02-10 · Phase 4 · GitHub App install state ──────────────
+  // `appInstalls` — list of `github_installations` rows owned by the
+  //                current user (populated after they complete an App
+  //                install via the wizard popup).
+  // `appPickerActive` — flips to true after a successful install so
+  //                the UI transitions from "Continue with GitHub App"
+  //                CTA → repo picker sourced from installation.repositories.
+  // `patDisclosureOpen` — controls the disclosure fallback that reveals
+  //                the legacy PAT input block. False by default per
+  //                Phase 3 decision #4 (PAT stays permanently but hidden).
+  const [appInstalls, setAppInstalls]           = useState([]);
+  const [appInstallsBusy, setAppInstallsBusy]   = useState(false);
+  const [appPickerActive, setAppPickerActive]   = useState(false);
+  const [patDisclosureOpen, setPatDisclosureOpen] = useState(false);
+  const appPopupRef = useRef(null);
+
   // Initial OAuth status check.
   useEffect(() => {
     let cancelled = false;
@@ -75,15 +91,16 @@ export default function NewUserWizard({ onComplete }) {
           setGhLogin(r.data.login || "");
           fetchRepos();
         } else {
-          // Iter 212m-182 — founder wants NEW users to land DIRECTLY on
-          // the repo-URL + PAT form (skip the "Continue with GitHub /
-          // Skip — paste a URL" choice screen). Default disconnected →
-          // "manual". The OAuth screen still appears contextually if a
-          // private repo later needs it (see submitRepo catch).
-          setGhStatus("manual");
+          // 2026-02-10 · Phase 4 — landing state for disconnected users
+          // is now "choosing" (App-first CTA + PAT disclosure), not
+          // straight into the manual PAT form. Preserves the wizard
+          // step order/position but adds the recommended path above
+          // the legacy PAT input. Set to "manual" only when the user
+          // explicitly clicks "Or paste a Personal Access Token".
+          setGhStatus("choosing");
         }
       } catch {
-        if (!cancelled) setGhStatus("manual");
+        if (!cancelled) setGhStatus("choosing");
       }
     })();
     return () => {
@@ -125,6 +142,109 @@ export default function NewUserWizard({ onComplete }) {
       setReposBusy(false);
     }
   }
+
+  // ─── 2026-02-10 · Phase 4 · GitHub App install handlers ─────────
+  async function fetchAppInstallations() {
+    setAppInstallsBusy(true);
+    try {
+      const r = await api.get("/github/app/installations");
+      const list = r.data?.installations || [];
+      setAppInstalls(list);
+      if (list.length > 0) {
+        setAppPickerActive(true);
+        // Auto-populate the repo input with the first repo of the
+        // most-recent installation so the user can hit Continue
+        // straight away if they only added one repo.
+        const first = list[0];
+        const firstRepo = (first?.repositories || [])[0];
+        if (firstRepo) {
+          setRepoUrl(`https://github.com/${firstRepo.full_name}`);
+          setBranch(firstRepo.default_branch || "main");
+        }
+      }
+    } catch {
+      setAppInstalls([]);
+    } finally {
+      setAppInstallsBusy(false);
+    }
+  }
+
+  function openAppInstallPopup() {
+    const token = getToken();
+    if (!token) {
+      setErr("Session expired — please log in again.");
+      return;
+    }
+    // Popup MUST open synchronously in the click handler or browsers
+    // will block it. Auth via `?auth=<jwt>` query param since we
+    // can't set Authorization headers on window.open() nav.
+    const url = `${API_BASE}/github/app/install?auth=${encodeURIComponent(token)}`;
+    const w = 720, h = 800;
+    const left = Math.max(0, window.screenX + (window.outerWidth  - w) / 2);
+    const top  = Math.max(0, window.screenY + (window.outerHeight - h) / 2);
+    appPopupRef.current = window.open(
+      url, "aurem_github_app_install",
+      `width=${w},height=${h},left=${left},top=${top}`,
+    );
+    // Polling fallback in case postMessage is dropped (some browsers
+    // block cross-origin messages back to opener). Every 1.5s, refetch
+    // the /installations list; if it grows, we know install completed.
+    const started = Date.now();
+    const startCount = appInstalls.length;
+    const poll = setInterval(async () => {
+      if (appPopupRef.current?.closed) {
+        clearInterval(poll);
+        await fetchAppInstallations();
+        return;
+      }
+      if (Date.now() - started > 180_000) {          // 3-minute timeout
+        clearInterval(poll);
+        return;
+      }
+      try {
+        const r = await api.get("/github/app/installations");
+        if ((r.data?.installations || []).length > startCount) {
+          clearInterval(poll);
+          try { appPopupRef.current?.close?.(); } catch {}
+          setAppInstalls(r.data.installations);
+          setAppPickerActive(true);
+          const first = r.data.installations[0];
+          const firstRepo = (first?.repositories || [])[0];
+          if (firstRepo) {
+            setRepoUrl(`https://github.com/${firstRepo.full_name}`);
+            setBranch(firstRepo.default_branch || "main");
+          }
+        }
+      } catch { /* keep polling */ }
+    }, 1500);
+  }
+
+  // Listen for the postMessage handshake from /api/aurem-dev/github/app/installed.
+  useEffect(() => {
+    function onMessage(e) {
+      const d = e.data;
+      if (!d || d.type !== "aurem-app-installed") return;
+      if (d.status === "success") {
+        // Popup already closed itself; refresh our list of installations.
+        fetchAppInstallations();
+      } else if (d.status === "err") {
+        setErr(
+          d.err === "invalid_state"
+            ? "Session expired while installing. Please try again."
+            : d.err === "github_probe_failed"
+              ? "GitHub couldn't verify the install. Try again."
+              : "Install did not complete — try again or use a PAT below.",
+        );
+      } else if (d.status === "pending") {
+        setErr(
+          "Install is pending your org admin's approval. " +
+          "You'll be able to continue once they accept.",
+        );
+      }
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
   function connectGithub() {
     const token = getToken();
@@ -209,14 +329,47 @@ export default function NewUserWizard({ onComplete }) {
     try {
       const parts = repoUrl.trim().replace(/\/$/, "").split("/");
       const name = parts[parts.length - 1].replace(/\.git$/, "");
-      const r = await api.post("/cto/projects/add", {
-        name, github_url: repoUrl.trim(), branch: branch.trim() || "main",
-        github_token: pat.trim() || undefined,
-      });
+
+      // 2026-02-10 · Phase 4 — if the App picker is active AND the
+      // chosen repo belongs to one of the user's installations,
+      // submit with `installation_id` so the backend uses the App-
+      // install branch. Otherwise fall back to PAT (legacy path,
+      // fully preserved).
+      let installation_id = null;
+      if (appPickerActive && appInstalls.length > 0) {
+        const chosenFullName = repoUrl.trim()
+          .replace(/^https?:\/\/(www\.)?github\.com\//i, "")
+          .replace(/\/$/, "")
+          .replace(/\.git$/i, "");
+        for (const inst of appInstalls) {
+          if ((inst.repositories || []).some(
+            (r) => (r.full_name || "").toLowerCase() === chosenFullName.toLowerCase(),
+          )) {
+            installation_id = inst.installation_id;
+            break;
+          }
+        }
+      }
+
+      const payload = {
+        name,
+        github_url: repoUrl.trim(),
+        branch:     branch.trim() || "main",
+      };
+      if (installation_id) {
+        payload.installation_id = installation_id;
+      } else {
+        payload.github_token = pat.trim() || undefined;
+      }
+
+      const r = await api.post("/cto/projects/add", payload);
       setProject(r.data?.project_id);
       setStep(2);
     } catch (e2) {
-      const msg = e2?.response?.data?.detail || e2?.message || "Could not connect repo.";
+      const detail = e2?.response?.data?.detail;
+      const msg = (typeof detail === "object" && detail?.message)
+        ? detail.message
+        : (typeof detail === "string" ? detail : (e2?.message || "Could not connect repo."));
       // If the server replies "GitHub not connected" mid-flow (e.g. user
       // is in manual mode for a private repo), flip the panel back to
       // the OAuth-connect view instead of asking them to leave.
@@ -393,8 +546,159 @@ export default function NewUserWizard({ onComplete }) {
                 </div>
               )}
 
-              {(ghStatus === "connected" || ghStatus === "manual") && (
+              {(ghStatus === "connected" || ghStatus === "manual" || ghStatus === "choosing") && (
                 <>
+                  {/* ── 2026-02-10 · Phase 4 · GitHub App primary CTA ── */}
+                  {(ghStatus === "choosing" || (ghStatus === "manual" && appPickerActive)) && (
+                    <div data-testid="wizard-app-cta-block" style={{
+                      marginBottom: 16,
+                      padding: 14,
+                      background: "linear-gradient(135deg, rgba(255,102,8,0.08), rgba(255,102,8,0.02))",
+                      border: "1px solid rgba(255,102,8,0.28)",
+                      borderRadius: 6,
+                    }}>
+                      {!appPickerActive && (
+                        <>
+                          <div style={{
+                            display: "flex", alignItems: "center", gap: 8,
+                            marginBottom: 8,
+                          }}>
+                            <Github size={14} />
+                            <strong style={{ fontSize: 13 }}>
+                              Install Aurem for your repos
+                            </strong>
+                            <span style={{
+                              fontSize: 10, padding: "2px 8px",
+                              background: "rgba(255,102,8,0.2)",
+                              color: "#ff9d5c", borderRadius: 10,
+                              letterSpacing: "0.04em",
+                            }}>
+                              RECOMMENDED
+                            </span>
+                          </div>
+                          <p style={{
+                            fontSize: 12, color: "var(--text-faint)",
+                            margin: "0 0 12px", lineHeight: 1.5,
+                          }}>
+                            One click — no token to manage. You pick which
+                            repos Aurem can see. Revoke any time from GitHub.
+                          </p>
+                          <button
+                            data-testid="wizard-app-install-btn"
+                            type="button"
+                            onClick={openAppInstallPopup}
+                            disabled={appInstallsBusy}
+                            style={{
+                              display: "inline-flex", alignItems: "center", gap: 8,
+                              padding: "8px 14px",
+                              background: "var(--accent, #ff6608)",
+                              color: "#fff", border: "none",
+                              borderRadius: 5, fontSize: 12, fontWeight: 600,
+                              cursor: "pointer",
+                            }}>
+                            <Github size={12} />
+                            Continue with GitHub App
+                            <ArrowRight size={12} />
+                          </button>
+                          <div style={{
+                            fontSize: 10.5, color: "var(--text-faint)",
+                            marginTop: 8,
+                          }}>
+                            Opens in a popup. This wizard picks up automatically
+                            once you finish installing.
+                          </div>
+                        </>
+                      )}
+                      {appPickerActive && appInstalls.length > 0 && (
+                        <div data-testid="wizard-app-repo-picker">
+                          <div style={{ fontSize: 12, marginBottom: 8,
+                                        color: "var(--ok, #6dd4a1)",
+                                        display: "flex", alignItems: "center",
+                                        gap: 6 }}>
+                            <Github size={11} />
+                            App installed. Pick a repo below to connect.
+                          </div>
+                          {appInstalls.map((inst) => (
+                            <div key={inst.installation_id} style={{ marginBottom: 8 }}>
+                              <div style={{ fontSize: 11, color: "var(--text-faint)",
+                                             marginBottom: 4 }}>
+                                @{inst.github_login}
+                                {" · "}
+                                {(inst.repositories || []).length} repo
+                                {(inst.repositories || []).length === 1 ? "" : "s"}
+                              </div>
+                              <div style={{
+                                display: "flex", flexWrap: "wrap", gap: 6,
+                              }}>
+                                {(inst.repositories || []).map((r) => (
+                                  <button
+                                    key={r.id || r.full_name}
+                                    data-testid={`wizard-app-repo-${r.full_name}`}
+                                    type="button"
+                                    onClick={() => {
+                                      setRepoUrl(`https://github.com/${r.full_name}`);
+                                      setBranch(r.default_branch || "main");
+                                    }}
+                                    style={{
+                                      padding: "5px 10px", fontSize: 11,
+                                      background: (repoUrl || "").endsWith(r.full_name)
+                                        ? "rgba(255,102,8,0.22)"
+                                        : "rgba(255,255,255,0.05)",
+                                      border: (repoUrl || "").endsWith(r.full_name)
+                                        ? "1px solid var(--accent, #ff6608)"
+                                        : "1px solid rgba(255,255,255,0.12)",
+                                      borderRadius: 4,
+                                      color: "var(--text)",
+                                      cursor: "pointer",
+                                      fontFamily: "'JetBrains Mono', monospace",
+                                    }}>
+                                    {r.full_name}
+                                    {r.private && (
+                                      <span style={{
+                                        marginLeft: 6, fontSize: 9,
+                                        color: "var(--text-faint)",
+                                      }}>private</span>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                          <button
+                            data-testid="wizard-app-add-more-btn"
+                            type="button"
+                            onClick={openAppInstallPopup}
+                            style={{
+                              marginTop: 6, padding: "4px 10px", fontSize: 10,
+                              background: "transparent",
+                              border: "1px dashed rgba(255,255,255,0.2)",
+                              color: "var(--text-faint)",
+                              borderRadius: 4, cursor: "pointer",
+                            }}>
+                            + Install on another account or add more repos
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── PAT disclosure — kept forever, hidden by default ── */}
+                  {ghStatus === "choosing" && !patDisclosureOpen && (
+                    <button
+                      data-testid="wizard-pat-disclosure-toggle"
+                      type="button"
+                      onClick={() => { setPatDisclosureOpen(true); setGhStatus("manual"); }}
+                      style={{
+                        background: "transparent", border: "none",
+                        color: "var(--text-faint)", fontSize: 11,
+                        padding: "4px 0", cursor: "pointer",
+                        textDecoration: "underline dotted",
+                        textUnderlineOffset: 3,
+                      }}>
+                      ▸ Or paste a Personal Access Token instead
+                    </button>
+                  )}
+
                   {ghStatus === "connected" && (
                     <div data-testid="wizard-gh-connected" style={{
                       display:"flex", alignItems:"center", gap:8,
@@ -408,10 +712,17 @@ export default function NewUserWizard({ onComplete }) {
                       Connected as <strong>{ghLogin || "github user"}</strong>
                     </div>
                   )}
+                  {/* 2026-02-10 · Phase 4 — hide repo URL / branch / PAT
+                      while the user is still on the "choosing" landing
+                      (no App picker yet AND PAT disclosure not opened). */}
+                  {!(ghStatus === "choosing" && !appPickerActive) && (
+                  <>
                   <p style={pStyle}>
                     {ghStatus === "connected"
                       ? "Pick a repo from your account or paste any URL — ORA will read it, write the diff, and push the commit back."
-                      : "Paste any public repo URL. (You can connect GitHub later from Settings for private repos.)"}
+                      : appPickerActive
+                        ? "Confirm the repo below (or edit if needed), then continue."
+                        : "Paste any public repo URL. (You can connect GitHub later from Settings for private repos.)"}
                   </p>
 
                   {ghStatus === "connected" && (
@@ -461,6 +772,12 @@ export default function NewUserWizard({ onComplete }) {
                     style={iStyle}
                   />
 
+                  {/* 2026-02-10 · Phase 4 — PAT sub-block hidden when
+                      user picked App path. App-installed repos don't
+                      need a stored PAT (installation token minted per-
+                      request server-side). */}
+                  {!appPickerActive && (
+                  <>
                   {/* Iter 212m-92 — PAT input + Generate PAT CTA.
                       Without this users hit a dead-end "Personal Access
                       Token required" error with no actionable button. */}
@@ -556,6 +873,14 @@ export default function NewUserWizard({ onComplete }) {
                   }}>
                     Encrypted at rest · only used to read &amp; push this repo
                   </p>
+                  </>
+                  )}
+                  {/* end PAT sub-block (hidden when appPickerActive) */}
+
+                  </>
+                  )}
+                  {/* end URL/branch/PAT outer conditional
+                      (hidden on pure "choosing" landing) */}
 
                   {err && <div data-testid="wizard-error" style={errStyle}>{err}</div>}
                   <Footer

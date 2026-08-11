@@ -2,20 +2,21 @@
  * AddProjectWizard.jsx — Iter 212m-5 — 3-step "Add Project" flow.
  *
  *   Step 1  Repo identify  (free-form owner/repo or full URL)
- *   Step 2  Generate token + paste (auto-verify against THIS repo only)
+ *   Step 2  App-install (recommended) OR generate token + paste (auto-verify)
  *   Step 3  Confirm summary + project name → save → land in chat
  *
- * No OAuth path. PAT-only. Per-repo fine-grained tokens are recommended
- * (Generate button deep-links to GitHub's fine-grained PAT page with
- * description pre-filled); classic PATs still accepted but surface an
- * over-scoped warning when they grant access to >1 repo.
+ * 2026-02-10 · Phase 4 — Dual-auth: App-first with PAT fallback.
+ * The GitHub App install path is presented as the primary CTA at the
+ * top of Step 2. Legacy PAT flow remains fully supported, hidden
+ * behind a "Or use a Personal Access Token" disclosure toggle for
+ * power users and private/legacy repos.
  *
  * After successful save:
  *   - localStorage active project is set to the new project_id
  *   - parent's onAdded(projectId) is called (refreshes list / closes modal)
  *   - user is navigated to /dashboard so they can start chatting immediately
  */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Github,
   ExternalLink,
@@ -29,7 +30,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, API_BASE, getToken } from "../lib/api";
 import { toast } from "./Toast";
 import { setActiveProjectId } from "./TabBar";
 
@@ -75,6 +76,89 @@ export default function AddProjectWizard({ onClose, onAdded }) {
   // Step-3 state
   const [projectName, setProjectName] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // ─── 2026-02-10 · Phase 4 · GitHub App install (additive) ────────
+  const [appInstalls, setAppInstalls]         = useState([]);
+  const [patDisclosureOpen, setPatDisclosureOpen] = useState(false);
+  const appPopupRef = useRef(null);
+
+  // The specific installation (if any) that covers the current `repo`.
+  // Non-null → App-install branch is available for this repo; the
+  // Save button uses installation_id instead of PAT.
+  const installationForRepo = React.useMemo(() => {
+    if (!repo) return null;
+    for (const inst of (appInstalls || [])) {
+      const has = (inst.repositories || []).some(
+        (r) => (r.full_name || "").toLowerCase() === repo.full_name.toLowerCase(),
+      );
+      if (has) return inst;
+    }
+    return null;
+  }, [repo, appInstalls]);
+
+  async function fetchAppInstallations() {
+    try {
+      const r = await api.get("/github/app/installations");
+      setAppInstalls(r.data?.installations || []);
+    } catch { /* silent — PAT path unaffected */ }
+  }
+  useEffect(() => { fetchAppInstallations(); }, []);
+
+  function openAppInstallPopup() {
+    const token = getToken();
+    if (!token) {
+      toast({ message: "Session expired — please log in again.", kind: "error" });
+      return;
+    }
+    const url = `${API_BASE}/github/app/install?auth=${encodeURIComponent(token)}`;
+    const w = 720, h = 800;
+    const left = Math.max(0, window.screenX + (window.outerWidth  - w) / 2);
+    const top  = Math.max(0, window.screenY + (window.outerHeight - h) / 2);
+    appPopupRef.current = window.open(
+      url, "aurem_github_app_install",
+      `width=${w},height=${h},left=${left},top=${top}`,
+    );
+    // Polling fallback in case postMessage is dropped.
+    const started = Date.now();
+    const startCount = appInstalls.length;
+    const poll = setInterval(async () => {
+      if (appPopupRef.current?.closed) {
+        clearInterval(poll);
+        await fetchAppInstallations();
+        return;
+      }
+      if (Date.now() - started > 180_000) { clearInterval(poll); return; }
+      try {
+        const r = await api.get("/github/app/installations");
+        if ((r.data?.installations || []).length > startCount) {
+          clearInterval(poll);
+          try { appPopupRef.current?.close?.(); } catch { /* xorigin */ }
+          setAppInstalls(r.data.installations);
+        }
+      } catch { /* keep polling */ }
+    }, 1500);
+  }
+
+  useEffect(() => {
+    function onMessage(e) {
+      const d = e.data;
+      if (!d || d.type !== "aurem-app-installed") return;
+      if (d.status === "success") {
+        fetchAppInstallations();
+      } else if (d.status === "err") {
+        toast({
+          message: d.err === "invalid_state"
+            ? "Session expired during install — please try again."
+            : d.err === "github_probe_failed"
+              ? "GitHub couldn't verify the install. Try again."
+              : "Install did not complete — try again or use a PAT.",
+          kind: "warn",
+        });
+      }
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
   // ── Auto-fill project name from repo name when entering step 3 ───
   useEffect(() => {
@@ -127,18 +211,33 @@ export default function AddProjectWizard({ onClose, onAdded }) {
 
   // ── Step-3 save ──────────────────────────────────────────────────
   async function handleSave() {
-    if (!repo || !pat.trim() || check.status !== "ok" || !projectName.trim()) {
-      toast({ message: "Fill all fields and verify the PAT first.", kind: "warn" });
+    // 2026-02-10 · Phase 4 — dual-auth save.
+    //   * If an App installation covers this repo → send installation_id
+    //     (skip PAT verify entirely; backend gate verifies via App JWT).
+    //   * Otherwise → legacy PAT path (existing behavior byte-for-byte).
+    const useAppPath = !!installationForRepo;
+
+    if (!repo || !projectName.trim()) {
+      toast({ message: "Fill in the project name.", kind: "warn" });
+      return;
+    }
+    if (!useAppPath && (!pat.trim() || check.status !== "ok")) {
+      toast({ message: "Paste and verify a PAT, or install the App above.", kind: "warn" });
       return;
     }
     setSaving(true);
     try {
-      const r = await api.post("/cto/projects/add", {
-        name:         projectName.trim(),
-        github_url:   repo.url,
-        github_token: pat.trim(),
-        branch:       "main",
-      });
+      const payload = {
+        name:       projectName.trim(),
+        github_url: repo.url,
+        branch:     "main",
+      };
+      if (useAppPath) {
+        payload.installation_id = installationForRepo.installation_id;
+      } else {
+        payload.github_token = pat.trim();
+      }
+      const r = await api.post("/cto/projects/add", payload);
       const newProjectId = r.data?.project?.project_id || r.data?.project_id;
       toast({
         message: `Connected ${repo.full_name} — opening chat…`,
@@ -151,10 +250,11 @@ export default function AddProjectWizard({ onClose, onAdded }) {
       // Land directly in chat with this project active.
       navigate("/dashboard");
     } catch (e) {
-      toast({
-        message: e?.response?.data?.detail || "Connect failed",
-        kind:    "error",
-      });
+      const d = e?.response?.data?.detail;
+      const msg = typeof d === "object" && d?.message
+        ? d.message
+        : (typeof d === "string" ? d : "Connect failed");
+      toast({ message: msg, kind: "error" });
     } finally {
       setSaving(false);
     }
@@ -313,9 +413,112 @@ export default function AddProjectWizard({ onClose, onAdded }) {
           </div>
         )}
 
-        {/* ──────────────── Step 2 — Generate + paste ──────────────── */}
+        {/* ──────────────── Step 2 — App-first + PAT fallback ──────────────── */}
         {step === 2 && repo && (
           <div data-testid="wizard-step-2">
+            {/* 2026-02-10 · Phase 4 · GitHub App primary CTA ─────── */}
+            {installationForRepo ? (
+              /* Already have an installation covering this repo — skip
+                 to Step 3 straight away with a one-line confirmation. */
+              <div
+                data-testid="add-wizard-app-installed-banner"
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: 12, marginBottom: 14,
+                  background: "rgba(109,212,161,0.08)",
+                  border: "1px solid rgba(109,212,161,0.32)",
+                  borderRadius: 8,
+                }}>
+                <Check size={16} color="#6dd4a1" />
+                <div style={{ fontSize: 13, lineHeight: 1.4 }}>
+                  <strong>@{installationForRepo.github_login}</strong>{" "}
+                  installed via GitHub App — no token needed.
+                  <div style={{ fontSize: 11, color: "var(--text-faint)",
+                                 marginTop: 3 }}>
+                    Click Continue to name and save this project.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div
+                data-testid="add-wizard-app-cta"
+                style={{
+                  padding: 14, marginBottom: 14,
+                  background: "linear-gradient(135deg, rgba(255,138,42,0.08), rgba(255,138,42,0.02))",
+                  border: "1px solid rgba(255,138,42,0.32)",
+                  borderRadius: 8,
+                }}>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  marginBottom: 8,
+                }}>
+                  <Github size={14} />
+                  <strong style={{ fontSize: 13 }}>
+                    Install Aurem for {repo.full_name}
+                  </strong>
+                  <span style={{
+                    fontSize: 10, padding: "2px 8px",
+                    background: "rgba(255,138,42,0.24)",
+                    color: "#ffb27a", borderRadius: 10,
+                    letterSpacing: "0.04em",
+                  }}>
+                    RECOMMENDED
+                  </span>
+                </div>
+                <p style={{
+                  fontSize: 12, color: "var(--text-faint)",
+                  margin: "0 0 10px", lineHeight: 1.5,
+                }}>
+                  One click — no token to manage or rotate.
+                  You pick which repos Aurem can see. Revoke any time from GitHub.
+                </p>
+                <button
+                  type="button"
+                  data-testid="add-wizard-app-install-btn"
+                  onClick={openAppInstallPopup}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 8,
+                    padding: "8px 14px",
+                    background: "var(--accent-2, #FF8A2A)",
+                    color: "#fff", border: "none",
+                    borderRadius: 6, fontSize: 13, fontWeight: 600,
+                    cursor: "pointer",
+                  }}>
+                  <Github size={13} />
+                  Continue with GitHub App
+                  <ArrowRight size={13} />
+                </button>
+                <div style={{
+                  fontSize: 10.5, color: "var(--text-faint)",
+                  marginTop: 8,
+                }}>
+                  Opens in a popup. This wizard picks up automatically
+                  after you finish selecting {repo.repo}.
+                </div>
+              </div>
+            )}
+
+            {/* PAT disclosure — always available for private/legacy repos */}
+            {!installationForRepo && !patDisclosureOpen && (
+              <button
+                type="button"
+                data-testid="add-wizard-pat-disclosure-toggle"
+                onClick={() => setPatDisclosureOpen(true)}
+                style={{
+                  background: "transparent", border: "none",
+                  color: "var(--text-faint)", fontSize: 12,
+                  padding: "4px 0", cursor: "pointer",
+                  textDecoration: "underline dotted",
+                  textUnderlineOffset: 3, marginBottom: 8,
+                }}>
+                ▸ Or paste a Personal Access Token instead
+              </button>
+            )}
+
+            {/* Legacy PAT block — rendered only when the App path isn't
+                available OR the user explicitly toggled the disclosure. */}
+            {!installationForRepo && patDisclosureOpen && (
+            <>
             <p style={{
               fontSize: 13, color: "var(--text-dim)",
               margin: "0 0 14px", lineHeight: 1.6,
@@ -413,6 +616,9 @@ export default function AddProjectWizard({ onClose, onAdded }) {
                 <span>{check.detail}</span>
               </div>
             )}
+            </>
+            )}
+            {/* end PAT disclosure block (installationForRepo || !patDisclosureOpen hide it) */}
 
             <div style={navRowStyle}>
               <button
@@ -427,9 +633,14 @@ export default function AddProjectWizard({ onClose, onAdded }) {
               <button
                 type="button"
                 onClick={() => setStep(3)}
-                disabled={check.status !== "ok"}
+                disabled={
+                  // App-installed repos skip PAT verify entirely.
+                  installationForRepo
+                    ? false
+                    : check.status !== "ok"
+                }
                 data-testid="wizard-next-2"
-                style={cta(check.status === "ok")}
+                style={cta(!!installationForRepo || check.status === "ok")}
               >
                 Next <ArrowRight size={14} />
               </button>
@@ -438,7 +649,7 @@ export default function AddProjectWizard({ onClose, onAdded }) {
         )}
 
         {/* ──────────────── Step 3 — Confirm + save ──────────────── */}
-        {step === 3 && repo && check.status === "ok" && (
+        {step === 3 && repo && (installationForRepo || check.status === "ok") && (
           <div data-testid="wizard-step-3">
             <p style={{
               fontSize: 13, color: "var(--text-dim)",
