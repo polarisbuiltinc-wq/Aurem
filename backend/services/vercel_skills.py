@@ -38,6 +38,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
+from services.http import ext_client
 
 from cto_services.db import get_db
 
@@ -85,7 +86,7 @@ async def _vercel_get(path: str, params: Optional[dict] = None) -> dict:
     if not _token():
         return {"ok": False, "error": "VERCEL_API_TOKEN not configured"}
     try:
-        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as c:
+        async with ext_client("vercel") as c:
             r = await c.get(f"{VERCEL_API}{path}", headers=_headers(),
                             params=params or {})
         if r.status_code == 401 or r.status_code == 403:
@@ -111,7 +112,7 @@ async def _vercel_post(path: str, body: dict) -> dict:
     if not _token():
         return {"ok": False, "error": "VERCEL_API_TOKEN not configured"}
     try:
-        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as c:
+        async with ext_client("vercel") as c:
             r = await c.post(f"{VERCEL_API}{path}", headers=_headers(),
                              json=body)
         if r.status_code >= 400:
@@ -132,7 +133,7 @@ async def _vercel_delete(path: str) -> dict:
     if not _token():
         return {"ok": False, "error": "VERCEL_API_TOKEN not configured"}
     try:
-        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as c:
+        async with ext_client("vercel") as c:
             r = await c.delete(f"{VERCEL_API}{path}", headers=_headers())
         if r.status_code >= 400:
             try:
@@ -319,7 +320,7 @@ async def vercel_trigger_deploy_hook(ctx: dict, args: dict) -> dict:
     if not url.startswith("https://api.vercel.com/v1/integrations/deploy/"):
         return {"ok": False, "error": "hook_url must be a vercel.com deploy hook URL"}
     try:
-        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as c:
+        async with ext_client("vercel") as c:
             r = await c.post(url)
         if r.status_code >= 400:
             await _audit(ctx, "vercel_trigger_deploy_hook", args,

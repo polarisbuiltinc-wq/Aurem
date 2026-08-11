@@ -44,6 +44,7 @@ import re
 from typing import Optional
 
 import httpx
+from services.http import ext_client
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +154,7 @@ async def deploy_personal_track(
     if framework:
         payload["framework"] = framework
 
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as cli:
+    async with ext_client("vercel") as cli:
         r = await cli.post(
             f"{_VERCEL_API}/v11/projects{_team_param()}",
             headers=_headers(), json=payload,
@@ -187,7 +188,7 @@ async def get_deploy_status(vercel_project_id: str) -> dict:
     'still building' → 'ready' after materialization."""
     if not is_available():
         return {"ok": False, "reason": "vercel_not_configured"}
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as cli:
+    async with ext_client("vercel") as cli:
         r = await cli.get(
             f"{_VERCEL_API}/v6/deployments{_team_param()}"
             f"{'&' if _team_id() else '?'}projectId={vercel_project_id}&limit=1",
@@ -228,7 +229,7 @@ async def check_spend_alert(vercel_project_id: str) -> dict:
 
     # Vercel usage endpoint returns aggregated bandwidth for the project
     # in the current billing period.
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as cli:
+    async with ext_client("vercel") as cli:
         r = await cli.get(
             f"{_VERCEL_API}/v1/usage{_team_param()}"
             f"{'&' if _team_id() else '?'}projectId={vercel_project_id}",
@@ -269,7 +270,7 @@ async def pause_project(vercel_project_id: str) -> dict:
     guardrail once a project crosses the KILL threshold."""
     if not is_available():
         return {"ok": False, "reason": "vercel_platform_not_configured"}
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as cli:
+    async with ext_client("vercel") as cli:
         r = await cli.patch(
             f"{_VERCEL_API}/v9/projects/{vercel_project_id}{_team_param()}",
             headers=_headers(), json={"paused": True},

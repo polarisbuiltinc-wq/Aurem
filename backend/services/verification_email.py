@@ -155,8 +155,12 @@ async def _resend_send(to_email: str, *, text: str, html: str) -> tuple[bool, Op
         or "AUREM <ora@aurem.live>"
     )
     try:
-        async with httpx.AsyncClient(timeout=15.0) as c:
-            r = await c.post(
+        # 2026-02-11 · Phase 1 hotspot dedup — use shared HTTP wrapper
+        # instead of raw httpx. Retry + breaker via `retry_guard.resend`.
+        from services.http import ext_request, ExternalCallError
+        try:
+            r = await ext_request(
+                "resend", "POST",
                 "https://api.resend.com/emails",
                 headers={"Authorization": f"Bearer {key}",
                          "Content-Type":   "application/json"},
@@ -167,10 +171,13 @@ async def _resend_send(to_email: str, *, text: str, html: str) -> tuple[bool, Op
                     "text":    text,
                     "html":    html,
                 },
+                raise_for_status=False,
             )
             if r.status_code in (200, 201, 202):
                 return True, None
             return False, f"HTTP {r.status_code}: {r.text[:200]}"
+        except ExternalCallError as e:
+            return False, f"{e.dep}: {e}"
     except Exception as e:                              # noqa: BLE001
         return False, f"{type(e).__name__}: {e}"
 
