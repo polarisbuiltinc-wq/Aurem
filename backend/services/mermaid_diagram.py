@@ -49,6 +49,9 @@ from typing import Optional
 
 import httpx
 
+from services.http import ext_request
+from services.http.client import ExternalCallError
+
 logger = logging.getLogger(__name__)
 
 OPENROUTER_URL     = "https://openrouter.ai/api/v1/chat/completions"
@@ -109,8 +112,17 @@ async def _openrouter_call(model: str, system: str, user: str,
         "X-Title": "Aurem - Graph Diagram",
     }
     try:
-        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as cx:
-            r = await cx.post(OPENROUTER_URL, json=payload, headers=headers)
+        r = await ext_request(
+            "openrouter", "POST", OPENROUTER_URL,
+            json=payload, headers=headers,
+            timeout=httpx.Timeout(
+                connect=5.0, read=_HTTP_TIMEOUT_S, write=10.0, pool=5.0,
+            ),
+            raise_for_status=False,
+        )
+    except ExternalCallError as e:
+        logger.warning("mermaid_diagram: transport error on %s: %r", model, e)
+        return None
     except Exception as e:
         logger.warning("mermaid_diagram: transport error on %s: %r", model, e)
         return None

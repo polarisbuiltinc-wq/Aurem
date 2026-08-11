@@ -36,6 +36,8 @@ from typing import Any, Awaitable, Callable
 
 import httpx
 
+from services.http import ext_client
+
 logger = logging.getLogger(__name__)
 
 PROBE_TIMEOUT = 20.0  # Iter 212m-16 — bumped 12→20s. At 12s the daily
@@ -313,7 +315,10 @@ async def _probe_github_oauth() -> dict:
                        fix_hint="Set GITHUB_REDIRECT_URI to https://auremcto.com/api/aurem-dev/github/oauth/callback")
     # We can't validate the secret without an OAuth code flow, but we
     # can at least verify GitHub's OAuth endpoint accepts our client_id.
-    async with httpx.AsyncClient(timeout=10) as c:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+    ) as c:
         r = await c.get(
             "https://github.com/login/oauth/authorize",
             params={"client_id": cid, "redirect_uri": redirect,
@@ -337,7 +342,10 @@ async def _probe_tavily() -> dict:
         return _result("tavily", "Tavily Search", "missing",
                        summary="TAVILY_API_KEY not configured",
                        fix_hint="Get key at app.tavily.com")
-    async with httpx.AsyncClient(timeout=10) as c:
+    async with ext_client(
+        "tavily",
+        timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+    ) as c:
         r = await c.post(
             "https://api.tavily.com/search",
             json={"api_key": key, "query": "aurem healthcheck", "max_results": 1},
@@ -393,7 +401,10 @@ async def _probe_firecrawl() -> dict:
         "key_prefix": key_prefix,
     }
     try:
-        async with httpx.AsyncClient(timeout=10) as c:
+        async with ext_client(
+            "firecrawl",
+            timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+        ) as c:
             r = await c.post(
                 "https://api.firecrawl.dev/v1/scrape",
                 headers={"Authorization": f"Bearer {key}"},
@@ -449,7 +460,10 @@ async def _probe_resend() -> dict:
         return _result("resend", "Resend Email", "missing",
                        summary="RESEND_API_KEY not configured",
                        fix_hint="Get key at resend.com/api-keys")
-    async with httpx.AsyncClient(timeout=10) as c:
+    async with ext_client(
+        "resend",
+        timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+    ) as c:
         r = await c.get(
             "https://api.resend.com/domains",
             headers={"Authorization": f"Bearer {key}"},
@@ -570,7 +584,10 @@ async def _probe_vercel() -> dict:
         return _result("vercel", "Vercel Deploy", "missing",
                        summary="VERCEL_API_TOKEN not configured",
                        fix_hint="vercel.com/account/tokens → Create Token")
-    async with httpx.AsyncClient(timeout=10) as c:
+    async with ext_client(
+        "vercel",
+        timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+    ) as c:
         r = await c.get(
             "https://api.vercel.com/v2/user",
             headers={"Authorization": f"Bearer {key}"},
@@ -613,7 +630,10 @@ async def _probe_supabase_platform() -> dict:
                       "feature is intentionally shelved."),
         )
     # Env is set — do a real reachability check via the org endpoint.
-    async with httpx.AsyncClient(timeout=10) as c:
+    async with ext_client(
+        "supabase",
+        timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+    ) as c:
         try:
             r = await c.get(
                 f"https://api.supabase.com/v1/organizations/{org}",
@@ -658,7 +678,10 @@ async def _probe_vercel_platform() -> dict:
                       "vercel_platform_deploy.py if not planned."),
         )
     # Env set — reachability check against the platform team.
-    async with httpx.AsyncClient(timeout=10) as c:
+    async with ext_client(
+        "vercel",
+        timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+    ) as c:
         try:
             r = await c.get(
                 f"https://api.vercel.com/v2/teams/{team}",
@@ -759,7 +782,10 @@ async def _probe_openrouter() -> dict:
         return _result("openrouter", "OpenRouter (DeepSeek)", "missing",
                        summary="OPENROUTER_API_KEY not configured",
                        fix_hint="Get key at openrouter.ai/keys")
-    async with httpx.AsyncClient(timeout=10) as c:
+    async with ext_client(
+        "openrouter",
+        timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+    ) as c:
         r = await c.get(
             "https://openrouter.ai/api/v1/credits",
             headers={"Authorization": f"Bearer {key}"},

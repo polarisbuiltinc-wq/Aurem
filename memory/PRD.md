@@ -1,6 +1,35 @@
 # AUREM CTO — PRD (Product Requirements & Change Log)
 
-## 🚀 IN-PROGRESS (Session 6 fork · 2026-02-09 continuation)
+## 🚀 IN-PROGRESS (Fork session · 2026-02-12)
+
+### 2026-02-12 · ConnectRepoBanner Chunk B+C + HTTP wrapper Batch 1
+
+**Delivered this session (preview only — not yet deployed to prod)**:
+- `ConnectRepoBanner.jsx` is now App-first: PAT walkthrough copy
+  removed, hardcoded "500 spots" replaced with dynamic
+  `${total}` from `/founder-offer/status`. Dead code purged
+  (StepCard + codeStyle constant).
+- Phase 3 · HTTP wrapper migration · Batch 1 shipped 11 raw
+  `httpx.AsyncClient(...)` callsites across 4 low-risk service
+  files (`topup_alerts.py`, `mermaid_diagram.py`,
+  `mock_reality_check.py`, `integration_health.py`) onto the
+  `services/http` wrapper (`ext_request` / `ext_client`).
+  Every migrated site now gets retry_guard breaker + uniform
+  `ExternalCallError` + `X-Request-ID` header.
+- 27/27 targeted pytest green. Backend boots clean. Landing +
+  founder-offer endpoint verified live.
+
+**Deferred to founder-supervised session (per user guardrail)**:
+- `ChatPanel.jsx` (4,874 LOC) split — high blast radius.
+- `services/loop_engine.py` (4,416 LOC) split — state-machine risk.
+- Remaining ~60 files with raw `httpx.AsyncClient` (chat,
+  github_*, loop_*, cto_projects, etc.) — will be batched into
+  ≤4-file waves, each with its own pinning tests + smoke test
+  before deploy.
+
+---
+
+## 🚀 EARLIER (Session 6 fork · 2026-02-09 continuation)
 
 ### 2026-02-10 · GitHub App migration — Phase 1.2 + 1.3 delivered
 

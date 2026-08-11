@@ -766,3 +766,21 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `services/github_app.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-10T02:35:50.554224Z] <!-- inv:service:services/github_app.py -->
 | `routers/github_app.py` | `/github/app` | 5 | auto-detected new router (verify) (Iter 0, 2026-08-10T15:20:57.105529Z) | <!-- inv:router:routers/github_app.py -->
 - `loop_run_log kind='github_app_install'` — auto-detected in backend/routers/github_app.py (verify) [Iter 0, 2026-08-10T15:20:57.105567Z] <!-- inv:loop_run_log_kind:github_app_install -->
+
+### Iter 0 · 2026-08-11
+
+| `routers/_admin_common.py` | `(none)` | 0 | auto-detected new router (verify) (Iter 0, 2026-08-11T15:10:10.370022Z) | <!-- inv:router:routers/_admin_common.py -->
+| `routers/admin_analytics.py` | `/admin` | 40 | auto-detected new router (verify) (Iter 0, 2026-08-11T15:10:10.370056Z) | <!-- inv:router:routers/admin_analytics.py -->
+- `TAVILY_API_KEY` — auto-detected in backend/routers/admin_analytics.py (verify) (default: unset) [Iter 0, 2026-08-11T15:10:10.370108Z] <!-- inv:envvar:TAVILY_API_KEY -->
+- `FIRECRAWL_API_KEY` — auto-detected in backend/routers/admin_analytics.py (verify) (default: unset) [Iter 0, 2026-08-11T15:10:10.370123Z] <!-- inv:envvar:FIRECRAWL_API_KEY -->
+- `loop_run_log kind='scope_drift'` — auto-detected in backend/routers/admin_analytics.py (verify) [Iter 0, 2026-08-11T15:10:10.370170Z] <!-- inv:loop_run_log_kind:scope_drift -->
+| `routers/admin_ops_config.py` | `/admin` | 23 | auto-detected new router (verify) (Iter 0, 2026-08-11T15:10:10.370189Z) | <!-- inv:router:routers/admin_ops_config.py -->
+- `SENTRY_DSN` — auto-detected in backend/routers/admin_ops_config.py (verify) (default: unset) [Iter 0, 2026-08-11T15:10:10.370204Z] <!-- inv:envvar:SENTRY_DSN -->
+- `CLOUDFLARE_API_TOKEN` — auto-detected in backend/routers/admin_ops_config.py (verify) (default: unset) [Iter 0, 2026-08-11T15:10:10.370220Z] <!-- inv:envvar:CLOUDFLARE_API_TOKEN -->
+- `CLOUDFLARE_ZONE_ID` — auto-detected in backend/routers/admin_ops_config.py (verify) (default: unset) [Iter 0, 2026-08-11T15:10:10.370233Z] <!-- inv:envvar:CLOUDFLARE_ZONE_ID -->
+| `routers/admin_payments.py` | `/admin` | 9 | auto-detected new router (verify) (Iter 0, 2026-08-11T15:10:10.370246Z) | <!-- inv:router:routers/admin_payments.py -->
+| `routers/admin_projects_brain.py` | `/admin` | 14 | auto-detected new router (verify) (Iter 0, 2026-08-11T15:10:10.370283Z) | <!-- inv:router:routers/admin_projects_brain.py -->
+| `routers/admin_support.py` | `/admin` | 8 | auto-detected new router (verify) (Iter 0, 2026-08-11T15:10:10.370299Z) | <!-- inv:router:routers/admin_support.py -->
+| `routers/admin_users.py` | `/admin` | 16 | auto-detected new router (verify) (Iter 0, 2026-08-11T15:10:10.370315Z) | <!-- inv:router:routers/admin_users.py -->
+- `FOUNDER_EMAILS` — auto-detected in backend/routers/admin_users.py (verify) (default: unset) [Iter 0, 2026-08-11T15:10:10.370341Z] <!-- inv:envvar:FOUNDER_EMAILS -->
+- `RESEND_FROM_EMAIL` — auto-detected in backend/routers/admin_users.py (verify) (default: unset) [Iter 0, 2026-08-11T15:10:10.370383Z] <!-- inv:envvar:RESEND_FROM_EMAIL -->

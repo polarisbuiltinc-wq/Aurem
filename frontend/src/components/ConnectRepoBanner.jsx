@@ -59,6 +59,10 @@ export default function ConnectRepoBanner({ onConnect }) {
   if (status && (status.remaining ?? 0) <= 0) return null;
 
   const remaining = status?.remaining;
+  // Total spots come from the backend so we never hardcode the promo
+  // ceiling in the UI.  Falls back to a neutral loading state until the
+  // first /founder-offer/status response lands.
+  const total = typeof status?.total === "number" ? status.total : null;
 
   return (
     <div
@@ -102,8 +106,8 @@ export default function ConnectRepoBanner({ onConnect }) {
               color: counterColor(remaining),
             }}
           >
-            {typeof remaining === "number"
-              ? `${remaining} of 500 founder spots remaining`
+            {typeof remaining === "number" && typeof total === "number"
+              ? `${remaining} of ${total} founder spots remaining`
               : "Loading founder spots…"}
           </div>
         </div>
@@ -125,7 +129,7 @@ export default function ConnectRepoBanner({ onConnect }) {
             type="button"
             data-testid="connect-repo-banner-toggle"
             onClick={toggleCollapsed}
-            title={collapsed ? "Show how to generate a PAT" : "Hide details"}
+            title={collapsed ? "Show how the connect flow works" : "Hide details"}
             style={{
               padding: 6,
               background: "transparent",
@@ -141,10 +145,11 @@ export default function ConnectRepoBanner({ onConnect }) {
         </div>
       </div>
 
-      {/* 2026-02-11 · Phase 4b — banner walkthrough now points at the
-          wizard as the single source of truth for the connect UX.
-          The wizard itself is App-first (one-click install) with a
-          PAT disclosure fallback for private/legacy repos. */}
+      {/* 2026-02-12 · App-first flow — the wizard is the single source
+          of truth for the connect UX. Copy focuses on the one-click
+          GitHub App install; the wizard itself still offers a PAT
+          fallback for private / legacy repos, so we don't advertise
+          PAT setup here. */}
       {!collapsed && (
         <div
           data-testid="connect-repo-banner-steps"
@@ -156,12 +161,10 @@ export default function ConnectRepoBanner({ onConnect }) {
             lineHeight: 1.6,
           }}
         >
-          Click <strong>Connect repo →</strong> above. The wizard offers
-          two ways to connect:{" "}
-          <strong>GitHub App</strong> (recommended — one click, no token
-          to manage) or a{" "}
-          <strong>Personal Access Token</strong> (for private / legacy
-          repos). You&apos;ll pick whichever fits.
+          Click <strong>Connect repo →</strong> above to install the{" "}
+          <strong>Aurem GitHub App</strong> — one click, no tokens to
+          manage. Choose which repositories to grant access to, and
+          Aurem will start indexing immediately.
         </div>
       )}
     </div>
@@ -169,83 +172,9 @@ export default function ConnectRepoBanner({ onConnect }) {
 }
 
 
-function StepCard({ n, title, body }) {
-  return (
-    <div
-      data-testid={`connect-repo-banner-step-${n}`}
-      style={{
-        background: "rgba(0,0,0,0.18)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: 8,
-        padding: "10px 12px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 4,
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          fontSize: 11,
-          color: "var(--text-dim, #aaa)",
-          fontFamily: "'JetBrains Mono', monospace",
-          letterSpacing: "0.06em",
-        }}
-      >
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 18, height: 18,
-            borderRadius: "50%",
-            background: "rgba(234,179,8,0.20)",
-            border: "1px solid rgba(234,179,8,0.50)",
-            color: "#facc15",
-            fontWeight: 700,
-            fontSize: 10,
-          }}
-        >
-          {n}
-        </span>
-        STEP {n}
-      </div>
-      <div
-        style={{
-          fontSize: 13,
-          fontWeight: 600,
-          color: "var(--text, #fff)",
-          marginTop: 2,
-        }}
-      >
-        {title}
-      </div>
-      <div
-        style={{
-          fontSize: 12,
-          lineHeight: 1.5,
-          color: "var(--text-dim, #bbb)",
-        }}
-      >
-        {body}
-      </div>
-    </div>
-  );
-}
-
 function counterColor(remaining) {
   if (typeof remaining !== "number") return "var(--text-dim, #aaa)";
   if (remaining <= 10) return "#ef4444";
   if (remaining <= 50) return "#f97316";
   return "#22c55e";
 }
-
-const codeStyle = {
-  background: "rgba(255,255,255,0.08)",
-  padding: "1px 5px",
-  borderRadius: 3,
-  fontFamily: "'JetBrains Mono', monospace",
-  fontSize: 11,
-};

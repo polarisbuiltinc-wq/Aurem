@@ -29,6 +29,8 @@ from typing import Any
 
 import httpx
 
+from services.http import ext_client
+
 # Keys our code / mocks assume are present. Sourced from actual usage
 # sites (grep the codebase for the field name to prove each entry).
 # If the upstream ever drops or renames one of these, `run_all()`
@@ -70,7 +72,10 @@ def _diff_shape(expected: set[str], actual_top: dict) -> dict:
 async def check_github(timeout: float = 8.0) -> dict:
     """Hit GitHub's REST API for a public repo and compare shape."""
     try:
-        async with httpx.AsyncClient(timeout=timeout) as c:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=timeout, write=5.0, pool=5.0),
+        ) as c:
             resp = await c.get(_GITHUB_PROBE_URL,
                                 headers={"Accept": "application/vnd.github+json"})
     except httpx.TimeoutException:
@@ -106,7 +111,10 @@ async def check_openrouter(timeout: float = 8.0) -> dict:
     """Hit OpenRouter's public model list and compare shape of the
     first model entry."""
     try:
-        async with httpx.AsyncClient(timeout=timeout) as c:
+        async with ext_client(
+            "openrouter",
+            timeout=httpx.Timeout(connect=5.0, read=timeout, write=5.0, pool=5.0),
+        ) as c:
             resp = await c.get(_OPENROUTER_PROBE_URL)
     except httpx.TimeoutException:
         return {"ok": False, "upstream": "openrouter",

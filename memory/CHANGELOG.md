@@ -4,6 +4,68 @@ Append-only iteration log. See `PRD.md` for the original problem
 
 ---
 
+## 2026-02-12 · Fork session · Chunk B+C (ConnectRepoBanner) + Phase 3 · Batch 1 (HTTP wrapper migration)
+
+### What shipped
+
+**Chunk B+C — `ConnectRepoBanner.jsx` App-first + dynamic total**
+- Removed the last PAT-flavored copy from the persistent empty-state
+  banner. The banner now reads *"install the Aurem GitHub App — one
+  click, no tokens to manage"* only. The wizard remains the single
+  source of truth for the PAT fallback (private / legacy repos).
+- Un-hardcoded the "of 500 founder spots" ceiling. Banner now
+  interpolates `${remaining} of ${total}` from `/founder-offer/status`
+  so the promo cap can move without a frontend deploy.
+- Deleted 60+ LOC of dead code (`StepCard` component + `codeStyle`
+  constant from the pre-Phase-4b PAT walkthrough).
+- Toggle tooltip changed from *"Show how to generate a PAT"* →
+  *"Show how the connect flow works"*.
+- Updated pinning test `test_iter212m31_connect_repo_banner.py` to
+  guard the new App-first contract (6/6 green).
+
+**Phase 3 · Chunk D · Batch 1 — HTTP wrapper migration (4 files)**
+Migrated 11 raw `httpx.AsyncClient(...)` callsites in 4 low-risk
+service files to the new `services/http` wrapper (`ext_request` /
+`ext_client`). Every migrated site now gets: retry_guard breaker,
+uniform `ExternalCallError`, `X-Request-ID` header, per-dep timeout
+defaults. Behavior identical on happy path.
+
+  - `services/topup_alerts.py` — Resend email delivery
+  - `services/mermaid_diagram.py` — OpenRouter LLM proxy (Gemini +
+    GPT failover)
+  - `services/mock_reality_check.py` — GitHub + OpenRouter shape
+    probes (2 sites)
+  - `services/integration_health.py` — 8 provider probes:
+    github_oauth, tavily, firecrawl, resend, vercel, supabase,
+    vercel_platform, openrouter
+
+  Pinning tests: `tests/test_phase3_http_wrapper_migration_batch1.py`
+  (4 tests, all green). Existing wrapper contract suite unchanged
+  (7/7 green).
+
+### Verification
+- Targeted pytest: 27/27 green
+  (`test_phase3_http_wrapper_migration_batch1.py`,
+  `test_iter212m31_connect_repo_banner.py`,
+  `test_http_client_wrapper.py`, `test_admin_observability.py`,
+  `test_risk_zone_smoke.py`).
+- Backend startup: clean, no import errors, LongCat probe still OK.
+- `/api/aurem-dev/founder-offer/status` → `{remaining:500, total:500,
+  is_active:true}` (banner will render dynamic total correctly).
+- Landing page smoke screenshot: renders fine.
+- JS lint: clean on `ConnectRepoBanner.jsx`.
+- Python lint: clean on all 4 migrated files.
+
+### Not in scope this session (deferred to supervised)
+- `ChatPanel.jsx` (4,874 LOC) and `services/loop_engine.py`
+  (4,416 LOC) — big refactors held for a founder-supervised
+  session per the guardrails.
+- Remaining ~60 files still on raw `httpx.AsyncClient` (chat,
+  github_*, loop_*, cto_projects, etc.) — will be migrated in
+  subsequent supervised batches. Each batch bounded to ≤4 files.
+
+---
+
 ## 2026-02-11 · Session · Phase 2 — `routers/admin.py` domain split
 
 ### What shipped
