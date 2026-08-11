@@ -1,5 +1,14 @@
 # AUREM CTO — PRD (Product Requirements & Change Log)
 
+## 🛑 MANDATORY READ FOR ANY DEPLOY AGENT
+
+Before dispatching ANY prod deploy, read
+`/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md`. It documents
+the pre-dispatch / post-dispatch / verification steps that
+must run in that order. Two incidents on 2026-02-12 shipped
+code other than what was dispatched because verification
+lagged — the checklist prevents recurrence.
+
 ## 🚀 IN-PROGRESS (Fork session · 2026-02-12)
 
 ### 2026-02-12 · ConnectRepoBanner Chunk B+C + HTTP wrapper Batches 1+2

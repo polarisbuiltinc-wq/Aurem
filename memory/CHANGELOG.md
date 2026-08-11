@@ -1,6 +1,39 @@
 # AUREM Dev / Aurem CTO — Changelog
 
-Append-only iteration log. See `PRD.md` for the original problem
+Append-only iteration log. See `PRD.md` for the original problem.
+**Before any prod deploy: read `DEPLOY_VERIFICATION_CHECKLIST.md`.**
+
+---
+
+## 2026-02-12 · Fork session · Deploy Verification Discipline
+
+### What shipped (documentation only, no code)
+
+After two back-to-back deploy pipeline races on 2026-02-12
+(one no-op deploy, one deploy that shipped a superset commit
+instead of the dispatched revert), filed
+`/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` as MANDATORY
+pre-flight and post-flight discipline for every prod deploy
+going forward.
+
+**Key change to agent behavior**:
+- Pre-dispatch: `git status --short` + `git log -1` + `git diff HEAD`
+  must be clean before calling `emergent__send_to_deployer`.
+- Dispatch message: record baseline prod SHA + built_at +
+  expected new HEAD SHA.
+- Post-dispatch: aggressive polling (every ~15s) until SHA
+  changes — do NOT wait for the "Deployment completed" message.
+- Verification: within 60s of new SHA landing, verify the
+  deployed commit content matches intent via `git show <sha>:...`
+  + content signal check + latency check + auth-gate check.
+- Report to founder ONLY after verification confirms the
+  actually-deployed SHA matches the intended SHA.
+
+**Rationale**: The pipeline race between dispatch time and
+build time is outside agent control, but verification timing
+is 100% inside agent control. Both incidents happened because
+verification came after "deploy landed" was declared. The
+checklist tightens the window.
 
 ---
 
