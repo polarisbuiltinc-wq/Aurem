@@ -26,6 +26,7 @@ import FixProgressDrawer from "./components/FixProgressDrawer";
 import { FixJobProvider } from "./components/FixJobContext";
 import PersistentFixBar from "./components/PersistentFixBar";
 import CookieConsentBanner from "./components/CookieConsentBanner";
+import { PrivateRoute, AdminRoute } from "./components/PrivateRoute";
 
 // Eager — these three are the first surfaces every visitor sees and
 // they share layout (AuthShell). Keeping them in the initial bundle
@@ -156,6 +157,55 @@ function MetaPixelRouteTracker() {
   return null;
 }
 
+// 2026-02-11 · Gap Register #38 — Global 401 handler.
+// api.js response interceptor dispatches `aurem:session-expired` when a
+// mid-session request returns 401 (JWT revoked or expired). This tiny
+// child of <BrowserRouter> catches that event, shows a friendly toast,
+// wipes local auth state, and SPA-navigates the user to /login with a
+// preserved `?next=` so they return to where they were once signed in.
+// The `firedRef` guard prevents the same session-expiry from stacking
+// dozens of toasts when multiple parallel requests all 401 at once.
+function SessionExpiredListener() {
+  const location = useLocation();
+  const firedRef = useRef(false);
+  useEffect(() => {
+    // Reset the guard whenever the pathname changes so a subsequent
+    // login → session-expiry re-fires correctly.
+    firedRef.current = false;
+  }, [location.pathname]);
+  useEffect(() => {
+    const handler = (e) => {
+      if (firedRef.current) return;
+      firedRef.current = true;
+      const msg = (e?.detail?.message)
+        || "Your session expired. Please sign in again.";
+      import("./lib/api").then(({ setToken, setUser }) => {
+        try { setToken(null); } catch { /* noop */ }
+        try { setUser(null);  } catch { /* noop */ }
+        // Best-effort toast, then hard nav to /login preserving current
+        // path so the user lands back after re-auth.
+        try {
+          import("sonner").then(({ toast }) => {
+            try { toast.error(msg, { duration: 4000 }); } catch { /* noop */ }
+          }).catch(() => {});
+        } catch { /* noop */ }
+        const path = window.location.pathname + window.location.search;
+        const isAuthPage = /^\/(login|signup|verify|oauth-finish)/.test(
+          window.location.pathname,
+        );
+        const nextParam = (!isAuthPage && path && path !== "/")
+          ? `?next=${encodeURIComponent(path)}` : "";
+        window.location.href = `/login${nextParam}`;
+      }).catch(() => {
+        window.location.href = "/login";
+      });
+    };
+    window.addEventListener("aurem:session-expired", handler);
+    return () => window.removeEventListener("aurem:session-expired", handler);
+  }, []);
+  return null;
+}
+
 export default function App() {
   // Iter 101 — Capture `?ref=<uid>` on any landing, stash in localStorage
   // so Signup can attribute the referrer after account creation.
@@ -188,6 +238,7 @@ export default function App() {
     <BrowserRouter>
       <AutoClearConsoleHost />
       <MetaPixelRouteTracker />
+      <SessionExpiredListener />
       <Toaster />
       {/* Iter 212m-148 — Global FixJob provider owns the SSE so the
           job survives panel toggles, route changes, and backdrop
@@ -214,52 +265,52 @@ export default function App() {
           <Route path="/login"           element={<Login />} />
           <Route path="/signup"          element={<Signup />} />
           <Route path="/verify"          element={<Verify />} />
-          <Route path="/dashboard"       element={<Dashboard />} />
+          <Route path="/dashboard"       element={<PrivateRoute><Dashboard /></PrivateRoute>} />
           {/* Iter 212m-235 — Personal Track routes */}
-          <Route path="/choose-track"    element={<ChooseTrack />} />
-          <Route path="/ora"             element={<OraDirect />} />
-          <Route path="/build"           element={<BuildHome />} />
-          <Route path="/build/:draftId"  element={<DraftReview />} />
-          <Route path="/build/:draftId/ship"    element={<ShipProgress />} />
-          <Route path="/build/:draftId/success" element={<BuildSuccess />} />
-          <Route path="/integrations"    element={<Integrations />} />
-          <Route path="/deploy"          element={<Deploy />} />
-          <Route path="/domain"          element={<Domain />} />
-          <Route path="/settings"        element={<Settings />} />
-          <Route path="/profile"         element={<Settings />} />
-          <Route path="/tokens"          element={<Tokens />} />
-          <Route path="/analytics"       element={<Analytics />} />
-          <Route path="/projects"        element={<Projects />} />
-          <Route path="/admin"           element={<Admin initialTab="cockpit" />} />
-          <Route path="/admin/cockpit"   element={<Admin initialTab="cockpit" />} />
-          <Route path="/admin/dashboard" element={<Admin initialTab="dash" />} />
-          <Route path="/admin/users"       element={<Admin initialTab="users" />} />
-          <Route path="/admin/suggestions" element={<Admin initialTab="suggestions" />} />
-          <Route path="/admin/overview"  element={<Admin initialTab="overview" />} />
+          <Route path="/choose-track"    element={<PrivateRoute><ChooseTrack /></PrivateRoute>} />
+          <Route path="/ora"             element={<PrivateRoute><OraDirect /></PrivateRoute>} />
+          <Route path="/build"           element={<PrivateRoute><BuildHome /></PrivateRoute>} />
+          <Route path="/build/:draftId"  element={<PrivateRoute><DraftReview /></PrivateRoute>} />
+          <Route path="/build/:draftId/ship"    element={<PrivateRoute><ShipProgress /></PrivateRoute>} />
+          <Route path="/build/:draftId/success" element={<PrivateRoute><BuildSuccess /></PrivateRoute>} />
+          <Route path="/integrations"    element={<PrivateRoute><Integrations /></PrivateRoute>} />
+          <Route path="/deploy"          element={<PrivateRoute><Deploy /></PrivateRoute>} />
+          <Route path="/domain"          element={<PrivateRoute><Domain /></PrivateRoute>} />
+          <Route path="/settings"        element={<PrivateRoute><Settings /></PrivateRoute>} />
+          <Route path="/profile"         element={<PrivateRoute><Settings /></PrivateRoute>} />
+          <Route path="/tokens"          element={<PrivateRoute><Tokens /></PrivateRoute>} />
+          <Route path="/analytics"       element={<PrivateRoute><Analytics /></PrivateRoute>} />
+          <Route path="/projects"        element={<PrivateRoute><Projects /></PrivateRoute>} />
+          <Route path="/admin"           element={<AdminRoute><Admin initialTab="cockpit" /></AdminRoute>} />
+          <Route path="/admin/cockpit"   element={<AdminRoute><Admin initialTab="cockpit" /></AdminRoute>} />
+          <Route path="/admin/dashboard" element={<AdminRoute><Admin initialTab="dash" /></AdminRoute>} />
+          <Route path="/admin/users"       element={<AdminRoute><Admin initialTab="users" /></AdminRoute>} />
+          <Route path="/admin/suggestions" element={<AdminRoute><Admin initialTab="suggestions" /></AdminRoute>} />
+          <Route path="/admin/overview"  element={<AdminRoute><Admin initialTab="overview" /></AdminRoute>} />
           {/* Feb 2026 · Sidebar Integrity fix — every in-shell sidebar
               item now has a real deep-linkable URL so browser Back /
               Forward and shareable links work.  The route: field in
               NAV points at the same paths (see Admin.jsx) so a
               sidebar click also updates window.location, closing the
               "internal-state-switch" back-navigation gap. */}
-          <Route path="/admin/support"        element={<Admin initialTab="support" />} />
-          <Route path="/admin/audit"          element={<Admin initialTab="audit" />} />
-          <Route path="/admin/house-rules"    element={<Admin initialTab="house_rules" />} />
-          <Route path="/admin/robot-guide"    element={<Admin initialTab="robot_guide" />} />
-          <Route path="/admin/payments"       element={<Admin initialTab="payments" />} />
-          <Route path="/admin/token-pnl"      element={<Admin initialTab="tokens" />} />
-          <Route path="/admin/projects"       element={<Admin initialTab="projects" />} />
-          <Route path="/admin/tasks"          element={<Admin initialTab="tasks" />} />
-          <Route path="/admin/agent-performance" element={<Admin initialTab="agent_perf" />} />
-          <Route path="/admin/mcp-usage"      element={<Admin initialTab="mcp" />} />
-          <Route path="/admin/reliability"    element={<Admin initialTab="reliability" />} />
-          <Route path="/admin/settings"       element={<Admin initialTab="settings" />} />
-          <Route path="/admin/integrations" element={<AdminIntegrations />} />
-          <Route path="/admin/financials"   element={<AdminFinancials />} />
-          <Route path="/admin/vanguard"     element={<AdminVanguard />} />
-          <Route path="/admin/system-stats" element={<SystemStatsPage />} />
-          <Route path="/admin/observability" element={<SystemStatsPage />} />
-          <Route path="/tools" element={<ToolsPage />} />
+          <Route path="/admin/support"        element={<AdminRoute><Admin initialTab="support" /></AdminRoute>} />
+          <Route path="/admin/audit"          element={<AdminRoute><Admin initialTab="audit" /></AdminRoute>} />
+          <Route path="/admin/house-rules"    element={<AdminRoute><Admin initialTab="house_rules" /></AdminRoute>} />
+          <Route path="/admin/robot-guide"    element={<AdminRoute><Admin initialTab="robot_guide" /></AdminRoute>} />
+          <Route path="/admin/payments"       element={<AdminRoute><Admin initialTab="payments" /></AdminRoute>} />
+          <Route path="/admin/token-pnl"      element={<AdminRoute><Admin initialTab="tokens" /></AdminRoute>} />
+          <Route path="/admin/projects"       element={<AdminRoute><Admin initialTab="projects" /></AdminRoute>} />
+          <Route path="/admin/tasks"          element={<AdminRoute><Admin initialTab="tasks" /></AdminRoute>} />
+          <Route path="/admin/agent-performance" element={<AdminRoute><Admin initialTab="agent_perf" /></AdminRoute>} />
+          <Route path="/admin/mcp-usage"      element={<AdminRoute><Admin initialTab="mcp" /></AdminRoute>} />
+          <Route path="/admin/reliability"    element={<AdminRoute><Admin initialTab="reliability" /></AdminRoute>} />
+          <Route path="/admin/settings"       element={<AdminRoute><Admin initialTab="settings" /></AdminRoute>} />
+          <Route path="/admin/integrations" element={<AdminRoute><AdminIntegrations /></AdminRoute>} />
+          <Route path="/admin/financials"   element={<AdminRoute><AdminFinancials /></AdminRoute>} />
+          <Route path="/admin/vanguard"     element={<AdminRoute><AdminVanguard /></AdminRoute>} />
+          <Route path="/admin/system-stats" element={<AdminRoute><SystemStatsPage /></AdminRoute>} />
+          <Route path="/admin/observability" element={<AdminRoute><SystemStatsPage /></AdminRoute>} />
+          <Route path="/tools" element={<PrivateRoute><ToolsPage /></PrivateRoute>} />
           {/* Iter 212m-198 — Sidebar Bug Hunt bug: `/tools/bug-hunt` was
               rendering the marketing landing (BugHunt.jsx), so clicking
               Bug Hunt from the sidebar looked like it took the user to
@@ -268,31 +319,31 @@ export default function App() {
               SEO + conversion funnel are preserved. Sidebar entry now
               lands on the CodebaseHealth scanner where the "Bug Hunt"
               category tile is one click away. */}
-          <Route path="/tools/bug-hunt"    element={<CodebaseHealth />} />
-          <Route path="/tools/health-scan" element={<CodebaseHealth />} />
-          <Route path="/feature-window"     element={<FeatureWindow />} />
-          <Route path="/admin/system-map"   element={<FeatureWindow />} />
-          <Route path="/codebase-health"    element={<CodebaseHealth />} />
-          <Route path="/health"             element={<CodebaseHealth />} />
+          <Route path="/tools/bug-hunt"    element={<PrivateRoute><CodebaseHealth /></PrivateRoute>} />
+          <Route path="/tools/health-scan" element={<PrivateRoute><CodebaseHealth /></PrivateRoute>} />
+          <Route path="/feature-window"     element={<PrivateRoute><FeatureWindow /></PrivateRoute>} />
+          <Route path="/admin/system-map"   element={<AdminRoute><FeatureWindow /></AdminRoute>} />
+          <Route path="/codebase-health"    element={<PrivateRoute><CodebaseHealth /></PrivateRoute>} />
+          <Route path="/health"             element={<PrivateRoute><CodebaseHealth /></PrivateRoute>} />
           <Route path="/bug-hunt"           element={<BugHunt />} />
-          <Route path="/sidebar-preview"    element={<SidebarPreview />} />
-          <Route path="/dashboard-preview-v2" element={<DashboardPreviewV2 />} />
-          <Route path="/admin/api-keys"     element={<AdminApiKeys />} />
-          <Route path="/admin/system-health" element={<AdminSystemHealth />} />
-          <Route path="/admin/inspect-loop/:loopId" element={<AdminInspectLoop />} />
+          <Route path="/sidebar-preview"    element={<PrivateRoute><SidebarPreview /></PrivateRoute>} />
+          <Route path="/dashboard-preview-v2" element={<PrivateRoute><DashboardPreviewV2 /></PrivateRoute>} />
+          <Route path="/admin/api-keys"     element={<AdminRoute><AdminApiKeys /></AdminRoute>} />
+          <Route path="/admin/system-health" element={<AdminRoute><AdminSystemHealth /></AdminRoute>} />
+          <Route path="/admin/inspect-loop/:loopId" element={<AdminRoute><AdminInspectLoop /></AdminRoute>} />
           {/* Iter 314 — universal admin-inspect wrappers so admin
               endpoints can be reached without hitting the JWT wall
               from direct URL navigation. */}
-          <Route path="/admin/inspect-speed-diagnostic" element={<AdminInspectSpeedDiagnostic />} />
-          <Route path="/admin/inspect-scope-drift"      element={<AdminInspectScopeDriftAudit />} />
-          <Route path="/admin/qa"           element={<AdminQADashboard />} />{/* Iter 303 */}
-          <Route path="/admin/personal-track" element={<PersonalTrackAdmin />} />
-          <Route path="/admin/ora-chat"       element={<OraChat />} />
+          <Route path="/admin/inspect-speed-diagnostic" element={<AdminRoute><AdminInspectSpeedDiagnostic /></AdminRoute>} />
+          <Route path="/admin/inspect-scope-drift"      element={<AdminRoute><AdminInspectScopeDriftAudit /></AdminRoute>} />
+          <Route path="/admin/qa"           element={<AdminRoute><AdminQADashboard /></AdminRoute>} />{/* Iter 303 */}
+          <Route path="/admin/personal-track" element={<AdminRoute><PersonalTrackAdmin /></AdminRoute>} />
+          <Route path="/admin/ora-chat"       element={<AdminRoute><OraChat /></AdminRoute>} />
           {/* Iter 212m-171 — direct URLs for new admin sections */}
-          <Route path="/admin/bin-tracker"    element={<Admin initialTab="bin_tracker" />} />
-          <Route path="/admin/feature-flags"  element={<Admin initialTab="feature_flags" />} />
-          <Route path="/admin/llm-credits"    element={<Admin initialTab="llm_credits" />} />
-          <Route path="/admin/parliament-live" element={<Admin initialTab="parliament_live" />} />
+          <Route path="/admin/bin-tracker"    element={<AdminRoute><Admin initialTab="bin_tracker" /></AdminRoute>} />
+          <Route path="/admin/feature-flags"  element={<AdminRoute><Admin initialTab="feature_flags" /></AdminRoute>} />
+          <Route path="/admin/llm-credits"    element={<AdminRoute><Admin initialTab="llm_credits" /></AdminRoute>} />
+          <Route path="/admin/parliament-live" element={<AdminRoute><Admin initialTab="parliament_live" /></AdminRoute>} />
           <Route path="/privacy"            element={<PolicyPage slug="privacy" />} />
           <Route path="/terms"              element={<PolicyPage slug="terms" />} />
           <Route path="/acceptable-use"     element={<PolicyPage slug="acceptable-use" />} />
@@ -304,12 +355,12 @@ export default function App() {
           <Route path="/dpa"                element={<PolicyPage slug="dpa" />} />
           <Route path="/security"           element={<PolicyPage slug="security" />} />
           <Route path="/status"             element={<PolicyPage slug="status" />} />
-          <Route path="/admin/architecture" element={<Admin initialTab="arch" />} />
-          <Route path="/admin/ops" element={<OpsRecipes />} />
-          <Route path="/admin/brain/:projectId" element={<BrainDump />} />
+          <Route path="/admin/architecture" element={<AdminRoute><Admin initialTab="arch" /></AdminRoute>} />
+          <Route path="/admin/ops" element={<AdminRoute><OpsRecipes /></AdminRoute>} />
+          <Route path="/admin/brain/:projectId" element={<AdminRoute><BrainDump /></AdminRoute>} />
           <Route path="/wall" element={<ShipWall />} />
-          <Route path="/wrapped" element={<Wrapped />} />
-          <Route path="/automations" element={<Automations />} />
+          <Route path="/wrapped" element={<PrivateRoute><Wrapped /></PrivateRoute>} />
+          <Route path="/automations" element={<PrivateRoute><Automations /></PrivateRoute>} />
           <Route path="/oauth-finish" element={<OAuthFinish />} />
           <Route path="/vs/devin"  element={<VsDevin />} />
           <Route path="/pricing" element={<Pricing />} />

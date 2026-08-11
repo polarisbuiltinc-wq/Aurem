@@ -10,6 +10,7 @@ import { api, setToken, setUser } from "../lib/api";
 import { trackSignup } from "../lib/analytics";
 import RobotGuide, { RobotGuideKeyframes, escapeHtml } from "../components/RobotGuide";
 import GoogleIcon from "../components/GoogleIcon";
+import { scorePassword, MIN_ACCEPTABLE_SCORE } from "../lib/passwordStrength";
 
 export default function Signup() {
   usePageMeta({
@@ -49,6 +50,18 @@ export default function Signup() {
     }
     if (form.password !== form.password_confirm) {
       setError("Passwords do not match. Please re-enter the same password in both fields.");
+      return;
+    }
+    // 2026-02-11 · Gap Register #40 — block signup below "Fair" strength
+    // (score 2). Backend still enforces min 6 chars; this catches
+    // common-list matches + all-same-char-class weaknesses.
+    const strength = scorePassword(form.password);
+    if (strength.score < MIN_ACCEPTABLE_SCORE) {
+      setError(
+        strength.label
+          ? `Please pick a stronger password — ${strength.label.toLowerCase()}. Aim for at least 8 characters mixing letters, digits, and symbols.`
+          : "Please pick a stronger password (at least 8 characters mixing letters, digits, and symbols).",
+      );
       return;
     }
     setBusy(true);
@@ -246,7 +259,7 @@ export default function Signup() {
             </label>
 
             <label>
-              <span className="label-mini">Password (min 6 chars)</span>
+              <span className="label-mini">Password (min 8 chars, 2+ character types)</span>
               <input
                 data-testid="signup-password"
                 className="input"
@@ -256,6 +269,41 @@ export default function Signup() {
                 value={form.password}
                 onChange={(e) => u("password", e.target.value)}
               />
+              {form.password && (() => {
+                const s = scorePassword(form.password);
+                return (
+                  <div
+                    data-testid="signup-password-strength"
+                    data-strength-score={s.score}
+                    style={{ marginTop: 6 }}
+                  >
+                    <div style={{
+                      display: "flex", gap: 3, height: 4,
+                      borderRadius: 2, overflow: "hidden",
+                    }}>
+                      {[0, 1, 2, 3].map((i) => (
+                        <div key={i} style={{
+                          flex: 1,
+                          background: i < s.score
+                            ? s.color
+                            : "rgba(255,255,255,0.08)",
+                          transition: "background 120ms ease",
+                        }} />
+                      ))}
+                    </div>
+                    {s.label && (
+                      <span style={{
+                        fontSize: 11,
+                        color: s.ok ? "var(--text-faint)" : s.color,
+                        marginTop: 4,
+                        display: "block",
+                      }}>
+                        {s.label}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
             </label>
 
             <label>

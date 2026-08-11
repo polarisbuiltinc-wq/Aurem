@@ -59,6 +59,36 @@ api.interceptors.response.use((response) => {
         },
       }));
     }
+    // 2026-02-11 · Gap Register #38 — surface mid-session 401s so a
+    // revoked/expired JWT bounces the user to /login immediately
+    // instead of leaving them staring at "failed" toasts until the
+    // next mount catches the empty-token state. We SKIP the auth
+    // endpoints themselves — a 401 there means "wrong credentials"
+    // and each page renders its own inline error UX. We also skip
+    // when there was no token in the first place (unauth'd public
+    // page call) — logging out someone who was never logged in
+    // would fire a spurious /login redirect on public routes.
+    if (error?.response?.status === 401) {
+      const url = String(error?.config?.url || "");
+      const hadToken = !!localStorage.getItem("aurem_token");
+      const isAuthEndpoint =
+        url.includes("/auth/login")
+        || url.includes("/auth/signup")
+        || url.includes("/auth/verify")
+        || url.includes("/auth/resend-verification")
+        || url.includes("/auth/login/2fa-verify")
+        || url.includes("/auth/google");
+      if (hadToken && !isAuthEndpoint) {
+        window.dispatchEvent(new CustomEvent("aurem:session-expired", {
+          detail: {
+            url,
+            message:
+              error?.response?.data?.detail
+                || "Your session expired. Please sign in again.",
+          },
+        }));
+      }
+    }
   } catch { /* interceptor must never itself throw */ }
   return Promise.reject(error);
 });
