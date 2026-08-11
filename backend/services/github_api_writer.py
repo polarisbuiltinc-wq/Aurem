@@ -25,11 +25,20 @@ from typing import Optional
 
 import httpx
 
+from services.http import ext_client
+
 logger = logging.getLogger(__name__)
 
 GITHUB_API = "https://api.github.com"
-# httpx connection pool — bump limits so parallel calls actually parallel
+# httpx connection pool — bump limits so parallel calls actually parallel.
+# Also passed EXPLICITLY at each ext_client site (reads via Sub-batch 2) so
+# the writer's connection-pool shape doesn't drift if _LIMITS_DEFAULTS
+# changes upstream in services.http.client.
 _LIMITS = httpx.Limits(max_connections=20, max_keepalive_connections=20)
+# Explicit timeout for every writer call site. Kept as a module constant
+# so read (ext_client) + write (raw AsyncClient) sites both reference the
+# same value.
+_TIMEOUT = httpx.Timeout(60.0)
 
 
 def _headers(token: str) -> dict:
@@ -42,41 +51,85 @@ def _headers(token: str) -> dict:
     return h
 
 
-async def fetch_file(client: httpx.AsyncClient, owner: str, repo: str,
+async def fetch_file(owner: str, repo: str,
                       path: str, ref: str, token: str) -> Optional[str]:
-    """Return file text at `ref` or None if missing."""
+    """Return file text at `ref` or None if missing.
+
+    Sub-batch 2 (2026-02-12) · Self-contained: opens its own
+    ext_client("github", 60s, 20/20) — no client param. This isolates
+    the read-path pool from the write-path raw client that commit_files
+    and revert_commit still hold. Timeout + limits passed EXPLICITLY
+    so a future change to _LIMITS_DEFAULTS doesn't shift writer behavior.
+    """
     url = f"{GITHUB_API}/repos/{owner}/{repo}/contents/{path}?ref={ref}"
     try:
-        r = await client.get(url, headers=_headers(token))
-        if r.status_code == 404:
-            return None
-        r.raise_for_status()
-        data = r.json()
-        if data.get("encoding") != "base64":
-            return None
-        return base64.b64decode(data.get("content", "")).decode(
-            "utf-8", errors="replace"
-        )
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(60.0),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=20),
+        ) as client:
+            r = await client.get(url, headers=_headers(token))
+            if r.status_code == 404:
+                return None
+            r.raise_for_status()
+            data = r.json()
+            if data.get("encoding") != "base64":
+                return None
+            return base64.b64decode(data.get("content", "")).decode(
+                "utf-8", errors="replace"
+            )
     except Exception as e:
         logger.debug(f"fetch_file {path}@{ref} failed: {e!r}")
         return None
 
 
-async def _get_branch_head(client: httpx.AsyncClient, owner: str, repo: str,
+async def _get_branch_head(owner: str, repo: str,
                             branch: str, token: str) -> dict:
-    """Return {sha, tree_sha} for branch head commit."""
-    r = await client.get(
-        f"{GITHUB_API}/repos/{owner}/{repo}/git/ref/heads/{branch}",
-        headers=_headers(token),
-    )
-    r.raise_for_status()
-    head_sha = r.json()["object"]["sha"]
-    r2 = await client.get(
-        f"{GITHUB_API}/repos/{owner}/{repo}/git/commits/{head_sha}",
-        headers=_headers(token),
-    )
-    r2.raise_for_status()
-    return {"sha": head_sha, "tree_sha": r2.json()["tree"]["sha"]}
+    """Return {sha, tree_sha} for branch head commit.
+
+    Sub-batch 2 (2026-02-12) · Self-contained ext_client for reads.
+    See fetch_file() for the rationale.
+    """
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(60.0),
+        limits=httpx.Limits(max_connections=20, max_keepalive_connections=20),
+    ) as client:
+        r = await client.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}/git/ref/heads/{branch}",
+            headers=_headers(token),
+        )
+        r.raise_for_status()
+        head_sha = r.json()["object"]["sha"]
+        r2 = await client.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}/git/commits/{head_sha}",
+            headers=_headers(token),
+        )
+        r2.raise_for_status()
+        return {"sha": head_sha, "tree_sha": r2.json()["tree"]["sha"]}
+
+
+async def _get_commit_details(owner: str, repo: str,
+                                commit_sha: str, token: str) -> dict:
+    """Return the full GitHub commit object (parents, files, etc.) for
+    the given SHA.
+
+    Sub-batch 2 (2026-02-12) · NEW helper — extracted from the inline
+    `client.get(.../commits/{sha})` previously in revert_commit at
+    line ~221. Isolating this into a named helper lets Sub-batch 2 own
+    the read path cleanly; Sub-batch 3 doesn't inherit it.
+    """
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(60.0),
+        limits=httpx.Limits(max_connections=20, max_keepalive_connections=20),
+    ) as client:
+        r = await client.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}/commits/{commit_sha}",
+            headers=_headers(token),
+        )
+        r.raise_for_status()
+        return r.json()
 
 
 async def commit_files(
@@ -111,7 +164,7 @@ async def commit_files(
 
     async with httpx.AsyncClient(timeout=60.0, limits=_LIMITS) as client:
         await _p(f"📡 Reading branch head ({branch})…")
-        head = await _get_branch_head(client, owner, repo, branch, token)
+        head = await _get_branch_head(owner, repo, branch, token)
         await _p(f"✅ HEAD @ {head['sha'][:7]}", "success")
 
         # 1. Upload every file as a blob IN PARALLEL → returns sha each
@@ -218,12 +271,7 @@ async def revert_commit(
 
     async with httpx.AsyncClient(timeout=60.0, limits=_LIMITS) as client:
         await _p(f"📡 Loading commit {commit_sha[:7]}…")
-        r = await client.get(
-            f"{GITHUB_API}/repos/{owner}/{repo}/commits/{commit_sha}",
-            headers=_headers(token),
-        )
-        r.raise_for_status()
-        commit = r.json()
+        commit = await _get_commit_details(owner, repo, commit_sha, token)
         if not commit.get("parents"):
             raise RuntimeError("Cannot revert a root commit (no parent)")
         parent_sha = commit["parents"][0]["sha"]
@@ -241,7 +289,7 @@ async def revert_commit(
             if status == "added":
                 # File didn't exist before → deletion (sha=None in tree)
                 return path, None
-            body = await fetch_file(client, owner, repo, path, parent_sha, token)
+            body = await fetch_file(owner, repo, path, parent_sha, token)
             return path, body
 
         restored = await asyncio.gather(*[
@@ -254,7 +302,7 @@ async def revert_commit(
         )
 
         # Get current HEAD to commit on top of (not the commit being reverted)
-        head = await _get_branch_head(client, owner, repo, branch, token)
+        head = await _get_branch_head(owner, repo, branch, token)
 
         # PARALLEL: build blobs for non-delete restorations
         async def _build_spec(path: str, content: Optional[str]) -> dict:

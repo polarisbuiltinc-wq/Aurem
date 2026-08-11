@@ -147,22 +147,21 @@ async def test_ext_client_falls_through_to_httpx_default_for_unlisted_dep():
 # ─── Regression guard: existing sites unaffected ───────────────────
 
 def test_existing_migrated_sites_do_not_pass_limits_kwarg():
-    """None of the 65 already-migrated sites use `limits=` — they
-    rely on wrapper defaults. This test just confirms no test
-    infrastructure is broken by the new signature."""
+    """Pre-Sub-batch-2 witness: only github_api_writer.py should use
+    `limits=` after today's Sub-batch 2 migration (3 read helpers).
+    Any OTHER non-test file using it means Sub-batches 2/3 leaked scope."""
     import glob
-    hits = 0
+    hits = []
     for py in glob.glob("/app/backend/**/*.py", recursive=True):
         if "/tests/" in py or "/services/http/" in py:
             continue
+        if "github_api_writer.py" in py:
+            # Expected: Sub-batch 2 added 3 explicit limits= sites here
+            continue
         src = open(py).read()
         if "ext_client(" in src and "limits=" in src:
-            hits += 1
-    # Zero pre-existing sites use `limits=`. Sub-batches 2/3 will
-    # add it. This test acts as a witness: at the moment Sub-batch 1
-    # lands, no non-test file passes limits=.
-    assert hits == 0, (
-        f"Found {hits} non-test files using `limits=` with ext_client. "
-        "Sub-batch 1 landed alone — Sub-batch 2 (read) and Sub-batch "
-        "3 (write) migrations should not have shipped alongside it."
+            hits.append(py)
+    assert hits == [], (
+        f"Non-writer files using `limits=` with ext_client: {hits}. "
+        "Only github_api_writer.py should — that's Sub-batch 2's scope."
     )
