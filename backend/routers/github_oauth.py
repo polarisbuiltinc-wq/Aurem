@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
+from services.http import ext_client
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 
@@ -75,9 +76,17 @@ async def _gh_primary_email(token: str) -> Optional[str]:
     """GitHub's /user endpoint returns email=null when the user marked
     it private. Hit /user/emails (needs read:user / user:email scope
     which our SCOPES list already includes via read:user) to find the
-    verified primary."""
+    verified primary.
+
+    2026-02-12 · Batch 8b — migrated to services.http.ext_client.
+    Retains graceful-degrade contract: ANY failure (network,
+    timeout, non-2xx from raise_for_status, ExternalCallError from
+    the wrapper) is swallowed and returns None. Signup flow at
+    line 357 depends on this — a raise here would 500 the OAuth
+    callback and break login for users with private emails.
+    """
     try:
-        async with httpx.AsyncClient(timeout=10) as c:
+        async with ext_client("github", timeout=httpx.Timeout(10.0)) as c:
             r = await c.get(
                 "https://api.github.com/user/emails",
                 headers={
