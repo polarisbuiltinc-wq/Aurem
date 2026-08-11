@@ -102,11 +102,12 @@ async def get_architecture(authorization: Optional[str] = Header(None)):
     # Now total wall-clock = slowest single probe ≈ 4s cap.
     probe_targets = [svc for svc in REGISTRY if should_probe(svc)]
 
+    from services.http import ext_client
     async def _probe_one(svc):
         try:
             t0 = time.time()
             # Per-call client so a hung connect doesn't share state with peers.
-            async with httpx.AsyncClient(timeout=4.0) as c:
+            async with ext_client("internal_probe", timeout=httpx.Timeout(4.0)) as c:
                 r = await c.get(
                     svc.probe_url,
                     headers={"User-Agent": "AUREM-arch-probe/1.0"},

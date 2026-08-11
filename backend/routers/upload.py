@@ -33,6 +33,7 @@ import httpx
 from fastapi import APIRouter, File, Header, HTTPException, UploadFile
 
 from cto_services.auth import current_dev
+from services.http import ext_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/upload", tags=["Upload / MarkItDown"])
@@ -116,7 +117,7 @@ async def _describe_image_via_vision(raw: bytes, content_type: str,
             "HTTP-Referer": "https://auremcto.com",
             "X-Title": "AUREM - upload/convert (image)",
         }
-        async with httpx.AsyncClient(timeout=45.0) as c:
+        async with ext_client("openrouter", timeout=httpx.Timeout(45.0)) as c:
             r = await c.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers=headers, json=payload,

@@ -35,6 +35,7 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Depends
 from pydantic import BaseModel
 from cto_services.auth import require_admin_dep
+from services.http import ext_client
 
 from routers.admin import _require_admin
 
@@ -268,7 +269,7 @@ async def _harvest_ci_status() -> dict:
         "X-GitHub-Api-Version": "2022-11-28",
     }
     try:
-        async with httpx.AsyncClient(timeout=6.0) as client:
+        async with ext_client("github", timeout=httpx.Timeout(6.0)) as client:
             r = await client.get(url, headers=headers)
         if r.status_code != 200:
             return {
@@ -300,7 +301,7 @@ async def _harvest_ci_status() -> dict:
     if not jobs_url:
         return {"available": False, "reason": "run has no jobs_url", "jobs": {}}
     try:
-        async with httpx.AsyncClient(timeout=6.0) as client:
+        async with ext_client("github", timeout=httpx.Timeout(6.0)) as client:
             rj = await client.get(jobs_url, headers=headers)
         job_data = (rj.json() or {}).get("jobs") or []
     except (httpx.HTTPError, ValueError) as e:                 # noqa: BLE001
@@ -831,8 +832,9 @@ async def vscode_marketplace_status(
     }
 
     try:
-        async with httpx.AsyncClient(
-            timeout=8.0,
+        async with ext_client(
+            "vscode_marketplace",
+            timeout=httpx.Timeout(8.0),
             follow_redirects=True,
             headers={"User-Agent": "AUREM-CTO-Admin-Health/1.0"},
         ) as c:

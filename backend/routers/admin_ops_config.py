@@ -219,6 +219,7 @@ async def purge_caches(
     """
     import os
     import httpx
+    from services.http import ext_client
     await _require_admin(authorization)
 
     report = {
@@ -232,7 +233,7 @@ async def purge_caches(
     cf_zone = os.environ.get("CLOUDFLARE_ZONE_ID")
     if cf_token and cf_zone:
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with ext_client("cloudflare", timeout=httpx.Timeout(10.0)) as client:
                 resp = await client.post(
                     f"https://api.cloudflare.com/client/v4/zones/{cf_zone}/purge_cache",
                     headers={

@@ -663,6 +663,7 @@ async def admin_send_user_offer(
 
     # Fire all sends concurrently. Per-recipient template substitution.
     import httpx
+    from services.http import ext_client
 
     async def _send_one(target: dict) -> tuple[str, bool, str]:
         name = (target.get("name") or "").strip() or "there"
@@ -671,7 +672,7 @@ async def admin_send_user_offer(
                         .replace("{{name}}", name)
                         .replace("{{email}}", email))
         try:
-            async with httpx.AsyncClient(timeout=15) as client:
+            async with ext_client("resend", timeout=httpx.Timeout(15.0)) as client:
                 resp = await client.post(
                     "https://api.resend.com/emails",
                     headers={

@@ -35,6 +35,7 @@ import httpx
 from fastapi import APIRouter, Header, HTTPException, Depends
 from cto_services.auth import require_admin_dep as _require_admin_dep
 from pydantic import BaseModel, Field
+from services.http import ext_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["Admin / Rebuild"],
@@ -116,7 +117,7 @@ async def bin_tracker_projects(
             repo = (p.get("github_repo") or "").strip()
             if owner and repo:
                 try:
-                    async with httpx.AsyncClient(timeout=4.0) as c:
+                    async with ext_client("github", timeout=httpx.Timeout(4.0)) as c:
                         r = await c.head(
                             f"https://api.github.com/repos/{owner}/{repo}",
                             headers={
@@ -286,7 +287,7 @@ async def _fetch_openrouter_balance() -> dict:
         _OR_CREDIT_CACHE.update(data=out, ts=now)
         return out
     try:
-        async with httpx.AsyncClient(timeout=6.0) as c:
+        async with ext_client("openrouter", timeout=httpx.Timeout(6.0)) as c:
             r = await c.get(
                 "https://openrouter.ai/api/v1/credits",
                 headers={"Authorization": f"Bearer {key}"},

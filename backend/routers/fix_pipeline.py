@@ -665,7 +665,8 @@ async def _verify_commit_exists(*, db, user: dict, project_id: str,
         if not (owner and repo and token):
             return False
         import httpx
-        async with httpx.AsyncClient(timeout=10.0) as cx:
+        from services.http import ext_client
+        async with ext_client("github", timeout=httpx.Timeout(10.0)) as cx:
             r = await cx.get(
                 f"https://api.github.com/repos/{owner}/{repo}/commits/{full_sha}",
                 headers={"Authorization": f"token {token}",
