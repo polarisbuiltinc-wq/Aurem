@@ -24,6 +24,8 @@ from typing import Optional
 
 import httpx
 
+from services.http import ext_client
+
 logger = logging.getLogger(__name__)
 
 # ─── Real 2026 vendor prices (Feb 2026, verified live) ────────────────
@@ -89,7 +91,10 @@ async def get_usd_cad_rate() -> dict:
             "age_seconds": int(age),
         }
     try:
-        async with httpx.AsyncClient(timeout=8) as c:
+        async with ext_client(
+            "frankfurter",
+            timeout=httpx.Timeout(connect=5.0, read=8.0, write=5.0, pool=5.0),
+        ) as c:
             # Iter 115 — frankfurter migrated from .app → .dev/v1/ on
             # 2026-06. The old URL returns a 301 redirect that httpx
             # doesn't auto-follow when redirects are off, so we hit the

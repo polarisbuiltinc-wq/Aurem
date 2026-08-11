@@ -20,6 +20,9 @@ from typing import Optional
 
 import httpx
 
+from services.http import ext_request
+from services.http.client import ExternalCallError
+
 from cto_services.db import get_db
 
 logger = logging.getLogger(__name__)
@@ -121,15 +124,16 @@ async def _send_via_resend(to_email: str, subject: str, body: str) -> bool:
         return False
     sender = os.environ.get("DIGEST_FROM", "AUREM <onboarding@resend.dev>")
     try:
-        async with httpx.AsyncClient(timeout=15.0) as c:
-            r = await c.post(
-                "https://api.resend.com/emails",
-                headers={"Authorization": f"Bearer {key}"},
-                json={"from": sender, "to": [to_email],
-                       "subject": subject, "text": body},
-            )
-            r.raise_for_status()
-            return True
+        await ext_request(
+            "resend", "POST", "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {key}"},
+            json={"from": sender, "to": [to_email],
+                   "subject": subject, "text": body},
+        )
+        return True
+    except ExternalCallError as e:
+        logger.warning(f"resend send failed: {e!r}")
+        return False
     except Exception as e:
         logger.warning(f"resend send failed: {e!r}")
         return False

@@ -2,30 +2,28 @@
 
 ## 🚀 IN-PROGRESS (Fork session · 2026-02-12)
 
-### 2026-02-12 · ConnectRepoBanner Chunk B+C + HTTP wrapper Batch 1
+### 2026-02-12 · ConnectRepoBanner Chunk B+C + HTTP wrapper Batches 1+2
 
-**Delivered this session (preview only — not yet deployed to prod)**:
-- `ConnectRepoBanner.jsx` is now App-first: PAT walkthrough copy
-  removed, hardcoded "500 spots" replaced with dynamic
-  `${total}` from `/founder-offer/status`. Dead code purged
-  (StepCard + codeStyle constant).
-- Phase 3 · HTTP wrapper migration · Batch 1 shipped 11 raw
-  `httpx.AsyncClient(...)` callsites across 4 low-risk service
-  files (`topup_alerts.py`, `mermaid_diagram.py`,
-  `mock_reality_check.py`, `integration_health.py`) onto the
-  `services/http` wrapper (`ext_request` / `ext_client`).
-  Every migrated site now gets retry_guard breaker + uniform
-  `ExternalCallError` + `X-Request-ID` header.
-- 27/27 targeted pytest green. Backend boots clean. Landing +
-  founder-offer endpoint verified live.
+**On prod as of 2026-02-12 (SHA `d81f167c73a1`)**:
+- `ConnectRepoBanner.jsx` App-first + dynamic total wired to
+  `/founder-offer/status`. Dead code purged.
+- Phase 3 · Batch 1 · 11 sites migrated onto `services/http`:
+  `topup_alerts.py`, `mermaid_diagram.py`, `mock_reality_check.py`,
+  `integration_health.py` (8 probes).
 
-**Deferred to founder-supervised session (per user guardrail)**:
-- `ChatPanel.jsx` (4,874 LOC) split — high blast radius.
-- `services/loop_engine.py` (4,416 LOC) split — state-machine risk.
-- Remaining ~60 files with raw `httpx.AsyncClient` (chat,
-  github_*, loop_*, cto_projects, etc.) — will be batched into
-  ≤4-file waves, each with its own pinning tests + smoke test
-  before deploy.
+**On preview, awaiting next deploy**:
+- Phase 3 · Batch 2 · 4 more low-risk sites: `advisor_vision.py`
+  (OpenRouter vision), `financials.py` (Frankfurter FX),
+  `daily_digest.py` (Resend), `url_fetcher.py` (user URL context).
+- 21/21 targeted pytest green (Batch1 + Batch2 + wrapper +
+  observability + banner + risk_zone smoke).
+
+**Still deferred to founder-supervised sessions**:
+- `ChatPanel.jsx` split (4,874 LOC)
+- `services/loop_engine.py` split (4,416 LOC)
+- ~55 remaining files with raw `httpx.AsyncClient` in the more
+  stateful call paths (chat.py, github_sync.py, loop_execute.py,
+  cto_projects.py, github_api_writer.py, ...).
 
 ---
 

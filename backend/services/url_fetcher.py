@@ -26,6 +26,8 @@ from urllib.parse import urlparse
 
 import httpx
 
+from services.http import ext_client
+
 logger = logging.getLogger(__name__)
 
 # ── Tunables ─────────────────────────────────────────────────────────────
@@ -121,9 +123,11 @@ async def _fetch_one(url: str) -> dict:
         if not _is_safe_host(parsed.hostname or ""):
             return {"url": url, "ok": False, "error": "blocked host"}
 
-        async with httpx.AsyncClient(
-            timeout=TIMEOUT_SECONDS,
-            follow_redirects=True,
+        async with ext_client(
+            "user_url",
+            timeout=httpx.Timeout(
+                connect=5.0, read=TIMEOUT_SECONDS, write=5.0, pool=5.0,
+            ),
             headers={"User-Agent": USER_AGENT, "Accept": "*/*"},
         ) as client:
             r = await client.get(url)

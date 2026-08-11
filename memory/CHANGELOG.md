@@ -4,6 +4,49 @@ Append-only iteration log. See `PRD.md` for the original problem
 
 ---
 
+## 2026-02-12 · Fork session · Phase 3 · Batch 2 (HTTP wrapper migration)
+
+### What shipped (preview only)
+
+Second wave of low-risk `httpx.AsyncClient` migrations onto the
+`services/http` wrapper. Same safe pattern as Batch 1 — pure
+external POST/GET calls, no state machine, no chained pooled
+requests. Every migrated site gets retry_guard breaker + uniform
+`ExternalCallError` + `X-Request-ID` header injection.
+
+**Files migrated (4)**:
+- `services/advisor_vision.py` — OpenRouter vision proxy (Gemini
+  2.5 Pro Vision) → `ext_request("openrouter", ...)`
+- `services/financials.py` — Frankfurter USD→CAD FX rate →
+  `ext_client("frankfurter", ...)` (new dep name, falls back to
+  `_default` timeout in wrapper)
+- `services/daily_digest.py` — Resend email delivery (founder
+  digest) → `ext_request("resend", ...)`
+- `services/url_fetcher.py` — arbitrary user-provided URL fetch
+  (chat prompt URL context) → `ext_client("user_url", ...)`
+
+**Pinning tests**: `tests/test_phase3_http_wrapper_migration_batch2.py`
+(4 tests, all green). Combined with Batch 1: **21/21 targeted
+pytest green**.
+
+### Verification
+- Backend restart clean, LongCat probe OK, no startup errors
+- Python lint clean on all 4 migrated files
+- Import smoke: `from services import advisor_vision, financials,
+  daily_digest, url_fetcher` → OK
+- Same day: prod deploy of Batch 1 + banner completed successfully
+  (SHA `d81f167c73a1` on auremcto.com), verified via
+  `/version`, `/founder-offer/status`, `/admin/observability/breakers`
+
+### Progress
+- Batch 1 (4 files) — ✅ shipped to prod
+- Batch 2 (4 files) — ✅ landed on preview, awaiting next deploy
+- Remaining raw `httpx.AsyncClient` sites: ~60 across ~55 files
+  (loop_engine, chat, github_*, cto_projects, etc.) — big or
+  stateful; queued for founder-supervised sessions
+
+---
+
 ## 2026-02-12 · Fork session · Chunk B+C (ConnectRepoBanner) + Phase 3 · Batch 1 (HTTP wrapper migration)
 
 ### What shipped
