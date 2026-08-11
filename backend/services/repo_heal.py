@@ -186,7 +186,10 @@ async def heal_project(*, db, user_id: str, project_id: str,
             {"user_id": user_id}, {"_id": 0, "github": 1},
         )
         oauth = ((me or {}).get("github") or {}).get("access_token") or None
-        pat   = await _decrypt_pat(user_id, proj.get("github_token"))
+        # 2026-02-11 · Phase 3b (Bug 2 fix) — use unified get_repo_token so
+        # App-installed projects (installation_id, no PAT) also work.
+        from services.pat_vault import get_repo_token
+        pat   = await get_repo_token(proj)
 
         # ── Strategy router ──────────────────────────────────────────
         if err == "repo_not_set":

@@ -534,11 +534,13 @@ class LoopEngine:
                 proj = await self.db.cto_projects.find_one(
                     {"project_id": self.project_id, "user_id": self.user_id},
                     {"_id": 0, "github_owner": 1, "github_repo": 1,
-                     "github_branch": 1, "github_token": 1},
+                     "github_branch": 1, "github_token": 1,
+                     "auth_method": 1, "installation_id": 1, "user_id": 1},
                 )
                 if proj and proj.get("github_owner") and proj.get("github_repo"):
-                    from services.pat_vault import decrypt_pat as _decrypt_pat  # iter 212m-225 boundary fix
-                    token = await _decrypt_pat(self.user_id, proj.get("github_token"))
+                    # 2026-02-11 · Phase 3b (Bug 2 fix) — App-installed projects.
+                    from services.pat_vault import get_repo_token
+                    token = await get_repo_token(proj)
                     if not token:
                         u = await self.db.dev_users.find_one(
                             {"user_id": self.user_id}, {"_id": 0, "github": 1},
@@ -1137,7 +1139,8 @@ class LoopEngine:
             proj = await self.db.cto_projects.find_one(
                 {"project_id": self.project_id, "user_id": self.user_id},
                 {"_id": 0, "github_owner": 1, "github_repo": 1,
-                 "github_branch": 1, "github_token": 1},
+                 "github_branch": 1, "github_token": 1,
+                 "auth_method": 1, "installation_id": 1, "user_id": 1},
             )
             if not proj:
                 logger.error("[loop %s] EXECUTE — project not found, aborting", self.loop_id)
@@ -1146,8 +1149,9 @@ class LoopEngine:
             owner   = proj.get("github_owner") or ""
             repo    = proj.get("github_repo")  or ""
             branch  = proj.get("github_branch") or "main"
-            from services.pat_vault import decrypt_pat as _decrypt_pat  # iter 212m-225 boundary fix  # local import
-            token = await _decrypt_pat(self.user_id, proj.get("github_token"))
+            # 2026-02-11 · Phase 3b (Bug 2 fix) — dual-auth token resolver.
+            from services.pat_vault import get_repo_token  # local import
+            token = await get_repo_token(proj)
             if not token:
                 try:
                     u = await self.db.dev_users.find_one(
@@ -2778,8 +2782,9 @@ class LoopEngine:
             owner   = proj.get("github_owner") or ""
             repo    = proj.get("github_repo")  or ""
             branch  = proj.get("github_branch") or "main"
-            from services.pat_vault import decrypt_pat as _decrypt_pat  # iter 212m-225 boundary fix  # local import
-            token = await _decrypt_pat(self.user_id, proj.get("github_token"))
+            # 2026-02-11 · Phase 3b (Bug 2 fix) — dual-auth token resolver.
+            from services.pat_vault import get_repo_token  # local import
+            token = await get_repo_token(proj)
             if not token:
                 try:
                     u = await self.db.dev_users.find_one(
@@ -3918,11 +3923,13 @@ async def _generate_plan(user_id: str, project_id: Optional[str],
                     proj = await db.cto_projects.find_one(
                         {"project_id": project_id, "user_id": user_id},
                         {"_id": 0, "github_owner": 1, "github_repo": 1,
-                         "github_branch": 1, "github_token": 1},
+                         "github_branch": 1, "github_token": 1,
+                         "auth_method": 1, "installation_id": 1, "user_id": 1},
                     )
                     if proj and proj.get("github_owner") and proj.get("github_repo"):
-                        from services.pat_vault import decrypt_pat as _decrypt_pat  # iter 212m-225 boundary fix
-                        tok = await _decrypt_pat(user_id, proj.get("github_token"))
+                        # 2026-02-11 · Phase 3b (Bug 2 fix) — App-installed projects.
+                        from services.pat_vault import get_repo_token
+                        tok = await get_repo_token(proj)
                         if not tok:
                             u = await db.dev_users.find_one(
                                 {"user_id": user_id}, {"_id": 0, "github": 1},
@@ -4066,14 +4073,17 @@ async def _run_security_scan(user_id: str,
                 "skipped_reason": "no_db"}
     proj = await db.cto_projects.find_one(
         {"project_id": project_id, "user_id": user_id},
-        {"_id": 0, "github_owner": 1, "github_repo": 1, "github_token": 1},
+        {"_id": 0, "github_owner": 1, "github_repo": 1, "github_token": 1,
+         "auth_method": 1, "installation_id": 1, "user_id": 1},
     )
     if not proj:
         return {"summary": {"total": 0, "by_severity": {}},
                 "skipped_reason": "no_project_doc"}
     owner = proj.get("github_owner") or ""
     repo  = proj.get("github_repo")  or ""
-    pat   = await _decrypt_pat(user_id, proj.get("github_token"))
+    # 2026-02-11 · Phase 3b (Bug 2 fix) — dual-auth token resolver.
+    from services.pat_vault import get_repo_token
+    pat   = await get_repo_token(proj)
     if not (owner and repo and pat):
         return {"summary": {"total": 0, "by_severity": {}},
                 "skipped_reason": "no_github_linkage"}
@@ -4183,14 +4193,16 @@ async def _run_diff_security_scan(
     proj = await db.cto_projects.find_one(
         {"project_id": project_id, "user_id": user_id},
         {"_id": 0, "github_owner": 1, "github_repo": 1,
-         "github_branch": 1, "github_token": 1},
+         "github_branch": 1, "github_token": 1,
+         "auth_method": 1, "installation_id": 1, "user_id": 1},
     )
     if not proj:
         return {"summary": {"total": 0, "by_severity": {}},
                 "findings": [], "diff_mode": True,
                 "skipped_reason": "no_project_doc"}
 
-    from services.pat_vault import decrypt_pat as _decrypt_pat  # iter 212m-225 boundary fix
+    # 2026-02-11 · Phase 3b (Bug 2 fix) — dual-auth token resolver.
+    from services.pat_vault import get_repo_token
     # Iter 319 · Bug 3 — restore the missing `_scan_text` import
     # for the diff-only scan path. Same defect as `_run_security_scan`.
     from routers.security_scan import _scan_text
@@ -4203,7 +4215,7 @@ async def _run_diff_security_scan(
     owner  = proj.get("github_owner") or ""
     repo   = proj.get("github_repo")  or ""
     branch = proj.get("github_branch") or "main"
-    pat    = await _decrypt_pat(user_id, proj.get("github_token"))
+    pat    = await get_repo_token(proj)
     if not (owner and repo and pat):
         return {"summary": {"total": 0, "by_severity": {}},
                 "findings": [], "diff_mode": True,

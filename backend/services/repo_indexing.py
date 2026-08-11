@@ -157,15 +157,19 @@ async def build_repo_index(
     owner  = (proj.get("github_owner") or "").strip()
     repo   = (proj.get("github_repo")  or "").strip()
     branch = (proj.get("branch")       or "main").strip()
-    token  = proj.get("github_token")  or None
+    # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token dispatches on
+    # project.auth_method so App-installed projects mint a fresh
+    # installation access token; PAT rows decrypt normally.
+    from services.pat_vault import get_repo_token
+    token  = await get_repo_token(proj)
     if not (owner and repo):
         out["errors"].append("project has no github_owner/github_repo")
         return out
 
-    # Decrypt PAT if it's stored encrypted (v1:-prefixed). The existing
-    # repo_context helpers already pass the token straight through, but
-    # commit_files needs a real plaintext PAT to upload blobs.
-    plaintext_token = await _maybe_decrypt(user_id, token)
+    # get_repo_token already returns plaintext (decrypted PAT or App
+    # installation token). Kept the variable name below for minimal
+    # downstream diff.
+    plaintext_token = token
 
     # ── Step 1: Tree fetch ───────────────────────────────────────
     try:

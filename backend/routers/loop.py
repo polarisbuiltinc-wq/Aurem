@@ -1194,8 +1194,11 @@ async def rollback_loop(
 
     # Reuse the cto_projects PAT decrypt helper so we don't create a
     # second key-derivation path (single source of truth for HKDF).
-    from routers.cto_projects import _decrypt_pat, _user_gh_token
-    user_token = await _decrypt_pat(user["user_id"], proj.get("github_token")) \
+    # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token unifies PAT
+    # + github_app auth paths so App-installed projects can rollback too.
+    from routers.cto_projects import _user_gh_token
+    from services.pat_vault import get_repo_token
+    user_token = await get_repo_token(proj) \
         or await _user_gh_token(user["user_id"])
     if not user_token:
         raise HTTPException(

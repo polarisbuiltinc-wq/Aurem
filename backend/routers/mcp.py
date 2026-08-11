@@ -795,8 +795,11 @@ async def _tool_get_recent_commits(user_id: str, args: dict) -> dict:
         raise RuntimeError(f"Project not found: {project_id}")
     # Decrypt PAT through the same helper the rest of the router uses
     # so encrypted-token storage stays consistent.
-    from routers.cto_projects import _decrypt_pat, _user_gh_token
-    gh_token = await _decrypt_pat(user_id, proj.get("github_token")) \
+    # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token unifies PAT
+    # + github_app auth paths.
+    from routers.cto_projects import _user_gh_token
+    from services.pat_vault import get_repo_token
+    gh_token = await get_repo_token(proj) \
         or await _user_gh_token(user_id)
     owner  = proj.get("github_owner")
     repo   = proj.get("github_repo")
@@ -1221,7 +1224,13 @@ async def _tool_get_project_info(user_id: str, args: dict) -> dict:
         "connected":    bool(
             proj.get("github_owner")
             and proj.get("github_repo")
-            and proj.get("github_token")
+            and (
+                # 2026-02-11 · Phase 3b (Bug 2 fix) — App-installed projects
+                # never store a github_token; check installation_id instead.
+                proj.get("github_token")
+                or (proj.get("auth_method") == "github_app"
+                    and proj.get("installation_id"))
+            )
         ),
         "task_count":   task_count,
         "health": (

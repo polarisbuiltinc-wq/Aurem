@@ -263,7 +263,10 @@ async def refresh_route(project_id: str,
     )
     if not proj:
         raise HTTPException(404, "project_not_found")
-    pat = proj.get("github_token") or ""
+    # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token handles both PAT
+    # rows and github_app installation rows.
+    from services.pat_vault import get_repo_token
+    pat = await get_repo_token(proj) or ""
     repo_url = proj.get("github_url") or ""
     if not pat:
         raise HTTPException(400, "no_github_pat_saved")

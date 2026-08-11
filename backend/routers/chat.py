@@ -1406,7 +1406,9 @@ async def chat_stream(
         try:
             _proj = await asyncio.wait_for(get_db().cto_projects.find_one(
                 {"project_id": body.project_id, "user_id": user_id},
-                {"_id": 0, "github_owner": 1, "github_repo": 1},
+                {"_id": 0, "github_owner": 1, "github_repo": 1,
+                 "github_token": 1, "auth_method": 1,
+                 "installation_id": 1, "user_id": 1},
             ), timeout=10.0)   # Iter 212m-177 P1-6 hard cap
             owner = (_proj or {}).get("github_owner") or ""
             repo = (_proj or {}).get("github_repo") or ""
@@ -1415,13 +1417,15 @@ async def chat_stream(
             # Best-effort: surface the GitHub PAT so the brain can pull
             # the last 5 commits from the remote — covers commits made
             # outside AUREM (direct CLI pushes / other contributors).
+            # 2026-02-11 · Phase 3b (Bug 2 fix) — dual-auth token resolver.
             _pat = None
             try:
-                from routers.cto_projects import _decrypt_pat, _user_gh_token
+                from routers.cto_projects import _user_gh_token
+                from services.pat_vault import get_repo_token
                 # Iter 212m-177 P1-6 — hard cap: PAT decrypt hits Mongo +
                 # HKDF and the OAuth fallback hits Mongo again.
                 async def _pat_lookup():
-                    return (await _decrypt_pat(user_id, (_proj or {}).get("github_token"))
+                    return (await get_repo_token(_proj or {})
                             or await _user_gh_token(user_id))
                 _pat = await asyncio.wait_for(_pat_lookup(), timeout=10.0)
             except Exception:
@@ -1739,12 +1743,14 @@ async def chat_stream(
                             branch_h = project.get("branch", "main")
                     pat = None
                     try:
-                        # Iter 204 — project.github_token is ENCRYPTED at rest
-                        # (`v1:…` Fernet ciphertext). MUST decrypt before
-                        # sending to GitHub's API or every Mode-D/E scan
-                        # fails with 401 Unauthorized.
+                        # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token
+                        # dispatches on project.auth_method so App-installed
+                        # projects mint a fresh installation token; PAT rows
+                        # decrypt normally (Iter 204 fix retained inside the
+                        # helper).
+                        from services.pat_vault import get_repo_token
                         pat = (
-                            await _decrypt_pat(user_id, (project or {}).get("github_token"))
+                            await get_repo_token(project or {})
                             or await _user_gh_token(user_id)
                         )
                     except Exception:

@@ -144,7 +144,8 @@ async def connection_status(authorization: str = Header(None)) -> dict:
         {"user_id": user_id},
         {"_id": 0, "project_id": 1, "name": 1,
          "github_owner": 1, "github_repo": 1, "branch": 1,
-         "github_token": 1},
+         "github_token": 1,
+         "auth_method": 1, "installation_id": 1, "user_id": 1},
     ).sort("created_at", -1).to_list(50)
 
     # Pull the user's OAuth token once — many projects may share it.
@@ -171,7 +172,11 @@ async def connection_status(authorization: str = Header(None)) -> dict:
                              "auth": "none", "owner": owner, "repo": repo,
                              "error": "repo_not_set"})
             continue
-        pat = await _decrypt_pat(user_id, p.get("github_token"))
+        # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token dispatches on
+        # project.auth_method; App-installed rows mint a fresh installation
+        # token, PAT rows decrypt normally.
+        from services.pat_vault import get_repo_token
+        pat = await get_repo_token(p)
         if pat:
             token, auth = pat, "pat"
         elif oauth_token:

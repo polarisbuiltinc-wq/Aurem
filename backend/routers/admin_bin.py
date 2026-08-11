@@ -92,13 +92,17 @@ async def bin_tracker_projects(
     ).to_list(200)
 
     # Decrypt + probe each PAT in parallel (HEAD /repos/{o}/{r}).
-    from routers.cto_projects import _decrypt_pat, _user_gh_token
+    # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token unifies PAT
+    # + github_app auth so App-installed projects show a real token
+    # status in the admin probe instead of always "missing".
+    from routers.cto_projects import _user_gh_token
+    from services.pat_vault import get_repo_token
     oauth_fallback = await _user_gh_token(bin_id)
 
     async def _probe(p):
         pat = None
         try:
-            pat = await _decrypt_pat(bin_id, p.get("github_token") or "")
+            pat = await get_repo_token(p)
         except Exception:
             pat = None
         if not pat:

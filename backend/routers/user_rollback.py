@@ -155,10 +155,12 @@ async def revert_last_ship(
             "error":   "project_not_found",
             "message": "Parent project not found — cannot resolve repo.",
         })
-    from routers.cto_projects import _decrypt_pat, _user_gh_token
-    user_token = await _decrypt_pat(
-        user["user_id"], proj.get("github_token"),
-    ) or await _user_gh_token(user["user_id"])
+    # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token unifies PAT
+    # + github_app auth so App-installed projects can rollback too.
+    from routers.cto_projects import _user_gh_token
+    from services.pat_vault import get_repo_token
+    user_token = await get_repo_token(proj) \
+        or await _user_gh_token(user["user_id"])
     if not user_token:
         raise HTTPException(400, {
             "error":   "no_github_pat",

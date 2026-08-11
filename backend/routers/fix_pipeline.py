@@ -643,14 +643,17 @@ async def _verify_commit_exists(*, db, user: dict, project_id: str,
     try:
         proj = await db.cto_projects.find_one(
             {"project_id": project_id, "user_id": user["user_id"]},
-            {"_id": 0, "github_owner": 1, "github_repo": 1, "github_token": 1},
+            {"_id": 0, "github_owner": 1, "github_repo": 1, "github_token": 1,
+             "auth_method": 1, "installation_id": 1, "user_id": 1},
         )
         if not proj:
             return False
         owner = proj.get("github_owner")
         repo  = proj.get("github_repo")
-        from routers.security_scan import _decrypt_pat
-        token = await _decrypt_pat(user["user_id"], proj.get("github_token"))
+        # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token dispatches on
+        # project.auth_method so App-installed projects also succeed.
+        from services.pat_vault import get_repo_token
+        token = await get_repo_token(proj)
         if not token:
             try:
                 u = await db.dev_users.find_one(

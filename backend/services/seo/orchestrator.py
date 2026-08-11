@@ -119,7 +119,10 @@ async def run_seo_fixes(
     owner  = (proj.get("github_owner") or "").strip()
     repo   = (proj.get("github_repo")  or "").strip()
     branch = (proj.get("branch")       or "main").strip()
-    token  = proj.get("github_token")  or None
+    # 2026-02-11 · Phase 3b (Bug 2 fix) — App-installed projects have no
+    # PAT; get_repo_token mints a fresh installation token.
+    from services.pat_vault import get_repo_token
+    token  = await get_repo_token(proj)
     if not (owner and repo):
         out["errors"].append("project has no github_owner/github_repo")
         return out

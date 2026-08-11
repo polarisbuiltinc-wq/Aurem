@@ -1746,10 +1746,13 @@ async def admin_brain_dump(
 
     # Fetch the PAT so the assembled context includes remote commits
     # (matches what ORA would see for this user in a real chat turn).
+    # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token unifies PAT
+    # + github_app auth.
     token = None
     try:
-        from routers.cto_projects import _decrypt_pat, _user_gh_token
-        token = await _decrypt_pat(proj["user_id"], proj.get("github_token")) \
+        from routers.cto_projects import _user_gh_token
+        from services.pat_vault import get_repo_token
+        token = await get_repo_token(proj) \
             or await _user_gh_token(proj["user_id"])
     except Exception:
         token = None
@@ -2365,10 +2368,13 @@ async def admin_brain_replay(
 
     # Match the PAT resolution used by the real chat path so the replay
     # answer is comparable to what a user would actually get.
+    # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token unifies PAT
+    # + github_app auth.
     token = None
     try:
-        from routers.cto_projects import _decrypt_pat, _user_gh_token
-        token = await _decrypt_pat(proj["user_id"], proj.get("github_token")) \
+        from routers.cto_projects import _user_gh_token
+        from services.pat_vault import get_repo_token
+        token = await get_repo_token(proj) \
             or await _user_gh_token(proj["user_id"])
     except Exception:
         token = None

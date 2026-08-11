@@ -379,13 +379,16 @@ async def run_security_scan(
         raise HTTPException(503, "DB not connected")
     proj = await db.cto_projects.find_one(
         {"project_id": project_id, "user_id": user_id},
-        {"_id": 0, "github_owner": 1, "github_repo": 1, "github_token": 1},
+        {"_id": 0, "github_owner": 1, "github_repo": 1, "github_token": 1,
+         "auth_method": 1, "installation_id": 1, "user_id": 1},
     )
     if not proj:
         raise HTTPException(404, "Project not found")
     owner = proj.get("github_owner") or ""
     repo  = proj.get("github_repo") or ""
-    pat   = await _decrypt_pat(user_id, proj.get("github_token"))
+    # 2026-02-11 · Phase 3b (Bug 2 fix) — dual-auth token resolver.
+    from services.pat_vault import get_repo_token
+    pat   = await get_repo_token(proj)
     # Iter 212m-102 — Fallback to the user's GitHub OAuth access_token
     # when the project row has no per-project PAT. OAuth tokens carry
     # `repo, read:user, user:email` scopes (see services/github_oauth.py

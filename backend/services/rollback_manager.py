@@ -129,8 +129,11 @@ async def execute_rollback(
                 "project_id": project_id}
 
     try:
-        from routers.cto_projects import _decrypt_pat, _user_gh_token
-        user_token = (await _decrypt_pat(user_id, proj.get("github_token"))
+        from routers.cto_projects import _user_gh_token
+        from services.pat_vault import get_repo_token
+        # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token dispatches
+        # on project.auth_method so App-installed projects work too.
+        user_token = (await get_repo_token(proj)
                       or await _user_gh_token(user_id))
     except Exception as e:
         return {"ok": False, "reason": "pat_resolve_failed",

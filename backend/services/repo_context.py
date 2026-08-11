@@ -267,11 +267,17 @@ async def _build_blob(project: dict) -> str:
     loops via asyncio.gather() with a small semaphore to keep us
     under GitHub's secondary-rate limit. The pre-refactor implementation
     awaited each _fetch_file one at a time, which dominated COLD-path
-    latency (10 files × 500 ms = 5 s)."""
+    latency (10 files × 500 ms = 5 s).
+
+    2026-02-11 · Phase 3b (Bug 2 fix) — token resolution now goes
+    through `get_repo_token(project)` so App-installed projects
+    (which store no PAT) mint a fresh installation access token
+    instead of returning None and 401-ing every GitHub call."""
     owner = project.get("github_owner") or ""
     repo = project.get("github_repo") or ""
     branch = project.get("branch") or "main"
-    token = project.get("github_token") or None
+    from services.pat_vault import get_repo_token
+    token = await get_repo_token(project)
     project_id = project.get("project_id") or ""
 
     timings: dict = {}
