@@ -57,6 +57,26 @@ _TIMEOUT_DEFAULTS: dict[str, httpx.Timeout] = {
     "_default": httpx.Timeout(connect=5.0,  read=20.0, write=10.0, pool=5.0),
 }
 
+# Per-dep connection-pool limits. Overridable per-call via `limits=`.
+# Deliberately conservative — a small keepalive pool is enough for
+# most deps (they're accessed sparsely), but write-heavy deps like
+# `github` (Git Data API: parallel blob/tree/commit calls in the
+# `github_api_writer` module) get a larger burst budget.
+#
+# 2026-02-12 · added as part of Sub-batch 1 of the `github_api_writer`
+# migration prep — the writer currently uses
+# `httpx.Limits(max_connections=20, max_keepalive_connections=20)`
+# so `github`'s default here MUST match, else the wrapper migration
+# would silently 5× the burst budget and risk tripping GitHub's
+# secondary rate-limiter on large multi-file commits.
+_LIMITS_DEFAULTS: dict[str, httpx.Limits] = {
+    "github":   httpx.Limits(max_connections=20, max_keepalive_connections=20),
+    # Everyone else uses httpx's own defaults (100/20) — represented
+    # by the absence of a per-dep override. Callers that need a
+    # custom cap MUST pass `limits=httpx.Limits(...)` explicitly.
+}
+
+
 # Status codes that should trigger a retry (transient upstream failures).
 # 4xx are user errors → no retry. 5xx / 408 / 429 → retry.
 _RETRY_STATUS = frozenset({408, 429, 500, 502, 503, 504})
@@ -102,6 +122,7 @@ async def ext_client(
     base_url: str = "",
     headers: Optional[dict] = None,
     timeout: Optional[httpx.Timeout] = None,
+    limits: Optional[httpx.Limits] = None,
     follow_redirects: bool = True,
 ):
     """Context-managed httpx.AsyncClient with policy defaults for `dep`.
@@ -111,23 +132,40 @@ async def ext_client(
     require intercepting every method); use `ext_request()` for the
     retry-wrapped one-shot form.
 
-    The `dep` name still matters because it seeds the timeout defaults
-    and the injected request-id header. Prefer `ext_request` for hot
-    outbound calls where retries matter; use `ext_client` when you
-    need to make multiple related calls in the same pooled session
-    (e.g. GitHub tree/blob/commit chain) and manage retries yourself
-    via `call_with_retry`.
+    The `dep` name still matters because it seeds the timeout defaults,
+    the connection-pool limits, and the injected request-id header.
+    Prefer `ext_request` for hot outbound calls where retries matter;
+    use `ext_client` when you need to make multiple related calls in
+    the same pooled session (e.g. GitHub tree/blob/commit chain) and
+    manage retries yourself via `call_with_retry`.
+
+    Iter 2026-02-12 · added `limits=` parameter (Sub-batch 1 of the
+    `github_api_writer` migration prep).  When None, uses the per-dep
+    default from `_LIMITS_DEFAULTS`, falling through to httpx's own
+    default (100/20) if the dep is not listed there.  Callers that
+    need a specific connection-pool shape (e.g. parallel blob uploads
+    with a burst cap) MUST pass an explicit `httpx.Limits(...)`.
     """
     to = timeout or _TIMEOUT_DEFAULTS.get(dep, _TIMEOUT_DEFAULTS["_default"])
+    lim = limits if limits is not None else _LIMITS_DEFAULTS.get(dep)
     hdrs = dict(headers or {})
     hdrs.setdefault("X-Request-ID", uuid.uuid4().hex)
     hdrs.setdefault("User-Agent", "aurem-dev/1.0 (+https://auremcto.com)")
-    async with httpx.AsyncClient(
-        base_url=base_url or None,
+    # Only forward `limits` when we actually have one — passing None
+    # to httpx.AsyncClient would override its internal DEFAULT_LIMITS
+    # with None, which is a TypeError. Omit the kwarg instead.
+    # Same pattern for `base_url` — httpx 0.27 rejects `base_url=None`
+    # with a TypeError, so omit the kwarg when the caller passed "".
+    client_kwargs: dict = dict(
         headers=hdrs,
         timeout=to,
         follow_redirects=follow_redirects,
-    ) as c:
+    )
+    if base_url:
+        client_kwargs["base_url"] = base_url
+    if lim is not None:
+        client_kwargs["limits"] = lim
+    async with httpx.AsyncClient(**client_kwargs) as c:
         yield c
 
 
