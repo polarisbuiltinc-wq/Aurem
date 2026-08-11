@@ -4,7 +4,7 @@
 
 ### 2026-02-12 · ConnectRepoBanner Chunk B+C + HTTP wrapper Batches 1+2
 
-**On prod as of 2026-02-12 (Batch 3 deploy at built_at `17:10:03`, SHA `0282936785ef`)**:
+**On prod as of 2026-02-12 (Batch 4 deploy at built_at `17:30:20`, SHA `49ffba55fcf7`)**:
 - `ConnectRepoBanner.jsx` App-first + dynamic total wired to
   `/founder-offer/status`. Dead code purged.
 - Phase 3 · Batch 1 · 11 sites migrated onto `services/http`:
@@ -17,14 +17,11 @@
   `mode_d_debugger.py` (1), `tools_bridge.py` (2 · new dep
   `aurem_upstream`), `web_skills.py` (4 · Tavily summarize +
   Firecrawl scrape/crawl).
-
-**On preview, awaiting next prod deploy**:
 - Phase 3 · Batch 4 · 13 more sites across 4 files:
   `graph_builder.py` (2), `repo_context.py` (3),
-  `local_tools.py` (7), `repo_heal.py` (1). All to `github` dep
-  → consolidated breaker coverage for the entire GitHub outbound
-  path.
-- **Cumulative: 35 sites / 15 service files migrated.**
+  `local_tools.py` (7), `repo_heal.py` (1) — all `github` dep,
+  consolidated breaker coverage for GitHub outbound path.
+- **Cumulative on prod: 35 sites / 15 service files migrated.**
 
 **3 sites intentionally deferred (supervised session queue)**:
 - `services/ora_client.py` — custom 24h fatal-pattern breaker
