@@ -31,6 +31,8 @@ from typing import Optional
 
 import httpx
 
+from services.http import ext_client
+
 from cto_services.db import get_db
 from .repo_context import _fetch_file as _gh_fetch_file
 from .sandbox_runner import run_python_check
@@ -109,7 +111,10 @@ async def find_usages(ctx: dict, args: dict) -> dict:
 
     gh_query = f"{symbol} repo:{owner}/{repo}"
     try:
-        async with httpx.AsyncClient(timeout=15.0) as c:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+        ) as c:
             r = await c.get(
                 f"{GITHUB_API}/search/code",
                 params={"q": gh_query, "per_page": max_hits},
@@ -131,7 +136,10 @@ async def find_usages(ctx: dict, args: dict) -> dict:
     # Fallback: if GitHub code-search rate-limited or empty, grep the tree.
     if not usages:
         try:
-            async with httpx.AsyncClient(timeout=20.0) as c:
+            async with ext_client(
+                "github",
+                timeout=httpx.Timeout(connect=5.0, read=20.0, write=5.0, pool=5.0),
+            ) as c:
                 tree_r = await c.get(
                     f"{GITHUB_API}/repos/{owner}/{repo}/git/trees/"
                     f"{branch}?recursive=1",
@@ -483,7 +491,10 @@ async def get_commit_history(ctx: dict, args: dict) -> dict:
         params["path"] = path_filter
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as c:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+        ) as c:
             r = await c.get(
                 f"{GITHUB_API}/repos/{owner}/{repo}/commits",
                 params=params, headers=_gh_headers(token),
@@ -557,7 +568,10 @@ async def list_issues(ctx: dict, args: dict) -> dict:
         params["labels"] = label
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as c:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+        ) as c:
             r = await c.get(
                 f"{GITHUB_API}/repos/{owner}/{repo}/issues",
                 params=params, headers=_gh_headers(token),
@@ -627,7 +641,10 @@ async def get_pr_comments(ctx: dict, args: dict) -> dict:
     if not owner or not repo:
         return {"ok": False, "error": "Project missing github_owner/repo"}
 
-    async with httpx.AsyncClient(timeout=15.0) as c:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+    ) as c:
         # Issue comments (top-level PR conversation)
         try:
             ic = await c.get(
@@ -693,7 +710,10 @@ async def find_package_docs(ctx: dict, args: dict) -> dict:
 
     async def _npm() -> dict | None:
         try:
-            async with httpx.AsyncClient(timeout=10.0) as c:
+            async with ext_client(
+                "npm",
+                timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+            ) as c:
                 r = await c.get(f"{NPM_REGISTRY}/{name}")
             if r.status_code != 200:
                 return None
@@ -715,7 +735,10 @@ async def find_package_docs(ctx: dict, args: dict) -> dict:
 
     async def _pypi() -> dict | None:
         try:
-            async with httpx.AsyncClient(timeout=10.0) as c:
+            async with ext_client(
+                "pypi",
+                timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+            ) as c:
                 r = await c.get(f"{PYPI_API}/{name}/json")
             if r.status_code != 200:
                 return None

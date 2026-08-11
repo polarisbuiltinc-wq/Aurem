@@ -23,7 +23,23 @@
   consolidated breaker coverage for GitHub outbound path.
 - **Cumulative on prod: 35 sites / 15 service files migrated.**
 
-**3 sites intentionally deferred (supervised session queue)**:
+**On preview, awaiting next prod deploy**:
+- Phase 3 · Batch 5 · 12 more sites across 2 files:
+  `supabase_provisioner.py` (5 · `ext_client("supabase")`) +
+  `dev_skills.py` (7 · 5 github + 1 npm + 1 pypi). New dep names
+  introduced: `npm`, `pypi`.
+- **Cumulative: 47 sites / 17 service files migrated.**
+
+**5 sites intentionally deferred (supervised session queue)**:
+- `services/ora_client.py` — custom 24h fatal-pattern breaker
+- `services/web_skills.py::web_search` + `::fetch_url` — manual
+  `retry_guard.get_breaker("tavily")` gating (would double-record)
+- `services/github_api_writer.py` (2 sites) — custom
+  `httpx.Limits(max_connections=20, max_keepalive=20)` pool +
+  60s big-commit timeout; needs `ext_client(limits=)` wrapper
+  API upgrade first (see `memory/BATCH_5_SURVEY_2026-02-12.md`)
+
+**Still deferred to founder-supervised sessions**:
 - `services/ora_client.py` — custom 24h fatal-pattern breaker
 - `services/web_skills.py::web_search` + `::fetch_url` — manual
   `retry_guard.get_breaker("tavily")` gating (would double-record)

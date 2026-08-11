@@ -81,6 +81,8 @@ from typing import Optional
 
 import httpx
 
+from services.http import ext_client
+
 logger = logging.getLogger(__name__)
 
 _API_ROOT = "https://api.supabase.com"
@@ -215,7 +217,10 @@ async def create_project(
         "plan":         "free",   # AUREM absorbs upgrades outside this call
         "db_pass":      db_password,
     }
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as cli:
+    async with ext_client(
+        "supabase",
+        timeout=httpx.Timeout(connect=5.0, read=_TIMEOUT, write=10.0, pool=5.0),
+    ) as cli:
         r = await cli.post(f"{_API_ROOT}/v1/projects",
                            headers=_headers(), json=payload)
     if r.status_code not in (200, 201):
@@ -248,7 +253,10 @@ async def get_project_status(project_ref: str) -> dict:
     """Poll Supabase for the project's readiness state."""
     if not is_configured():
         return _not_configured_error()
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as cli:
+    async with ext_client(
+        "supabase",
+        timeout=httpx.Timeout(connect=5.0, read=_TIMEOUT, write=10.0, pool=5.0),
+    ) as cli:
         r = await cli.get(f"{_API_ROOT}/v1/projects/{project_ref}",
                           headers=_headers())
     if r.status_code != 200:
@@ -271,7 +279,10 @@ async def run_sql(project_ref: str, sql: str) -> dict:
         return _not_configured_error()
     if not sql or not sql.strip():
         return {"ok": True, "rows": [], "skipped": "empty_sql"}
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as cli:
+    async with ext_client(
+        "supabase",
+        timeout=httpx.Timeout(connect=5.0, read=_TIMEOUT, write=10.0, pool=5.0),
+    ) as cli:
         r = await cli.post(
             f"{_API_ROOT}/v1/projects/{project_ref}/database/query",
             headers=_headers(), json={"query": sql},
@@ -291,7 +302,10 @@ async def delete_project(project_ref: str) -> dict:
     for the downgrade grace-period expiry cleanup."""
     if not is_configured():
         return _not_configured_error()
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as cli:
+    async with ext_client(
+        "supabase",
+        timeout=httpx.Timeout(connect=5.0, read=_TIMEOUT, write=10.0, pool=5.0),
+    ) as cli:
         r = await cli.delete(f"{_API_ROOT}/v1/projects/{project_ref}",
                              headers=_headers())
     if r.status_code in (200, 202, 204):
@@ -318,7 +332,10 @@ async def transfer_project_to_org(project_ref: str, target_org_id: str) -> dict:
     if not target_org_id or not isinstance(target_org_id, str):
         return {"ok": False, "reason": "missing_target_org_id"}
     payload = {"target_organization_id": target_org_id.strip()}
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as cli:
+    async with ext_client(
+        "supabase",
+        timeout=httpx.Timeout(connect=5.0, read=_TIMEOUT, write=10.0, pool=5.0),
+    ) as cli:
         r = await cli.post(
             f"{_API_ROOT}/v1/projects/{project_ref}/transfer",
             headers=_headers(), json=payload,

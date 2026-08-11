@@ -4,6 +4,60 @@ Append-only iteration log. See `PRD.md` for the original problem
 
 ---
 
+## 2026-02-12 · Fork session · Phase 3 · Batch 5 (HTTP wrapper migration — Option A)
+
+### What shipped (preview only — awaiting founder review)
+
+Fifth wave, per founder-approved Option A path from the Batch 5
+survey (`memory/BATCH_5_SURVEY_2026-02-12.md`): ship the two
+files that are proven low-risk, defer `github_api_writer.py`
+(custom `httpx.Limits` pool + 60s big-commit timeout that need a
+supervised wrapper API upgrade first) and `github_deploy_service.py`
+(needs a quick per-site read).
+
+**Migrated (12 sites across 2 files)**:
+- `services/supabase_provisioner.py` — 5 sites (Supabase Mgmt
+  API: create_project, get_project_status, run_sql,
+  delete_project, transfer_project_to_org) → `ext_client("supabase")`
+- `services/dev_skills.py` — 7 sites (5 GitHub: code_search,
+  tree fallback, commits log, issues, PR comments; 1 npm registry;
+  1 PyPI registry). Two **new dep names** introduced —
+  `"npm"` and `"pypi"` — both fall back to `_default` timeout in
+  the wrapper (fine for registry lookups).
+
+**Pinning tests**: `tests/test_phase3_http_wrapper_migration_batch5.py`
+(3 tests, all green — including a guard that asserts
+`github_api_writer.py` was NOT migrated so a future agent
+doesn't skip the supervised review).
+
+### Verification
+- **32/32 targeted pytest green** (Batch1+2+3+4+5 + wrapper
+  contract + banner + observability + risk_zone smoke)
+- Backend restart clean, no import errors
+- Python lint clean on both migrated files
+- `/version` + `/founder-offer/status` responsive on preview
+
+### Progress
+- Batch 1 (4 files, 11 sites) — ✅ shipped to prod
+- Batch 2 (4 files,  4 sites) — ✅ shipped to prod
+- Batch 3 (3 files,  7 sites) — ✅ shipped to prod
+- Batch 4 (4 files, 13 sites) — ✅ shipped to prod
+- Batch 5 (2 files, 12 sites) — ✅ landed on preview, awaiting deploy
+- **Cumulative: 47 sites / 17 service files migrated**
+- Held for supervised session (5 sites):
+  - `ora_client.py` (custom 24h fatal-pattern breaker)
+  - `web_skills.py::web_search` + `::fetch_url` (manual
+    retry_guard.get_breaker gating)
+  - `github_api_writer.py` (custom `httpx.Limits` pool +
+    60s big-commit timeout)
+- Still on raw `httpx.AsyncClient`: ~35 sites across ~38 files
+  (loop_engine, chat, github_sync, cto_projects, hosted_deploy,
+  admin_qa, upload, health_checks, etc.) + 1 file
+  (`github_deploy_service.py`, 4 sites) awaiting a quick
+  per-site read to be safely batched.
+
+---
+
 ## 2026-02-12 · Fork session · Phase 3 · Batch 4 (HTTP wrapper migration)
 
 ### What shipped (preview only — awaiting founder review)
