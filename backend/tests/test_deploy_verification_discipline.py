@@ -86,3 +86,52 @@ def test_checklist_records_the_two_incidents_that_caused_it():
     assert "no-op" in src.lower()
     assert "pipeline built wrong ref" in src.lower() or \
            "pipeline shipped the wrong thing" in src.lower()
+
+
+def test_checklist_has_mandatory_sha_hard_stop_step():
+    """The permanent-fix step added on 2026-02-12 after Incident 2:
+    every deploy dispatch MUST be followed by a SHA-in-vs-SHA-out
+    check, and any mismatch is a HARD STOP. This test guards
+    that the step:
+      (a) is called out as MANDATORY / PERMANENT, not situational
+      (b) explicitly says STOP / do not dispatch on mismatch
+      (c) contains a bash example of the comparison
+      (d) preserves the 'verification-by-luck is not verification'
+          principle so a future agent doesn't relax it
+    """
+    src = open(CHECKLIST_PATH).read()
+
+    # (a) — the step must self-identify as mandatory + permanent.
+    assert "MANDATORY PERMANENT STEP" in src or \
+           "MANDATORY, PERMANENT STEP" in src, (
+        "SHA hard-stop step must self-identify as a "
+        "MANDATORY PERMANENT STEP. If a future refactor "
+        "renamed it to 'recommended' or 'situational', "
+        "restore the language."
+    )
+
+    # (b) — mismatch must trigger STOP + do-not-dispatch + report.
+    for token in ("HARD STOP", "Do NOT dispatch", "Report to founder"):
+        assert token in src, (
+            f"Hard-stop guard token {token!r} missing from "
+            "checklist — the abort semantics are what makes "
+            "the step non-optional. Restore it."
+        )
+
+    # (c) — bash example of the SHA comparison must be present.
+    assert 'EXPECTED_PREFIX=${EXPECTED_SHA:0:12}' in src or \
+           'EXPECTED_PREFIX=${EXPECTED_SHA' in src, (
+        "The SHA comparison bash example must be present — "
+        "otherwise the step becomes a suggestion rather than "
+        "an executable procedure."
+    )
+
+    # (d) — the rationale ('verification-by-luck is not
+    # verification') must survive so future agents don't
+    # relax it after a stretch of good deploys.
+    assert "Verification-by-luck is not verification" in src, (
+        "The rationale sentence must survive verbatim. It's "
+        "the principle that stops a future agent from arguing "
+        "'we haven't hit a mismatch in a while, this is "
+        "over-engineered'."
+    )
