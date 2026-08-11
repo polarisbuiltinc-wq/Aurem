@@ -4,6 +4,20 @@
 **Guardrails applied**: safety-over-speed, preview-only when unsure, no unsupervised big-bang refactors
 **Session ended**: agent's own stop-decision — insufficient context for high-risk work
 
+
+### 🎯 Follow-up wrap (2026-02-11 late night)
+Founder returned briefly and said "phase 2" — agent shipped the split cleanly:
+
+- ✅ `routers/admin.py` (5,782 LOC, 110 handlers) split into 6 sub-routers + 1 shared `_admin_common.py`
+- ✅ Zero endpoints dropped (AST 110/110 match)
+- ✅ Testing agent iter364 caught 5 latent NameError bugs (private helpers left in stub) — all fixed via targeted re-imports before deploy
+- ✅ 32/32 phase2-specific pytests green + 96/96 pre-existing green = 128 total
+- ✅ Prod deploy queued (job_id `92e41e3e-9fa0-4499-a913-f3e3d1530c79`)
+
+Phase 2 ships the same session as Phase 1. Phase 3 (ChatPanel + loop_engine splits) still deferred to a supervised session.
+
+Ledger updates coming next.
+
 ---
 
 ## 🟢 What shipped to PRODUCTION

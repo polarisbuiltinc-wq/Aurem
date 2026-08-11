@@ -1,0 +1,39 @@
+{
+  "summary": "Phase 2 admin.py split regression testing. 31/32 pytest tests passed on preview. Discovered CRITICAL regression: 6 private helper functions (_email_hint, _bucket_label, _run_skill, _compute_activation_funnel, _github_app_live_probe) were left behind in the routers/admin.py stub but are referenced (unimported) from 3 sub-routers. This is the exact class of bug the review request warned about (helpers not moved with handlers). At least 3 founder-facing admin endpoints currently 500 in production-flavored preview. Import-cycle check: all 8 modules import cleanly. Admin gating (401/403) intact. POST body Pydantic validation intact. OpenAPI schema exposes 171 /admin/* paths (well above the 30 threshold). Handler count via AST: 116 total across 7 files (≥100). RECOMMENDATION: DO NOT DEPLOY to prod until helpers are moved or re-imported.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "/api/aurem-dev/admin/loop-metrics", "issue": "500/499: `NameError: name '_email_hint' is not defined` at admin_analytics.py:1762. Helper still lives only in routers/admin.py:726 and was not moved/imported.", "priority": "CRITICAL"},
+      {"endpoint": "/api/aurem-dev/admin/insights/activation-funnel", "issue": "500/499: `NameError: name '_compute_activation_funnel' is not defined` at admin_users.py:755. Helper still lives only in routers/admin.py.", "priority": "CRITICAL"},
+      {"endpoint": "/api/aurem-dev/admin/skills/{web_search,fetch_url,web_search_and_summarize,firecrawl_scrape,firecrawl_crawl_site}", "issue": "Handlers call `_run_skill(...)` (admin_analytics.py:839/845/852/858/864) which is undefined in that module — only defined in routers/admin.py. All 5 skill endpoints will 500 when invoked.", "priority": "CRITICAL"},
+      {"endpoint": "/api/aurem-dev/admin/dashboard bucket rows (admin_analytics.py:646)", "issue": "`_bucket_label` referenced but not defined/imported in admin_analytics.py. Any code path that hits the bucket-label branch will 500. (GET /admin/dashboard currently returned 200 — likely because the code path was not exercised by the empty-data scenario in the test, but it is a latent NameError.)", "priority": "HIGH"},
+      {"endpoint": "/api/aurem-dev/admin/github-app-config* (admin_ops_config.py:467, :540)", "issue": "`_github_app_live_probe` referenced but not defined/imported in admin_ops_config.py. Any request that triggers the live probe (e.g. saving github-app-config or hitting the probe endpoint) will 500 with NameError.", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_admin_split_phase2.py",
+    "/app/test_reports/pytest/phase2_split.xml"
+  ],
+  "action_items": [
+    "URGENT: Move (or re-export/import) the 5 private helpers from routers/admin.py into the sub-routers that call them, OR add `from .admin import _email_hint, _bucket_label, _run_skill, _compute_activation_funnel, _github_app_live_probe` (as appropriate) at the top of admin_analytics.py, admin_users.py, admin_ops_config.py. Preferred: move each helper alongside its callers to avoid re-introducing coupling to the stub.",
+    "After fix, re-run /app/backend/tests/test_admin_split_phase2.py — expect 32/32 green.",
+    "Recommend running the AST 'missing helper' scan permanently in CI to catch this class of bug: parse each split file, collect referenced Names, subtract locally-defined + imported names, and fail if any name that lives only in the pre-split stub is referenced.",
+    "DO NOT deploy Phase 2 split to production until above is fixed and re-verified. Founder-facing admin dashboard would show at least 3 broken cards (loop-metrics, activation-funnel, skills)."
+  ],
+  "critical_code_review_comments": [
+    "Split refactor's 'verbatim move' guarantee held for @router handlers but NOT for module-private helpers (_prefix names). The AST route-count check the main agent ran (110→110) is insufficient — it does not detect free-variable references. This is a repeatable lesson: any handler-body-verbatim refactor must also enumerate free variables and confirm each is either locally defined, imported, or moved.",
+    "routers/admin.py is 803 LOC despite the review claim of '~35 LOC stub'. The stub still contains helpers, seed data, and possibly legacy handlers. Consider a cleanup pass to bring the stub down to a genuine no-op re-export.",
+    "Consider using a linter like ruff (F821 undefined-name) or pyright in CI on backend/routers/ — either would have flagged all 6 undefined-name references during the split PR without any live traffic.",
+    "Total handler count is 116, slightly above the pre-split 110. Suggests a few handlers were possibly duplicated or new handlers slipped in during refactor. Diff worth reviewing (not a blocker)."
+  ],
+  "updated_files": ["/app/backend/tests/test_admin_split_phase2.py"],
+  "success_rate": {"backend": "97% (31/32 pytest)", "frontend": "n/a (backend-only test)"},
+  "test_credentials": "Founder JWT via POST /api/aurem-dev/auth/login with test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md). Non-admin created dynamically via /auth/signup.",
+  "seed_data_creation": "None. Non-admin user signup emits ephemeral nonadmin_split_<uuid>@example.com accounts (not cleaned up — negligible).",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "The pytest file at /app/backend/tests/test_admin_split_phase2.py covers all 5 review-request bullets. Re-run after main agent fixes the 5 missing helper references. Expect 32/32 green. If any GET returns 499 on preview, hit http://localhost:8001 directly — Cloudflare ingress translates internal 500s to 499. Backend NameErrors surface in /var/log/supervisor/backend.err.log — always grep there when an admin endpoint 499s.",
+  "rca_of_the_issue": "Phase 2 split moved @router-decorated handlers verbatim from routers/admin.py into 6 domain sub-routers, but private helper functions (_email_hint, _bucket_label, _run_skill, _compute_activation_funnel, _github_app_live_probe) that those handlers call were LEFT BEHIND in the original stub. Since these are underscore-prefixed module-private names, they are neither imported nor exported. The AST route-count check the main agent used (110→110 handlers moved) does not catch free-variable references. The 401 smoke tests also missed this because the NameError only fires when a handler is executed with a valid founder JWT — the auth gate rejects unauthenticated requests before the handler body runs. Reproduction: 1) POST /api/aurem-dev/auth/login → grab founder token; 2) GET /api/aurem-dev/admin/loop-metrics with that token; 3) observe 499 externally (500 internally) + `NameError: name '_email_hint' is not defined` in backend.err.log. Mitigation: (a) short-term, add `from routers.admin import _email_hint, _bucket_label, _run_skill, _compute_activation_funnel, _github_app_live_probe` to each affected sub-router, OR (b) preferred, cut/paste each helper into the sub-router that uses it and delete it from routers/admin.py. Then re-run test_admin_split_phase2.py."
+}

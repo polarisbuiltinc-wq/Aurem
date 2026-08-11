@@ -1,0 +1,914 @@
+"""admin_users.py — User CRUD, grants, suspend, funnel/insights analytics.
+
+Extracted from routers/admin.py during Phase 2 architecture split (2026-02-11).
+Contains 20 handler(s)/helper(s):
+
+  GET  /admin/me                     GET  /admin/github-sync
+  GET  /admin/users                  GET  /admin/users/{user_id}
+  POST /admin/users/{user_id}/grant-tokens
+  POST /admin/users/{user_id}/enable-loop-beta
+  POST /admin/users/{user_id}/suspend
+  POST /admin/users/email-offer
+  GET  /admin/funnel                 GET  /admin/insights/activation-funnel
+  GET  /admin/insights/user-patterns
+  POST /admin/dev-users/backfill-created-at
+  GET  /admin/dev-users/created-at-health
+  POST /admin/loop-beta/kill-switch  GET  /admin/loop-beta/status
+
+Every handler + helper is COPIED VERBATIM from the pre-split admin.py.
+"""
+from __future__ import annotations
+
+import logging
+import os
+import asyncio
+import re
+import time
+from datetime import datetime, timezone, timedelta
+from typing import Optional
+
+from fastapi import APIRouter, Header, HTTPException, Request, Depends
+from pydantic import BaseModel
+
+from cto_services.auth import current_dev, require_admin_dep
+from cto_services.db import get_db, require_db
+from services.usage import get_usage
+# Iter 212m-71 — 60 s TTL cache for the heavy admin aggregations
+# (activation funnel, dev_users buckets, etc.). Founders click around
+# the admin panel rapidly; without this every click fires 5+ heavy
+# aggregations against Mongo.
+from services.admin_analytics_cache import (
+    cached_agg,
+    invalidate as _cache_invalidate,
+    mongo_swr_cache,
+)
+
+logger = logging.getLogger(__name__)
+# Iter 358 — router-level admin gate (defense-in-depth). EVERY route on
+# this router is denied to non-founders at the router boundary, so a new
+# endpoint added later is protected by default. Individual handlers keep
+# their inline `await _require_admin(...)` too (harmless redundancy).
+# The one intentionally-public sink (/admin/errors/report) lives on the
+# separate, un-gated routers/admin_public.py at the same URL.
+
+router = APIRouter(
+    prefix="/admin", tags=["Admin-users"],
+    dependencies=[Depends(require_admin_dep)],
+)
+
+from routers._admin_common import _require_admin  # noqa: E402
+# 2026-02-11 · Phase 2 split fix — helper still lives in pre-split
+# admin.py stub. Re-import so handlers resolve it at runtime.
+from routers.admin import _compute_activation_funnel  # noqa: E402
+
+
+@router.get("/me")
+async def admin_me(authorization: Optional[str] = Header(None)):
+    user = await _require_admin(authorization)
+    return {"email": user.get("email"), "user_id": user.get("user_id"),
+            "is_admin": True}
+
+
+@router.get("/github-sync")
+async def github_sync_status(authorization: Optional[str] = Header(None)):
+    await _require_admin(authorization)
+    from routers.version import _COMMIT_SHA, _BUILT_AT
+    from services.github_sync import get_github_sync
+    return await get_github_sync(_COMMIT_SHA, _BUILT_AT, db=get_db())
+
+
+@router.get("/users")
+async def list_users(
+    search: str = "",
+    window: str = "all",
+    authorization: Optional[str] = Header(None),
+):
+    """List users with optional search + signup-time window filter.
+
+    `window` accepts: `24h`, `7d`, `30d`, `all`. Bucket counts for all
+    three windows are returned in the same payload so the UI can render
+    filter pills without an extra request.
+    """
+    await _require_admin(authorization)
+    db = require_db()
+    now = time.time()
+    buckets = {
+        "24h": now - 86_400,
+        "7d":  now - 7 * 86_400,
+        "30d": now - 30 * 86_400,
+    }
+    # Iter 212m-222 — the three signup paths historically wrote
+    # `created_at` inconsistently: /auth/signup + /auth/google/session
+    # wrote a `datetime`, /auth/github/callback wrote NOTHING at all.
+    # Admin filters use float epoch, so BSON type-order + missing
+    # fields together made most legacy users invisible. All three
+    # writers now emit `time.time()` (float) but Mongo still has
+    # datetime-typed rows from before the fix.
+    #
+    # Read-path tolerance: use `$or` on both types so a `datetime`-
+    # typed row still matches the numeric window bound, and cast the
+    # datetime cutoff to a `datetime.utcfromtimestamp` for the
+    # datetime branch. Missing-field rows can't be reliably windowed;
+    # they surface in `window="all"` and in the total count.
+    from datetime import datetime as _dt, timezone as _tz
+    def _window_query(cutoff: float) -> dict:
+        _cutoff_dt = _dt.fromtimestamp(cutoff, tz=_tz.utc)
+        return {"$or": [
+            {"created_at": {"$gte": cutoff}},        # new float format
+            {"created_at": {"$gte": _cutoff_dt}},    # legacy datetime rows
+        ]}
+
+    # Always compute the three bucket counts (cheap — one count_documents
+    # each, all over an indexed `created_at`). These power the filter
+    # pills in the admin UI.
+    # Iter 212m-70 — N+1 fix. Was 3 separate count_documents calls
+    # over the same indexed `created_at` field. Collapse into a single
+    # aggregation pipeline: one round-trip, one index scan, all three
+    # buckets returned together.
+    # Iter 212m-222 — the pipeline now normalises both created_at
+    # types into an epoch double before bucketing, so legacy datetime
+    # rows are counted correctly.
+    bucket_counts: dict[str, int] = {"24h": 0, "7d": 0, "30d": 0}
+    try:
+        pipeline = [
+            {"$addFields": {
+                "_created_ts": {
+                    "$switch": {
+                        "branches": [
+                            {"case": {"$eq": [{"$type": "$created_at"}, "double"]},
+                             "then": "$created_at"},
+                            {"case": {"$eq": [{"$type": "$created_at"}, "long"]},
+                             "then": "$created_at"},
+                            {"case": {"$eq": [{"$type": "$created_at"}, "int"]},
+                             "then": "$created_at"},
+                            {"case": {"$eq": [{"$type": "$created_at"}, "date"]},
+                             "then": {"$divide": [{"$toLong": "$created_at"}, 1000]}},
+                        ],
+                        "default": None,
+                    }
+                }
+            }},
+            {"$match": {"_created_ts": {"$gte": buckets["30d"]}}},
+            {"$project": {
+                "_id": 0,
+                "is_24h": {"$gte": ["$_created_ts", buckets["24h"]]},
+                "is_7d":  {"$gte": ["$_created_ts", buckets["7d"]]},
+            }},
+            {"$group": {
+                "_id":     None,
+                "in_24h":  {"$sum": {"$cond": ["$is_24h", 1, 0]}},
+                "in_7d":   {"$sum": {"$cond": ["$is_7d",  1, 0]}},
+                "in_30d":  {"$sum": 1},
+            }},
+        ]
+        agg = await db.dev_users.aggregate(pipeline).to_list(1)
+        if agg:
+            bucket_counts["24h"] = int(agg[0].get("in_24h") or 0)
+            bucket_counts["7d"]  = int(agg[0].get("in_7d")  or 0)
+            bucket_counts["30d"] = int(agg[0].get("in_30d") or 0)
+    except Exception as e:
+        logger.warning("list_users bucket aggregation failed: %r", e)
+    try:
+        bucket_counts["all"] = await db.dev_users.count_documents({})
+    except Exception:
+        bucket_counts["all"] = 0
+
+    query: dict = {}
+    if search:
+        query = {"$or": [
+            {"email": {"$regex": search, "$options": "i"}},
+            {"name": {"$regex": search, "$options": "i"}},
+        ]}
+    if window in buckets:
+        # Merge the window filter into the query. If a search filter
+        # was already using $or, wrap with $and so both constraints apply.
+        window_q = _window_query(buckets[window])
+        if "$or" in query:
+            query = {"$and": [query, window_q]}
+        else:
+            query.update(window_q)
+
+    users = await db.dev_users.find(
+        query, {"_id": 0, "password": 0, "password_hash": 0, "github.access_token": 0}
+    ).sort("created_at", -1).limit(100).to_list(100)
+
+    # Iter 120 — flatten 300 round-trips (3 count_documents per user) into
+    # 3 grouped aggregations. Critical for /admin/users responsiveness
+    # under load; the old pattern was an N+1 hotspot flagged by the
+    # deployment agent and a candidate cause for OOM/timeout on Atlas
+    # free tier where connection slots are limited.
+    uids = [u.get("user_id", "") for u in users]
+    if uids:
+        async def _counts(coll_name: str) -> dict:
+            coll = getattr(db, coll_name)
+            cur = coll.aggregate([
+                {"$match": {"user_id": {"$in": uids}}},
+                {"$group": {"_id": "$user_id", "n": {"$sum": 1}}},
+            ])
+            return {row["_id"]: row["n"] async for row in cur}
+        proj_counts = await _counts("cto_projects")
+        task_counts = await _counts("cto_tasks")
+        sess_counts = await _counts("chat_sessions")
+    else:
+        proj_counts = task_counts = sess_counts = {}
+
+    for u in users:
+        uid = u.get("user_id", "")
+        u["project_count"] = proj_counts.get(uid, 0)
+        u["task_count"]    = task_counts.get(uid, 0)
+        u["session_count"] = sess_counts.get(uid, 0)
+    return {"users": users, "bucket_counts": bucket_counts}
+
+
+@router.get("/users/{user_id}")
+async def get_user(user_id: str, authorization: Optional[str] = Header(None)):
+    await _require_admin(authorization)
+    db = require_db()
+    user = await db.dev_users.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "password": 0, "password_hash": 0, "github.access_token": 0},
+    )
+    if not user:
+        raise HTTPException(404, "User not found")
+    user["projects"] = await db.cto_projects.find(
+        {"user_id": user_id},
+        {"_id": 0, "github_token": 0},
+    ).to_list(50)
+    user["recent_tasks"] = await db.cto_tasks.find(
+        {"user_id": user_id},
+        {"_id": 0, "steps": 0, "rollback_steps": 0},
+    ).sort("created_at", -1).limit(20).to_list(20)
+    user["project_count"] = len(user["projects"])
+    user["task_count"] = await db.cto_tasks.count_documents({"user_id": user_id})
+    user["session_count"] = await db.chat_sessions.count_documents({"user_id": user_id})
+    # Live token budget (plan + admin-granted bonus - used)
+    try:
+        user["usage"] = await get_usage(user_id)
+    except Exception as e:
+        logger.warning(f"usage lookup failed for {user_id}: {e}")
+        user["usage"] = None
+    # Recent admin grants for this user
+    user["token_grants"] = await db.cto_token_grants.find(
+        {"user_id": user_id}, {"_id": 0},
+    ).sort("granted_at", -1).limit(20).to_list(20)
+    return user
+
+
+class GrantTokensBody(BaseModel):
+    tokens: int
+    reason: str = ""
+
+
+@router.post("/users/{user_id}/grant-tokens")
+async def grant_tokens(
+    user_id: str,
+    body: GrantTokensBody,
+    authorization: Optional[str] = Header(None),
+):
+    """Admin manually credits a user with bonus tokens.
+
+    Bonus tokens are tracked SEPARATELY on `dev_users.tokens_granted` and added
+    on top of the plan limit (see `services.usage.get_usage`). Every grant is
+    appended to `cto_token_grants` for audit.
+    """
+    admin = await _require_admin(authorization)
+    db = require_db()
+    if not isinstance(body.tokens, int) or body.tokens <= 0:
+        raise HTTPException(400, "tokens must be a positive integer")
+    if body.tokens > 10_000_000:
+        raise HTTPException(400, "tokens grant too large (max 10M)")
+    target = await db.dev_users.find_one({"user_id": user_id}, {"user_id": 1})
+    if not target:
+        raise HTTPException(404, "User not found")
+
+    now = time.time()
+    await db.dev_users.update_one(
+        {"user_id": user_id},
+        {"$inc": {"tokens_granted": body.tokens}, "$set": {"updated_at": now}},
+    )
+    await db.cto_token_grants.insert_one({
+        "user_id": user_id,
+        "tokens": body.tokens,
+        "reason": (body.reason or "").strip()[:500],
+        "granted_by": admin.get("email") or admin.get("user_id"),
+        "granted_at": now,
+    })
+    usage = await get_usage(user_id)
+    return {"ok": True, "granted": body.tokens, "usage": usage}
+
+
+class SuspendBody(BaseModel):
+    suspend: bool
+
+
+class LoopBetaBody(BaseModel):
+    enabled: bool
+
+
+@router.post("/users/{user_id}/enable-loop-beta")
+async def enable_loop_beta(
+    user_id: str,
+    body: LoopBetaBody,
+    authorization: Optional[str] = Header(None),
+):
+    """Iter 364 · Phase-2 — admin toggles `loop_beta_enabled` on a
+    single dev_users doc so a Pro/Team user can pass the tiered gate
+    in `routers/loop.py::start_loop`. Founders always bypass the flag."""
+    admin = await _require_admin(authorization)
+    db = require_db()
+    target = await db.dev_users.find_one(
+        {"user_id": user_id}, {"_id": 0, "user_id": 1, "email": 1, "tier": 1},
+    )
+    if not target:
+        raise HTTPException(404, "User not found")
+    now = time.time()
+    await db.dev_users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "loop_beta_enabled":         bool(body.enabled),
+            "loop_beta_updated_at":      now,
+            "loop_beta_updated_by":      admin.get("email") or admin.get("user_id"),
+        }},
+    )
+    return {
+        "ok":                True,
+        "user_id":           user_id,
+        "email":             target.get("email"),
+        "tier":              target.get("tier"),
+        "loop_beta_enabled": bool(body.enabled),
+    }
+
+
+class KillSwitchBody(BaseModel):
+    enabled: bool
+    reason:  Optional[str] = ""
+
+
+@router.post("/loop-beta/kill-switch")
+async def toggle_loop_kill_switch(
+    body: KillSwitchBody,
+    authorization: Optional[str] = Header(None),
+):
+    """Iter 364 · Phase-3 — flip the DB-backed kill switch. When ON,
+    every user (including founders) sees a 403 on /loop/start until
+    it's flipped OFF. Env var LOOP_MODE_KILL_SWITCH=true is an
+    orthogonal override (env wins if set)."""
+    admin = await _require_admin(authorization)
+    db = require_db()
+    from services import loop_beta as _lb
+    await _lb.set_kill_switch(
+        db, on=bool(body.enabled),
+        reason=(body.reason or "").strip()[:400] or (
+            f"manual flip by {admin.get('email') or admin.get('user_id')}"),
+    )
+    return {
+        "ok":                     True,
+        "kill_switch_enabled":    bool(body.enabled),
+        "env_override_wins":      bool(os.environ.get("LOOP_MODE_KILL_SWITCH", "").lower()
+                                        in ("1", "true", "yes", "on")),
+    }
+
+
+@router.get("/loop-beta/status")
+async def loop_beta_status(authorization: Optional[str] = Header(None)):
+    """Iter 364 · Phase-3 — dashboard snapshot for the admin QA UI."""
+    await _require_admin(authorization)
+    db = require_db()
+    from services import loop_beta as _lb
+    n_active = await db.loop_sessions.count_documents({
+        "state": {"$in": list(_lb._ACTIVE_STATES)},
+    })
+    n_beta   = await db.dev_users.count_documents({"loop_beta_enabled": True})
+    n_stuck  = await _lb.count_stuck_loops(db)
+    row = await db.system_flags.find_one({"key": "loop_mode_kill_switch"}) or {}
+    return {
+        "kill_switch_db":        bool(row.get("value")),
+        "kill_switch_env":       os.environ.get("LOOP_MODE_KILL_SWITCH", ""),
+        "kill_switch_reason":    row.get("reason"),
+        "beta_users":            n_beta,
+        "active_loops":          n_active,
+        "stuck_last_10min":      n_stuck,
+        "stuck_trip_threshold":  _lb.LOOP_STUCK_TRIP_THRESHOLD,
+        "max_concurrent_per_user": _lb.LOOP_MAX_CONCURRENT_PER_USER,
+        "maxx_daily_cap":        _lb.MAXX_DAILY_TASK_CAP,
+    }
+
+
+@router.get("/funnel")
+async def admin_funnel_dashboard(
+    days: int = 30,
+    authorization: Optional[str] = Header(None),
+):
+    """Iter 365 · Phase 3 — signup / activation / retention funnel.
+
+    Returns:
+      signups            : count of users who completed signup in the window
+      first_chat_pct     : % of those who ever sent a chat
+      first_ship_pct     : % who ever shipped a task (REAL activation KPI)
+      time_to_first_ship_median_h : median hours from signup to first ship
+      d7_retention_pct   : % who did anything on day 7+
+      d30_retention_pct  : % who did anything on day 30+
+      event_counts       : total funnel_events row count by type in the window
+    """
+    await _require_admin(authorization)
+    db = require_db()
+    days = max(1, min(int(days or 30), 365))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since_epoch = since.timestamp()
+
+    # Signup cohort in the window (from dev_users.created_at float epoch).
+    cohort_cursor = db.dev_users.find(
+        {"created_at": {"$gte": since_epoch}},
+        {"_id": 0, "user_id": 1, "email": 1, "created_at": 1,
+         "first_chat_at": 1, "first_loop_at": 1, "first_ship_at": 1,
+         "is_admin": 1, "is_unlimited": 1, "tier": 1},
+    )
+    cohort = []
+    async for u in cohort_cursor:
+        if u.get("is_admin") or u.get("is_unlimited") or u.get("tier") == "founder":
+            continue          # exclude internal accounts from funnel math
+        cohort.append(u)
+
+    n = len(cohort)
+    if n == 0:
+        return {
+            "window_days":                days,
+            "signups":                    0,
+            "first_chat_pct":             0.0,
+            "first_ship_pct":             0.0,
+            "time_to_first_ship_median_h": None,
+            "d7_retention_pct":           0.0,
+            "d30_retention_pct":          0.0,
+            "event_counts":               {},
+        }
+
+    n_chat = sum(1 for u in cohort if u.get("first_chat_at"))
+    n_ship = sum(1 for u in cohort if u.get("first_ship_at"))
+
+    # Median time-to-first-ship (in hours).
+    ttfs = sorted(
+        (u["first_ship_at"] - u["created_at"]) / 3600
+        for u in cohort
+        if u.get("first_ship_at") and u.get("created_at")
+    )
+    if ttfs:
+        mid = len(ttfs) // 2
+        median = ttfs[mid] if len(ttfs) % 2 else (ttfs[mid - 1] + ttfs[mid]) / 2
+    else:
+        median = None
+
+    # Retention — did the user have ANY funnel event or chat/loop
+    # activity ≥N days after signup.
+    now_epoch = time.time()
+    d7_hits  = 0
+    d30_hits = 0
+    for u in cohort:
+        signup_ts = u.get("created_at") or 0
+        marks = [
+            u.get("first_chat_at") or 0,
+            u.get("first_loop_at") or 0,
+            u.get("first_ship_at") or 0,
+        ]
+        # We use max(last activity marker) as a proxy for "still active".
+        latest = max(marks) if any(marks) else 0
+        age_days = (now_epoch - signup_ts) / 86400 if signup_ts else 0
+        if age_days >= 7 and latest and (latest - signup_ts) >= 7 * 86400:
+            d7_hits += 1
+        if age_days >= 30 and latest and (latest - signup_ts) >= 30 * 86400:
+            d30_hits += 1
+    # Denominators: only cohort users old enough to have crossed the mark.
+    n_eligible_7  = sum(1 for u in cohort
+                        if (now_epoch - (u.get("created_at") or 0)) / 86400 >= 7)
+    n_eligible_30 = sum(1 for u in cohort
+                        if (now_epoch - (u.get("created_at") or 0)) / 86400 >= 30)
+
+    # Event counts from funnel_events for extra observability.
+    ev_counts: dict[str, int] = {}
+    try:
+        pipeline = [
+            {"$match": {"created_at": {"$gte": since}}},
+            {"$group": {"_id": "$event_type", "n": {"$sum": 1}}},
+        ]
+        async for row in db.funnel_events.aggregate(pipeline):
+            ev_counts[row["_id"] or "?"] = int(row["n"])
+    except Exception:
+        pass
+
+    def _pct(hits: int, total: int) -> float:
+        return round((hits / total) * 100, 1) if total else 0.0
+
+    return {
+        "window_days":                days,
+        "signups":                    n,
+        "first_chat_pct":             _pct(n_chat, n),
+        "first_ship_pct":             _pct(n_ship, n),
+        "time_to_first_ship_median_h": round(median, 2) if median else None,
+        "d7_retention_pct":           _pct(d7_hits, n_eligible_7),
+        "d30_retention_pct":          _pct(d30_hits, n_eligible_30),
+        "event_counts":               ev_counts,
+    }
+
+
+@router.post("/users/{user_id}/suspend")
+async def toggle_suspend(
+    user_id: str,
+    body: SuspendBody,
+    authorization: Optional[str] = Header(None),
+):
+    await _require_admin(authorization)
+    db = require_db()
+    status = "suspended" if body.suspend else "active"
+    r = await db.dev_users.update_one(
+        {"user_id": user_id},
+        {"$set": {"status": status, "status_changed_at": time.time()}},
+    )
+    if r.matched_count == 0:
+        raise HTTPException(404, "User not found")
+    return {"ok": True, "status": status}
+
+
+@router.delete("/users/{user_id}")
+async def admin_delete_user(
+    user_id: str,
+    authorization: Optional[str] = Header(None),
+):
+    """Hard-delete a user and cascade across owned collections."""
+    actor = await _require_admin(authorization)
+    db = require_db()
+
+    # Look up the target — also gives us the email for the founder check
+    # and audit log.
+    target = await db.dev_users.find_one({"user_id": user_id}, {"_id": 0, "email": 1, "name": 1})
+    if not target:
+        raise HTTPException(404, "User not found")
+
+    target_email = (target.get("email") or "").strip().lower()
+    # Refuse to delete a founder. Founders are baked into FOUNDER_EMAILS
+    # at deploy time; wiping one would brick login + billing.
+    founder_list = [
+        e.strip().lower() for e in
+        (os.environ.get("FOUNDER_EMAILS") or "").split(",") if e.strip()
+    ]
+    if target_email and target_email in founder_list:
+        raise HTTPException(403, f"Refusing to delete founder account ({target_email})")
+    # Belt + suspenders — never let an admin delete themselves either.
+    if user_id == actor.get("user_id"):
+        raise HTTPException(403, "Cannot delete your own account from this UI")
+
+    deletions: dict[str, int] = {}
+    # Collections that key off user_id. Each is deleted in its own
+    # try/except so one failed collection doesn't block the rest.
+    for coll, key in [
+        ("dev_users",        "user_id"),
+        ("cto_sessions",     "user_id"),
+        ("chat_sessions",    "user_id"),
+        ("cto_projects",     "user_id"),
+        ("cto_tasks",        "user_id"),
+        ("cto_payments",     "user_id"),
+        ("api_keys",         "user_id"),
+        ("post_task_scans",  "user_id"),
+        ("warm_start_jobs",  "user_id"),
+        ("oauth_codes",      "user_id"),
+    ]:
+        try:
+            res = await db[coll].delete_many({key: user_id})
+            deletions[coll] = res.deleted_count
+        except Exception as e:
+            logger.warning("admin_delete_user[%s]: %s failed: %r", user_id, coll, e)
+            deletions[coll] = -1
+
+    logger.info(
+        "user deleted by admin=%s target_user=%s target_email=%s deletions=%s",
+        actor.get("email"), user_id, target_email, deletions,
+    )
+    return {
+        "ok":         True,
+        "user_id":    user_id,
+        "email":      target_email,
+        "deletions":  deletions,
+    }
+
+
+@router.post("/users/email-offer")
+async def admin_send_user_offer(
+    body: dict,
+    authorization: Optional[str] = Header(None),
+):
+    """Send a one-off offer email to a list of users.
+
+      Request body:
+        {
+          "user_ids": ["uid_..", "uid_.."],   # required, max 500
+          "subject":  "Special offer for you",
+          "body_html": "<p>Hi {{name}}, ...</p>",   # supports {{name}} and {{email}}
+          "from": "ORA <ora@aurem.live>",   # optional, falls back to DIGEST_FROM
+          "reply_to": "ora@auremcto.com",  # optional, falls back to support inbox
+        }
+
+    Returns: {sent, failed, dry_run, recipients[]}
+    """
+    actor = await _require_admin(authorization)
+    db = require_db()
+
+    user_ids = (body or {}).get("user_ids") or []
+    subject  = ((body or {}).get("subject") or "").strip()
+    body_html = ((body or {}).get("body_html") or "").strip()
+    from_addr = ((body or {}).get("from") or "").strip()
+    reply_to = ((body or {}).get("reply_to") or "").strip() or "ora@auremcto.com"
+
+    if not isinstance(user_ids, list) or not user_ids:
+        raise HTTPException(400, "user_ids[] required (non-empty)")
+    if len(user_ids) > 500:
+        raise HTTPException(400, "Too many recipients (max 500 per batch)")
+    if not subject:
+        raise HTTPException(400, "subject required")
+    if not body_html:
+        raise HTTPException(400, "body_html required")
+
+    # Resolve emails. Project only what we need.
+    cursor = db.dev_users.find(
+        {"user_id": {"$in": user_ids}},
+        {"_id": 0, "user_id": 1, "email": 1, "name": 1},
+    )
+    targets: list[dict] = []
+    async for u in cursor:
+        if u.get("email"):
+            targets.append(u)
+
+    if not targets:
+        raise HTTPException(404, "No valid emails found for the given user_ids")
+
+    resend_key = os.environ.get("RESEND_API_KEY") or ""
+    sender = from_addr or os.environ.get("DIGEST_FROM") or os.environ.get(
+        "RESEND_FROM_EMAIL"
+    ) or "AUREM <onboarding@resend.dev>"
+
+    # When the API key is missing we record what *would* have been sent
+    # so the UI can still display recipient counts (and ops can see what
+    # was queued during a Resend outage).
+    if not resend_key:
+        logger.warning(
+            "email-offer dry-run (no RESEND_API_KEY): admin=%s recipients=%d subject=%r",
+            actor.get("email"), len(targets), subject,
+        )
+        return {
+            "ok":         True,
+            "dry_run":    True,
+            "sent":       0,
+            "failed":     0,
+            "recipients": [t["email"] for t in targets],
+            "reply_to":   reply_to,
+            "note":       "RESEND_API_KEY not configured — no emails actually sent.",
+        }
+
+    # Fire all sends concurrently. Per-recipient template substitution.
+    import httpx
+
+    async def _send_one(target: dict) -> tuple[str, bool, str]:
+        name = (target.get("name") or "").strip() or "there"
+        email = target["email"]
+        personalized = (body_html
+                        .replace("{{name}}", name)
+                        .replace("{{email}}", email))
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(
+                    "https://api.resend.com/emails",
+                    headers={
+                        "Authorization": f"Bearer {resend_key}",
+                        "Content-Type":  "application/json",
+                    },
+                    json={
+                        "from":    sender,
+                        "to":      [email],
+                        "subject": subject,
+                        "html":    personalized,
+                    },
+                )
+            if resp.status_code < 300:
+                return (email, True, "")
+            return (email, False, f"http_{resp.status_code}: {resp.text[:200]}")
+        except Exception as e:
+            return (email, False, str(e)[:200])
+
+    results = await asyncio.gather(
+        *[_send_one(t) for t in targets],
+        return_exceptions=False,
+    )
+    sent = sum(1 for _, ok, _ in results if ok)
+    failed = [{"email": e, "error": err}
+              for e, ok, err in results if not ok]
+
+    # Persist a record so support can audit what we promised users.
+    try:
+        await db.email_offers.insert_one({
+            "_id":        f"offer_{int(time.time())}_{actor.get('user_id', 'anon')}",
+            "admin_id":   actor.get("user_id"),
+            "admin_email": actor.get("email"),
+            "subject":    subject,
+            "body_html":  body_html,
+            "from":       sender,
+            "reply_to":   reply_to,
+            "recipient_count": len(targets),
+            "sent_count":      sent,
+            "failed_count":    len(failed),
+            "failed":     failed[:50],   # cap for storage hygiene
+            "created_at": time.time(),
+        })
+    except Exception as e:
+        logger.warning("email-offer ledger insert failed: %r", e)
+
+    logger.info(
+        "email-offer sent by admin=%s recipients=%d sent=%d failed=%d subject=%r",
+        actor.get("email"), len(targets), sent, len(failed), subject,
+    )
+    return {
+        "ok":         True,
+        "dry_run":    False,
+        "sent":       sent,
+        "failed":     len(failed),
+        "failed_detail": failed[:20],
+        "recipients": [t["email"] for t in targets],
+        "reply_to":   reply_to,
+    }
+
+
+@router.get("/insights/activation-funnel")
+async def activation_funnel(
+    authorization: Optional[str] = Header(None),
+):
+    await _require_admin(authorization)
+
+    # Iter 212m-154 — Mongo-backed Stale-While-Revalidate cache.
+    #
+    # The previous 60 s in-process cache (iter 212m-71) helped warm
+    # reads but did NOTHING for cold-start admin loads — every fresh
+    # uvicorn worker / pod restart paid the full ~6 s aggregation
+    # cost on the first request, which the frontend AbortController
+    # cancelled with HTTP 499 (caught in iter 212m-153 prod QA).
+    #
+    # SWR pattern: persist the last-known-good funnel result in a
+    # Mongo doc.  Every read returns it in <50 ms even when stale.
+    # When past the 5-minute TTL, a background task refreshes the
+    # doc without blocking the request.  First-ever boot (no doc)
+    # is capped at 4 s — anything slower returns a "warming" skeleton.
+    return await mongo_swr_cache(
+        key="admin:activation_funnel:v1",
+        ttl_seconds=300.0,         # 5 min freshness target
+        builder=_compute_activation_funnel,
+        hard_timeout=4.0,          # never block the frontend past abort threshold
+    )
+
+
+@router.get("/insights/user-patterns")
+async def user_patterns_insights(
+    authorization: Optional[str] = Header(None),
+):
+    await _require_admin(authorization)
+    db = require_db()
+
+    from collections import Counter
+
+    # Pull every pattern doc. The collection is small by design (1 doc
+    # per (user_id, project_id) tuple) so a full scan is fine; can be
+    # replaced with a server-side $unwind aggregation if it grows.
+    docs = await db.ora_patterns.find(
+        {},
+        {"_id": 0, "user_id": 1, "hot_files": 1,
+         "stack_signals": 1, "session_count": 1},
+    ).to_list(5000)
+
+    file_counter: Counter[str] = Counter()
+    stack_counter: Counter[str] = Counter()
+    user_ids: set[str] = set()
+    total_sessions = 0
+
+    for d in docs:
+        uid = d.get("user_id")
+        if uid:
+            user_ids.add(uid)
+        total_sessions += int(d.get("session_count") or 0)
+        for f in (d.get("hot_files") or []):
+            if isinstance(f, str) and f:
+                file_counter[f] += 1
+        for s in (d.get("stack_signals") or []):
+            if isinstance(s, str) and s:
+                stack_counter[s] += 1
+
+    top_files = [
+        {"file": f, "user_count": n}
+        for f, n in file_counter.most_common(10)
+    ]
+    top_stack = [
+        {"signal": s, "count": n}
+        for s, n in stack_counter.most_common(20)
+    ]
+
+    return {
+        "ok": True,
+        "top_files":           top_files,
+        "stack_distribution":  top_stack,
+        "users_with_patterns": len(user_ids),
+        "total_sessions":      total_sessions,
+        "records":             len(docs),
+    }
+
+
+@router.post("/dev-users/backfill-created-at")
+async def admin_backfill_dev_users_created_at(
+    authorization: Optional[str] = Header(None),
+) -> dict:
+    """P0 recovery endpoint (founder-only) — repair legacy `dev_users`
+    rows whose `created_at` is either datetime-typed OR missing.
+    Same logic as the startup task in `main.py:_backfill_dev_users_created_at`.
+
+    Returns:
+        {
+            ok: True,
+            datetime_fixed: int,        # rows converted from date → float
+            missing_filled: int,        # rows where created_at was absent
+            still_pending:   int,       # rows still on legacy shape (should be 0)
+            total_users:     int,
+        }
+    """
+    await _require_admin(authorization)
+    db = require_db()
+    _now = time.time()
+
+    # 1. datetime → float (server-side coercion via aggregation pipeline).
+    r1 = await db.dev_users.update_many(
+        {"created_at": {"$type": "date"}},
+        [{"$set": {"created_at":
+            {"$divide": [{"$toLong": "$created_at"}, 1000]}}}],
+    )
+    # 2. Missing → best-effort backfill. Prefer github/google connected_at.
+    r2 = await db.dev_users.update_many(
+        {"created_at": {"$exists": False}},
+        [{"$set": {"created_at": {
+            "$ifNull": [
+                "$github.connected_at",
+                {"$ifNull": ["$google.connected_at", _now]},
+            ]
+        }}}],
+    )
+    # 3. Verify nothing is left on the legacy shape.
+    still_datetime = await db.dev_users.count_documents(
+        {"created_at": {"$type": "date"}},
+    )
+    still_missing = await db.dev_users.count_documents(
+        {"created_at": {"$exists": False}},
+    )
+    total = await db.dev_users.count_documents({})
+
+    logger.info(
+        "[P0 manual backfill] datetime_fixed=%d missing_filled=%d "
+        "still_pending=%d total=%d",
+        r1.modified_count, r2.modified_count,
+        still_datetime + still_missing, total,
+    )
+    return {
+        "ok":             True,
+        "datetime_fixed": r1.modified_count,
+        "missing_filled": r2.modified_count,
+        "still_pending":  still_datetime + still_missing,
+        "total_users":    total,
+    }
+
+
+@router.get("/dev-users/created-at-health")
+async def admin_dev_users_created_at_health(
+    authorization: Optional[str] = Header(None),
+) -> dict:
+    """Cheap read-only probe — reports the shape distribution of
+    `created_at` across the `dev_users` collection so the founder can
+    verify the P0 fix landed cleanly on production.
+
+    Healthy shape: `by_type.double + by_type.int/long == total_users`
+    and both `datetime_typed` + `missing_field` are zero.
+    """
+    await _require_admin(authorization)
+    db = require_db()
+    pipeline = [
+        {"$group": {
+            "_id": {
+                "$cond": [
+                    {"$eq": [{"$type": "$created_at"}, "missing"]}, "missing",
+                    {"$type": "$created_at"},
+                ]
+            },
+            "n": {"$sum": 1},
+        }},
+    ]
+    by_type: dict = {}
+    async for row in db.dev_users.aggregate(pipeline):
+        by_type[row["_id"] or "unknown"] = int(row["n"])
+    total = sum(by_type.values())
+    return {
+        "ok":              True,
+        "total_users":     total,
+        "by_type":         by_type,
+        "datetime_typed":  by_type.get("date", 0),
+        "missing_field":   by_type.get("missing", 0),
+        "healthy": (by_type.get("date", 0) == 0
+                    and by_type.get("missing", 0) == 0),
+    }

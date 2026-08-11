@@ -4,6 +4,43 @@ Append-only iteration log. See `PRD.md` for the original problem
 
 ---
 
+## 2026-02-11 · Session · Phase 2 — `routers/admin.py` domain split
+
+### What shipped
+Split the 5,782 LOC `routers/admin.py` (110 handlers, #4 hotspot with score 324) into 6 domain-cohesive sub-routers + 1 shared helper module. Zero behavior change — every handler + helper class moved VERBATIM. Route paths, response shapes, auth gates, and side effects identical to pre-split.
+
+### New file layout
+- `routers/_admin_common.py` (48 LOC) — shared `_require_admin(authorization)` helper used by every sub-router
+- `routers/admin_payments.py` (9 handlers, 486 LOC) — `/admin/payments`, `/financials`, `/stripe-config`, `/stripe-prices`, `/billing/*`
+- `routers/admin_support.py` (9 handlers, 241 LOC) — `/admin/support`, `/errors`, `/alerts`
+- `routers/admin_users.py` (20 handlers, 812 LOC) — `/admin/me`, `/users`, `/funnel`, `/insights`, `/dev-users`, `/loop-beta/*`, `/github-sync`
+- `routers/admin_projects_brain.py` (16 handlers, 427 LOC) — `/admin/projects`, `/tasks`, `/project-brain/*`, `/brain/{project_id}/*`, `/architecture`, `/code-surface`, `/postscan-issues`
+- `routers/admin_ops_config.py` (26 handlers, 888 LOC) — `/admin/settings`, `/cache/*`, `/feature-flags`, `/integrations/*`, `/sentry/test`, `/db-health`, `/house-rules`, `/robot-guide`, `/github-app-config`, `/debug/*`, `/dev/*`
+- `routers/admin_analytics.py` (42 handlers, 1949 LOC) — `/admin/dashboard`, `/audit`, `/pulse`, `/system-stats`, `/token-pnl`, `/agent-*`, `/loop-metrics`, `/loop-inspect/*`, `/mcp-usage`, `/graph-status`, `/vanguard/*`, `/skills/*`, `/council/*`, `/ora/*`, `/speed-diagnostic`, `/scope-drift-audit`, `/eval-quality`, `/mode-telemetry`, `/product-analytics`, `/overview-metrics`, `/learning-health`, `/warm-start-stats`, `/digest`, `/seo/run`, `/qa/cleanup-e2e-sessions`
+- `routers/admin.py` remains as a **stub** (docstring + module scaffolding) so external imports don't break. Effective LOC drops from 5,782 → ~35.
+
+### Verification done pre-deploy
+- **AST-level**: git-HEAD admin.py had 110 handler paths; post-split total across all files = 110. Zero MISSING, zero EXTRA.
+- **Live-endpoint smoke**: hit all 67 GET endpoints on preview via curl — all returned HTTP 401 (mounted + admin-gated correctly). Zero 404s. Zero 200s (no ungated leaks).
+- **Backend startup**: clean. No import errors. No FastAPI duplicate-route conflicts.
+- **Pytest**: 96/96 green (all pre-existing + Phase 1 wrapper + smoke + observability suites).
+- **Testing agent (iter364)**: 32/32 green after post-fix. Caught 5 latent NameError bugs (`_email_hint`, `_bucket_label`, `_run_skill`, `_compute_activation_funnel`, `_github_app_live_probe`) — private helpers that got left in the pre-split stub. Fixed by re-importing from `routers.admin` at the top of `admin_analytics.py`, `admin_users.py`, `admin_ops_config.py`. Re-verified: `/admin/loop-metrics`, `/admin/insights/activation-funnel`, `/admin/skills/status`, `/admin/github-app-config`, `/admin/dashboard` all now return HTTP 200 with valid founder JWT.
+- **Lint**: clean on all 8 files.
+
+### Testing-agent-flagged followups (not blockers for THIS deploy)
+- `routers/admin.py` is still 803 LOC as a "stub" — contains 5 helper functions that could still be moved to their respective sub-routers. Left as import-from-stub for now to minimize deploy risk; can refactor to true no-op stub in a follow-up session without user-visible change.
+- Consider adding `pyright` or `ruff F821` to CI to catch this class of undefined-name bug in future refactors without needing live traffic.
+
+### Method
+Mechanical AST-based extraction script — for each domain, matched route decorator paths + helper classes, extracted their line ranges verbatim, wrote new sub-router with same imports + `router = APIRouter(prefix="/admin", ...)` + inline `_require_admin` import from `_admin_common`. Then deleted extracted ranges from admin.py and parsed the remainder to confirm still-valid Python. Route prefix `/admin` stays the same across all sub-routers so mounts under `/api/aurem-dev/admin/*` produce identical URLs to pre-split.
+
+### Ledger update
+Ledger item #4 (architecture hotspot #1 `routers/admin.py`) → ✅ SHIPPED. Effective LOC drops from 5,782 → ~35 (stub only), splitting the risk across 6 files averaging ~800 LOC each.
+
+
+
+---
+
 ## 2026-02-11 · Session · Overnight autonomous — Observability endpoint + Phase 2/3 stop-decision
 
 ### What shipped this session

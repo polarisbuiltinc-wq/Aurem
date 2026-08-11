@@ -44,6 +44,12 @@ from routers.admin_public import router as admin_public_router  # Iter 358 — p
 from routers.admin_qa import router as admin_qa_router          # Iter 303 (/admin/qa dashboard)
 from routers.admin_health import router as admin_health_router  # Feb 2026 — unified health registry aggregator
 from routers.admin_observability import router as admin_observability_router  # 2026-02-11 — /admin/observability/breakers
+from routers.admin_payments import router as admin_payments_router  # 2026-02-11 — Phase 2 split: /admin/payments, /financials, /stripe-*, /billing/*
+from routers.admin_support import router as admin_support_router  # 2026-02-11 — Phase 2 split: /admin/support, /errors, /alerts
+from routers.admin_users import router as admin_users_router  # 2026-02-11 — Phase 2 split: /admin/users, /funnel, /insights
+from routers.admin_projects_brain import router as admin_projects_brain_router  # 2026-02-11 — Phase 2 split: /admin/projects, /project-brain, /architecture
+from routers.admin_ops_config import router as admin_ops_config_router  # 2026-02-11 — Phase 2 split: /admin/cache, /feature-flags, /integrations, /settings, /github-app-config
+from routers.admin_analytics import router as admin_analytics_router  # 2026-02-11 — Phase 2 split: /admin/dashboard, /audit, /loop-metrics, /council, /skills
 from routers.support import router as support_router
 from routers.payments import router as payments_router
 from routers.mcp import router as mcp_router, mcp_discovery_root
@@ -2610,6 +2616,12 @@ app.include_router(admin_public_router,  prefix="/api/aurem-dev")  # Iter 358 �
 app.include_router(admin_qa_router,      prefix="/api/aurem-dev")  # Iter 303 — /admin/qa dashboard
 app.include_router(admin_health_router,  prefix="/api")             # Feb 2026 — /api/aurem-dev/admin/status/*
 app.include_router(admin_observability_router, prefix="/api")       # 2026-02-11 — /api/aurem-dev/admin/observability/breakers
+app.include_router(admin_payments_router, prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split
+app.include_router(admin_support_router,  prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split
+app.include_router(admin_users_router,          prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split
+app.include_router(admin_projects_brain_router, prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split
+app.include_router(admin_ops_config_router,     prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split
+app.include_router(admin_analytics_router,      prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split
 app.include_router(support_router,       prefix="/api/aurem-dev")
 app.include_router(payments_router,      prefix="/api/aurem-dev")
 app.include_router(usage_router,         prefix="/api/aurem-dev")

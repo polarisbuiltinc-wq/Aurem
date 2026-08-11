@@ -97,13 +97,13 @@ Files ≥ 500 LOC, ≤ 3 commits over their lifetime, and no matching test file.
 
 ## 📋 Prioritized Action Recommendations
 
-### 🔴 P0 — Structural refactors (long lived pain)
+### 🔴 P0 — Structural refactors (long-lived pain)
 
-1. **Split `backend/routers/admin.py` (5,782 LOC)** → per-domain sub-routers (`admin_users.py`, `admin_projects.py`, `admin_payments.py`, `admin_llm_credits.py`, etc.). Every admin change today has 5,782 LOC of blast radius. This is the single largest architectural debt in the repo.
+1. **Split `backend/routers/admin.py`** — ✅ **SHIPPED 2026-02-11**. 5,782 LOC → 6 sub-routers + 1 shared helper. 110 handlers preserved via AST verification + testing agent 32/32 green.
 
-2. **Split `frontend/src/components/ChatPanel.jsx` (4,874 LOC)** → extract `<MessageStream>`, `<ToolCallRenderer>`, `<ChatComposer>`, `<StreamingCursor>` as siblings. Currently one component owns render, transport, state, and animation.
+2. **Split `frontend/src/components/ChatPanel.jsx` (4,874 LOC)** — Phase 3, deferred to supervised session.
 
-3. **Split `backend/services/loop_engine.py` (4,416 LOC, 7 token-fetch sites)** → separate `plan.py`, `execute.py`, `verify.py`, `ship.py`, `scan.py`. The Bug 2 sweep proved the same auth pattern lives in 7 places in this one file — that's a symptom of the file being 4× too big.
+3. **Split `backend/services/loop_engine.py` (4,416 LOC, 7 token-fetch sites)** — Phase 3, deferred. Do LAST — Bug 2 just stabilized this file.
 
 ### 🟠 P1 — Deduplication payoff
 
