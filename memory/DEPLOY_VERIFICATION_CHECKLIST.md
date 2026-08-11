@@ -194,6 +194,56 @@ timing.
 | 2026-02-12 19:03 | Wave 7B "no-op" deploy | Uncommitted changes race | Same as above; both waves became one commit `9b12d0a` |
 | 2026-02-12 19:31 | Wave 7A "recovery" shipped both waves | Pipeline built commit AHEAD of dispatch HEAD | Left as-is — live traffic verified both waves work; working tree re-aligned to prod |
 | 2026-02-12 20:21 | Middleware fix dispatch shipped 2 commits behind HEAD | Snapshot-at-build-start race | Emergent Support confirmed fix IS live; `/version` was reporting lagging SHA per BUILD_INFO.txt stamping bug. Fix: BUILD_INFO.txt now untracked + post-commit hook stamps HEAD SHA. Checklist rewritten to remove SHA-pinning assumption. |
+| 2026-02-12 23:02 | `ext_client(base_url=None)` bug lived undetected for ~7h across 5 deploys | Post-deploy curl checks (`/version`, `/founder-offer/status`, `/admin/observability/breakers`) do NOT exercise the shared HTTP wrapper — the wrapper's runtime failure was invisible until integration_health cron probes fired. Log retrospective found 238 preview probe crashes across 6 deps. | Sub-batch 1 landed the fix + latent bug patch. New checklist rule added below: any deploy touching the shared wrapper MUST include a spot-check on an endpoint that actually invokes ext_client. |
+
+---
+
+## Wrapper-touching deploy addendum (added 2026-02-12 after Sub-batch 1 discovery)
+
+**Rule:** if the deploy touches `backend/services/http/client.py` OR any
+of the currently-migrated ~70 ext_client() sites, the post-dispatch
+verification MUST include at least one runtime spot-check on an
+endpoint that **actually invokes ext_client at request time**, not
+just an infrastructure health endpoint.
+
+**Why:** on 2026-02-12, 5 consecutive "best-case" deploys shipped a
+broken wrapper (`httpx.AsyncClient(base_url=None)` raises TypeError
+at construction) — the failure was masked because the post-deploy
+curl set used `/version`, `/founder-offer/status`, and
+`/admin/observability/breakers`, **none of which invoke ext_client**.
+The bug only surfaced in `services.integration_health` cron probes
+(and possibly LLM probe layer) which fire every ~10 minutes. Left
+undetected for ~7 hours.
+
+**Endpoints that DO NOT exercise ext_client** (do not rely on these
+as wrapper-verification signals):
+- `/api/aurem-dev/version` — reads BUILD_INFO.txt only
+- `/founder-offer/status` — DB read only
+- `/admin/observability/breakers` — 401 gate before hitting anything
+- `/api/aurem-dev/github/oauth/callback` (with bogus state) — returns 400 before OAuth code exchange
+- Any 401-gated admin endpoint hit without auth — returns 401 before executing the handler body
+
+**Endpoints that DO exercise ext_client** (safe spot-check targets
+post-wrapper-touching-deploy):
+- Any authenticated admin action that calls a migrated service:
+  * `admin_bin` project refresh (GitHub HEAD probe via ext_client)
+  * `admin_qa` observability runs (GitHub Actions API via ext_client)
+  * `admin_ops_config` Cloudflare purge (ext_client cloudflare dep)
+- `services.integration_health` cron probe cycle — fires every ~10min;
+  check the admin `Integration Health` panel for all 6 non-Stripe/non-e2b
+  deps showing green (not red/broken)
+- Full GitHub OAuth signup flow (only meaningful for private-email accounts;
+  requires human)
+- Any user-triggered codebase-health scan on a real repo
+
+**Diagnostic queries for after a wrapper-touching deploy:**
+1. Grep prod logs for `TypeError: Invalid type for url` → must be 0
+   after the fix landed
+2. Check `Integration Health` admin panel — if all 6 non-Stripe/non-e2b
+   deps went green after the deploy, wrapper is healthy live
+3. If no admin access at that moment: request the founder to run any
+   real admin action that touches GitHub or an external API; confirm
+   200 (not 500 with a NoneType URL traceback)
 
 ---
 
