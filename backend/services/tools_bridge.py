@@ -14,6 +14,8 @@ import time
 import httpx
 import logging
 
+from services.http import ext_client
+
 logger = logging.getLogger(__name__)
 
 UPSTREAM_URL = os.getenv("AUREM_UPSTREAM_URL", "https://aurem.live")
@@ -117,7 +119,10 @@ async def list_tools(jwt_token: str) -> list[dict]:
     headers = {"Authorization": f"Bearer {jwt_token}"}
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with ext_client(
+            "aurem_upstream",
+            timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+        ) as client:
             resp = await client.get(url, headers=headers)
             resp.raise_for_status()
             data = resp.json()
@@ -153,7 +158,10 @@ async def invoke_tool(name: str, args: dict, jwt_token: str) -> dict:
     payload = {"tool": name, "args": args}
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with ext_client(
+            "aurem_upstream",
+            timeout=httpx.Timeout(connect=5.0, read=60.0, write=5.0, pool=5.0),
+        ) as client:
             resp = await client.post(url, json=payload, headers=headers)
             resp.raise_for_status()
             return resp.json()

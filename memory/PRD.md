@@ -14,6 +14,16 @@
   `advisor_vision.py`, `financials.py`, `daily_digest.py`,
   `url_fetcher.py`.
 
+**On preview, awaiting next prod deploy**:
+- Phase 3 · Batch 3 · 7 more sites across 3 files:
+  `mode_d_debugger.py` (1), `tools_bridge.py` (2),
+  `web_skills.py` (4). Total migrated to date: **22 sites / 11
+  service files**.
+- 3 sites intentionally held for supervised session:
+  `ora_client.py` (custom 24h fatal-pattern breaker) + 2 sites
+  in `web_skills.py` (manual retry_guard.get_breaker("tavily")
+  gating that would double-record with the wrapper).
+
 **Still deferred to founder-supervised sessions**:
 - `ChatPanel.jsx` split (4,874 LOC)
 - `services/loop_engine.py` split (4,416 LOC)

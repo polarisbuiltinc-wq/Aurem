@@ -28,6 +28,8 @@ from urllib.parse import urlparse
 
 import httpx
 
+from services.http import ext_client
+
 logger = logging.getLogger(__name__)
 
 TAVILY_BASE = "https://api.tavily.com"
@@ -234,7 +236,10 @@ async def web_search_and_summarize(ctx: dict, args: dict) -> dict:
         "Content-Type": "application/json",
     }
     try:
-        async with httpx.AsyncClient(timeout=TAVILY_TIMEOUT) as c:
+        async with ext_client(
+            "tavily",
+            timeout=httpx.Timeout(connect=5.0, read=TAVILY_TIMEOUT, write=5.0, pool=5.0),
+        ) as c:
             r = await c.post(f"{TAVILY_BASE}/search", json=payload, headers=headers)
     except httpx.TimeoutException:
         return {"ok": False, "error": "Tavily summarize timed out after 15s"}
@@ -289,7 +294,10 @@ async def firecrawl_scrape(ctx: dict, args: dict) -> dict:
         "Content-Type": "application/json",
     }
     try:
-        async with httpx.AsyncClient(timeout=FIRECRAWL_SCRAPE_TIMEOUT) as c:
+        async with ext_client(
+            "firecrawl",
+            timeout=httpx.Timeout(connect=5.0, read=FIRECRAWL_SCRAPE_TIMEOUT, write=5.0, pool=5.0),
+        ) as c:
             r = await c.post(f"{FIRECRAWL_BASE}/scrape", json=payload, headers=headers)
     except httpx.TimeoutException:
         return {"ok": False, "error": "Firecrawl scrape timed out after 60s"}
@@ -342,7 +350,10 @@ async def firecrawl_crawl_site(ctx: dict, args: dict) -> dict:
         "Content-Type": "application/json",
     }
     try:
-        async with httpx.AsyncClient(timeout=15.0) as c:
+        async with ext_client(
+            "firecrawl",
+            timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+        ) as c:
             r = await c.post(f"{FIRECRAWL_BASE}/crawl", json=payload, headers=headers)
     except httpx.RequestError as e:
         return {"ok": False, "error": f"Firecrawl crawl kickoff failed: {e}"}
@@ -358,7 +369,10 @@ async def firecrawl_crawl_site(ctx: dict, args: dict) -> dict:
     # Poll up to FIRECRAWL_CRAWL_POLL_MAX seconds.
     elapsed = 0.0
     delay = 2.0
-    async with httpx.AsyncClient(timeout=15.0) as c:
+    async with ext_client(
+        "firecrawl",
+        timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+    ) as c:
         while elapsed < FIRECRAWL_CRAWL_POLL_MAX:
             try:
                 pr = await c.get(f"{FIRECRAWL_BASE}/crawl/{job_id}",

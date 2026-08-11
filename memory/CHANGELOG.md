@@ -4,6 +4,64 @@ Append-only iteration log. See `PRD.md` for the original problem
 
 ---
 
+## 2026-02-12 · Fork session · Phase 3 · Batch 3 (HTTP wrapper migration)
+
+### What shipped (preview only — awaiting founder review before prod)
+
+Third wave of `httpx.AsyncClient` migrations onto `services/http`.
+Same safe pattern as Batches 1 & 2, but with **7 sites migrated
+and 3 intentionally deferred** because of custom-breaker
+interactions that need supervised reconciliation.
+
+**Migrated (7 sites across 3 files)**:
+- `services/mode_d_debugger.py` — 1 site — GitHub PAT fetch
+  (drop-in swap; passes the wrapped `httpx.AsyncClient` yielded by
+  `ext_client("github", ...)` into `_gh_fetch_file` unchanged)
+- `services/tools_bridge.py` — 2 sites — aurem.live upstream
+  tools registry (list_tools + invoke_tool). Uses new dep name
+  `aurem_upstream`. Retry_guard breaker is ADDITIVE to the
+  existing 5-min auth cooldown (`_upstream_blocked`).
+- `services/web_skills.py` — 4 sites — Tavily summarize +
+  Firecrawl scrape + Firecrawl crawl kickoff + Firecrawl crawl
+  polling loop.
+
+**Intentionally deferred (3 sites) — needs supervised session**:
+- `services/ora_client.py` (1 site) — has its own 24h fatal-
+  pattern breaker (`_trip_breaker` / `_breaker_is_open` with
+  fatal-pattern list). Migrating naively would cause two
+  breakers to fight for the same "ora" dep name.
+- `services/web_skills.py::web_search` (line ~105) and
+  `services/web_skills.py::fetch_url` (line ~180) — call
+  `services.retry_guard.get_breaker("tavily")` manually and
+  already gate via `_br.allow()` / `_br.record_failure()`. The
+  wrapper uses the SAME "tavily" breaker; migrating naively
+  would double-record failures. Refactor to remove the manual
+  gates AND switch to `ext_request` needs a supervised review.
+
+**Pinning tests**: `tests/test_phase3_http_wrapper_migration_batch3.py`
+(4 tests, all green — including one guard that asserts
+`ora_client.py` was *not* migrated so a future agent doesn't
+skip the supervised review).
+
+### Verification
+- 25/25 targeted pytest green (Batch1 + Batch2 + Batch3 + wrapper
+  contract + banner + observability + risk_zone smoke)
+- Backend restart clean, LongCat probe OK, no import errors
+- Python lint clean on all 3 migrated files
+- Preview endpoints responsive (`/version`, `/founder-offer/status`)
+
+### Progress
+- Batch 1 (4 files, 11 sites) — ✅ shipped to prod
+- Batch 2 (4 files, 4 sites) — ✅ shipped to prod
+- Batch 3 (3 files, 7 sites) — ✅ landed on preview, awaiting founder
+  review before next deploy
+- Total migrated to date: **22 sites across 11 service files**
+- Remaining raw `httpx.AsyncClient` sites: ~55 across ~48 files
+  (loop_engine, chat, github_sync, cto_projects, etc.) + 3 sites
+  in the supervised-only bucket (ora_client + 2 in web_skills)
+
+---
+
 ## 2026-02-12 · Fork session · Phase 3 · Batch 2 (HTTP wrapper migration)
 
 ### What shipped (preview only)
