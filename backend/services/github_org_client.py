@@ -45,6 +45,8 @@ from typing import Optional
 
 import httpx
 
+from services.http import ext_client
+
 logger = logging.getLogger(__name__)
 
 _API_ROOT = "https://api.github.com"
@@ -128,7 +130,10 @@ async def create_org_repo(
         "has_wiki":        False,
     }
 
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as cli:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=_TIMEOUT, write=10.0, pool=5.0),
+    ) as cli:
         r = await cli.post(
             f"{_API_ROOT}/orgs/{_org_name()}/repos",
             headers=_headers(), json=payload,
@@ -178,7 +183,10 @@ async def push_file(
         body = {"message": message[:120] or "add file", "content": b64, "branch": br}
         if with_sha:
             body["sha"] = with_sha
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as cli:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=_TIMEOUT, write=10.0, pool=5.0),
+        ) as cli:
             r = await cli.put(url, headers=_headers(), json=body)
         return {"status": r.status_code, "json": r.json() if r.text else {}}
 
@@ -189,7 +197,10 @@ async def push_file(
 
     # Retry with sha if the file exists (create → conflict → update).
     if res["status"] == 422:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as cli:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=_TIMEOUT, write=5.0, pool=5.0),
+        ) as cli:
             g = await cli.get(url + f"?ref={br}", headers=_headers())
         if g.status_code == 200 and g.json().get("sha"):
             res2 = await _try(g.json()["sha"])
@@ -248,7 +259,10 @@ async def delete_org_repo(repo_name: str) -> dict:
     we need to unwind. Idempotent (404 is treated as success)."""
     if not is_configured():
         return {"ok": False, "reason": "aurem_org_not_configured"}
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as cli:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=_TIMEOUT, write=5.0, pool=5.0),
+    ) as cli:
         r = await cli.delete(
             f"{_API_ROOT}/repos/{_org_name()}/{repo_name}",
             headers=_headers(),
@@ -276,7 +290,10 @@ async def transfer_repo_to_user(repo_name: str, new_owner: str) -> dict:
     if not new_owner or not isinstance(new_owner, str):
         return {"ok": False, "reason": "missing_new_owner"}
     payload = {"new_owner": new_owner.strip()}
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as cli:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=_TIMEOUT, write=10.0, pool=5.0),
+    ) as cli:
         r = await cli.post(
             f"{_API_ROOT}/repos/{_org_name()}/{repo_name}/transfer",
             headers=_headers(), json=payload,

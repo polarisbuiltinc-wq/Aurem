@@ -112,7 +112,15 @@ async def _maybe_append_github_commits(
         if not (owner and repo):
             return existing_context
         import httpx
-        async with httpx.AsyncClient(timeout=4) as client:
+        from services.http import ext_client
+        # NOTE: 4-second read timeout is INTENTIONAL — this path is
+        # called from chat-brain enrichment and must not extend the
+        # chat response latency budget beyond ~4s on cache-miss.
+        # See BATCH_7_SURVEY_2026-02-12.md.
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=3.0, read=4.0, write=3.0, pool=3.0),
+        ) as client:
             resp = await client.get(
                 f"https://api.github.com/repos/{owner}/{repo}/commits?per_page=5",
                 headers={
@@ -469,9 +477,13 @@ async def _gh_list_files(
     if not (token and owner and repo):
         return []
     import httpx
+    from services.http import ext_client
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path.lstrip('/')}"
     try:
-        async with httpx.AsyncClient(timeout=8.0) as cx:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=8.0, write=5.0, pool=5.0),
+        ) as cx:
             r = await cx.get(
                 url,
                 params={"ref": branch} if branch else None,
@@ -505,9 +517,13 @@ async def _gh_read_small(
         return ""
     import base64
     import httpx
+    from services.http import ext_client
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path.lstrip('/')}"
     try:
-        async with httpx.AsyncClient(timeout=8.0) as cx:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=8.0, write=5.0, pool=5.0),
+        ) as cx:
             r = await cx.get(
                 url,
                 params={"ref": branch} if branch else None,

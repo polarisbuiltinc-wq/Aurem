@@ -28,6 +28,8 @@ import uuid
 
 import httpx
 
+from services.http import ext_client
+
 logger = logging.getLogger("aurem.smoke")
 
 _SMOKE_FILES = [
@@ -199,7 +201,10 @@ async def run_smoke(db, user: dict, cleanup: bool = True) -> dict:
         token = os.environ["SUPABASE_MANAGEMENT_TOKEN"].strip()
         org_id = os.environ["SUPABASE_ORG_ID"].strip()
         try:
-            async with httpx.AsyncClient(timeout=20.0) as cli:
+            async with ext_client(
+                "supabase",
+                timeout=httpx.Timeout(connect=5.0, read=20.0, write=5.0, pool=5.0),
+            ) as cli:
                 r = await cli.get(
                     "https://api.supabase.com/v1/organizations",
                     headers={"Authorization": f"Bearer {token}"},
@@ -240,7 +245,10 @@ async def run_smoke(db, user: dict, cleanup: bool = True) -> dict:
                 cleaned["repo"] = f"delete_error: {e!r:.150}"
         if vercel_project_id:
             try:
-                async with httpx.AsyncClient(timeout=20.0) as cli:
+                async with ext_client(
+                    "vercel",
+                    timeout=httpx.Timeout(connect=5.0, read=20.0, write=5.0, pool=5.0),
+                ) as cli:
                     r = await cli.delete(
                         f"https://api.vercel.com/v9/projects/{vercel_project_id}"
                         f"?teamId={os.environ.get('VERCEL_PLATFORM_TEAM_ID', '').strip()}",

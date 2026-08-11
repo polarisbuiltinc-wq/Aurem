@@ -27,6 +27,8 @@ import time
 from typing import Any, Optional
 
 import httpx
+
+from services.http import ext_client
 from fastapi import APIRouter, HTTPException, Header
 
 from cto_services.auth import current_dev
@@ -105,7 +107,10 @@ async def refresh_index(user_id: str, project_id: str,
     if db is None:
         raise HTTPException(503, "db_not_ready")
     owner, name = _parse_repo_url(repo_url)
-    async with httpx.AsyncClient(timeout=30) as c:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0),
+    ) as c:
         repo = await _gh_get(c, f"{GITHUB_API}/repos/{owner}/{name}", pat)
         branch = repo.get("default_branch", "main")
         tree = await _gh_get(
