@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from typing import Optional, Dict
 import httpx
 
+from services.http import ext_client
+
 logger = logging.getLogger(__name__)
 
 _db = None
@@ -76,7 +78,10 @@ async def connect_github(tenant_id: str, token: str, repo: Optional[str] = None)
         return {"connected": False, "error": "no_db"}
 
     # Verify token works
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+    ) as client:
         resp = await client.get(f"{GITHUB_API}/user", headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"})
         if resp.status_code != 200:
             return {"connected": False, "error": f"GitHub auth failed: {resp.status_code}"}
@@ -155,7 +160,10 @@ async def push_fix(
     branch_name = f"aurem/fix-{secrets.token_hex(6)}"
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0),
+    ) as client:
         # 1. Get base branch SHA
         ref_resp = await client.get(f"{GITHUB_API}/repos/{repo}/git/ref/heads/{base_branch}", headers=headers)
         if ref_resp.status_code != 200:
@@ -250,7 +258,10 @@ async def get_pr_status(tenant_id: str, pr_number: int = None, repo: str = None)
     if not repo or not pr_number:
         return {"error": "No PR found"}
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+    ) as client:
         resp = await client.get(
             f"{GITHUB_API}/repos/{repo}/pulls/{pr_number}",
             headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
@@ -331,7 +342,10 @@ async def ship_auto_deploy_workflow(
         workflow_yaml = f.read()
 
     headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+    ) as client:
         # 1. Check if the destination file already exists on base_branch.
         check_url = (
             f"https://api.github.com/repos/{repo}/contents/"

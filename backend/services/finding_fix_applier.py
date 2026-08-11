@@ -34,6 +34,8 @@ from typing import Optional
 
 import httpx
 
+from services.http import ext_client
+
 logger = logging.getLogger("aurem-dev.finding_fix_applier")
 
 
@@ -56,7 +58,10 @@ async def _fetch_file_content(
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
     params = {"ref": branch} if branch and branch != "HEAD" else None
     try:
-        async with httpx.AsyncClient(timeout=15.0) as cx:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+        ) as cx:
             for attempt in range(3):
                 r = await cx.get(url, params=params, headers=headers)
                 if r.status_code == 200:

@@ -36,6 +36,9 @@ from calendar import monthrange
 
 import httpx
 
+from services.http import ext_request
+from services.http.client import ExternalCallError
+
 logger = logging.getLogger(__name__)
 
 
@@ -205,19 +208,19 @@ async def grant_referral_reward(db, new_user_id: str) -> dict:
                     f"auremcto.com/?ref={referrer_uid}</a></p>"
                     f"<p>— Tejinder Sandhu, Founder, Aurem</p>"
                 )
-                async with httpx.AsyncClient(timeout=8) as c:
-                    await c.post(
-                        "https://api.resend.com/emails",
-                        headers={"Authorization": f"Bearer {resend_key}",
-                                 "Content-Type": "application/json"},
-                        json={
-                            "from":    from_addr,
-                            "to":      [referrer["email"]],
-                            "subject": "You earned 1 free month on AUREM 🎉",
-                            "text":    _referral_text,
-                            "html":    _referral_html,
-                        },
-                    )
+                await ext_request(
+                    "resend", "POST", "https://api.resend.com/emails",
+                    headers={"Authorization": f"Bearer {resend_key}",
+                             "Content-Type": "application/json"},
+                    json={
+                        "from":    from_addr,
+                        "to":      [referrer["email"]],
+                        "subject": "You earned 1 free month on AUREM 🎉",
+                        "text":    _referral_text,
+                        "html":    _referral_html,
+                    },
+                    timeout=httpx.Timeout(connect=5.0, read=8.0, write=5.0, pool=5.0),
+                )
         except Exception as e:
             logger.warning(f"[referral_reward] email failed for {referrer_uid}: {e!r}")
         return {"granted": True, "referrer": referrer_uid,

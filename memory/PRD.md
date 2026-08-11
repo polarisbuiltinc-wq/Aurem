@@ -23,12 +23,18 @@
   consolidated breaker coverage for GitHub outbound path.
 - **Cumulative on prod: 35 sites / 15 service files migrated.**
 
+**On prod as of 2026-02-12 (Batch 5 deploy at built_at `17:59:55`, SHA `261fc8ad337e`)**:
+- All Batches 1-5 shipped (35 sites across 15 files pre-Batch 5,
+  47 sites across 17 files with Batch 5 landed).
+
 **On preview, awaiting next prod deploy**:
-- Phase 3 · Batch 5 · 12 more sites across 2 files:
-  `supabase_provisioner.py` (5 · `ext_client("supabase")`) +
-  `dev_skills.py` (7 · 5 github + 1 npm + 1 pypi). New dep names
-  introduced: `npm`, `pypi`.
-- **Cumulative: 47 sites / 17 service files migrated.**
+- Phase 3 · Batch 6 · 7 more sites across 4 files:
+  `github_deploy_service.py` (4 · `ext_client("github")`),
+  `billing_cron.py` (1 · `ext_request("resend")`),
+  `finding_fix_applier.py` (1 · `ext_client("github")` — manual
+  retry loop preserved), `github_issues_context.py` (1 ·
+  `ext_client("github")`).
+- **Cumulative: 54 sites / 21 service files migrated.**
 
 **5 sites intentionally deferred (supervised session queue)**:
 - `services/ora_client.py` — custom 24h fatal-pattern breaker

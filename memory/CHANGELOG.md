@@ -4,6 +4,59 @@ Append-only iteration log. See `PRD.md` for the original problem
 
 ---
 
+## 2026-02-12 · Fork session · Phase 3 · Batch 6 (HTTP wrapper migration)
+
+### What shipped (preview only — awaiting founder review)
+
+Sixth wave. Piggy-backed on the Batch 5 deploy window: while the
+deployer pipeline was mid-flight, I did a per-site survey of the
+remaining 0-breaker-signal candidates and migrated the safe ones.
+No new file has custom limits/breakers.
+
+**Migrated (7 sites across 4 files)**:
+- `services/github_deploy_service.py` — 4 sites (token verify,
+  branch/blob/commit pooled session, PR fetch, workflow install
+  check) → `ext_client("github", ...)`
+- `services/billing_cron.py` — 1 site (referral reward email
+  via Resend) → `ext_request("resend", ...)`
+- `services/finding_fix_applier.py` — 1 site (GitHub file fetch
+  inside a manual `for attempt in range(3)` retry loop).
+  Migration preserves the manual retry (wrapper's ext_client is
+  context-manager only — no auto-retry, no double-tracking).
+- `services/github_issues_context.py` — 1 site (list open issues)
+  → `ext_client("github", ...)`
+
+**False-positive skipped**: `services/architecture_health.py` — the
+"1 site" grep hit turned out to be a docstring warning about
+direct httpx use, not an actual call. Nothing to migrate.
+
+**Pinning tests**: `tests/test_phase3_http_wrapper_migration_batch6.py`
+(4 tests, all green — including a guard that
+`finding_fix_applier.py` still has its manual retry loop
+after the swap).
+
+### Verification
+- **36/36 targeted pytest green** across Batches 1-6 + wrapper
+  contract + banner + observability + risk_zone smoke
+- Backend restart clean, LongCat probe OK, no import errors
+- Python lint clean on all 4 migrated files
+- Batch 5 deploy verified live on prod at same time
+  (SHA `261fc8ad337e`, built_at `17:59:55`)
+
+### Progress
+- Batch 1 (4 files, 11 sites) — ✅ shipped to prod
+- Batch 2 (4 files,  4 sites) — ✅ shipped to prod
+- Batch 3 (3 files,  7 sites) — ✅ shipped to prod
+- Batch 4 (4 files, 13 sites) — ✅ shipped to prod
+- Batch 5 (2 files, 12 sites) — ✅ shipped to prod
+- Batch 6 (4 files,  7 sites) — ✅ landed on preview, awaiting deploy
+- **Cumulative: 54 sites / 21 service files migrated**
+- Held for supervised session (5 sites): ora_client (1),
+  web_skills tavily search + fetch_url (2), github_api_writer (2)
+- Still on raw `httpx.AsyncClient`: ~28 sites across ~30 files
+
+---
+
 ## 2026-02-12 · Fork session · Phase 3 · Batch 5 (HTTP wrapper migration — Option A)
 
 ### What shipped (preview only — awaiting founder review)

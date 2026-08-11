@@ -19,6 +19,8 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import httpx
+
+from services.http import ext_client
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 logger = logging.getLogger(__name__)
@@ -50,7 +52,10 @@ async def _fetch_open_issues(
     }
     params = {"state": "open", "per_page": max_issues, "sort": "updated"}
 
-    async with httpx.AsyncClient(timeout=10) as client:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+    ) as client:
         resp = await client.get(url, headers=headers, params=params)
         resp.raise_for_status()
         raw = resp.json()
