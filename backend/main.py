@@ -43,6 +43,7 @@ from routers.backups_admin import router as backups_admin_router  # 2026-02-09 �
 from routers.admin_public import router as admin_public_router  # Iter 358 — public /admin/errors/report sink
 from routers.admin_qa import router as admin_qa_router          # Iter 303 (/admin/qa dashboard)
 from routers.admin_health import router as admin_health_router  # Feb 2026 — unified health registry aggregator
+from routers.admin_observability import router as admin_observability_router  # 2026-02-11 — /admin/observability/breakers
 from routers.support import router as support_router
 from routers.payments import router as payments_router
 from routers.mcp import router as mcp_router, mcp_discovery_root
@@ -2608,6 +2609,7 @@ app.include_router(backups_admin_router,    prefix="/api/aurem-dev")  # /api/aur
 app.include_router(admin_public_router,  prefix="/api/aurem-dev")  # Iter 358 — un-gated /admin/errors/report
 app.include_router(admin_qa_router,      prefix="/api/aurem-dev")  # Iter 303 — /admin/qa dashboard
 app.include_router(admin_health_router,  prefix="/api")             # Feb 2026 — /api/aurem-dev/admin/status/*
+app.include_router(admin_observability_router, prefix="/api")       # 2026-02-11 — /api/aurem-dev/admin/observability/breakers
 app.include_router(support_router,       prefix="/api/aurem-dev")
 app.include_router(payments_router,      prefix="/api/aurem-dev")
 app.include_router(usage_router,         prefix="/api/aurem-dev")
