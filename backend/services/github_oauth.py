@@ -9,8 +9,6 @@ from typing import Any
 
 import httpx
 
-from services.http import ext_client
-
 logger = logging.getLogger(__name__)
 
 
@@ -51,16 +49,8 @@ def auth_url(state: str, force_reauth: bool = False,
 
 
 async def exchange(code: str) -> str:
-    """Exchange OAuth `code` for an access_token. Raises on error.
-
-    NOTE: This POSTs to github.com (the web host) NOT api.github.com.
-    Both usually fail together in an outage, so routing this through
-    the same "github" dep breaker is intentional and desired.
-    """
-    async with ext_client(
-        "github",
-        timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
-    ) as c:
+    """Exchange OAuth `code` for an access_token. Raises on error."""
+    async with httpx.AsyncClient(timeout=15) as c:
         r = await c.post(
             "https://github.com/login/oauth/access_token",
             json={
@@ -79,10 +69,7 @@ async def exchange(code: str) -> str:
 
 
 async def gh_user(token: str) -> dict:
-    async with ext_client(
-        "github",
-        timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
-    ) as c:
+    async with httpx.AsyncClient(timeout=15) as c:
         r = await c.get(
             "https://api.github.com/user",
             headers={
@@ -95,10 +82,7 @@ async def gh_user(token: str) -> dict:
 
 
 async def gh_repos(token: str) -> list[dict[str, Any]]:
-    async with ext_client(
-        "github",
-        timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
-    ) as c:
+    async with httpx.AsyncClient(timeout=15) as c:
         r = await c.get(
             "https://api.github.com/user/repos",
             headers={

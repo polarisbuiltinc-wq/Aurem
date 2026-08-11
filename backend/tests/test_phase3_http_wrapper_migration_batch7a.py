@@ -78,14 +78,15 @@ def test_project_brain_other_two_sites_use_8s():
     assert "httpx.AsyncClient(timeout=8.0)" not in src
 
 
-def test_batch_7b_files_migrated_after_wave_a_verified():
-    """This test flipped from "must be raw" to "must be migrated"
-    once Wave 7A was verified on prod (built_at 18:44:51 on 2026-02-12).
-    Wave 7B is now landing github_oauth + github_app together — see
-    tests/test_phase3_http_wrapper_migration_batch7b.py for the
-    detailed guards."""
+def test_batch_7b_files_NOT_YET_migrated():
+    """Guard the sequenced-deploy plan: github_oauth.py and
+    github_app.py stay on raw httpx.AsyncClient until Wave 7A
+    is verified on prod. If a future agent races ahead and
+    migrates these before Wave 7A ships, this test flips red
+    so the deployment plan doesn't get accidentally collapsed."""
     oauth_src = open("/app/backend/services/github_oauth.py").read()
     app_src = open("/app/backend/services/github_app.py").read()
-    # No raw client construction in either module anymore.
-    assert "httpx.AsyncClient(timeout=15)" not in oauth_src
-    assert "httpx.AsyncClient(timeout=15.0)" not in app_src
+    # github_oauth: expect 3 raw sites still present.
+    assert oauth_src.count("httpx.AsyncClient(timeout=15)") == 3
+    # github_app: expect 6 raw sites still present.
+    assert app_src.count("httpx.AsyncClient(timeout=15.0)") == 6
