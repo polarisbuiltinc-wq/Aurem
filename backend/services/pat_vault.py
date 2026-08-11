@@ -88,7 +88,70 @@ encrypt_pat        = _encrypt_pat
 get_user_gh_token  = _user_gh_token
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 2026-02-10 · Phase 3a — dual-auth repo-token resolver
+# ═══════════════════════════════════════════════════════════════════
+async def get_repo_token(project: dict) -> Optional[str]:
+    """Return a valid GitHub token for the given `cto_projects` row.
+
+    Dispatch by `project.auth_method`:
+      * "github_app"                  → mint a fresh short-lived
+                                        installation access token via
+                                        `services.github_app.get_installation_token`.
+                                        NEVER persisted; the caller uses
+                                        it once and discards.
+      * "pat" | missing               → decrypt the stored PAT
+                                        (`project.github_token`) via
+                                        `_decrypt_pat`. Legacy rows with
+                                        no `auth_method` field fall
+                                        through here (recommended-default
+                                        per Phase 3 decision #2).
+
+    Returns:
+      * a non-empty token string on success
+      * `None` when the project row is genuinely unconfigured for either
+        path (empty PAT AND no installation_id). Callers preserve their
+        existing "fallback to `_user_gh_token()` for legacy projects
+        without a per-project PAT" semantics — this function only
+        replaces the primary lookup.
+
+    NEVER raises — every caller relies on the `str | None` contract to
+    fall through to the `or await _user_gh_token(...)` fallback safely.
+    """
+    if not project:
+        return None
+
+    method = (project.get("auth_method") or "pat").lower()
+
+    if method == "github_app":
+        iid = project.get("installation_id")
+        if not iid:
+            # Malformed row — logged but non-raising so the caller
+            # falls through to its existing `_user_gh_token` fallback
+            # rather than a hard 500. Real production writes always
+            # set installation_id when auth_method="github_app" (see
+            # /projects/add gate rewrite), so this branch is defensive
+            # only.
+            return None
+        try:
+            from services.github_app import get_installation_token
+            token, _expires_at = await get_installation_token(int(iid))
+            return token or None
+        except Exception:
+            # Installation revoked, App misconfigured, GitHub 5xx, etc.
+            # Return None so caller falls through to org-token fallback
+            # rather than crashing the request. Caller sees the same
+            # semantics as an unauthenticated request would produce.
+            return None
+
+    # Default path — PAT (explicit or legacy).
+    return await _decrypt_pat(
+        project.get("user_id") or "", project.get("github_token"),
+    )
+
+
 __all__ = [
     "decrypt_pat", "encrypt_pat", "get_user_gh_token",
     "_decrypt_pat", "_encrypt_pat", "_user_gh_token",
+    "get_repo_token",
 ]

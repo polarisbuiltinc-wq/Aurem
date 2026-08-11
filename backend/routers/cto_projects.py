@@ -133,6 +133,14 @@ class AddProject(BaseModel):
     branch: str = "main"
     tech_stack: Optional[str] = None
     preview_url: Optional[str] = None   # public URL of the running site/app
+    # 2026-02-10 · Phase 3a — GitHub App path (additive to PAT).
+    # When present, the gate treats this as the App-install branch:
+    # verifies the caller owns the installation, then persists the row
+    # with auth_method="github_app" and installation_id set. `github_token`
+    # is ignored in that branch (installation_id wins per Phase 3
+    # decision #1). NEVER stored — installation access tokens are minted
+    # fresh per-request via services.github_app.
+    installation_id: Optional[int] = None
 
 
 class TaskBody(BaseModel):
@@ -186,6 +194,18 @@ async def _decrypt_pat(user_id: str, token: Optional[str]) -> Optional[str]:
     return await _svc_decrypt_pat(user_id, token)
 
 
+# 2026-02-10 · Phase 3a — dual-auth repo-token resolver.
+# `get_repo_token(project)` returns the right token for any project
+# row regardless of whether it was connected via PAT (auth_method="pat")
+# or the GitHub App (auth_method="github_app"). Legacy rows without an
+# auth_method field are treated as PAT (recommended-default per Phase 3
+# decision #2). Never raises — callers keep their existing
+# `or await _user_gh_token(user_id)` org-fallback semantics.
+async def get_repo_token(project: dict) -> Optional[str]:
+    from services.pat_vault import get_repo_token as _svc_get_repo_token
+    return await _svc_get_repo_token(project)
+
+
 # Iter 165 — Brain V2 endpoints (manual rebuild + read-only inspect)
 
 
@@ -210,7 +230,7 @@ async def build_project_brain(
     if not proj:
         raise HTTPException(404, "Project not found")
 
-    gh_token = await _decrypt_pat(user_id, proj.get("github_token")) \
+    gh_token = await get_repo_token(proj) \
         or await _user_gh_token(user_id)
     gh_owner = proj.get("github_owner") or ""
     gh_repo  = proj.get("github_repo") or ""
@@ -287,7 +307,7 @@ async def warm_start_project(
     if not proj:
         raise HTTPException(404, "Project not found")
 
-    gh_token = await _decrypt_pat(user_id, proj.get("github_token")) \
+    gh_token = await get_repo_token(proj) \
         or await _user_gh_token(user_id)
     gh_owner = proj.get("github_owner") or ""
     gh_repo  = proj.get("github_repo") or ""
@@ -547,7 +567,7 @@ async def build_project_graph(
     )
     if not proj:
         raise HTTPException(404, "Project not found")
-    gh_token = await _decrypt_pat(user_id, proj.get("github_token")) \
+    gh_token = await get_repo_token(proj) \
         or await _user_gh_token(user_id)
     gh_owner = proj.get("github_owner") or ""
     gh_repo  = proj.get("github_repo") or ""
@@ -800,7 +820,7 @@ async def check_project_pat(
     )
     if not proj:
         raise HTTPException(404, "project not found")
-    token = await _decrypt_pat(user_id, proj.get("github_token")) \
+    token = await get_repo_token(proj) \
         or await _user_gh_token(user_id)
     if not token:
         return {"ok": True, "state": "missing", "message": "No PAT configured"}
@@ -848,100 +868,169 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
     db = require_db()
     owner, repo = _parse_repo(body.github_url)
 
-    # Iter 211 — PAT compulsory at project creation (per user spec).
-    # Per-project isolation: every project stores its own encrypted PAT
-    # independently. We no longer fall back to the user's OAuth token
-    # for repo work (OAuth is identity-only). User must explicitly
-    # paste a PAT for each project.
+    # ═══════════════════════════════════════════════════════════════
+    # 2026-02-10 · Phase 3a — dual-auth gate
+    # ═══════════════════════════════════════════════════════════════
+    # Accepts EITHER:
+    #   (a) `installation_id` — App-install path (recommended, seamless)
+    #   (b) `github_token`    — PAT path (legacy, still fully supported)
+    #
+    # When BOTH are provided, installation_id wins silently (Phase 3
+    # decision #1). The PAT is ignored — never persisted, never
+    # verified. This behavior is deliberate so a future wizard UX that
+    # accidentally sends both can't corrupt state or double-charge
+    # GitHub rate limits.
+    installation_id = body.installation_id
     pat = (body.github_token or "").strip() or None
-    if not pat:
-        raise HTTPException(
-            400,
-            "A GitHub Personal Access Token is required for every project. "
-            "Generate one at github.com/settings/personal-access-tokens/new "
-            "with Contents: Read and write for this repo.",
-        )
-    if not (pat.startswith("ghp_") or pat.startswith("github_pat_")):
-        raise HTTPException(
-            400,
-            "That doesn't look like a GitHub PAT — should start with "
-            "ghp_ (classic) or github_pat_ (fine-grained).",
-        )
 
-    # Iter 211 — atomic verify: hit GitHub /repos/{owner}/{repo} with
-    # the PAT BEFORE writing the project doc. If GitHub rejects the
-    # token we never persist a broken project. Maps to the same
-    # signals as `/projects/{id}/test-pat` (iter 207) for UI symmetry.
-    #
-    # Session G · Item 1 — scoped test-mode bypass.
-    # When AUREM_TEST_MODE=1 AND the PAT matches the magic sentinel
-    # prefix `github_pat_TEST_*`, skip the live GitHub roundtrip so
-    # `tests/test_aurem_p0_bugs.py::test_bug1_*` (P0 regression
-    # coverage of the add/list/patch surface) can run without
-    # requiring a real long-lived test PAT.
-    #
-    # Security note:
-    #   • Bypass is IMPOSSIBLE on production — prod pods never set
-    #     `AUREM_TEST_MODE`. The env var is a preview-only test
-    #     harness switch.
-    #   • Real user PATs (which start with `github_pat_11...` or
-    #     `ghp_...`) are UNAFFECTED — the sentinel-prefix guard
-    #     (`github_pat_TEST_`) is a namespace no real GitHub PAT
-    #     will ever collide with (GitHub PATs after the underscore
-    #     use base62 tokens, never the literal string "TEST_").
-    #   • Even inside preview, only the specific sentinel prefix
-    #     is accepted — a real weak/expired PAT still hits the
-    #     live validation and gets rejected.
-    _test_bypass = (
-        os.getenv("AUREM_TEST_MODE") == "1"
-        and pat.startswith("github_pat_TEST_")
-    )
+    # Values that both branches populate for the shared insert below.
+    auth_method:     str
+    encrypted_token: Optional[str]
+    installation_active: Optional[bool] = None
+    pat_verified_flag = True   # both branches verify against real GitHub
+
     import httpx as _httpx
-    if not _test_bypass:
+
+    # ── Branch A: GitHub App install ────────────────────────────────
+    if installation_id:
+        # 1. Verify caller owns THIS installation.
+        install_row = await db.github_installations.find_one({
+            "installation_id": int(installation_id),
+            "user_id":         me["user_id"],
+            "active":          True,
+        })
+        if not install_row:
+            raise HTTPException(400, {
+                "error":   "installation_not_found_or_inactive",
+                "message": (
+                    "That GitHub App installation isn't linked to your "
+                    "account, or has been suspended/uninstalled. Re-install "
+                    "the App and try again."
+                ),
+            })
+        # 2. Verify installation has access to THIS repo — real GitHub
+        #    call using a fresh short-lived installation token (never
+        #    stored). Same trust boundary as the PAT branch's live
+        #    verify step; this is what prevents a user from pointing
+        #    their own installation at a repo they don't have access to.
+        from services import github_app as _ga
         try:
-            async with _httpx.AsyncClient(timeout=10.0) as _c:
-                _r = await _c.get(
-                    f"https://api.github.com/repos/{owner}/{repo}",
-                    headers={
-                        "Accept":              "application/vnd.github+json",
-                        "Authorization":       f"Bearer {pat}",
-                        "X-GitHub-Api-Version": "2022-11-28",
-                    },
-                )
+            await _ga.get_repo_via_installation(
+                int(installation_id), owner, repo,
+            )
+        except _httpx.HTTPStatusError as _e:
+            code = _e.response.status_code
+            if code == 404:
+                raise HTTPException(400, {
+                    "error":   "installation_no_repo_access",
+                    "message": (
+                        f"The App installation on @{install_row.get('github_login','')} "
+                        f"doesn't have access to {owner}/{repo}. "
+                        "Grant access on GitHub → your App → Configure → "
+                        "\"Repository access\" (add this repo)."
+                    ),
+                })
+            if code in (401, 403):
+                raise HTTPException(400, {
+                    "error":   "installation_token_rejected",
+                    "message": (
+                        "GitHub rejected the installation access token. The "
+                        "installation may have been suspended — check the "
+                        "App settings on GitHub."
+                    ),
+                })
+            raise HTTPException(502, {
+                "error":   "github_probe_failed",
+                "message": f"GitHub returned HTTP {code} while verifying "
+                           f"installation access to {owner}/{repo}.",
+            })
         except _httpx.RequestError as _e:
-            raise HTTPException(
-                502,
-                f"Couldn't reach GitHub to verify the token ({type(_e).__name__}). "
-                "Try again in a moment.",
-            )
-        if _r.status_code in (401, 403):
+            raise HTTPException(502, (
+                f"Couldn't reach GitHub to verify installation access "
+                f"({type(_e).__name__}). Try again in a moment."
+            ))
+        auth_method         = "github_app"
+        encrypted_token     = None   # never stored — token minted per-request
+        installation_active = True
+
+    # ── Branch B: PAT (unchanged from prior behavior) ───────────────
+    elif pat:
+        if not (pat.startswith("ghp_") or pat.startswith("github_pat_")):
             raise HTTPException(
                 400,
-                "GitHub rejected the PAT (401/403). Regenerate it with "
-                "Contents: Read and write for this repo, then try again.",
+                "That doesn't look like a GitHub PAT — should start with "
+                "ghp_ (classic) or github_pat_ (fine-grained).",
             )
-        if _r.status_code == 404:
-            raise HTTPException(
-                400,
-                f"Repo not found at github.com/{owner}/{repo} via this PAT. "
-                "The repo may not be in the token's scope — re-pick it when "
-                "generating a fine-grained PAT.",
-            )
-        if _r.status_code != 200:
-            raise HTTPException(
-                502,
-                f"GitHub returned HTTP {_r.status_code} during verification. "
-                "Try a fresh token.",
-            )
+        # Iter 211 — atomic verify: hit GitHub /repos/{owner}/{repo}
+        # with the PAT BEFORE writing the project doc. Same code as
+        # before Phase 3a — semantics unchanged for the PAT branch.
+        # (Session G · Item 1 scoped test-mode bypass preserved.)
+        _test_bypass = (
+            os.getenv("AUREM_TEST_MODE") == "1"
+            and pat.startswith("github_pat_TEST_")
+        )
+        if not _test_bypass:
+            try:
+                async with _httpx.AsyncClient(timeout=10.0) as _c:
+                    _r = await _c.get(
+                        f"https://api.github.com/repos/{owner}/{repo}",
+                        headers={
+                            "Accept":              "application/vnd.github+json",
+                            "Authorization":       f"Bearer {pat}",
+                            "X-GitHub-Api-Version": "2022-11-28",
+                        },
+                    )
+            except _httpx.RequestError as _e:
+                raise HTTPException(
+                    502,
+                    f"Couldn't reach GitHub to verify the token ({type(_e).__name__}). "
+                    "Try again in a moment.",
+                )
+            if _r.status_code in (401, 403):
+                raise HTTPException(
+                    400,
+                    "GitHub rejected the PAT (401/403). Regenerate it with "
+                    "Contents: Read and write for this repo, then try again.",
+                )
+            if _r.status_code == 404:
+                raise HTTPException(
+                    400,
+                    f"Repo not found at github.com/{owner}/{repo} via this PAT. "
+                    "The repo may not be in the token's scope — re-pick it when "
+                    "generating a fine-grained PAT.",
+                )
+            if _r.status_code != 200:
+                raise HTTPException(
+                    502,
+                    f"GitHub returned HTTP {_r.status_code} during verification. "
+                    "Try a fresh token.",
+                )
+        auth_method     = "pat"
+        encrypted_token = await _encrypt_pat(me["user_id"], pat)
+
+    # ── Neither provided ────────────────────────────────────────────
+    else:
+        raise HTTPException(400, {
+            "error": "auth_required",
+            "message": (
+                "Connect via the GitHub App (recommended) or paste a "
+                "Personal Access Token. Both options are available in "
+                "the connect-repo wizard."
+            ),
+        })
 
     proj_id = f"p_{uuid.uuid4().hex[:10]}"
-    encrypted_token = await _encrypt_pat(me["user_id"], pat)
     doc = {
         "project_id": proj_id, "user_id": me["user_id"],
         "name": body.name, "github_url": body.github_url,
         "github_owner": owner, "github_repo": repo,
-        "github_token": encrypted_token,
-        "auth_method": "pat",          # iter 211 — always PAT, never OAuth fallback.
+        "github_token": encrypted_token,       # None for github_app branch
+        "auth_method": auth_method,
+        # 2026-02-10 · Phase 3a — installation binding (only set for
+        # github_app branch; None/absent for PAT branch preserves
+        # perfect backward compat with legacy rows).
+        "installation_id":     int(installation_id) if installation_id else None,
+        "installation_active": installation_active,
         "branch": body.branch, "tech_stack": body.tech_stack or "auto",
         "preview_url": (body.preview_url or "").strip() or None,
         "status": "connected", "tasks_done": 0,
@@ -954,27 +1043,41 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
         "created_at": time.time(),
     }
     await db.cto_projects.insert_one(doc)
-    # Iter 212m-75 — fire-and-forget indexing wrapper.  Wraps the legacy
+
+    # Iter 212m-75 — fire-and-forget indexing wrapper. Wraps the legacy
     # build_brain_v2 with explicit status writes so the FE can poll
     # /indexing-status and show a progress spinner instead of guessing.
+    #
+    # Phase 3a: for the github_app branch, mint a fresh installation
+    # token here so the indexer has a working credential. For PAT the
+    # decrypted plaintext is already in `pat`.
     try:
+        if auth_method == "github_app":
+            from services.github_app import get_installation_token
+            _ix_token, _ = await get_installation_token(int(installation_id))
+        else:
+            _ix_token = pat
         asyncio.create_task(_run_project_indexing(
             db=db, project_id=proj_id, user_id=me["user_id"],
-            github_token=pat, github_owner=owner, github_repo=repo,
+            github_token=_ix_token, github_owner=owner, github_repo=repo,
             branch=body.branch or "main",
         ))
     except Exception as _bbe:
         logger.warning("indexing scheduler skipped: %r", _bbe)
-    return {"ok": True, "project_id": proj_id,
-            "owner": owner, "repo": repo,
-            "auth_method": doc["auth_method"],
-            "indexing_status": "indexing",
-            "message": "Indexing your repository in the background...",
-            # Iter 211 — surface that PAT verification already passed
-            # during creation so the frontend can skip a redundant
-            # `/test-pat` round-trip and show the green checkmark
-            # immediately.
-            "pat_verified": True}
+
+    resp = {
+        "ok":                True,
+        "project_id":        proj_id,
+        "owner":             owner,
+        "repo":              repo,
+        "auth_method":       doc["auth_method"],
+        "indexing_status":   "indexing",
+        "message":           "Indexing your repository in the background...",
+        "pat_verified":      pat_verified_flag,
+    }
+    if auth_method == "github_app":
+        resp["installation_id"] = int(installation_id)
+    return resp
 
 
 async def _run_project_indexing(
@@ -1315,7 +1418,7 @@ async def test_project_pat(
     if not (owner and repo):
         return {"ok": False, "error": "Project has no repo configured."}
 
-    gh_token = await _decrypt_pat(user_id, proj.get("github_token")) \
+    gh_token = await get_repo_token(proj) \
         or await _user_gh_token(user_id)
     if not gh_token:
         return {
@@ -1390,7 +1493,7 @@ async def get_project_tree(
     )
     if not proj:
         raise HTTPException(404, "Project not found")
-    gh_token = await _decrypt_pat(user_id, proj.get("github_token")) \
+    gh_token = await get_repo_token(proj) \
         or await _user_gh_token(user_id)
     owner = proj.get("github_owner") or ""
     repo  = proj.get("github_repo") or ""
@@ -1472,7 +1575,7 @@ async def get_project_file(
     )
     if not proj:
         raise HTTPException(404, "Project not found")
-    gh_token = await _decrypt_pat(user_id, proj.get("github_token")) \
+    gh_token = await get_repo_token(proj) \
         or await _user_gh_token(user_id)
     owner = proj.get("github_owner") or ""
     repo  = proj.get("github_repo") or ""
@@ -1591,7 +1694,7 @@ async def _enqueue_cto_task(
         "source": "chat_handoff",
         "created_at": time.time(),
     })
-    user_token = await _decrypt_pat(user_id, proj.get("github_token")) \
+    user_token = await get_repo_token(proj) \
         or await _user_gh_token(user_id)
     if not user_token:
         await db.cto_tasks.update_one(
@@ -1782,7 +1885,7 @@ async def rollback_task(
     if not proj:
         raise HTTPException(404, "Parent project not found")
 
-    user_token = await _decrypt_pat(me["user_id"], proj.get("github_token")) \
+    user_token = await get_repo_token(proj) \
         or await _user_gh_token(me["user_id"])
     if not user_token:
         raise HTTPException(
@@ -2061,7 +2164,7 @@ async def retry_task(
                           "status": "info",
                           "ts": time.time()}],
     })
-    user_token = await _decrypt_pat(me["user_id"], proj.get("github_token")) \
+    user_token = await get_repo_token(proj) \
         or await _user_gh_token(me["user_id"])
     bg.add_task(
         _run_task,
