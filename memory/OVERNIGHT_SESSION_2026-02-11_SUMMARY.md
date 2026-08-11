@@ -15,13 +15,13 @@
 4. **Shared HTTP wrapper** (`services/http/client.py`) + 11 callsites migrated (Resend x3, Vercel x2 files) — build hash `50aaa4c41e05` verified live
 
 ### End of session (deploy queued as of session close)
-5. **`GET /admin/observability/breakers`** endpoint — live breaker state per external service, admin-gated, read-only, additive, zero blast radius. Deploy job in the queue; will land in prod when deployer picks it up.
+5. **`GET /admin/observability/breakers`** endpoint — live breaker state per external service, admin-gated, read-only, additive, zero blast radius. **✅ DEPLOYED + VERIFIED on prod at 2026-08-11 04:53:53Z** — commit `3fdffacebda3`. Endpoint returns HTTP 401 without auth (gate active). Ready for admin JWT + real breaker inspection.
 
 ---
 
 ## 🟡 What's sitting on PREVIEW awaiting founder review
 
-**Nothing.** Every piece of code changed this session was either fully deployed to prod OR belongs to the deploy queued at session close. No half-done work left on preview.
+**Nothing.** Every piece of code changed this session was fully deployed to prod. No half-done work left on preview.
 
 ---
 
