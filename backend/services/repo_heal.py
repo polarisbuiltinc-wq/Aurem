@@ -53,6 +53,8 @@ from typing import Optional
 
 import httpx
 
+from services.http import ext_client
+
 from cto_services.crypto import decrypt
 
 logger = logging.getLogger("aurem-dev.repo_heal")
@@ -197,7 +199,10 @@ async def heal_project(*, db, user_id: str, project_id: str,
             return {"project_id": project_id, "heal_attempted": False,
                     "reason": "needs_user_input"}
 
-        async with httpx.AsyncClient(timeout=_GH_TIMEOUT_S) as client:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=_GH_TIMEOUT_S, write=5.0, pool=5.0),
+        ) as client:
 
             # 1) Network errors — pure retry.
             if err.startswith("network:"):

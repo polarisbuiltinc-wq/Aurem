@@ -982,7 +982,11 @@ async def _fetch_subtree_contents(owner: str, repo: str, branch: str,
     out: list[str] = []
     queue: list[tuple[str, int]] = [(path.strip("/"), 0)]
 
-    async with httpx.AsyncClient(timeout=15.0) as c:
+    from services.http import ext_client
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+    ) as c:
         while queue:
             current, depth = queue.pop(0)
             if depth > max_depth or len(out) >= 1000:
@@ -1053,7 +1057,11 @@ async def list_repo_files(ctx: dict, args: dict) -> dict:
     # and a PARTIAL list. We surface that flag and fall back below.
     url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
     try:
-        async with httpx.AsyncClient(timeout=20.0) as c:
+        from services.http import ext_client
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=20.0, write=5.0, pool=5.0),
+        ) as c:
             r = await c.get(url, headers=headers)
             r.raise_for_status()
             data = r.json()
@@ -1153,12 +1161,16 @@ def _snapshot_lock(key: str) -> asyncio.Lock:
 async def _repo_head_sha(owner: str, repo: str, branch: str,
                          token: str) -> Optional[str]:
     import httpx
+    from services.http import ext_client
     headers = {"Accept": "application/vnd.github+json"}
     if token:
         headers["Authorization"] = f"token {token}"
     url = f"https://api.github.com/repos/{owner}/{repo}/git/ref/heads/{branch}"
     try:
-        async with httpx.AsyncClient(timeout=10.0) as c:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+        ) as c:
             r = await c.get(url, headers=headers)
             if r.status_code != 200:
                 return None
@@ -1205,8 +1217,12 @@ async def _ensure_repo_snapshot(
             suffix=".tar.gz", delete=False, dir="/tmp")
         try:
             total = 0
-            async with httpx.AsyncClient(
-                timeout=_SNAPSHOT_DL_TIMEOUT_S, follow_redirects=True,
+            from services.http import ext_client
+            async with ext_client(
+                "github",
+                timeout=httpx.Timeout(
+                    connect=5.0, read=_SNAPSHOT_DL_TIMEOUT_S, write=5.0, pool=5.0,
+                ),
             ) as c:
                 async with c.stream("GET", url, headers=headers) as r:
                     if r.status_code != 200:
@@ -1424,6 +1440,7 @@ async def _search_repo_via_api(*, owner: str, repo: str, branch: str,
     """Legacy budgeted per-file GitHub API scan — FALLBACK ONLY when the
     full snapshot can't be built. May return partial results."""
     import httpx
+    from services.http import ext_client
     import time as _time
 
     headers = {"Accept": "application/vnd.github.v3+json"}
@@ -1432,7 +1449,10 @@ async def _search_repo_via_api(*, owner: str, repo: str, branch: str,
 
     url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
     try:
-        async with httpx.AsyncClient(timeout=20.0) as c:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=20.0, write=5.0, pool=5.0),
+        ) as c:
             r = await c.get(url, headers=headers)
             r.raise_for_status()
             data = r.json()
@@ -1595,8 +1615,12 @@ async def semantic_search_repo(ctx: dict, args: dict) -> dict:
         headers["Authorization"] = f"Bearer {token}"
 
     import httpx
+    from services.http import ext_client
     try:
-        async with httpx.AsyncClient(timeout=15.0) as c:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+        ) as c:
             r = await c.get(
                 "https://api.github.com/search/code",
                 params={"q": gh_query, "per_page": max_hits},
@@ -1729,8 +1753,12 @@ async def get_commit_diff(ctx: dict, args: dict) -> dict:
         headers["Authorization"] = f"Bearer {token}"
 
     import httpx
+    from services.http import ext_client
     try:
-        async with httpx.AsyncClient(timeout=10.0) as c:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+        ) as c:
             r = await c.get(
                 f"https://api.github.com/repos/{owner}/{repo}/commits/{sha}",
                 headers=headers,

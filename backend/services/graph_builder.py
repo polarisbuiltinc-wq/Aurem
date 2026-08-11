@@ -231,6 +231,7 @@ async def build_graph(
         return {}
 
     import httpx
+    from services.http import ext_client
     headers = {
         "Authorization": f"token {gh_token}",
         "Accept": "application/vnd.github+json",
@@ -260,7 +261,10 @@ async def build_graph(
     # Step 1A — file tree (1 API call) — captures both tree SHA and
     # per-blob SHA so we can do fingerprint-based incremental updates.
     try:
-        async with httpx.AsyncClient(timeout=15.0) as cx:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+        ) as cx:
             r = await cx.get(f"{base}/git/trees/{branch}?recursive=1", headers=headers)
             r.raise_for_status()
             payload = r.json() or {}
@@ -313,7 +317,10 @@ async def build_graph(
     # Step 1C — parallel file reads (batched by 10)
     async def _read(path: str) -> tuple[str, str]:
         try:
-            async with httpx.AsyncClient(timeout=10.0) as cx:
+            async with ext_client(
+                "github",
+                timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+            ) as cx:
                 r = await cx.get(
                     f"{base}/contents/{path}",
                     params={"ref": branch} if branch != "HEAD" else None,

@@ -34,6 +34,8 @@ from typing import Optional
 
 import httpx
 
+from services.http import ext_client
+
 from cto_services.db import get_db
 
 logger = logging.getLogger(__name__)
@@ -125,7 +127,10 @@ async def _fetch_tree(owner: str, repo: str, branch: str,
         f"https://api.github.com/repos/{owner}/{repo}/git/trees/"
         f"{branch}?recursive=1"
     )
-    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=20.0, write=5.0, pool=5.0),
+    ) as client:
         r = await client.get(url, headers=_gh_headers(token))
         r.raise_for_status()
         data = r.json()
@@ -155,7 +160,10 @@ async def _fetch_file(owner: str, repo: str, path: str, branch: str,
         f"?ref={branch}"
     )
     try:
-        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=20.0, write=5.0, pool=5.0),
+        ) as client:
             r = await client.get(url, headers=_gh_headers(token))
             r.raise_for_status()
             data = r.json()
@@ -429,7 +437,10 @@ async def _fetch_subtree_contents(owner: str, repo: str, branch: str,
     headers = _gh_headers(token)
     out: list[str] = []
     queue: list[tuple[str, int]] = [(path.strip("/"), 0)]
-    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+    ) as client:
         while queue:
             current, depth = queue.pop(0)
             if depth > max_depth or len(out) >= 1000:

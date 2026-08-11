@@ -4,6 +4,59 @@ Append-only iteration log. See `PRD.md` for the original problem
 
 ---
 
+## 2026-02-12 · Fork session · Phase 3 · Batch 4 (HTTP wrapper migration)
+
+### What shipped (preview only — awaiting founder review)
+
+Fourth wave of `httpx.AsyncClient` migrations onto `services/http`.
+All 4 files in this batch route through the **same `github` dep**
+name so the retry_guard breaker consolidates coverage across the
+graph, repo-context, local-tools, and repo-heal paths — a real
+noisy neighbour on GitHub would now trip once and fast-fail every
+downstream code path instead of each site timing out independently.
+
+**Migrated (13 sites across 4 files)**:
+- `services/graph_builder.py` — 2 sites (tree fetch + parallel
+  file reads for the LLM graph builder)
+- `services/repo_context.py`  — 3 sites (tree, single file,
+  subtree walk with pooled session)
+- `services/local_tools.py`   — 7 sites (contents walk, tree
+  fetch, HEAD sha ref, tarball stream, tree fallback, code
+  search, commit fetch)
+- `services/repo_heal.py`     — 1 site (pooled session already
+  used with `retry_guard.call_with_retry("github", ...)` — exactly
+  the "multiple related calls in same pooled session" pattern
+  `ext_client` is designed for; the type annotation on
+  `_gh_get(client: httpx.AsyncClient, ...)` stays because
+  `ext_client` yields an `httpx.AsyncClient` instance)
+
+**Pinning tests**: `tests/test_phase3_http_wrapper_migration_batch4.py`
+(4 tests, all green).
+
+### Verification
+- **29/29 targeted pytest green** (Batch1+2+3+4 + wrapper contract
+  + banner + observability + risk_zone smoke)
+- Backend restart clean, no import errors
+- Python lint clean on all 4 migrated files
+- `/version` + `/founder-offer/status` responsive on preview
+- Type annotation `client: httpx.AsyncClient` intact in repo_heal
+  (verified via test guard)
+
+### Progress
+- Batch 1 (4 files, 11 sites) — ✅ shipped to prod
+- Batch 2 (4 files,  4 sites) — ✅ shipped to prod
+- Batch 3 (3 files,  7 sites) — ✅ shipped to prod
+- Batch 4 (4 files, 13 sites) — ✅ landed on preview, awaiting deploy
+- **Cumulative: 35 sites / 15 service files migrated**
+- Still on raw `httpx.AsyncClient`: ~42 sites across ~44 files
+  (mostly loop_engine, chat, github_sync, github_api_writer,
+  cto_projects, hosted_deploy, admin_qa, upload, health_checks,
+  supabase_provisioner, dev_skills, etc.)
+- Held for supervised session: 3 custom-breaker sites in
+  ora_client.py + web_skills.py
+
+---
+
 ## 2026-02-12 · Fork session · Phase 3 · Batch 3 (HTTP wrapper migration)
 
 ### What shipped (preview only — awaiting founder review before prod)

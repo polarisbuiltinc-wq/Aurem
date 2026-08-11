@@ -17,7 +17,14 @@
   `mode_d_debugger.py` (1), `tools_bridge.py` (2 · new dep
   `aurem_upstream`), `web_skills.py` (4 · Tavily summarize +
   Firecrawl scrape/crawl).
-- **Total migrated to date: 22 sites / 11 service files**.
+
+**On preview, awaiting next prod deploy**:
+- Phase 3 · Batch 4 · 13 more sites across 4 files:
+  `graph_builder.py` (2), `repo_context.py` (3),
+  `local_tools.py` (7), `repo_heal.py` (1). All to `github` dep
+  → consolidated breaker coverage for the entire GitHub outbound
+  path.
+- **Cumulative: 35 sites / 15 service files migrated.**
 
 **3 sites intentionally deferred (supervised session queue)**:
 - `services/ora_client.py` — custom 24h fatal-pattern breaker
