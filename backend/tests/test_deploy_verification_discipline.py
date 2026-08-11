@@ -32,16 +32,20 @@ def test_checklist_file_exists_at_documented_path():
 
 
 def test_checklist_contains_mandatory_pre_dispatch_steps():
-    """Guard that the 4 pre-dispatch commands stay in the file
-    (if a future agent 'simplifies' by removing them, that's
-    exactly the discipline gap the checklist was created to
-    prevent)."""
+    """Guard that the pre-dispatch commands + rules stay in the
+    file. Rewritten 2026-02-12 after Emergent Support confirmed
+    the pipeline is 'snapshot at build-start' (no SHA pinning),
+    so the pre-dispatch discipline shifted from 'lock the SHA'
+    to 'ensure intended commits land + no build in-flight'."""
     src = open(CHECKLIST_PATH).read()
     for token in (
         "git status --short",
-        "git log --oneline -1",
-        "git diff HEAD",
+        "git log --oneline",
         "emergent__send_to_deployer",
+        # New (post-Support) rules:
+        "no deploy is currently in-flight",  # don't dispatch while one is building
+        "all INTENDED commits exist",         # ensure commits land pre-dispatch
+        "Manage Publishes",                    # source of truth
     ):
         assert token in src, (
             f"Pre-dispatch guard token {token!r} missing from "
@@ -75,63 +79,58 @@ def test_changelog_header_references_checklist():
     assert "DEPLOY_VERIFICATION_CHECKLIST.md" in head
 
 
-def test_checklist_records_the_two_incidents_that_caused_it():
+def test_checklist_records_incidents_that_caused_it():
     """Historical log must survive — future agents need to know
     WHY the discipline exists so they don't relax it as
     'ceremony'."""
     src = open(CHECKLIST_PATH).read()
     # Historical log section present.
     assert "Historical log" in src
-    # Both incident types recorded.
+    # Incident types recorded (rewritten 2026-02-12 to cover all
+    # three race patterns seen that day).
     assert "no-op" in src.lower()
-    assert "pipeline built wrong ref" in src.lower() or \
-           "pipeline shipped the wrong thing" in src.lower()
+    assert "snapshot-at-build-start race" in src.lower() or \
+           "pipeline built commit ahead" in src.lower()
 
 
-def test_checklist_has_mandatory_sha_hard_stop_step():
-    """The permanent-fix step added on 2026-02-12 after Incident 2:
-    every deploy dispatch MUST be followed by a SHA-in-vs-SHA-out
-    check, and any mismatch is a HARD STOP. This test guards
-    that the step:
-      (a) is called out as MANDATORY / PERMANENT, not situational
-      (b) explicitly says STOP / do not dispatch on mismatch
-      (c) contains a bash example of the comparison
-      (d) preserves the 'verification-by-luck is not verification'
-          principle so a future agent doesn't relax it
+def test_checklist_documents_pipeline_model_and_source_of_truth():
+    """After Emergent Support confirmed the pipeline is
+    'snapshot at build-start' (no SHA pinning), the checklist
+    MUST document this so future agents don't waste hours
+    debugging SHA-in vs SHA-out races that are expected behavior.
+
+    Also pins:
+      • Manage Publishes → Overview as primary source of truth
+        (not /version, which has the BUILD_INFO.txt lag issue)
+      • The three channels that can mutate HEAD or trigger deploy
     """
     src = open(CHECKLIST_PATH).read()
 
-    # (a) — the step must self-identify as mandatory + permanent.
-    assert "MANDATORY PERMANENT STEP" in src or \
-           "MANDATORY, PERMANENT STEP" in src, (
-        "SHA hard-stop step must self-identify as a "
-        "MANDATORY PERMANENT STEP. If a future refactor "
-        "renamed it to 'recommended' or 'situational', "
-        "restore the language."
+    # Pipeline model must be documented.
+    assert "snapshot at build-start" in src, (
+        "Checklist must state the pipeline is 'snapshot at "
+        "build-start' — this is what Emergent Support confirmed "
+        "on 2026-02-12. Future agents will re-hit the same race "
+        "confusion without this line."
     )
 
-    # (b) — mismatch must trigger STOP + do-not-dispatch + report.
-    for token in ("HARD STOP", "Do NOT dispatch", "Report to founder"):
-        assert token in src, (
-            f"Hard-stop guard token {token!r} missing from "
-            "checklist — the abort semantics are what makes "
-            "the step non-optional. Restore it."
+    # Manage Publishes must be called out as primary signal.
+    assert "Manage Publishes" in src and "source of truth" in src.lower(), (
+        "Manage Publishes → Overview must be documented as the "
+        "primary source of truth for what shipped. /version is "
+        "unreliable due to BUILD_INFO.txt lag (see Iter 314 fix)."
+    )
+
+    # All three channels documented.
+    for channel_marker in (
+        "Channel",
+        "session-fork bookkeeping",
+        "finish` auto-commit",
+        "manual UI deploy",
+    ):
+        assert channel_marker in src, (
+            f"Channel documentation token {channel_marker!r} "
+            "missing. All three ways HEAD/deploy can be mutated "
+            "must be spelled out or agents will be surprised by "
+            "off-band changes to HEAD."
         )
-
-    # (c) — bash example of the SHA comparison must be present.
-    assert 'EXPECTED_PREFIX=${EXPECTED_SHA:0:12}' in src or \
-           'EXPECTED_PREFIX=${EXPECTED_SHA' in src, (
-        "The SHA comparison bash example must be present — "
-        "otherwise the step becomes a suggestion rather than "
-        "an executable procedure."
-    )
-
-    # (d) — the rationale ('verification-by-luck is not
-    # verification') must survive so future agents don't
-    # relax it after a stretch of good deploys.
-    assert "Verification-by-luck is not verification" in src, (
-        "The rationale sentence must survive verbatim. It's "
-        "the principle that stops a future agent from arguing "
-        "'we haven't hit a mismatch in a while, this is "
-        "over-engineered'."
-    )

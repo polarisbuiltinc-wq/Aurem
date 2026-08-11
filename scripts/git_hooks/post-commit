@@ -1,0 +1,55 @@
+#!/bin/bash
+# scripts/git_hooks/post-commit
+#
+# Stamps backend/BUILD_INFO.txt with the just-committed HEAD SHA so
+# the /api/aurem-dev/version endpoint reports the ACTUAL current
+# commit, not a stale value from a prior backend boot.
+#
+# Background (2026-02-12 incident): the previous stamping mechanism
+# wrote BUILD_INFO.txt at backend boot time. If the agent made
+# multiple commits without restarting the backend, every new commit
+# inherited a stale BUILD_INFO.txt value. This produced deploy-time
+# SHA ambiguity — /version reported a SHA that could correspond to
+# multiple different actually-deployed commits.
+#
+# The fix (Option 1, approved 2026-02-12):
+#   • backend/BUILD_INFO.txt is now UNTRACKED (.gitignore entry)
+#   • This hook writes the 12-char HEAD SHA to it after every
+#     commit, so the on-disk value is always the current HEAD.
+#   • The deploy pipeline snapshots the container filesystem at
+#     build-start; if it includes untracked files (unverified),
+#     prod will read the correct SHA. If not, prod falls back to
+#     the existing .emergent/emergent.yml job_id cascade in
+#     backend/routers/version.py (no regression from prior state).
+#
+# Install: `bash scripts/install_hooks.sh` (from repo root)
+# Uninstall: remove `.git/hooks/post-commit`
+
+set -e
+
+# Prevent recursion (defensive — this hook does not amend, but if a
+# future change adds an amend loop this flag protects us).
+if [ "${GIT_POST_COMMIT_HOOK_ACTIVE:-0}" = "1" ]; then
+    exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo)"
+if [ -z "$REPO_ROOT" ]; then
+    exit 0
+fi
+
+BUILD_INFO_PATH="$REPO_ROOT/backend/BUILD_INFO.txt"
+
+# Derive the 12-char SHA of the commit that just landed.
+HEAD_SHA=$(git rev-parse HEAD 2>/dev/null | head -c 12)
+if [ -z "$HEAD_SHA" ]; then
+    exit 0
+fi
+
+# Write atomically to avoid partial reads if a concurrent process
+# (like the backend boot-time /version import) reads mid-write.
+TMPFILE="$(mktemp "${BUILD_INFO_PATH}.XXXXXX")"
+printf "%s" "$HEAD_SHA" > "$TMPFILE"
+mv "$TMPFILE" "$BUILD_INFO_PATH"
+
+exit 0

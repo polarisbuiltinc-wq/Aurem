@@ -118,3 +118,10 @@ credentials.json
 qa/simulated-user/node_modules/@openai/codex-linux-arm64/vendor/aarch64-unknown-linux-musl/bin/codex
 qa/simulated-user/node_modules/@anthropic-ai/claude-agent-sdk-linux-arm64/claude
 
+
+# Iter 314 — BUILD_INFO.txt is now untracked. It's stamped by
+# scripts/git_hooks/post-commit after every commit so the
+# /version endpoint's SHA matches actual HEAD. See
+# scripts/git_hooks/post-commit for full rationale (2026-02-12
+# SHA-ambiguity incident).
+backend/BUILD_INFO.txt
