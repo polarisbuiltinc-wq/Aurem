@@ -1957,7 +1957,23 @@ _GLOBAL_RL_PER_MIN = int(os.getenv("GLOBAL_RATE_LIMIT_PER_MIN", "300"))
 @app.middleware("http")
 async def _global_rate_limit_guard(request, call_next):
     if _global_rl_should_skip(request):
-        return await call_next(request)
+        # Even the skip path must respect the middleware contract of
+        # ALWAYS returning a response — Starlette's BaseHTTPMiddleware
+        # + Python 3.11 anyio ExceptionGroup interaction otherwise
+        # raises "RuntimeError: No response returned" at ASGI dispatch
+        # if call_next propagates an unhandled exception.
+        try:
+            return await call_next(request)
+        except Exception as _e:
+            logger.error(
+                "rate_limit_guard: downstream raised on skip path %s %s — %r",
+                request.method, request.url.path, _e,
+                exc_info=True,
+            )
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "Internal server error"},
+            )
     ip = client_ip_from_request(request)
     # Namespaced key so this never collides with per-endpoint limiters
     # (they use `ora_chat:...`, `login-ip:...`, etc). One shared 60-s
@@ -1974,7 +1990,20 @@ async def _global_rate_limit_guard(request, call_next):
     # every pod sees the SAME bucket. Falls back to per-process on
     # Redis outage (fail-open — we never 429 legitimate users because
     # our cache is sick).
-    if not await check_rate_limit_async(f"global-ip:{ip}", _GLOBAL_RL_PER_MIN):
+    #
+    # 2026-02-12 deploy hardening: check_rate_limit_async is fail-open
+    # and non-raising by design (see rate_limiter.py:213), but wrap it
+    # anyway for belt-and-braces so a future refactor that adds a
+    # raise-path can't crash the middleware.
+    try:
+        allowed = await check_rate_limit_async(f"global-ip:{ip}", _GLOBAL_RL_PER_MIN)
+    except Exception as _rl_err:                                    # noqa: BLE001
+        logger.warning(
+            "rate_limit_guard: check_rate_limit_async raised (%s), failing open",
+            type(_rl_err).__name__,
+        )
+        allowed = True
+    if not allowed:
         logger.warning(
             "global_rate_limit_hit ip=%s path=%s limit=%d/min",
             ip, request.url.path, _GLOBAL_RL_PER_MIN,
@@ -1987,7 +2016,43 @@ async def _global_rate_limit_guard(request, call_next):
             },
             headers={"Retry-After": "60"},
         )
-    return await call_next(request)
+    # THE FIX for "RuntimeError: No response returned" at deploy time.
+    # BaseHTTPMiddleware + Python 3.11 ExceptionGroup: when call_next
+    # propagates an unhandled exception from downstream, the anyio task
+    # group re-raises it as a BaseExceptionGroup, and Starlette's
+    # middleware plumbing can end up in a state where no response is
+    # produced — ASGI then throws "RuntimeError: No response returned".
+    # The canonical workaround is to always return SOME response from
+    # the middleware, even on failure. The exception handler at
+    # _global_exc_handler will also catch it, but that runs AFTER
+    # this middleware and can't recover if call_next itself corrupted
+    # the response stream. So we catch here defensively.
+    try:
+        return await call_next(request)
+    except Exception as _e:                                        # noqa: BLE001
+        logger.error(
+            "rate_limit_guard: downstream raised on %s %s — %r",
+            request.method, request.url.path, _e,
+            exc_info=True,
+        )
+        # Surface to Sentry (if wired) so we don't lose signal — the
+        # global exception handler normally does this but it can't
+        # see the exception once it's been mangled by the ExceptionGroup
+        # unwind.
+        try:
+            if SENTRY_ACTIVE:
+                import sentry_sdk
+                with sentry_sdk.push_scope() as scope:
+                    scope.set_tag("kind", "middleware_call_next_crash")
+                    scope.set_tag("path", request.url.path)
+                    scope.set_tag("method", request.method)
+                    sentry_sdk.capture_exception(_e)
+        except Exception:                                          # noqa: BLE001
+            pass
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+        )
 
 
 # ── Iter 44 — Global exception handler ──
