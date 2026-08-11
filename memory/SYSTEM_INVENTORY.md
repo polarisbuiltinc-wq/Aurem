@@ -764,3 +764,5 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 
 - `services/github_app_config.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-10T02:13:57.897884Z] <!-- inv:service:services/github_app_config.py -->
 - `services/github_app.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-10T02:35:50.554224Z] <!-- inv:service:services/github_app.py -->
+| `routers/github_app.py` | `/github/app` | 5 | auto-detected new router (verify) (Iter 0, 2026-08-10T15:20:57.105529Z) | <!-- inv:router:routers/github_app.py -->
+- `loop_run_log kind='github_app_install'` — auto-detected in backend/routers/github_app.py (verify) [Iter 0, 2026-08-10T15:20:57.105567Z] <!-- inv:loop_run_log_kind:github_app_install -->
