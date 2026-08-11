@@ -1,12 +1,23 @@
 # Open Customer Tasks — polarisbuiltinc-wq/auremdev-update
 **Opened:** 2026-02-11 · **Customer:** polarisbuiltinc-wq · **Repo:** auremdev-update
+**Closed:** 2026-02-11 (same day, deploy + customer confirmation) · **Status:** ✅ BOTH TASKS RESOLVED
 
-Two coupled tasks. **Task 2 is blocked on Task 1 landing in prod.**
+Two coupled tasks. **Task 2 was blocked on Task 1 landing in prod — both cleared same-day.**
+
+
+### 📝 Session close note (2026-02-11)
+Customer retested `test all APIs working or not` on `polarisbuiltinc-wq/auremdev-update` directly after the prod deploy landed:
+- ✅ No more instant `HTTP 400 "No PAT configured"` rejection
+- ✅ ORA ran the check for 17+ seconds of real work
+- ✅ Returned a **genuine project-specific finding**: `403 Forbidden due to insufficient admin permissions on one endpoint`, with a fix recommendation
+- ✅ Founder confirmed: "Task 1 and Task 2 both confirmed resolved on my end. Nice work — both tasks closed."
+
+The 403 that ORA surfaced is a **legitimate product finding** for the customer to act on, not a bug in AUREM.
 
 ---
 
 ## Task 1: Chunk A · `get_repo_token()` sweep (Bug 2, Phase 3b)
-**Status:** ✅ CODE COMPLETE (this session) — ⏳ awaiting prod redeploy
+**Status:** ✅ RESOLVED — deployed to prod 2026-02-11, customer confirmed working same-day
 
 **Impact:** Full block for every App-installed project (not just one endpoint). Symptoms:
 - `HTTP 400 {"detail":"No PAT configured for this project..."}` on any chat that hits a repo tool
@@ -38,40 +49,23 @@ Two coupled tasks. **Task 2 is blocked on Task 1 landing in prod.**
 ---
 
 ## Task 2: Resume the paused loop on `polarisbuiltinc-wq/auremdev-update`
-**Status:** 🔴 BLOCKED on Task 1 prod redeploy
+**Status:** ✅ RESOLVED — customer retested same-day after Task 1 deploy landed. ORA ran the "test all APIs" flow for 17+ seconds and returned a legitimate project-specific finding (403 Forbidden due to insufficient admin permissions on one endpoint, with a fix recommendation). The auth-gate bug is gone; whatever the customer does next with the loop is normal product usage, not a Task 2 blocker.
 
-**Reported failure signature:**
+The `__init__.py:1:1` invalid-syntax signature that was reported earlier did NOT resurface after the resume. Working theory: the original paused-loop error was a stale artifact from the pre-fix state, and once the customer could actually enter the pipeline again, the loop was able to self-resolve or restart from a known-good checkpoint.
+
+---
+
+### Historical context (kept for future audit)
+
+**Original reported failure signature:**
 - Loop paused/failed at execute or verify phase
 - Failing file: `backend/aurem_cto/routers/__init__.py`
 - Failure: `invalid-syntax at 1:1`
 - Customer clicked "resume" → immediately got `HTTP 400 "No PAT configured"` (Task 1 bug)
 
-**Why blocked:** Every resume attempt currently 400s on the PAT gate BEFORE the loop can re-enter. Even if the loop code is fine, we can't observe the real syntax error until the gate passes.
-
-**Next steps after Task 1 lands in prod:**
-1. **Retry the resume** — either from the customer's dashboard OR via direct API call:
-   ```
-   POST /api/aurem-dev/loop/{loop_id}/resume
-   Authorization: Bearer <customer_jwt>
-   ```
-   Expected: no more PAT 400. Loop should re-enter execute/verify phase.
-2. **Diagnose the `__init__.py:1:1` invalid-syntax** — most likely causes in decreasing order:
-   - a. Empty file with UTF-8 BOM (`\ufeff` at byte 0) — `python -m py_compile` says "invalid syntax" on the BOM
-   - b. File contains a non-ASCII zero-width char at start
-   - c. LLM generated a fenced-code marker (```` ``` ````) as the file's first char
-   - d. Legitimate syntax error (unexpected but possible)
-3. **Determine self-heal capability:**
-   - If (a) or (b): the fix-loop's syntax gate (`_run_syntax_check` in `services/local_tools.py:38-`) should catch it on the next `write_repo_file` — the loop can self-heal.
-   - If (c): may need a one-shot patch to strip the marker before re-running.
-   - If (d): let the loop handle it via normal retry.
-4. **If self-heal fails after one retry:** patch the file directly (empty `__init__.py` is valid Python — just write zero bytes) and re-ship.
-
-**Files to review during diagnosis:**
-- `/app/backend/services/loop_engine.py` — resume logic
-- `/app/backend/services/local_tools.py:38-155` — `_run_syntax_check`, `_run_repo_syntax_check`
-- Loop session doc for `polarisbuiltinc-wq/auremdev-update` in `loop_sessions` collection
-
-**Customer communication:** Once Task 1 is live, the customer can retry from the UI. If Task 2 needs manual intervention (case c/d above), coordinate with the customer via founder rather than direct patch.
+**Diagnosis hypothesis (never had to be executed — retest bypassed the whole path):**
+- Most likely causes: UTF-8 BOM at byte 0, zero-width unicode char, or LLM-generated fenced-code marker as file's first char
+- Follow-up self-heal enhancement was proposed: byte-0 sanity check in `services/local_tools.py::_run_syntax_check` to catch this class of file-corruption pre-commit. Recorded as a Next Action for a future session — not blocking anything today.
 
 ---
 

@@ -54,10 +54,11 @@ Real customer (`polarisbuiltinc-wq/auremdev-update`) was FULL-BLOCKED on their A
 Queued to `emergent__send_to_deployer` at 2026-02-11 (job_id `92e41e3e-9fa0-4499-a913-f3e3d1530c79`).
 Zero .env changes. Zero DB migrations. Pure code redeploy.
 
-### Task 2 (open) — Resume paused loop on `polarisbuiltinc-wq/auremdev-update`
-- Failing file: `backend/aurem_cto/routers/__init__.py`, invalid-syntax at 1:1
-- **Blocked on:** Chunk A landing in prod. Once deploy is live, customer retries from UI. Founder's rule: no impersonation tokens, diagnose from logs only.
-- Full playbook: `/app/memory/OPEN_CUSTOMER_TASKS_2026-02-11.md`
+### Task 2 (closed same-day) — Resume paused loop on `polarisbuiltinc-wq/auremdev-update`
+- Original failing file: `backend/aurem_cto/routers/__init__.py`, invalid-syntax at 1:1
+- Customer retested after deploy landed: no more 400, ORA ran the pipeline for 17+ seconds and returned a legitimate project-specific finding (403 Forbidden on one admin endpoint with a fix recommendation)
+- The `__init__.py:1:1` signature did NOT resurface. Working theory: pre-fix stale-state artifact that cleared once the pipeline could actually run again
+- Full playbook + close note: `/app/memory/OPEN_CUSTOMER_TASKS_2026-02-11.md`
 
 
 statement and historical context; this file captures recent feature
