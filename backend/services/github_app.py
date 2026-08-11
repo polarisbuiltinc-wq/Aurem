@@ -60,6 +60,8 @@ import time
 from typing import Optional
 
 import httpx
+
+from services.http import ext_client
 import jwt  # PyJWT 2.10.0
 
 from services.github_app_config import (
@@ -214,7 +216,10 @@ async def get_installation_token(installation_id: int) -> tuple[str, float]:
 
     # Mint fresh
     url = f"{GITHUB_API}/app/installations/{installation_id}/access_tokens"
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+    ) as client:
         r = await client.post(url, headers=_headers_app())
     if r.status_code == 404:
         # Installation was deleted or suspended — evict any stale
@@ -266,7 +271,10 @@ async def list_installations() -> list[dict]:
     """Every installation of our App across all accounts (App-JWT auth)."""
     url = f"{GITHUB_API}/app/installations?per_page=100"
     out: list[dict] = []
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+    ) as client:
         while url:
             r = await client.get(url, headers=_headers_app())
             r.raise_for_status()
@@ -291,7 +299,10 @@ async def list_installations_for_user(user_access_token: str) -> list[dict]:
             "list_installations_for_user requires the GitHub App to be configured."
         )
     url = f"{GITHUB_API}/user/installations?per_page=100"
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+    ) as client:
         r = await client.get(url, headers=_headers_bearer(user_access_token))
     r.raise_for_status()
     data = r.json() or {}
@@ -306,7 +317,10 @@ async def list_installation_repos(installation_id: int) -> list[dict]:
     token, _ = await get_installation_token(installation_id)
     out: list[dict] = []
     url = f"{GITHUB_API}/installation/repositories?per_page=100"
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+    ) as client:
         while url:
             r = await client.get(url, headers=_headers_bearer(token))
             r.raise_for_status()
@@ -330,7 +344,10 @@ async def get_repo_via_installation(
     """
     token, _ = await get_installation_token(installation_id)
     url = f"{GITHUB_API}/repos/{owner}/{repo}"
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+    ) as client:
         r = await client.get(url, headers=_headers_bearer(token))
     r.raise_for_status()
     return r.json() or {}
@@ -344,7 +361,10 @@ async def revoke_installation(installation_id: int) -> None:
     `get_installation_token` doesn't hand out a stale token.
     """
     url = f"{GITHUB_API}/app/installations/{installation_id}"
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+    ) as client:
         r = await client.delete(url, headers=_headers_app())
     # 204 = deleted; 404 = already gone (idempotent success).
     if r.status_code not in (204, 404):
