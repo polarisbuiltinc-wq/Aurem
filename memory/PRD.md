@@ -4,7 +4,7 @@
 
 ### 2026-02-12 · ConnectRepoBanner Chunk B+C + HTTP wrapper Batches 1+2
 
-**On prod as of 2026-02-12 (Batch 2 deploy at built_at `16:46:51`)**:
+**On prod as of 2026-02-12 (Batch 3 deploy at built_at `17:10:03`, SHA `0282936785ef`)**:
 - `ConnectRepoBanner.jsx` App-first + dynamic total wired to
   `/founder-offer/status`. Dead code purged.
 - Phase 3 · Batch 1 · 11 sites migrated onto `services/http`:
@@ -13,16 +13,16 @@
 - Phase 3 · Batch 2 · 4 more sites migrated:
   `advisor_vision.py`, `financials.py`, `daily_digest.py`,
   `url_fetcher.py`.
-
-**On preview, awaiting next prod deploy**:
 - Phase 3 · Batch 3 · 7 more sites across 3 files:
-  `mode_d_debugger.py` (1), `tools_bridge.py` (2),
-  `web_skills.py` (4). Total migrated to date: **22 sites / 11
-  service files**.
-- 3 sites intentionally held for supervised session:
-  `ora_client.py` (custom 24h fatal-pattern breaker) + 2 sites
-  in `web_skills.py` (manual retry_guard.get_breaker("tavily")
-  gating that would double-record with the wrapper).
+  `mode_d_debugger.py` (1), `tools_bridge.py` (2 · new dep
+  `aurem_upstream`), `web_skills.py` (4 · Tavily summarize +
+  Firecrawl scrape/crawl).
+- **Total migrated to date: 22 sites / 11 service files**.
+
+**3 sites intentionally deferred (supervised session queue)**:
+- `services/ora_client.py` — custom 24h fatal-pattern breaker
+- `services/web_skills.py::web_search` + `::fetch_url` — manual
+  `retry_guard.get_breaker("tavily")` gating (would double-record)
 
 **Still deferred to founder-supervised sessions**:
 - `ChatPanel.jsx` split (4,874 LOC)
