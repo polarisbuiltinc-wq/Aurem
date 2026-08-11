@@ -88,7 +88,8 @@ async def bin_tracker_projects(
         {"_id": 0, "project_id": 1, "name": 1, "github_owner": 1,
          "github_repo": 1, "branch": 1, "github_token": 1,
          "tasks_done": 1, "last_task": 1, "updated_at": 1, "created_at": 1,
-         "auth_method": 1, "status": 1},
+         "auth_method": 1, "status": 1,
+         "installation_id": 1, "user_id": 1},
     ).to_list(200)
 
     # Decrypt + probe each PAT in parallel (HEAD /repos/{o}/{r}).

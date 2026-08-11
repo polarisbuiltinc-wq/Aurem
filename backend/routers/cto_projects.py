@@ -816,7 +816,8 @@ async def check_project_pat(
     db = get_db()
     proj = await db.cto_projects.find_one(
         {"project_id": project_id, "user_id": user_id},
-        {"_id": 0, "github_token": 1},
+        {"_id": 0, "github_token": 1,
+         "auth_method": 1, "installation_id": 1, "user_id": 1},
     )
     if not proj:
         raise HTTPException(404, "project not found")

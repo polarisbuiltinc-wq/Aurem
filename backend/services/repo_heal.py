@@ -172,7 +172,8 @@ async def heal_project(*, db, user_id: str, project_id: str,
         proj = await db.cto_projects.find_one(
             {"project_id": project_id, "user_id": user_id},
             {"_id": 0, "github_owner": 1, "github_repo": 1,
-             "github_token": 1, "name": 1},
+             "github_token": 1, "name": 1,
+             "auth_method": 1, "installation_id": 1, "user_id": 1},
         )
         if not proj:
             return {"project_id": project_id, "heal_attempted": False,
