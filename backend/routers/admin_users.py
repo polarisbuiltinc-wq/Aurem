@@ -410,6 +410,16 @@ async def get_user(user_id: str, authorization: Optional[str] = Header(None)):
         },
     }
 
+    # (4) Support tickets — last 20 for this user. Same collection the
+    # admin Support panel reads, projected down to the fields the user
+    # detail UI shows.
+    tickets_cur = db.cto_support.find(
+        {"user_id": user_id},
+        {"_id": 0, "ticket_id": 1, "subject": 1, "status": 1, "source": 1,
+         "created_at": 1, "updated_at": 1, "last_reply_at": 1},
+    ).sort("updated_at", -1).limit(20)
+    user["support_tickets"] = await tickets_cur.to_list(20)
+
     return user
 
 

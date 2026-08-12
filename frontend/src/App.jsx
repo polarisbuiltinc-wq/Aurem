@@ -26,6 +26,7 @@ import FixProgressDrawer from "./components/FixProgressDrawer";
 import { FixJobProvider } from "./components/FixJobContext";
 import PersistentFixBar from "./components/PersistentFixBar";
 import CookieConsentBanner from "./components/CookieConsentBanner";
+import GlobalHelpFAB from "./components/GlobalHelpFAB";
 import { PrivateRoute, AdminRoute } from "./components/PrivateRoute";
 
 // Eager — these three are the first surfaces every visitor sees and
@@ -43,6 +44,7 @@ const AdminQADashboard  = lazy(() => import("./pages/AdminQADashboard"));
 const Login             = lazy(() => import("./pages/Login"));
 const Signup            = lazy(() => import("./pages/Signup"));
 const Verify            = lazy(() => import("./pages/Verify"));  // Track 3 (item #31) — email verification landing
+const Support           = lazy(() => import("./pages/Support"));  // 2026-02-12 — public token-verified support inbox
 const WhyOra            = lazy(() => import("./pages/WhyOra"));
 import { initTheme } from "./services/theme";
 
@@ -240,6 +242,7 @@ export default function App() {
       <MetaPixelRouteTracker />
       <SessionExpiredListener />
       <Toaster />
+      <GlobalHelpFAB />
       {/* Iter 212m-148 — Global FixJob provider owns the SSE so the
           job survives panel toggles, route changes, and backdrop
           clicks.  PersistentFixBar is the always-visible 44px chrome;
@@ -265,6 +268,7 @@ export default function App() {
           <Route path="/login"           element={<Login />} />
           <Route path="/signup"          element={<Signup />} />
           <Route path="/verify"          element={<Verify />} />
+          <Route path="/support"         element={<Support />} />
           <Route path="/dashboard"       element={<PrivateRoute><Dashboard /></PrivateRoute>} />
           {/* Iter 212m-235 — Personal Track routes */}
           <Route path="/choose-track"    element={<PrivateRoute><ChooseTrack /></PrivateRoute>} />

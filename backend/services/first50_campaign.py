@@ -62,20 +62,43 @@ def unsub_url(email: str) -> str:
             f"?t={unsub_token(email)}&e={quote(email)}")
 
 
+# ── Support-token (same HMAC pattern, different scope) ────────────────
+# Used by the "Need help?" links in campaign emails. Verified by the
+# public POST /support/tickets/token endpoint so users don't have to
+# log in to send a message.
+def support_token(email: str) -> str:
+    payload = f"support:{email.lower().strip()}"
+    return hmac.new(UNSUB_SECRET.encode(), payload.encode(),
+                    hashlib.sha256).hexdigest()[:16]
+
+
+def support_url(email: str, source: str) -> str:
+    return (f"{PUBLIC_BASE}/support"
+            f"?t={support_token(email)}&e={quote(email)}&src={quote(source)}")
+
+
 # ── Templates ────────────────────────────────────────────────────────
-def _footer_html(email: str) -> str:
-    url = unsub_url(email)
+def _footer_html(email: str, stage: int) -> str:
+    unsub = unsub_url(email)
+    help_url = support_url(email, f"email_stage_{stage}")
     return (f'<p style="color:#666;font-size:11px;margin-top:32px;'
             f'padding-top:16px;border-top:1px solid #eee">'
+            f'Need help? <a href="{_html.escape(help_url)}" '
+            f'style="color:#eab308;text-decoration:underline">'
+            f'Send us a message</a> — replies to this email may bounce, '
+            f'use the link instead.<br><br>'
             f'You\'re receiving this because you signed up at '
             f'<a href="{PUBLIC_BASE}" style="color:#666">auremcto.com</a>. '
-            f'<a href="{_html.escape(url)}" style="color:#666;'
+            f'<a href="{_html.escape(unsub)}" style="color:#666;'
             f'text-decoration:underline">Unsubscribe</a> — one click, '
             f'no login required.</p>')
 
 
-def _footer_text(email: str) -> str:
-    return (f"\n\n—\nYou're receiving this because you signed up at "
+def _footer_text(email: str, stage: int) -> str:
+    return (f"\n\n—\nNeed help? Send a message: "
+            f"{support_url(email, f'email_stage_{stage}')}\n"
+            f"(Replies to this email may bounce — use the link instead.)\n\n"
+            f"You're receiving this because you signed up at "
             f"auremcto.com.\nUnsubscribe (one click, no login): "
             f"{unsub_url(email)}")
 
@@ -123,7 +146,7 @@ def render_stage(stage: int, user: dict, *,
             f'\'find security issues\', \'add a test for X\', \'refactor Y\'. '
             f'It ships the commit.</p>'
             f'<p>{_html.escape(SIGNOFF)}</p>'
-            f'{_footer_html(email)}</div>'
+            f'{_footer_html(email, stage)}</div>'
         )
 
     elif stage == 3:
@@ -162,7 +185,7 @@ def render_stage(stage: int, user: dict, *,
             f'text-decoration:none;border-radius:8px;font-weight:600;'
             f'display:inline-block">Open ORA chat</a></p>'
             f'<p>{_html.escape(SIGNOFF)}</p>'
-            f'{_footer_html(email)}</div>'
+            f'{_footer_html(email, stage)}</div>'
         )
 
     else:  # stage 7
@@ -202,10 +225,10 @@ def render_stage(stage: int, user: dict, *,
             f'<p>{_html.escape(SIGNOFF)}</p>'
             f'<p style="color:#888;font-size:12px"><i>P.S. This is the last '
             f'email in this sequence.</i></p>'
-            f'{_footer_html(email)}</div>'
+            f'{_footer_html(email, stage)}</div>'
         )
 
-    return subject, text + _footer_text(email), html
+    return subject, text + _footer_text(email, stage), html
 
 
 # ── DB helpers ───────────────────────────────────────────────────────

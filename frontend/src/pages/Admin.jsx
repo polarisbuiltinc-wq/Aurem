@@ -1003,6 +1003,60 @@ function UserDetail({ user, onBack }) {
       </Card>
 
       <h3 style={{ fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase",
+                    color: "var(--text-faint)", margin: "0 0 8px" }}>
+        Support tickets{" "}
+        <span style={{ color: "var(--text-faint)", fontSize: 10 }}>
+          ({(d.support_tickets || []).length}
+          {(d.support_tickets || []).filter(t => t.status === "open").length > 0
+            && `, ${(d.support_tickets || []).filter(t => t.status === "open").length} open`}
+          )
+        </span>
+      </h3>
+      <Card style={{ padding: 0, marginBottom: 16 }} data-testid="admin-user-support-tickets">
+        {(d.support_tickets || []).length === 0 ? (
+          <div style={{ padding: 16, color: "var(--text-faint)", fontSize: 12 }}>
+            No tickets from this user.
+          </div>
+        ) : (
+          (d.support_tickets || []).map((t) => (
+            <div
+              key={t.ticket_id}
+              data-testid={`admin-user-support-ticket-${t.ticket_id}`}
+              style={{
+                padding: "10px 14px",
+                borderBottom: "1px solid var(--border)",
+                display: "flex", justifyContent: "space-between",
+                alignItems: "center", gap: 12,
+              }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 600,
+                              whiteSpace: "nowrap", overflow: "hidden",
+                              textOverflow: "ellipsis" }}>
+                  {t.subject || "(no subject)"}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-faint)",
+                              marginTop: 2, display: "flex", gap: 8,
+                              alignItems: "center" }}>
+                  <span>{ago(t.created_at)}</span>
+                  {t.source && (
+                    <span style={{
+                      fontSize: 10, fontFamily: "monospace",
+                      padding: "1px 6px", border: "1px solid var(--border)",
+                      borderRadius: 3,
+                    }}>{t.source}</span>
+                  )}
+                </div>
+              </div>
+              <Badge color={STATUS_COLOR[t.status === "resolved" ? "done"
+                : (t.status === "open" ? "failed" : "running")]}>
+                {t.status}
+              </Badge>
+            </div>
+          ))
+        )}
+      </Card>
+
+      <h3 style={{ fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase",
                     color: "var(--text-faint)", margin: "0 0 8px" }}>Recent tasks</h3>
       <Card>
         <Table
@@ -1556,10 +1610,21 @@ function SupportPage() {
                 <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2 }}>
                   {t.user_email} · {ago(t.created_at)}
                 </div>
-                <div style={{ marginTop: 4 }}>
+                <div style={{ marginTop: 4, display: "flex", gap: 6, alignItems: "center" }}>
                   <Badge color={STATUS_COLOR[t.status === "resolved" ? "done" : (t.status === "open" ? "failed" : "running")]}>
                     {t.status}
                   </Badge>
+                  {t.source && (
+                    <span
+                      data-testid={`admin-support-ticket-source-${t.ticket_id}`}
+                      style={{
+                        fontSize: 10, color: "var(--text-faint)",
+                        padding: "1px 6px", border: "1px solid var(--border)",
+                        borderRadius: 3, fontFamily: "monospace",
+                      }}>
+                      {t.source}
+                    </span>
+                  )}
                 </div>
               </div>
             ))}

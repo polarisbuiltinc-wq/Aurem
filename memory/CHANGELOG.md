@@ -2,6 +2,21 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **In-App + Email Support Flow (Iter 388 · 2026-02-12)** — replaces broken `ora@aurem.live` email replies as the user-side entry point.
+  - `POST /support/tickets/token` (public, HMAC-verified) — new: users file tickets from email links without login. Same HMAC pattern as unsubscribe (`support:<email>` scope on `UNSUBSCRIBE_SECRET`).
+  - `POST /support/tickets` extended — accepts optional `source` + optional `subject` (auto-derived from body's first line).
+  - `cto_support` schema now carries `source` + `user_name`. Same collection admin Support panel already reads → zero parallel systems.
+  - `GET /admin/users/{user_id}` extended with `support_tickets` field (last 20).
+  - Admin Support panel now shows per-ticket `source` badge (`email_stage_0`, `in_app_dashboard`, etc).
+  - Admin User Detail page has new "Support tickets" section with source badges.
+  - Public `/support` page (token-verified, subject-less textbox).
+  - Reusable `SupportPopup` + `SupportButton` + globally-mounted `GlobalHelpFAB` (floating "Need help?" pill on all logged-in in-app routes).
+  - Every campaign email (Stage 0/3/7) footer now includes "Need help? Send us a message" link + "replies to this email may bounce, use the link instead" disclaimer.
+  - Verified end-to-end (preview): 2 tickets filed via 2 different paths → both visible in admin Support inbox with correct source badges → both visible on user detail page.
+  - Files: `routers/support.py`, `services/first50_campaign.py`, `routers/admin_users.py`, `pages/Support.jsx`, `components/SupportPopup.jsx`, `components/GlobalHelpFAB.jsx`, `App.jsx`, `pages/Admin.jsx`.
+- **First-50 Campaign — `to_emails` override (Iter 388 · 2026-02-12)** — `POST /admin/first50-campaign/dispatch?to_emails=a@x,b@y` bypasses all guards & DB filter, doesn't record in `first50_campaign_state`. Real sends verified to founder inbox (Resend IDs `0131f6dc…`, `4b73c8f5…`, `8c953df6…`).
+
+
 ## 2026-02-12 (Batch 8a → 8b day)
 
 - **Iter 314 — BUILD_INFO.txt lag fixed** + Deploy Verification Checklist rewrite
