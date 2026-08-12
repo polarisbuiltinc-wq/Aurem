@@ -1,8 +1,11 @@
 /**
- * components/FounderOfferPill.jsx — Slim "X of 500 spots remaining" pill.
+ * components/FounderOfferPill.jsx — Slim "X of Y spots remaining" pill.
  *
  * Drop-in for any page header `right` slot. Polls /founder-offer/status
  * every 60 s; auto-hides when the offer sells out so it can't dangle.
+ * Both `remaining` and `total` come from the API (single source of
+ * truth — matches ConnectRepoBanner.jsx pattern) so an env-driven
+ * change to PROMO_FOUNDER_OFFER_TOTAL doesn't silently drift the UI.
  */
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/api";
@@ -38,7 +41,7 @@ export default function FounderOfferPill() {
         whiteSpace: "nowrap",
       }}
     >
-      🎁 {s.remaining} of 500 founder spots remaining
+      🎁 {s.remaining} of {s.total} founder spots remaining
     </a>
   );
 }
