@@ -639,6 +639,61 @@ function UserDetail({ user, onBack }) {
     } finally { setGranting(false); }
   }
 
+  // 2026-02-12 — Email User button.
+  // Pre-fills mailto: with user's actual data pulled from `d` (server-
+  // returned dev_users row + projects). Founder doesn't have to copy-
+  // paste name/tier/project name every time. Keeping mailto: (not an
+  // in-admin compose form) per founder's spec: "mailto: is fine for now".
+  function emailUser() {
+    const name       = d.name || (d.email || "").split("@")[0] || "there";
+    const projects   = (d.projects || []).map((p) => p.name).filter(Boolean);
+    const projectStr = projects.length === 0
+      ? "your project"
+      : projects.length === 1
+        ? projects[0]
+        : `${projects[0]} (and ${projects.length - 1} more)`;
+    const tier       = d.tier || "free";
+    const joined     = ago(d.created_at) || "recently";
+    const subject    = `Quick check-in about ${projectStr}`;
+    const body = [
+      `Hey ${name},`,
+      "",
+      `Noticed ${projectStr} is set up on ORA — is there anything I can help you get running?`,
+      "",
+      "A few things I can do straight away if useful:",
+      "  · Walk you through the first ORA task for this repo",
+      "  · Grant extra tokens if you're testing more than the free tier allows",
+      "  · Answer any question about the workflow",
+      "",
+      "Just hit reply — happy to help.",
+      "",
+      "— Founder, ORA by Aurem",
+      "",
+      "—",
+      `(context: ${d.email} · tier=${tier} · joined ${joined}` +
+        (projects.length > 0 ? ` · project(s): ${projects.join(", ")})` : ")"),
+    ].join("\n");
+    const url = `mailto:${encodeURIComponent(d.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = url;
+  }
+
+  // Timeline row formatter — keeps the JSX clean. Groups event `type`
+  // into human labels + an icon-like glyph the founder can scan quickly.
+  function formatTimelineRow(evt) {
+    const T = evt.type || "";
+    const D = evt.detail || {};
+    if (T === "signup_completed")       return { icon: "◆", label: "Signup completed", tail: D.signup_ip ? `from ${D.signup_ip}` : "" };
+    if (T === "login_success" || T === "login")
+                                        return { icon: "→", label: "Login", tail: "" };
+    if (T === "email_verified")         return { icon: "✓", label: "Email verified", tail: "" };
+    if (T === "first_chat")             return { icon: "○", label: "First chat opened", tail: "" };
+    if (T === "first_ship")             return { icon: "★", label: "First ship", tail: "" };
+    if (T === "promo_first50_claimed")  return { icon: "🎁", label: "First-50 promo claimed → 30-day Pro", tail: "" };
+    if (T === "token_grant")            return { icon: "＋", label: `+${(D.tokens || 0).toLocaleString()} tokens granted`, tail: D.reason ? `— ${D.reason}` : "" };
+    if (T.startsWith("task_"))          return { icon: "▸", label: `Task ${T.slice(5)}`, tail: D.task ? `— ${D.task.slice(0, 60)}${D.task.length > 60 ? "…" : ""}` : "" };
+    return { icon: "·", label: T || "event", tail: "" };
+  }
+
   return (
     <div style={{ padding: 24 }}>
       <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: 11, marginBottom: 14 }}
@@ -685,6 +740,15 @@ function UserDetail({ user, onBack }) {
                        borderColor: "rgba(120,200,255,0.35)", color: "var(--accent-2)" }}
               onClick={() => setGrantOpen((v) => !v)}>
               {grantOpen ? "Cancel grant" : "Grant tokens"}
+            </button>
+            <button
+              data-testid="admin-user-email"
+              className="btn-ghost"
+              style={{ padding: "6px 12px", fontSize: 11,
+                       borderColor: "rgba(234,179,8,0.35)", color: "#eab308" }}
+              onClick={emailUser}
+              title={`Compose email to ${d.email}`}>
+              Email user
             </button>
           </div>
           {grantOpen && (
@@ -749,6 +813,195 @@ function UserDetail({ user, onBack }) {
           </div>
         </Card>
       </div>
+
+      {/* 2026-02-12 · Active Offers / Promo Status — founder must be
+          able to see at a glance whether this user already has a promo
+          before sending a new one. Data source: /admin/users/{id}.offers
+          which merges dev_users flags + user_seo_claims. */}
+      {d.offers && (
+        <>
+          <h3 data-testid="admin-user-offers-header"
+              style={{ fontSize: 12, letterSpacing: "0.1em",
+                       textTransform: "uppercase",
+                       color: "var(--text-faint)", margin: "0 0 8px" }}>
+            Active Offers / Promo Status
+          </h3>
+          <Card style={{ padding: 14, marginBottom: 14 }}>
+            <div data-testid="admin-user-offers"
+                 style={{ display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                          gap: 10, fontSize: 12 }}>
+
+              {/* Tier + tier_source pill */}
+              <div style={{ padding: 10, borderRadius: 8,
+                            background: "rgba(255,255,255,0.03)" }}>
+                <div style={{ color: "var(--text-faint)", fontSize: 10,
+                              textTransform: "uppercase", letterSpacing: "0.08em",
+                              marginBottom: 4 }}>
+                  Current tier
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>
+                  {d.offers.tier || "free"}
+                </div>
+                <div data-testid="admin-user-tier-source"
+                     style={{ marginTop: 4, fontSize: 11 }}>
+                  Source:{" "}
+                  <Badge color={
+                    d.offers.tier_source === "founder"           ? "#eab308" :
+                    d.offers.tier_source === "promo_first50"     ? "#a855f7" :
+                    d.offers.tier_source === "paid_subscription" ? "#22c55e" :
+                    "#64748b"
+                  }>
+                    {d.offers.tier_source === "promo_first50"    ? "First-50 promo (not paid)" :
+                     d.offers.tier_source === "paid_subscription" ? "Paid subscription" :
+                     d.offers.tier_source === "founder"          ? "Founder allow-list" :
+                     d.offers.tier_source === "paid_or_unknown"  ? "Paid or unknown" :
+                     "Free (no active offer)"}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* First-50 promo status */}
+              <div data-testid="admin-user-first50-block"
+                   style={{ padding: 10, borderRadius: 8,
+                            background: d.offers.first50?.claimed
+                              ? "rgba(168,85,247,0.10)"
+                              : "rgba(255,255,255,0.03)",
+                            border: d.offers.first50?.claimed
+                              ? "1px solid rgba(168,85,247,0.32)"
+                              : "1px solid transparent" }}>
+                <div style={{ color: "var(--text-faint)", fontSize: 10,
+                              textTransform: "uppercase", letterSpacing: "0.08em",
+                              marginBottom: 4 }}>
+                  First-50 promo
+                </div>
+                {d.offers.first50?.claimed ? (
+                  <>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#a855f7" }}>
+                      🎁 Claimed
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>
+                      Claimed {ago(d.offers.first50.claimed_at)}
+                    </div>
+                    {d.offers.first50.pro_active ? (
+                      <div style={{ fontSize: 11, marginTop: 2, color: "var(--ok)" }}>
+                        Pro active · {d.offers.first50.days_left ?? "?"} days left
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 11, marginTop: 2, color: "var(--text-faint)" }}>
+                        Pro window ended
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ fontSize: 13, color: "var(--text-faint)" }}>
+                    Not claimed
+                    <div style={{ fontSize: 11, marginTop: 4, color: "var(--text-dim)" }}>
+                      {d.email_verified
+                        ? "Email verified — promo may have been full at verify time"
+                        : "Email unverified — promo not yet available"}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Founder offer (SEO fix) */}
+              <div data-testid="admin-user-founder-offer-block"
+                   style={{ padding: 10, borderRadius: 8,
+                            background: (d.offers.founder_offer?.claim_count || 0) > 0
+                              ? "rgba(234,179,8,0.10)"
+                              : "rgba(255,255,255,0.03)",
+                            border: (d.offers.founder_offer?.claim_count || 0) > 0
+                              ? "1px solid rgba(234,179,8,0.32)"
+                              : "1px solid transparent" }}>
+                <div style={{ color: "var(--text-faint)", fontSize: 10,
+                              textTransform: "uppercase", letterSpacing: "0.08em",
+                              marginBottom: 4 }}>
+                  Founder SEO offer
+                </div>
+                {(d.offers.founder_offer?.claim_count || 0) > 0 ? (
+                  <>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#eab308" }}>
+                      Claimed × {d.offers.founder_offer.claim_count}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>
+                      {(d.offers.founder_offer.active_claims || []).length} active,{" "}
+                      {(d.offers.founder_offer.all_claims || []).length -
+                       (d.offers.founder_offer.active_claims || []).length} closed
+                    </div>
+                    {(d.offers.founder_offer.all_claims || []).slice(0, 2).map((c, i) => (
+                      <div key={i} style={{ fontSize: 11, color: "var(--text-dim)",
+                                           marginTop: 3, whiteSpace: "nowrap",
+                                           overflow: "hidden", textOverflow: "ellipsis" }}>
+                        · {c.site_url || c.repo_id} · <Badge>{c.fix_status}</Badge>
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  <div style={{ fontSize: 13, color: "var(--text-faint)" }}>
+                    Not claimed
+                  </div>
+                )}
+              </div>
+            </div>
+          </Card>
+        </>
+      )}
+
+      {/* 2026-02-12 · Activity Logs — merged timeline from funnel_events
+          + cto_tasks + cto_token_grants + email_verifications + promo
+          claims. Newest first. Purely reads existing collections, no
+          new logging surface. */}
+      <h3 data-testid="admin-user-activity-header"
+          style={{ fontSize: 12, letterSpacing: "0.1em",
+                   textTransform: "uppercase",
+                   color: "var(--text-faint)", margin: "0 0 8px" }}>
+        Activity Logs
+        <span style={{ marginLeft: 8, color: "var(--text-faint)",
+                       textTransform: "none", letterSpacing: 0, fontSize: 11 }}>
+          ({(d.activity_timeline || []).length} events, newest first)
+        </span>
+      </h3>
+      <Card style={{ padding: 12, marginBottom: 14 }}>
+        <div data-testid="admin-user-activity-list"
+             style={{ maxHeight: 320, overflowY: "auto", fontSize: 12,
+                      fontFamily: "'JetBrains Mono', monospace" }}>
+          {(d.activity_timeline || []).length === 0 && (
+            <div style={{ color: "var(--text-faint)", padding: "8px 0" }}>
+              No activity recorded yet.
+            </div>
+          )}
+          {(d.activity_timeline || []).map((evt, i) => {
+            const f = formatTimelineRow(evt);
+            const kindColor =
+              evt.kind === "offer" ? "#a855f7" :
+              evt.kind === "admin" ? "#eab308" :
+              evt.kind === "auth"  ? "#22c55e" :
+              evt.kind === "task"  ? "var(--accent-2)" :
+              "var(--text-dim)";
+            return (
+              <div key={i}
+                   data-testid={`admin-user-activity-row-${i}`}
+                   style={{ padding: "6px 4px", borderBottom: "1px solid var(--border)",
+                            display: "grid",
+                            gridTemplateColumns: "20px 1fr auto",
+                            gap: 10, alignItems: "center" }}>
+                <span style={{ color: kindColor, fontSize: 14 }}>{f.icon}</span>
+                <span>
+                  <span style={{ color: kindColor, fontWeight: 500 }}>{f.label}</span>
+                  {f.tail && (
+                    <span style={{ color: "var(--text-dim)", marginLeft: 6 }}>{f.tail}</span>
+                  )}
+                </span>
+                <span style={{ color: "var(--text-faint)", fontSize: 11 }}>
+                  {ago(evt.at)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
       <h3 style={{ fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase",
                     color: "var(--text-faint)", margin: "0 0 8px" }}>Recent tasks</h3>
       <Card>

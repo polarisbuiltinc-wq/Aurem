@@ -251,6 +251,165 @@ async def get_user(user_id: str, authorization: Optional[str] = Header(None)):
     user["token_grants"] = await db.cto_token_grants.find(
         {"user_id": user_id}, {"_id": 0},
     ).sort("granted_at", -1).limit(20).to_list(20)
+
+    # ── 2026-02-12 · Admin user-detail expansion ──────────────────────
+    # Founder asked for 3 additions on the admin user detail page:
+    #   (1) Email User button — served client-side via mailto: with the
+    #       fields we already return above (name, email, projects, tier,
+    #       created_at). No backend work needed for that.
+    #   (2) Activity Logs section — merged timeline from existing sources
+    #       (funnel_events, cto_tasks, cto_token_grants, email verify used_at,
+    #        promo_first50_claimed_at). No new logging surface.
+    #   (3) Active Offers / Promo Status section — surfaces the user's
+    #       First-50 promo state + any user_seo_claims (founder offer)
+    #       plus a `tier_source` (paid / promo / free / founder).
+    #
+    # Both new sections are STRICTLY reads from existing collections — no
+    # schema drift, no double-write risk.
+    # ──────────────────────────────────────────────────────────────────
+
+    # (2) Activity timeline — merge from existing sources, newest first.
+    timeline: list[dict] = []
+    # Signup / login / verify / first_task / first_ship funnel events.
+    async for ev in db.funnel_events.find(
+        {"user_id": user_id}, {"_id": 0},
+    ).sort("ts_epoch", -1).limit(60):
+        ts = ev.get("ts_epoch") or ev.get("created_at")
+        if hasattr(ts, "timestamp"):
+            ts = ts.timestamp()
+        timeline.append({
+            "kind":     "funnel",
+            "type":     ev.get("event_type", ""),
+            "at":       ts,
+            "detail":   ev.get("metadata", {}),
+        })
+    # Tasks (task run + status).
+    for t in user["recent_tasks"]:
+        ts = t.get("created_at")
+        if hasattr(ts, "timestamp"):
+            ts = ts.timestamp()
+        timeline.append({
+            "kind":     "task",
+            "type":     f"task_{t.get('status', 'unknown')}",
+            "at":       ts,
+            "detail":   {
+                "task":       (t.get("task") or "")[:120],
+                "status":     t.get("status"),
+                "commit_sha": t.get("commit_sha"),
+            },
+        })
+    # Admin token grants.
+    for g in user["token_grants"]:
+        timeline.append({
+            "kind":     "admin",
+            "type":     "token_grant",
+            "at":       g.get("granted_at"),
+            "detail":   {
+                "tokens":     g.get("tokens"),
+                "reason":     g.get("reason"),
+                "granted_by": g.get("granted_by"),
+            },
+        })
+    # Email verification click.
+    ver = await db.email_verifications.find_one(
+        {"user_id": user_id, "used_at": {"$ne": None}},
+        {"_id": 0, "used_at": 1},
+        sort=[("used_at", -1)],
+    )
+    if ver:
+        used_at = ver.get("used_at")
+        if hasattr(used_at, "timestamp"):
+            used_at = used_at.timestamp()
+        timeline.append({
+            "kind": "auth", "type": "email_verified",
+            "at": used_at, "detail": {},
+        })
+    # Promo First-50 claim (from dev_users itself).
+    if user.get("promo_first50_claimed"):
+        claim_ts = user.get("promo_first50_claimed_at")
+        if hasattr(claim_ts, "timestamp"):
+            claim_ts = claim_ts.timestamp()
+        timeline.append({
+            "kind": "offer", "type": "promo_first50_claimed",
+            "at": claim_ts, "detail": {
+                "pro_expires_at": (
+                    user["pro_expires_at"].timestamp()
+                    if hasattr(user.get("pro_expires_at"), "timestamp")
+                    else user.get("pro_expires_at")
+                ),
+            },
+        })
+    # Sort merged timeline (drop rows with unusable ts).
+    timeline = [t for t in timeline if isinstance(t.get("at"), (int, float))]
+    timeline.sort(key=lambda x: x["at"], reverse=True)
+    user["activity_timeline"] = timeline[:80]
+
+    # (3) Active Offers / Promo Status — single source of truth.
+    now_ts = time.time()
+    pro_exp = user.get("pro_expires_at")
+    pro_exp_epoch = (
+        pro_exp.timestamp() if hasattr(pro_exp, "timestamp") else pro_exp
+    )
+    pro_active = bool(
+        pro_exp_epoch and isinstance(pro_exp_epoch, (int, float))
+        and pro_exp_epoch > now_ts
+    )
+    tier = user.get("tier") or "free"
+    # tier_source discriminator — is Pro from promo or a real Stripe sub?
+    if tier == "founder":
+        tier_source = "founder"
+    elif user.get("promo_first50_claimed") and pro_active:
+        tier_source = "promo_first50"   # ← don't dangle offers at these users
+    elif user.get("stripe_subscription_id") or user.get("subscription_id"):
+        tier_source = "paid_subscription"
+    elif tier != "free":
+        tier_source = "paid_or_unknown"
+    else:
+        tier_source = "free"
+
+    # Founder-offer per-user claims (user_seo_claims collection).
+    seo_claims_raw = await db.user_seo_claims.find(
+        {"user_id": user_id}, {"_id": 0},
+    ).sort("created_at", -1).limit(20).to_list(20)
+    seo_claims = []
+    for c in seo_claims_raw:
+        created_at = c.get("created_at")
+        if hasattr(created_at, "timestamp"):
+            created_at = created_at.timestamp()
+        seo_claims.append({
+            "claim_id":   c.get("claim_id"),
+            "repo_id":    c.get("repo_id"),
+            "site_url":   c.get("site_url"),
+            "fix_status": c.get("fix_status"),
+            "created_at": created_at,
+        })
+
+    user["offers"] = {
+        "tier":        tier,
+        "tier_source": tier_source,
+        "first50": {
+            "claimed":         bool(user.get("promo_first50_claimed")),
+            "claimed_at":      (
+                user["promo_first50_claimed_at"].timestamp()
+                if hasattr(user.get("promo_first50_claimed_at"), "timestamp")
+                else user.get("promo_first50_claimed_at")
+            ),
+            "pro_expires_at":  pro_exp_epoch,
+            "pro_active":      pro_active,
+            "days_left":       (
+                round((pro_exp_epoch - now_ts) / 86400, 1)
+                if pro_active else None
+            ),
+        },
+        "founder_offer": {
+            "claim_count":   len(seo_claims),
+            "active_claims": [c for c in seo_claims
+                              if c.get("fix_status") not in
+                                 ("cancelled", "shipped", "failed")],
+            "all_claims":    seo_claims,
+        },
+    }
+
     return user
 
 
