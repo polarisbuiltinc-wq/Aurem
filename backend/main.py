@@ -66,6 +66,8 @@ from routers.repo_indexing import router as repo_indexing_router    # Iter 212m-
 from routers.founder_offer import router as founder_offer_router    # Iter 212m-30 PR-2
 from routers.onboarding import router as onboarding_router          # Iter 212m-32 nudge emails
 from routers.promo_first50 import router as promo_first50_router    # Track 3 (item #31) — First-50 signup promo + email verification
+from routers.email_unsubscribe import router as email_unsubscribe_router  # 2026-02-12 · CAN-SPAM/GDPR one-click unsubscribe
+from routers.admin_first50_campaign import router as admin_first50_campaign_router  # 2026-02-12 · First-50 drip admin
 from routers.admin_vanguard import router as admin_vanguard_router  # Iter 212m-42 vanguard admin toggle
 from routers.admin_bin import router as admin_bin_router  # Iter 212m-171 admin panel rebuild
 from routers.security_scan import router as security_scan_router    # Iter 212m-55 1-click vuln scanner
@@ -2706,6 +2708,8 @@ app.include_router(repo_indexing_router,  prefix="/api/aurem-dev")  # Iter 212m-
 app.include_router(founder_offer_router,  prefix="/api/aurem-dev")  # Iter 212m-30 PR-2
 app.include_router(onboarding_router,     prefix="/api/aurem-dev")  # Iter 212m-32 nudge emails
 app.include_router(promo_first50_router,  prefix="/api/aurem-dev")  # Track 3 (item #31) — First-50 signup promo + email verification
+app.include_router(email_unsubscribe_router,        prefix="/api/aurem-dev")  # 2026-02-12 · one-click unsubscribe
+app.include_router(admin_first50_campaign_router,   prefix="/api/aurem-dev")  # 2026-02-12 · First-50 drip admin
 app.include_router(admin_vanguard_router, prefix="/api/aurem-dev")  # Iter 212m-42 vanguard config
 app.include_router(admin_bin_router,      prefix="/api/aurem-dev")  # Iter 212m-171 admin panel rebuild
 app.include_router(security_scan_router,  prefix="/api/aurem-dev")  # Iter 212m-55 1-click vuln scanner
