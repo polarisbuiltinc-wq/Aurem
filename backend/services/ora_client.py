@@ -32,6 +32,8 @@ from typing import Optional
 import httpx
 from fastapi import HTTPException
 
+from services.http import ext_client
+
 logger = logging.getLogger(__name__)
 
 # ── Circuit breaker config ────────────────────────────────────
@@ -197,7 +199,18 @@ async def call_ora(
         # Cap defensively at 380 to leave headroom.
         body["system_hint"] = system_hint[:380]
     try:
-        async with httpx.AsyncClient(timeout=timeout) as c:
+        # ── Phase 3 · Custom-breaker reconciliation (2026-02-12) ─────────
+        # Migrated to ext_client("ora", ...) for uniform header injection
+        # (X-Request-ID, User-Agent) + base_url=None safety.
+        # The file-based persistent circuit breaker above (_breaker_is_open
+        # / _trip_breaker, 24h fatal cooldown, /tmp/aurem_ora_circuit_open*)
+        # is INTENTIONALLY PRESERVED — it differs meaningfully from
+        # retry_guard.CircuitBreaker (persistent across worker restarts,
+        # first-failure trip vs 5-consec, 24h fatal-pattern silence).
+        # Do NOT wrap in call_with_retry — same reasoning as
+        # github_api_writer Sub-batch 3: explicit retry opt-out.
+        # ─────────────────────────────────────────────────────────────────
+        async with ext_client("ora", timeout=httpx.Timeout(timeout)) as c:
             r = await c.post(
                 base + path,
                 headers={

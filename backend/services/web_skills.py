@@ -104,7 +104,14 @@ async def web_search(ctx: dict, args: dict) -> dict:
         if not _br.allow():
             return {"ok": False, "error": "Web search temporarily unavailable "
                     f"(tavily circuit open — retry in ~{_br.retry_after_s():.0f}s)"}
-        async with httpx.AsyncClient(timeout=TAVILY_TIMEOUT) as c:
+        # Phase 3 · Custom-breaker reconciliation (2026-02-12) — migrated to
+        # ext_client("tavily", ...) for uniform header injection + safety.
+        # The explicit get_breaker("tavily") block above is PRESERVED because
+        # ext_client's CM form does NOT auto-apply retries or the breaker
+        # (see services/http/client.py docstring lines 122-124). Semantics
+        # unchanged: manual _br.allow() gate, _br.record_failure() /
+        # _br.record_success() on outcome.
+        async with ext_client("tavily", timeout=httpx.Timeout(TAVILY_TIMEOUT)) as c:
             r = await c.post(f"{TAVILY_BASE}/search", json=payload, headers=headers)
     except httpx.TimeoutException:
         _br.record_failure("timeout")
@@ -179,7 +186,12 @@ async def fetch_url(ctx: dict, args: dict) -> dict:
         if not _br.allow():
             return {"ok": False, "error": "URL fetch temporarily unavailable "
                     f"(tavily circuit open — retry in ~{_br.retry_after_s():.0f}s)"}
-        async with httpx.AsyncClient(timeout=TAVILY_TIMEOUT) as c:
+        # Phase 3 · Custom-breaker reconciliation (2026-02-12) — migrated to
+        # ext_client("tavily", ...) for uniform header injection + safety.
+        # Same rationale as web_search above; the explicit
+        # get_breaker("tavily") wrapper is preserved because ext_client's
+        # CM form does not auto-apply the breaker.
+        async with ext_client("tavily", timeout=httpx.Timeout(TAVILY_TIMEOUT)) as c:
             r = await c.post(f"{TAVILY_BASE}/extract", json=payload, headers=headers)
     except httpx.TimeoutException:
         _br.record_failure("timeout")
