@@ -784,3 +784,12 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 | `routers/admin_users.py` | `/admin` | 16 | auto-detected new router (verify) (Iter 0, 2026-08-11T15:10:10.370315Z) | <!-- inv:router:routers/admin_users.py -->
 - `FOUNDER_EMAILS` — auto-detected in backend/routers/admin_users.py (verify) (default: unset) [Iter 0, 2026-08-11T15:10:10.370341Z] <!-- inv:envvar:FOUNDER_EMAILS -->
 - `RESEND_FROM_EMAIL` — auto-detected in backend/routers/admin_users.py (verify) (default: unset) [Iter 0, 2026-08-11T15:10:10.370383Z] <!-- inv:envvar:RESEND_FROM_EMAIL -->
+
+### Iter 0 · 2026-08-12
+
+| `routers/admin_first50_campaign.py` | `/admin/first50-campaign` | 5 | auto-detected new router (verify) (Iter 0, 2026-08-12T19:35:34.277260Z) | <!-- inv:router:routers/admin_first50_campaign.py -->
+| `routers/email_unsubscribe.py` | `(none)` | 1 | auto-detected new router (verify) (Iter 0, 2026-08-12T19:35:34.277293Z) | <!-- inv:router:routers/email_unsubscribe.py -->
+- `services/first50_campaign.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-12T19:35:34.277320Z] <!-- inv:service:services/first50_campaign.py -->
+- `PUBLIC_APP_URL` — auto-detected in backend/services/first50_campaign.py (verify) (default: unset) [Iter 0, 2026-08-12T19:35:34.277338Z] <!-- inv:envvar:PUBLIC_APP_URL -->
+- `UNSUBSCRIBE_SECRET` — auto-detected in backend/services/first50_campaign.py (verify) (default: unset) [Iter 0, 2026-08-12T19:35:34.277354Z] <!-- inv:envvar:UNSUBSCRIBE_SECRET -->
+- `HOW_TO_START_VIDEO_URL` — auto-detected in backend/services/first50_campaign.py (verify) (default: unset) [Iter 0, 2026-08-12T19:35:34.277369Z] <!-- inv:envvar:HOW_TO_START_VIDEO_URL -->

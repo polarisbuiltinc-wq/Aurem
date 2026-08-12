@@ -14,6 +14,7 @@ from cto_services.db import get_db, require_db
 from routers._admin_common import _require_admin
 from services.first50_campaign import (
     STAGE_HOURS, eligible_for_stage, render_stage, send_one,
+    _resend_send,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,23 +107,65 @@ async def render_email(stage: int, user_id: str = "",
 
 @router.post("/dispatch")
 async def dispatch(stage: int, limit: int = 5, dry_run: bool = True,
+                    to_emails: Optional[str] = None,
                     authorization: Optional[str] = Header(None)):
-    """Actually send stage N to up to `limit` eligible users.
+    """Actually send stage N.
+
+    Two modes:
+      1) Normal (default): send to up to `limit` eligible users from DB filter.
+      2) Override: if `to_emails=a@x.com,b@y.com` is passed, bypass DB
+         filtering entirely and forcibly send stage N to those exact
+         recipients. Skips ALL stop-conditions (unsub / already_sent /
+         task_created) and does NOT record to first50_campaign_state,
+         so it's safe for founder inbox review without polluting prod
+         campaign state. Uses the real dev_users row for personalization
+         when the email exists in DB; falls back to a synthetic user dict
+         otherwise.
+
     Defaults to dry_run=true (safety). Set dry_run=false to actually send."""
     await _require_admin(authorization)
     if stage not in STAGE_HOURS:
         raise HTTPException(400, f"stage must be one of {list(STAGE_HOURS)}")
     db = require_db()
+    remaining = await _promo_remaining()
+
+    # ── Override path: send to explicit list, bypass ALL guards ─────────
+    if to_emails:
+        emails = [e.strip().lower() for e in to_emails.split(",") if e.strip()]
+        if not emails:
+            raise HTTPException(400, "to_emails was provided but empty")
+        results = []
+        for em in emails:
+            # Try to find a real dev_users row so name/pro_expires_at render right
+            u = await db.dev_users.find_one(
+                {"email": em},
+                {"_id": 0, "user_id": 1, "email": 1, "name": 1,
+                 "pro_expires_at": 1},
+            ) or {"user_id": f"override-{em}", "email": em,
+                  "name": em.split("@")[0]}
+            subject, text, html = render_stage(stage, u, promo_remaining=remaining)
+            if dry_run:
+                results.append({"email": em, "ok": True, "dry_run": True,
+                                "subject": subject, "text_len": len(text),
+                                "html_len": len(html)})
+                continue
+            ok, err, mid = await _resend_send(em, subject=subject,
+                                              text=text, html=html)
+            results.append({"email": em, "ok": ok, "error": err,
+                            "message_id": mid, "subject": subject})
+        return {"stage": stage, "dry_run": dry_run, "mode": "to_emails_override",
+                "attempted": len(emails), "results": results}
+
+    # ── Normal path: eligible users from DB filter ──────────────────────
     users = await eligible_for_stage(db, stage, limit=limit * 3)
     to_send = [u for u in users if u.get("_will_send")][:limit]
-    remaining = await _promo_remaining()
 
     results = []
     for u in to_send:
         r = await send_one(u, stage, dry_run=dry_run, promo_remaining=remaining)
         results.append({"user_id": u["user_id"], "email": u["email"], **r})
-    return {"stage": stage, "dry_run": dry_run, "attempted": len(to_send),
-            "results": results}
+    return {"stage": stage, "dry_run": dry_run, "mode": "eligible_filter",
+            "attempted": len(to_send), "results": results}
 
 
 @router.get("/state")
