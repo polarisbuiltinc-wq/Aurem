@@ -108,10 +108,16 @@ def test_no_call_with_retry_anywhere_in_writer():
     the newer ref pointer.
 
     This test fails if ANY future refactor adds call_with_retry
-    into this file. Force review of the change."""
+    into this file. Force review of the change.
+
+    NOTE: uses `call_with_retry(` (with paren) so rationale comments
+    that mention the name `call_with_retry` without invoking it (see
+    `test_ref_advance_docstring_records_no_retry_rationale`) don't
+    falsely trip this guard. Actual usage would be a `call_with_retry(...)`
+    function call which this check will still catch."""
     src = _src()
-    assert "call_with_retry" not in src, (
-        "call_with_retry appeared in github_api_writer.py. This "
+    assert "call_with_retry(" not in src, (
+        "call_with_retry(...) invocation appeared in github_api_writer.py. This "
         "is the retry opt-out guard for the two ref-advance PATCH "
         "sites. If you have a legitimate reason to add retry to a "
         "NON-PATCH site here, refactor this test to allow that "
@@ -120,14 +126,18 @@ def test_no_call_with_retry_anywhere_in_writer():
 
 
 def test_ref_advance_docstring_records_no_retry_rationale():
-    """Aspirational — passes AFTER Sub-batch 3 writes actual code and
-    adds a `no retry` / `opt-out` comment near the ref-advance sites.
-    During PREP (this state), skip: we've already asserted call_with_retry
-    is absent (primary defense); the rationale comment is Sub-batch 3
-    code-work, added when the actual migration happens."""
-    import pytest
-    pytest.skip("Comment added during Sub-batch 3 code migration — "
-                "not part of preserve-test prep")
+    """The ref-advance PATCH sites (or their containing functions)
+    must include an inline comment explaining WHY call_with_retry is
+    NOT used — otherwise a future maintainer might 'improve' reliability
+    by adding retries and reintroduce the race."""
+    src = _src()
+    assert "no retry" in src.lower() or "no_retry" in src.lower() or \
+           "opt out" in src.lower() or "opt-out" in src.lower() or \
+           "retry opt-out" in src.lower(), (
+        "The ref-advance PATCH sites (or their containing function) "
+        "must include an inline comment explaining why call_with_retry "
+        "is NOT used."
+    )
 
 
 # ─── Parallelism preservation ──────────────────────────────────────

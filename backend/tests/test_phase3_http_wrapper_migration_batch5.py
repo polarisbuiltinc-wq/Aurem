@@ -54,13 +54,20 @@ def test_dev_skills_all_sites_migrated():
 
 
 def test_github_api_writer_intentionally_deferred():
-    """Guard that we did NOT migrate github_api_writer.py — a naive
-    ext_client swap would drop the pinned httpx.Limits pool tuning
-    and the 60s big-commit timeout override. Supervised session
-    will migrate this AFTER extending ext_client() with a limits=
-    parameter."""
+    """POST-SUB-BATCH-3 (2026-02-12): the deferral that this test
+    originally guarded is now COMPLETE. Sub-batch 1 upgraded ext_client
+    with a `limits=` kwarg; Sub-batch 2 migrated the 3 read helpers;
+    Sub-batch 3 migrated commit_files + revert_commit writes. This
+    guard is flipped to lock in the post-migration invariant:
+
+      1. No raw httpx.AsyncClient(timeout=60.0, limits=_LIMITS) sites
+      2. _LIMITS module constant removed (each ext_client site now
+         inlines explicit `httpx.Limits(max_connections=20, ...)`)
+
+    If a future refactor regresses either, this test breaks the build.
+    """
     src = open("/app/backend/services/github_api_writer.py").read()
-    # The 2 real client-creation sites must still be raw.
-    assert src.count("httpx.AsyncClient(timeout=60.0, limits=_LIMITS)") == 2
-    # And the deliberate pool cap must still be present.
-    assert "_LIMITS = httpx.Limits(max_connections=20, max_keepalive_connections=20)" in src
+    # No more raw AsyncClient with the Sub-batch 2 sentinel signature.
+    assert src.count("httpx.AsyncClient(timeout=60.0, limits=_LIMITS)") == 0
+    # And the module-level constant is gone (per-site limits now).
+    assert "_LIMITS = httpx.Limits(max_connections=20, max_keepalive_connections=20)" not in src

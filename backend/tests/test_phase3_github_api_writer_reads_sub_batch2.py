@@ -132,27 +132,39 @@ def test_read_helpers_no_longer_take_client_param():
         )
 
 
-def test_write_sites_still_use_raw_httpx_client():
-    """CRITICAL: commit_files + revert_commit's write blocks MUST
-    STILL use raw `httpx.AsyncClient(timeout=60.0, limits=_LIMITS)`.
-    Sub-batch 3 will migrate them. Any leak of ext_client into the
-    write path is a scope violation of this sub-batch."""
+def test_write_sites_migrated_to_ext_client_post_sub_batch_3():
+    """POST-SUB-BATCH-3: commit_files + revert_commit's write blocks
+    MUST now use `ext_client("github", ...)` — the raw
+    `httpx.AsyncClient(timeout=60.0, limits=_LIMITS)` pattern from
+    Sub-batch 2 era is removed. This test was flipped from the
+    transitional guard once Sub-batch 3 migrated the writes."""
     src = _read("/app/backend/services/github_api_writer.py")
-    # The raw client block should appear at least twice (once each
-    # in commit_files + revert_commit).
-    assert src.count("async with httpx.AsyncClient(timeout=60.0, limits=_LIMITS)") >= 2, (
-        "The raw httpx.AsyncClient blocks in commit_files and "
-        "revert_commit must be preserved. Sub-batch 3 will migrate "
-        "them — not Sub-batch 2."
+    # Raw AsyncClient must be gone.
+    assert "httpx.AsyncClient(" not in src, (
+        "Raw httpx.AsyncClient still present in github_api_writer.py "
+        "after Sub-batch 3. Writes must be on ext_client."
+    )
+    # At least 2 ext_client sites for writes (commit_files + revert_commit).
+    # Plus 3 for Sub-batch 2 reads → ≥5 total.
+    assert src.count("async with ext_client(") >= 5, (
+        "Expected ≥5 ext_client sites post-Sub-batch-3 (3 read helpers "
+        "+ commit_files + revert_commit)."
     )
 
 
-def test_LIMITS_module_constant_preserved():
-    """The module-level `_LIMITS = httpx.Limits(20/20)` constant
-    MUST survive — it's what the write blocks reference. Sub-batch 3
-    will remove it when writes migrate."""
+def test_LIMITS_module_constant_removed_post_sub_batch_3():
+    """POST-SUB-BATCH-3: the `_LIMITS = httpx.Limits(...)` module
+    constant is removed — every ext_client site now inlines its own
+    `httpx.Limits(max_connections=20, max_keepalive_connections=20)`
+    so future changes to services.http.client._LIMITS_DEFAULTS cannot
+    silently drift this writer's connection-pool shape. Flipped from
+    the Sub-batch 2 preservation guard."""
     src = _read("/app/backend/services/github_api_writer.py")
-    assert "_LIMITS = httpx.Limits(max_connections=20, max_keepalive_connections=20)" in src
+    assert "_LIMITS = httpx.Limits(" not in src, (
+        "The _LIMITS module constant re-appeared after Sub-batch 3. "
+        "It was removed intentionally — per-site inline limits prevent "
+        "drift with services.http.client defaults."
+    )
 
 
 # ─── Runtime tests — actually exercise the transport ────────────────

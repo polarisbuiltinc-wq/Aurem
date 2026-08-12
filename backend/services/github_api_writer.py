@@ -30,14 +30,12 @@ from services.http import ext_client
 logger = logging.getLogger(__name__)
 
 GITHUB_API = "https://api.github.com"
-# httpx connection pool — bump limits so parallel calls actually parallel.
-# Also passed EXPLICITLY at each ext_client site (reads via Sub-batch 2) so
-# the writer's connection-pool shape doesn't drift if _LIMITS_DEFAULTS
-# changes upstream in services.http.client.
-_LIMITS = httpx.Limits(max_connections=20, max_keepalive_connections=20)
-# Explicit timeout for every writer call site. Kept as a module constant
-# so read (ext_client) + write (raw AsyncClient) sites both reference the
-# same value.
+# Sub-batch 3 (2026-02-12): the _LIMITS module constant was replaced by
+# explicit `httpx.Limits(max_connections=20, max_keepalive_connections=20)`
+# at every ext_client site so a future change to services.http.client's
+# _LIMITS_DEFAULTS['github'] cannot silently shift this writer's
+# connection-pool shape. Kept the read/write timeout as a module const
+# for the same reason.
 _TIMEOUT = httpx.Timeout(60.0)
 
 
@@ -162,7 +160,18 @@ async def commit_files(
         if progress is not None:
             await progress(step, status)
 
-    async with httpx.AsyncClient(timeout=60.0, limits=_LIMITS) as client:
+    # ── Sub-batch 3 (2026-02-12) · Write path migrated to ext_client ────
+    # RETRY OPT-OUT (deliberate): the ref-advance PATCH at the tail of
+    # this function must NEVER be wrapped in call_with_retry.  A retry
+    # racing a concurrent push could advance the branch pointer to a
+    # stale tree; the repeat-PATCH-is-no-op fallback is a secondary
+    # defense — explicit non-retry is the primary one.
+    # ────────────────────────────────────────────────────────────────────
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(60.0),
+        limits=httpx.Limits(max_connections=20, max_keepalive_connections=20),
+    ) as client:
         await _p(f"📡 Reading branch head ({branch})…")
         head = await _get_branch_head(owner, repo, branch, token)
         await _p(f"✅ HEAD @ {head['sha'][:7]}", "success")
@@ -269,7 +278,18 @@ async def revert_commit(
         if progress is not None:
             await progress(step, status)
 
-    async with httpx.AsyncClient(timeout=60.0, limits=_LIMITS) as client:
+    # ── Sub-batch 3 (2026-02-12) · Write path migrated to ext_client ────
+    # RETRY OPT-OUT (deliberate): the ref-advance PATCH at the tail of
+    # this function must NEVER be wrapped in call_with_retry. Same
+    # rationale as commit_files above — the repeat-PATCH-is-no-op fallback
+    # is secondary; explicit non-retry is the primary defense against
+    # accidental history churn from a retry racing a concurrent push.
+    # ────────────────────────────────────────────────────────────────────
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(60.0),
+        limits=httpx.Limits(max_connections=20, max_keepalive_connections=20),
+    ) as client:
         await _p(f"📡 Loading commit {commit_sha[:7]}…")
         commit = await _get_commit_details(owner, repo, commit_sha, token)
         if not commit.get("parents"):
