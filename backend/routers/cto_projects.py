@@ -2063,6 +2063,17 @@ async def get_task(task_id: str, authorization: str = Header(None)) -> dict:
     )
     if not t:
         raise HTTPException(404, "Task not found")
+    # Iter 388g — Personal Track gate on the inline diff-view payload.
+    # `edited_files` (unified-diff hunks with dual gutter numbers) is
+    # dev-facing only. Personal Track users get the plain task view
+    # WITHOUT the structured diff — matches the ORA_DIFF_VIEW_SPEC
+    # non-goal ("Do NOT touch the AUREM CTO user chat" for non-devs).
+    try:
+        _track = str((me or {}).get("track") or "").lower()
+        if _track.startswith("personal"):
+            t.pop("edited_files", None)
+    except Exception:
+        pass
     return {"ok": True, "task": t}
 
 
@@ -3482,7 +3493,11 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
                           completed_at=time.time())
         # iter 114 — rich diff + popup data
         try:
-            from services.task_diff import build_files_changed, shape_vanguard_findings
+            from services.task_diff import (
+                build_files_changed, shape_vanguard_findings,
+                build_unified_diff_hunks,
+            )
+            from services.ora_chat.tool_output_wrapper import wrap_edited_files
             rich_changes = build_files_changed(contents, edits)
             findings_clean = shape_vanguard_findings(
                 (verify_result.get("findings", []) if "verify_result" in locals() else []),
@@ -3490,6 +3505,22 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
                         and not verify_result.get("pass", True)
                         else "fixed"),
             )
+            # Iter 388g — inline diff-view payload for the chat bubble.
+            # `build_unified_diff_hunks` produces per-line old_n/new_n
+            # gutter columns; `wrap_edited_files` puts it in the SSE
+            # shape the EditedFileBubble frontend consumes.  Persisted
+            # alongside `files_changed` so `/cto/tasks/{id}` can serve
+            # the same data to the chat panel on task-completion.
+            hunk_files = []
+            for _path, _after in (edits or {}).items():
+                _before = (contents or {}).get(_path)
+                hunk_files.append({
+                    "path":  _path,
+                    "hunks": build_unified_diff_hunks(
+                        _before, _after, context=2,
+                    ),
+                })
+            edited_files_payload = wrap_edited_files(hunk_files)
             _started = (await db.cto_tasks.find_one(
                 {"task_id": task_id}, {"started_at": 1, "_id": 0}
             )) or {}
@@ -3498,6 +3529,7 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
                 task_id,
                 files_changed=rich_changes,
                 vanguard_findings=findings_clean,
+                edited_files=edited_files_payload,
                 time_taken_seconds=elapsed,
                 github_url=f"https://github.com/{owner}/{repo}/commit/{commit_full_sha}",
             )

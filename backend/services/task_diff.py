@@ -105,3 +105,116 @@ def shape_vanguard_findings(findings, status: str = "blocked") -> list[dict]:
             "status":   status,
         })
     return out
+
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Iter 388g — Unified-diff hunks for inline ORA diff view
+# ──────────────────────────────────────────────────────────────────────
+# Existing `build_files_changed` above emits ONE line per file (first
+# diff line only) — perfect for the compact Iter 114 side popup.
+# The Path A ORA diff bubble needs full unified-diff hunks with per-
+# line old_n/new_n gutter numbers.  This helper produces that shape
+# WITHOUT touching `build_files_changed` so both consumers stay stable.
+def build_unified_diff_hunks(
+    before: str | None,
+    after:  str | None,
+    *,
+    context: int = 2,
+) -> list[dict]:
+    """Compute unified-diff hunks between two file contents.
+
+    Returns a list of hunks:
+        [{
+          "old_start": int,       # 1-based line where hunk begins (old)
+          "new_start": int,       # 1-based line where hunk begins (new)
+          "lines": [
+            {"tag": " ", "text": "...", "old_n": 3, "new_n": 3},
+            {"tag": "-", "text": "...", "old_n": 4, "new_n": None},
+            {"tag": "+", "text": "...", "old_n": None, "new_n": 4},
+            ...
+          ],
+        }, ...]
+
+    `context` is the number of unchanged context lines to keep around
+    each change block (matches `diff -u` default of 3, tuned down to 2
+    for chat-bubble compactness).
+    """
+    old_lines = _lines(before)
+    new_lines = _lines(after)
+
+    # difflib's SequenceMatcher gives us opcodes; we translate to hunks.
+    from difflib import SequenceMatcher
+    sm = SequenceMatcher(a=old_lines, b=new_lines, autojunk=False)
+
+    hunks: list[dict] = []
+    current: dict | None = None
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            # Bridge unchanged rows between change blocks — keep only
+            # `context` before/after so hunks stay tight.
+            length = i2 - i1
+            if current is None:
+                # Only trailing context of the previous hunk needed —
+                # but we haven't opened one yet.
+                lead = old_lines[max(i1, i2 - context): i2]
+                lead_j = new_lines[max(j1, j2 - context): j2]
+                # Track for the NEXT hunk's leading context.
+                current = None  # noqa: F841 — clarity
+                # Nothing to emit; the leading-context lines will be
+                # picked up when the next change opens a hunk.
+                continue
+            # Extend the current hunk with up to `context` bridging
+            # rows, then close.
+            take = min(length, context)
+            for k in range(take):
+                current["lines"].append({
+                    "tag":   " ",
+                    "text":  old_lines[i1 + k],
+                    "old_n": i1 + k + 1,
+                    "new_n": j1 + k + 1,
+                })
+            # If the equal block is longer than 2*context, close this
+            # hunk here — next change opens a fresh one.
+            if length > context * 2:
+                hunks.append(current)
+                current = None
+            elif length > context:
+                # Bridge fully consumed → still close.
+                hunks.append(current)
+                current = None
+        else:
+            # Any change → open a hunk (with leading context) if none.
+            if current is None:
+                lead_i = max(0, i1 - context)
+                lead_j = max(0, j1 - context)
+                current = {
+                    "old_start": lead_i + 1,
+                    "new_start": lead_j + 1,
+                    "lines":     [],
+                }
+                for k in range(lead_i, i1):
+                    current["lines"].append({
+                        "tag":   " ",
+                        "text":  old_lines[k],
+                        "old_n": k + 1,
+                        "new_n": lead_j + (k - lead_i) + 1,
+                    })
+            # Emit removals then insertions (matches unified-diff order).
+            for k in range(i1, i2):
+                current["lines"].append({
+                    "tag":   "-",
+                    "text":  old_lines[k],
+                    "old_n": k + 1,
+                    "new_n": None,
+                })
+            for k in range(j1, j2):
+                current["lines"].append({
+                    "tag":   "+",
+                    "text":  new_lines[k],
+                    "old_n": None,
+                    "new_n": k + 1,
+                })
+    if current is not None:
+        hunks.append(current)
+    return hunks

@@ -843,7 +843,19 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       const params = new URLSearchParams(window.location.search);
       const t = params.get("ltp");
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (t) setLivePopupTaskId(t);
+      if (t) {
+        setLivePopupTaskId(t);
+        // Iter 388g — smoke-test path also seeds a placeholder assistant
+        // message with the matching shipped_task_id so the popup's
+        // `onDone` handler has a target to attach edited_files onto.
+        // Production flow doesn't need this — real chat turns already
+        // pin shipped_task_id via the SSE task_handoff frame.
+        setMessages((msgs) => msgs.concat([{
+          role: "assistant", streaming: false,
+          content: `Shipping … task \`${t}\``,
+          shipped_task_id: t,
+        }]));
+      }
     } catch { /* ignore */ }
   }, []);
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -4852,6 +4864,21 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         key={livePopupTaskId || "none"}
         taskId={livePopupTaskId}
         onClose={() => setLivePopupTaskId(null)}
+        onDone={(task) => {
+          // Iter 388g — attach the unified-diff hunks the worker just
+          // persisted onto the shipped assistant message. Matches the
+          // bubble by `shipped_task_id` so only the correct turn shows
+          // the inline diff (later turns stay untouched).
+          const files = task?.edited_files?.files;
+          if (!Array.isArray(files) || files.length === 0) return;
+          const tid = task?.task_id;
+          if (!tid) return;
+          setMessages((msgs) => msgs.map((m) =>
+            (m.role === "assistant" && m.shipped_task_id === tid)
+              ? { ...m, edited_files: files }
+              : m
+          ));
+        }}
       />
       {/* Iter 165 — Codebase Graph drawer (right side). */}
       <GraphPanel

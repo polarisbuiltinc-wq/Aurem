@@ -25,6 +25,7 @@ import TaskProgressCard from "./TaskProgressCard";
 import TaskLiveTape from "./TaskLiveTape";
 import TaskManagementPanel, { hasChecklist } from "./TaskManagementPanel";
 import RenderedMessage from "./RenderedMessage";
+import EditedFileBubble from "./EditedFileBubble";
 import LoopProgressBubble, { isLoopProgressContent } from "./LoopProgressBubble"; // Iter 331
 import CollapsibleReply from "./CollapsibleReply"; // Iter 339d/339m
 import MermaidBlock from "./MermaidBlock";       // Iter 212m-61 /diagram
@@ -695,6 +696,20 @@ export default function MessageBubble({
               code={m.diagram.code}
               title={m.diagram.title}
             />
+          )}
+          {/* Iter 388g — Inline diff-view bubbles. Attached to the
+              shipped assistant message by ChatPanel's LiveTaskPopup
+              `onDone` handler once the worker persists unified-diff
+              hunks. Personal-Track users never see this — backend
+              strips `edited_files` from /cto/tasks/{id} for that
+              track before the popup can attach it here. */}
+          {m.role === "assistant" && !m.streaming
+            && Array.isArray(m.edited_files) && m.edited_files.length > 0 && (
+            <div data-testid="ora-edited-files-list" style={{ marginTop: 10 }}>
+              {m.edited_files.map((f, i) => (
+                <EditedFileBubble key={`${i}-${f.path}`} file={f} />
+              ))}
+            </div>
           )}
           {/* Iter 212m-59 — Blinking cursor at the tail of a streaming
               assistant message.  Makes the perceived speed match

@@ -43,11 +43,15 @@ const C = {
   ink:    "#e8e2cf",
 };
 
-export default function LiveTaskPopup({ taskId, onClose }) {
+export default function LiveTaskPopup({ taskId, onClose, onDone }) {
   const [task, setTask] = useState(null);
   const [err,  setErr]  = useState("");
   const dismissTimerRef = useRef(null);
   const pollTimerRef    = useRef(null);
+  // Iter 388g — fire `onDone(task)` ONCE when the poll first sees a
+  // completed task. ChatPanel uses this to attach edited_files to the
+  // shipped assistant message so the inline diff bubble renders.
+  const onDoneFiredRef  = useRef(false);
 
   // unmount whenever taskId changes / becomes null (new chat dismiss)
   // Iter 151 — same terminal-state widening + retry cap as in
@@ -72,6 +76,15 @@ export default function LiveTaskPopup({ taskId, onClose }) {
         if (!cancelled && t) {
           setTask(t);
           if (t.status === "done") {
+            // Iter 388g — one-shot done callback with the full task
+            // payload (includes edited_files hunks written by the
+            // worker on completion). Fire before starting the 5s
+            // dismiss timer so ChatPanel can attach the diff to the
+            // shipped assistant bubble immediately.
+            if (!onDoneFiredRef.current) {
+              onDoneFiredRef.current = true;
+              try { onDone?.(t); } catch { /* never let the popup crash */ }
+            }
             if (!dismissTimerRef.current) {
               dismissTimerRef.current = setTimeout(() => {
                 if (!cancelled) onClose?.();
@@ -97,7 +110,7 @@ export default function LiveTaskPopup({ taskId, onClose }) {
       if (pollTimerRef.current)    clearTimeout(pollTimerRef.current);
       if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
     };
-  }, [taskId, onClose]);
+  }, [taskId, onClose, onDone]);
 
   if (!taskId) return null;
 
