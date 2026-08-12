@@ -213,7 +213,9 @@ export default function VsPage({ forcedSlug }) {
           <p style={{ ...S.dim, fontSize: 13, marginTop: 10 }}>
             Sources: AUREM production codebase and docs; {c.name} public
             pricing and documentation, last verified {LAST_VERIFIED}. Spotted
-            something stale? Email ora@auremcto.com and we&apos;ll fix it.
+            something stale? Message us at{" "}
+            <a href="/support" style={{ color: "inherit" }}>auremcto.com/support</a>{" "}
+            and we&apos;ll fix it.
           </p>
         </section>
 

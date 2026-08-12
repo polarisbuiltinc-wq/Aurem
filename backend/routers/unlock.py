@@ -56,8 +56,8 @@ async def request_unlock(body: UnlockRequestBody,
         "status":     "pending",
         "message": (
             "Your unlock request has been submitted. Our team reviews "
-            "these manually — email ora@auremcto.com if you need "
-            "this expedited."
+            "these manually — message us at auremcto.com/support if you "
+            "need this expedited."
         ),
     }
 

@@ -158,7 +158,9 @@ async def _resend_send(to_email: str, *, text: str, html: str) -> tuple[bool, Op
         # 2026-02-11 · Phase 1 hotspot dedup — use shared HTTP wrapper
         # instead of raw httpx. Retry + breaker via `retry_guard.resend`.
         from services.http import ext_request, ExternalCallError
+        from services.email_reply_to import get_reply_to
         try:
+            _rt = get_reply_to()
             r = await ext_request(
                 "resend", "POST",
                 "https://api.resend.com/emails",
@@ -170,6 +172,7 @@ async def _resend_send(to_email: str, *, text: str, html: str) -> tuple[bool, Op
                     "subject": SUBJECT,
                     "text":    text,
                     "html":    html,
+                    **({"reply_to": _rt} if _rt else {}),
                 },
                 raise_for_status=False,
             )

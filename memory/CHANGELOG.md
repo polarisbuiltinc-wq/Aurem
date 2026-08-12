@@ -2,6 +2,19 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **`ora@auremcto.com` Bounce Fix (Iter 388b · 2026-02-12 · Preview only)** — direct-reply bounces resolved.
+  - **Root cause identified**: `auremcto.com` has **no MX record** → every reply to `ora@auremcto.com` (referenced across policies, README, in-app error strings, orchestrator prompts, landing footer) was guaranteed to bounce. `aurem.live` DOES have MX (Cloudflare Email Routing) but that's a separate check the founder is doing.
+  - **Two-layer fix shipped**:
+    1. **`Reply-To` header** — new `services/email_reply_to.py` centralizes `REPLY_TO_EMAIL` env read. Added `REPLY_TO_EMAIL=polarisbuiltinc@gmail.com` to preview `.env`. Every user-facing Resend send (verification, welcome, onboarding, first50 campaign, referral reward, admin email tool) now conditionally includes `"reply_to": <env value>` when the env is set. Result: Gmail "Reply" button sends directly to the founder's real inbox, bypassing the aurem.live MX chain entirely.
+    2. **Swap all `ora@auremcto.com` → `auremcto.com/support`** across product surfaces:
+       - Policy docs (7 files): privacy-policy.md, terms-of-service.md, acceptable-use-policy.md, refund-policy.md, cookie-policy.md, security.md, ai-code-processing.md, dpa.md, subprocessors.md, AUREM_README.md — same treatment for `privacy@auremcto.com`.
+       - Backend: `services/orchestrator.py` (founder-escalation prompts at count=3/4/5/6+), `services/error_translator.py`, `routers/payments.py`, `routers/unlock.py`, `routers/harden.py`, `routers/chat.py` (draft-support-email), `routers/admin_users.py` (email tool reply_to fallback).
+       - Frontend: `pages/PolicyPage.jsx`, `pages/OpsRecipes.jsx`, `pages/VsPage.jsx`, `pages/Landing.jsx` (footer), `pages/Admin.jsx` (email tool banner), `components/PricingCards.jsx`, `README.md`.
+  - **Regression guards**: new `tests/test_iter388_reply_to_header.py` asserts (a) Resend payload includes reply_to when env set, (b) omits it when env unset, (c) no product code ever re-introduces `ora@auremcto.com`. Existing tests `test_iter99`, `test_iter71`, `test_iter73`, `test_iter104` all updated for the new canonical channel.
+  - **Verified in preview**: real Resend send to `teji.ss1986@gmail.com` returned Resend ID `4e65a915-8bf5-44f7-b33f-4476e4a97f26` — clicking Reply in Gmail should now land in `polarisbuiltinc@gmail.com`.
+  - **Prod deploy pending founder confirmation** + Cloudflare Email Routing status check on `aurem.live`. Reminder: `REPLY_TO_EMAIL=polarisbuiltinc@gmail.com` must be configured via Emergent dashboard on prod, not via the .env file.
+
+
 - **In-App + Email Support Flow (Iter 388 · 2026-02-12)** — replaces broken `ora@aurem.live` email replies as the user-side entry point.
   - `POST /support/tickets/token` (public, HMAC-verified) — new: users file tickets from email links without login. Same HMAC pattern as unsubscribe (`support:<email>` scope on `UNSUBSCRIBE_SECRET`).
   - `POST /support/tickets` extended — accepts optional `source` + optional `subject` (auto-derived from body's first line).

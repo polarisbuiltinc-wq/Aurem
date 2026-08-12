@@ -2,7 +2,7 @@
 >
 > **This document is a starting-point draft and has NOT been reviewed by a lawyer.** It is published here so users can see the intent, but it is not yet the final policy. Placeholders shown in `[BRACKETS]` will be filled in and legal review will be completed before this policy becomes binding.
 >
-> Questions or feedback? Email **[ora@auremcto.com](mailto:ora@auremcto.com)**.
+> Questions or feedback? Email **[auremcto.com/support](https://auremcto.com/support)**.
 
 ---
 
@@ -60,7 +60,7 @@ If you initiate a chargeback with your bank/card issuer instead of contacting us
 
 ## 1.10 Contact for billing issues
 
-Email **[ora@auremcto.com](mailto:ora@auremcto.com)** — please include your account email and, if applicable, the transaction ID from your payment receipt.
+Email **[auremcto.com/support](https://auremcto.com/support)** — please include your account email and, if applicable, the transaction ID from your payment receipt.
 
 ---
 

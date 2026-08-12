@@ -185,6 +185,8 @@ async def grant_referral_reward(db, new_user_id: str) -> dict:
         try:
             resend_key = os.environ.get("RESEND_API_KEY") or ""
             from_addr = os.environ.get("RESEND_FROM_EMAIL", "AUREM <ora@aurem.live>")
+            from services.email_reply_to import get_reply_to
+            _referral_reply_to = get_reply_to()
             if resend_key and referrer.get("email"):
                 _ref_name = referrer.get("name") or "there"
                 _ref_link = f"https://auremcto.com/?ref={referrer_uid}"
@@ -218,6 +220,8 @@ async def grant_referral_reward(db, new_user_id: str) -> dict:
                         "subject": "You earned 1 free month on AUREM 🎉",
                         "text":    _referral_text,
                         "html":    _referral_html,
+                        **({"reply_to": _referral_reply_to}
+                            if _referral_reply_to else {}),
                     },
                     timeout=httpx.Timeout(connect=5.0, read=8.0, write=5.0, pool=5.0),
                 )

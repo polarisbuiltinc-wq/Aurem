@@ -3,7 +3,7 @@
 
 This Data Processing Agreement ("DPA") is entered into between the **Customer** (as defined in the Order Form or account signup) and **Polaris Built Inc**, a corporation incorporated in Canada ("Aurem", "we", "us"), and forms part of the [Terms of Service](/terms) or executed Order Form ("Agreement").
 
-By subscribing to a Team or Enterprise plan, the Customer accepts this DPA. Enterprise customers may execute a countersigned copy — email **privacy@auremcto.com** to request one.
+By subscribing to a Team or Enterprise plan, the Customer accepts this DPA. Enterprise customers may execute a countersigned copy — email **auremcto.com/support** to request one.
 
 ---
 
@@ -86,7 +86,7 @@ Physical/on-site audits are reserved for enterprise customers with a signed Orde
 
 7.2 After 30 days, Aurem will delete Customer Personal Data from active systems within **90 days**, and from backups within **180 days**, unless retention is required by applicable law.
 
-7.3 Certificate of deletion available on request at **privacy@auremcto.com**.
+7.3 Certificate of deletion available on request at **auremcto.com/support**.
 
 ---
 
@@ -122,6 +122,6 @@ See [/security](/security) for the current version. Highlights:
 
 ---
 
-**Contact for DPA execution or amendments:** **privacy@auremcto.com**
+**Contact for DPA execution or amendments:** **auremcto.com/support**
 
 **Polaris Built Inc** — Incorporated in Canada

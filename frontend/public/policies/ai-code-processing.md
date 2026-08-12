@@ -128,7 +128,7 @@ Under **GDPR, CCPA/CPRA, DPDP Act,** and **PIPEDA**, you may:
 - Request the specific LLM provider that handled a given task ID
 - Withdraw consent and terminate LLM processing (this ends your ability to use ORA fixes but preserves your account)
 
-Email **privacy@auremcto.com** with your account email and task ID(s).
+Email **auremcto.com/support** with your account email and task ID(s).
 
 ---
 
@@ -142,5 +142,5 @@ Material changes to LLM routing, subprocessor list, or retention windows trigger
 
 **Polaris Built Inc**
 Incorporated in Canada
-AI/data inquiries: **privacy@auremcto.com**
+AI/data inquiries: **auremcto.com/support**
 Engineering security: **security@auremcto.com**

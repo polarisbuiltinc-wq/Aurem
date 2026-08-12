@@ -397,7 +397,7 @@ up on the next redeploy.
 
 ## Support & Status <a id="support--status"></a>
 
-- **Email:** ora@auremcto.com
+- **Support:** [auremcto.com/support](https://auremcto.com/support)
 - **Integrations docs:**
   [auremcto.com/integrations](https://auremcto.com/integrations)
 - **Health:** [auremcto.com/api/aurem-dev/system/health](https://auremcto.com/api/aurem-dev/system/health)

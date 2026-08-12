@@ -318,13 +318,16 @@ async def _resend_send(to_email: str, *, subject: str,
     sender = os.environ.get("RESEND_FROM_EMAIL") or "AUREM <ora@aurem.live>"
     try:
         from services.http import ext_request, ExternalCallError
+        from services.email_reply_to import get_reply_to
         try:
+            _rt = get_reply_to()
             r = await ext_request(
                 "resend", "POST", "https://api.resend.com/emails",
                 headers={"Authorization": f"Bearer {key}",
                          "Content-Type": "application/json"},
                 json={"from": sender, "to": [to_email],
-                      "subject": subject, "text": text, "html": html},
+                      "subject": subject, "text": text, "html": html,
+                      **({"reply_to": _rt} if _rt else {})},
                 raise_for_status=False,
             )
             if r.status_code in (200, 201, 202):

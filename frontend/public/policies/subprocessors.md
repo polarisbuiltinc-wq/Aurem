@@ -74,10 +74,10 @@ We update this list whenever we add or remove a subprocessor. Material changes a
 
 ## 8. Objection & Contact
 
-**Enterprise customers** with a signed [DPA](/dpa) may object to a new subprocessor within **30 days of notice** by writing to **privacy@auremcto.com**. If we cannot resolve the objection with a reasonable alternative, you may terminate the affected service and receive a prorated refund.
+**Enterprise customers** with a signed [DPA](/dpa) may object to a new subprocessor within **30 days of notice** by writing to **auremcto.com/support**. If we cannot resolve the objection with a reasonable alternative, you may terminate the affected service and receive a prorated refund.
 
 **All users** may email questions to:
-- Data-processing questions → **privacy@auremcto.com**
+- Data-processing questions → **auremcto.com/support**
 - Security concerns → **security@auremcto.com**
 
 **Polaris Built Inc**

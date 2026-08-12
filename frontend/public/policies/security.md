@@ -132,5 +132,5 @@ We do not currently run a paid bug-bounty programme, but critical findings earn 
 **Polaris Built Inc**
 Incorporated in Canada
 Security: **security@auremcto.com** (PGP key on request)
-Privacy: **privacy@auremcto.com**
-General: **ora@auremcto.com**
+Privacy: **auremcto.com/support**
+General: **auremcto.com/support**

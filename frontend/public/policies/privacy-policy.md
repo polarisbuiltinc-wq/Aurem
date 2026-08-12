@@ -136,7 +136,7 @@ Depending on your location, you may have the right to:
 - Challenge accuracy of your data
 - Withdraw consent (by deleting account)
 
-To exercise any right: email **ora@auremcto.com** (support), or use Settings → Delete Account in the app.
+To exercise any right: email **auremcto.com/support** (support), or use Settings → Delete Account in the app.
 
 ---
 
@@ -155,7 +155,7 @@ To exercise any right: email **ora@auremcto.com** (support), or use Settings →
 
 ## 9. Children's Privacy
 
-The Service is not directed to persons under 18. We do not knowingly collect personal information from minors. If you believe a minor has provided us data, contact ora@auremcto.com.
+The Service is not directed to persons under 18. We do not knowingly collect personal information from minors. If you believe a minor has provided us data, contact auremcto.com/support.
 
 ---
 
@@ -181,7 +181,7 @@ We will notify you by email 14 days before material changes. The "Last updated" 
 
 **Privacy Officer**
 Polaris Built Inc
-ora@auremcto.com
+auremcto.com/support
 auremcto.com
 
 For GDPR requests, response within 30 days.

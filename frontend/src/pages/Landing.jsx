@@ -1589,8 +1589,8 @@ export default function Landing() {
           <div>
             <div style={{ fontSize: 11, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Contact</div>
             <div className="footer-links" style={{ flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
-              <a href="mailto:ora@auremcto.com"      data-testid="footer-support">ora@auremcto.com</a>
-              <a href="mailto:privacy@auremcto.com"  data-testid="footer-privacy-email">privacy@auremcto.com</a>
+              <a href="/support"                     data-testid="footer-support">Support · auremcto.com/support</a>
+              <a href="/support"                     data-testid="footer-privacy-email">Privacy · auremcto.com/support</a>
               <a href="mailto:security@auremcto.com" data-testid="footer-security-email">security@auremcto.com</a>
               <a href="mailto:billing@auremcto.com"  data-testid="footer-billing-email">billing@auremcto.com</a>
             </div>

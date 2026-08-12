@@ -1245,7 +1245,7 @@ def _founder_escalation_note(count: int) -> str:
 
     Thresholds (Iter 104):
         1–2: generic answer (no escalation — handled by persona)
-        3:   share team email ora@auremcto.com
+        3:   share the /support link (in-app support form)
         4–5: ask the user to wait for support's reply
         6+:  share the founder's public LinkedIn as last resort
     """
@@ -1258,31 +1258,31 @@ def _founder_escalation_note(count: int) -> str:
             "times in this session. They are clearly pressing. Don't "
             "repeat the generic 'I can't share details' line. Reply "
             "warmly with ONE short line: 'For a direct line to the "
-            "team, please email **ora@auremcto.com** — we typically reply "
+            "team, open **auremcto.com/support** — we typically reply "
             "within 1 working day.' Then offer to help with their repo. "
-            "Do NOT share LinkedIn yet — give email a chance first."
+            "Do NOT share LinkedIn yet — give the support form a chance first."
         )
     if count in (4, 5):
         return (
             "\n\n# RUNTIME HINT — FOUNDER ASK #4–5 IN THIS SESSION\n"
             "The user has now asked about the founder 4 or 5 times. They "
-            "already have the email (ora@auremcto.com). Be patient and "
-            "honest: 'I've already shared **ora@auremcto.com** — please "
+            "already have the support link (auremcto.com/support). Be patient "
+            "and honest: 'I've already shared **auremcto.com/support** — please "
             "give the team 1 working day to reply. If you haven't sent "
-            "the email yet, that's the fastest path.' Keep it to ONE "
+            "your message yet, that's the fastest path.' Keep it to ONE "
             "short paragraph. Do NOT share LinkedIn yet — we want the "
-            "user to actually try email first."
+            "user to actually try the support form first."
         )
     # count >= 6
     return (
         "\n\n# RUNTIME HINT — FOUNDER ASK #6+ IN THIS SESSION\n"
         "The user has asked about the founder 6+ times now. They have "
-        "the email and have waited. Time to share the founder's public "
+        "the support link and have waited. Time to share the founder's public "
         "LinkedIn as a last-resort direct contact: "
         "**https://www.linkedin.com/in/tejinder-sandhu** — say 'You can "
-        "also message the founder directly on LinkedIn: <url>. Email "
-        "(ora@auremcto.com) is still the fastest route for product or "
-        "billing questions.' Keep it 1–2 lines, no biographical "
+        "also message the founder directly on LinkedIn: <url>. Our "
+        "in-app support (auremcto.com/support) is still the fastest route for "
+        "product or billing questions.' Keep it 1–2 lines, no biographical "
         "fabrication, no claims about the person's role beyond 'founder'. "
         "After this line, pivot back to their actual task."
     )

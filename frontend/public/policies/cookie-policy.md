@@ -88,7 +88,7 @@ We honour the **Global Privacy Control (GPC)** signal. If your browser sends `Se
 | **Canada (PIPEDA)** | Meaningful consent | Access, correction, complaint to OPC |
 | **Rest of World** | Opt-out where feasible | Contact us to exercise equivalent rights |
 
-Exercise any right by emailing **privacy@auremcto.com** or **ora@auremcto.com**.
+Exercise any right by emailing **auremcto.com/support** or **auremcto.com/support**.
 
 ---
 
@@ -102,5 +102,5 @@ We update this policy when we add/remove trackers. Material changes trigger a fr
 
 **Polaris Built Inc**
 Incorporated in Canada
-Email: **ora@auremcto.com**
-Privacy inquiries: **privacy@auremcto.com**
+Email: **auremcto.com/support**
+Privacy inquiries: **auremcto.com/support**

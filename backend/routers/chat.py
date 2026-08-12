@@ -3601,7 +3601,7 @@ async def draft_support_email(
     return {
         "ok": True,
         "subject": f"[{tier.upper()}] Support — {email}",
-        "to": "ora@auremcto.com",
+        "to": "auremcto.com/support",
         "from_email": email,
         "body": full_body,
     }

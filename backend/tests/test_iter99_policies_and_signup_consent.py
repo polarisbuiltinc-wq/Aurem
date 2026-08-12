@@ -2,12 +2,13 @@
 test_iter99_policies_and_signup_consent.py — locks in:
 
   • 3 policy markdown files exist at frontend/public/policies/
-  • Each policy uses ora@aurem.live as the contact (no stale
-    privacy@/support@/abuse@auremcto.com leaks)
+  • Each policy uses auremcto.com/support as the contact (no stale
+    ora@auremcto.com / privacy@auremcto.com / support@auremcto.com
+    leaks — swapped 2026-02-12 after ora@auremcto.com MX-less bounces)
   • App.jsx wires /privacy, /terms, /acceptable-use routes
   • Landing footer has links to all 3 policies + Contact
   • Signup.jsx requires the ToS/Privacy checkbox before submit
-  • README mentions ora@aurem.live as support email
+  • README mentions auremcto.com/support as support channel
 """
 from __future__ import annotations
 
@@ -31,11 +32,18 @@ def test_policy_files_exist(filename):
     assert p.exists(), f"{p} missing"
     text = p.read_text()
     assert len(text) > 500, f"{filename} suspiciously small ({len(text)} bytes)"
-    # Stale support emails must be wiped — Iter 201 unified everything to ora@auremcto.com.
-    for stale in ("privacy@auremcto.com", "support@auremcto.com", "abuse@auremcto.com"):
+    # No-MX auremcto.com support addresses must NEVER re-appear.
+    # 2026-02-12 — swapped to auremcto.com/support after direct-reply
+    # bounces from ora@auremcto.com (no MX record on that domain).
+    for stale in (
+        "ora@auremcto.com", "privacy@auremcto.com",
+        "support@auremcto.com", "abuse@auremcto.com",
+    ):
         assert stale not in text, f"{filename} still references {stale}"
-    # New canonical address must be present.
-    assert "ora@auremcto.com" in text, f"{filename} missing ora@auremcto.com"
+    # New canonical contact channel must be present.
+    assert "auremcto.com/support" in text, (
+        f"{filename} missing auremcto.com/support"
+    )
 
 
 def test_app_jsx_wires_policy_routes():
@@ -51,7 +59,7 @@ def test_landing_footer_has_policy_links():
     assert 'data-testid="footer-terms"' in landing, "footer Terms link missing"
     assert 'data-testid="footer-aup"' in landing, "footer Acceptable Use link missing"
     assert 'data-testid="footer-support"' in landing, "footer Contact link missing"
-    assert "ora@auremcto.com" in landing
+    assert "auremcto.com/support" in landing
 
 
 def test_signup_requires_terms_checkbox():
@@ -82,8 +90,11 @@ def test_policy_page_component_renders_markdown():
     assert "marked.parse" in pp or "marked(" in pp, "Must invoke marked parser"
 
 
-def test_readme_uses_canonical_support_email():
+def test_readme_uses_canonical_support_channel():
     readme = (REPO / "README.md").read_text()
-    assert "ora@auremcto.com" in readme, "README must reference ora@auremcto.com"
+    assert "auremcto.com/support" in readme or "ora@aurem.live" in readme, (
+        "README must reference the current support channel "
+        "(auremcto.com/support or ora@aurem.live)"
+    )
     # Stale CAD price must be gone (covered in iter94 too but belt+braces).
     assert "$35 / user / mo" not in readme, "stale $35 CAD price still in README"

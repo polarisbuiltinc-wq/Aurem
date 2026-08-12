@@ -2,7 +2,7 @@
 >
 > **This document is a starting-point draft and has NOT been reviewed by a lawyer.** It is published here so users can see the intent, but it is not yet the final policy. Placeholders shown in `[BRACKETS]` will be filled in and legal review will be completed before this policy becomes binding.
 >
-> Questions or feedback? Email **[ora@auremcto.com](mailto:ora@auremcto.com)**.
+> Questions or feedback? Email **[auremcto.com/support](https://auremcto.com/support)**.
 
 ---
 
@@ -55,7 +55,7 @@ Depending on severity, consequences may escalate through the following stages:
 
 ## 2.6 Reporting abuse
 
-If you believe an application built on AUREM violates this policy, report it to **[ora@auremcto.com](mailto:ora@auremcto.com)** with subject line "Abuse Report". We aim to review reports within `[X business days]`, sooner for urgent safety issues.
+If you believe an application built on AUREM violates this policy, report it to **[auremcto.com/support](https://auremcto.com/support)** with subject line "Abuse Report". We aim to review reports within `[X business days]`, sooner for urgent safety issues.
 
 ## 2.7 Changes to this policy
 
