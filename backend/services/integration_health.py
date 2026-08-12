@@ -581,9 +581,26 @@ async def _probe_sentry() -> dict:
 async def _probe_vercel() -> dict:
     key = _safe_env("VERCEL_API_TOKEN")
     if not key:
-        return _result("vercel", "Vercel Deploy", "missing",
-                       summary="VERCEL_API_TOKEN not configured",
-                       fix_hint="vercel.com/account/tokens → Create Token")
+        # 2026-02-12 · Option B (founder-agreed): Vercel is NOT used for
+        # prod hosting on auremcto.com (Cloudflare→Emergent origin, DNS
+        # verified). The probe stays wired so if we bring Vercel back
+        # in-scope later it lights up automatically. Until then, show
+        # "disabled" to match the Supabase/Vercel-Platform convention
+        # (intentional non-use, not a config oversight).
+        return _result(
+            "vercel", "Vercel Deploy",
+            "disabled",
+            summary="Disabled — VERCEL_API_TOKEN not configured (intentional)",
+            detail=("Vercel is not used for prod hosting on auremcto.com "
+                    "(traffic path: Cloudflare → Emergent). The probe "
+                    "remains wired so setting VERCEL_API_TOKEN in "
+                    "backend/.env will re-enable live health checks "
+                    "automatically."),
+            fix_hint=("Set VERCEL_API_TOKEN in backend/.env if bringing "
+                      "Vercel back in-scope, OR delete _probe_vercel and "
+                      "remove the vercel dep from the probe registry to "
+                      "acknowledge the shelving."),
+        )
     async with ext_client(
         "vercel",
         timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
