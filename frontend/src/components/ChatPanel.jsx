@@ -83,6 +83,7 @@ import StreamHealthPill  from "./chat/StreamHealthPill";
 import RepoHelpDialog    from "./chat/RepoHelpDialog";
 import ScanStatusStrip, { markScanJustCompleted } from "./ScanStatusStrip";        // Iter 212m-190 · Session 3
 import SlashCommandMenu, { matchSlashCommands } from "./SlashCommandMenu";         // Iter 212m-190 · Session 3
+import CharCounter from "./CharCounter";                                             // Iter 388f — live char counter for 20k cap
 import {
   isLoopUnlockedSync,
   extractSuggestions,
@@ -4420,6 +4421,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           ref={taRef}
           data-testid="chat-input"
           className="composer-input-bare"
+          maxLength={20000}
           value={input}
           onChange={(e) => {
             const v = e.target.value;
@@ -4666,6 +4668,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
               see a locked "Loop · soon" variant so the surface stays
               consistent without giving them the engine. */}
           <IntentTierIndicator liveText={input} lastTier={lastIntentTier} />
+          <CharCounter value={input} max={20000} style={{ marginRight: 8 }} />
           <LoopModeToggle
             value={execMode}
             onChange={handleExecModeChange}

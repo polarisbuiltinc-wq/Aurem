@@ -21,6 +21,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { cn } from "./cn";
 import { streamChat, api } from "../../../lib/api";
 import { getActiveProjectId } from "../../TabBar";
+import { CharCounter, formatTooLongError } from "../../CharCounter";
 import {
   Lightbulb, ArrowUp, ChevronRight, Square,
   AlertTriangle, GitPullRequest, BarChart2, Sparkles,
@@ -428,11 +429,13 @@ export default function AskAdvisorReal({ collapsed = false, onCollapse, projectI
                 }
               }}
               rows={2}
+              maxLength={20000}
               placeholder={thinking ? "ORA is thinking…" : "Ask about runs, repos, or usage..."}
               disabled={thinking}
               data-testid="ds2-advisor-input"
               className="w-full resize-none bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-60" />
-            <div className="flex justify-end pt-1">
+            <div className="flex justify-between items-center pt-1">
+              <CharCounter value={input} max={20000} />
               {thinking ? (
                 <button
                   type="button"
@@ -445,7 +448,7 @@ export default function AskAdvisorReal({ collapsed = false, onCollapse, projectI
                   <Square className="size-3" strokeWidth={2.5} />
                 </button>
               ) : (
-                <button type="submit" disabled={!input.trim()}
+                <button type="submit" disabled={!input.trim() || input.length > 20000}
                   aria-label="Send message"
                   data-testid="ds2-advisor-send"
                   className="flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30">

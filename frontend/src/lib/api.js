@@ -295,6 +295,32 @@ export async function streamChat({ prompt, sessionId, session_id,
   });
   if (!res.ok || !res.body) {
     const txt = await res.text().catch(() => "");
+    // Iter 388f — friendly 422 handling. When the backend rejects a
+    // prompt for being too long, FastAPI returns a Pydantic 422 with
+    // a JSON body. Surface a plain-English message instead of the
+    // raw "HTTP 422: {detail:[{...}]}" blob so the composer error
+    // toast is actually readable.
+    if (res.status === 422) {
+      let friendly = null;
+      try {
+        const body = JSON.parse(txt);
+        const arr = Array.isArray(body?.detail) ? body.detail : null;
+        const overflow = arr?.find((x) =>
+          x?.type === "string_too_long" ||
+          /too\s*long/i.test(x?.msg || "") ||
+          /at most.*character/i.test(x?.msg || "")
+        );
+        if (overflow) {
+          const cap = overflow.ctx?.max_length || 20000;
+          const got = (overflow.input || prompt || "").length;
+          friendly = `Message too long: ${got.toLocaleString()} chars / ` +
+                     `${cap.toLocaleString()} max. Shorten it, or split ` +
+                     `into multiple messages.`;
+        }
+      } catch { /* fall through */ }
+      onError?.(friendly || `HTTP 422: ${txt || res.statusText}`);
+      return;
+    }
     onError?.(`HTTP ${res.status}: ${txt || res.statusText}`);
     return;
   }

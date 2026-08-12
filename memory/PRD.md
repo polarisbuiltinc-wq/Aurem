@@ -75,6 +75,28 @@ Key rules established after 3 deploy race incidents in one day:
 
 ## Recent changes (Feb 12, 2026)
 
+- **Iter 388f — Landing.jsx fake claim cleanup + composer char counter (2026-02-12)**:
+  - Removed all Ollama / LM Studio / llama.cpp / "air-gapped" claims from
+    `frontend/src/pages/Landing.jsx` (Local mode card, TOOLS/TAGLINES,
+    FAQ, comparison-table row) AND from `frontend/index.html` JSON-LD
+    schema (SoftwareApplication description, featureList,
+    FAQPage). Backend `feature_window.py:181` says Local mode
+    `"status": "not_built"` — Landing was falsely advertising it.
+  - Removed fabricated "Akari T. finserv Ollama compliance" testimonial.
+  - Verified `25-pattern Vanguard scan` claim is ACCURATE (15 secret +
+    10 dangerous = 25; scanner code itself uses "25-pattern catalog"
+    comment). Kept.
+  - New `frontend/src/components/CharCounter.jsx` — live counter that
+    turns amber at 80% (`#eab308`) and red at 100% (`#ef4444`) of the
+    20,000-char cap. Wired into `ChatPanel.jsx` composer toolbar.
+  - `frontend/src/lib/api.js::streamChat` now intercepts HTTP 422
+    `string_too_long` responses and formats them as "Message too long:
+    N chars / 20,000 max. Shorten it, or split into multiple messages."
+    instead of the raw JSON blob toast.
+  - E2E verified via login → dashboard → composer at 500 (muted),
+    17,000 (amber `rgb(234,179,8)`), 20,000 (red `rgb(239,68,68)`).
+  - Backend curl verified 20,001 char → 422 `string_too_long` with
+    `ctx.max_length=20000`.
 - **Iter 314** — BUILD_INFO.txt untracked + post-commit hook stamps HEAD;
   Deploy Verification Checklist rewritten to remove SHA-pinning
   assumption; three HEAD-mutation channels formally documented.

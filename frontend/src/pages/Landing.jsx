@@ -533,15 +533,13 @@ const LANDING_CSS = `
 // Static data
 const TOOLS = [
   "Claude Desktop", "Claude Code", "Cursor", "VS Code",
-  "Ollama (offline)", "LM Studio (offline)", "GitHub", "MCP 2.4",
+  "GitHub", "MCP 2.4",
 ];
 const TAGLINES = [
   "Claude Desktop",
   "Claude Code",
   "Cursor",
   "VS Code",
-  "Ollama (offline)",
-  "LM Studio (offline)",
   "GitHub",
   "MCP 2.4",
   "Vanguard Security",
@@ -589,24 +587,6 @@ const MODES = [
         <span className="amber">✓ commit f4e3d2 pushed</span></>
     ),
   },
-  {
-    label: "⌂ Local",
-    title: <>Local mode <span style={{ color: "#f59e0b", fontSize: 12 }}>(no internet)</span></>,
-    blurb: "Point ORA at a local Ollama / LM Studio endpoint. Your repo and prompts never leave your box. Same MCP tools, zero cloud inference.",
-    features: [
-      "Works with Ollama / LM Studio / llama.cpp",
-      "Code Llama 70B · Mistral · Phi-3 · open-source backbones",
-      "End-to-end on localhost — air-gapped friendly",
-      "Same sk-aurem-* token, same MCP server",
-    ],
-    terminal: (
-      <><span className="prompt">$</span> export ORA_LLM=ollama://codellama-70b{"\n"}
-        <span className="prompt">$</span> ora ship {'"tidy README typos"'}{"\n"}
-        <span className="gray">→</span> connecting to localhost:11434 …{"\n"}
-        <span className="gray">→</span> writing patch on-device …{"\n"}
-        <span className="amber">✓ commit d7e8f9 pushed (offline)</span></>
-    ),
-  },
 ];
 const TEAMS = [
   { icon: "🛡️", tag: "UNIQUE — no competitor",
@@ -632,7 +612,6 @@ const REVIEWS = [
   { stars: 5, text: "I shipped a Stripe integration in a Slack thread while waiting for a flight. ORA read the repo, wrote the code, ran the tests, committed. Mind blown.", name: "James R.", role: "Founder, Devstream", initials: "JR" },
   { stars: 5, text: "Finally an AI that actually commits — no copy-paste compromise. ORA is just direct.", name: "Sarah P.", role: "Indie dev, Berlin", initials: "SP", color: "#22c55e" },
   { stars: 5, text: "Switched from Cursor. I was paying $40/mo and still getting token-throttled. ORA is flat $9 and just ships.", name: "Mrinul K.", role: "Backend engineer", initials: "MK" },
-  { stars: 5, text: "Compliance team blocked all cloud LLMs. Pointed ORA at our internal Ollama box and shipped 4 PRs the same week. Zero data leakage.", name: "Akari T.", role: "Staff eng, finserv", initials: "AT", color: "#a5b4fc" },
   { stars: 5, text: "The only AI tool that understands my repo. After running it once, the warm-start memory is dialled in. Tasks land in minutes, not hours.", name: "Luca M.", role: "Senior, SaaS startup", initials: "LM", color: "#f472b6" },
   { stars: 5, text: "Linux dev. No IDE, no problem. ORA via Claude Code in terminal is the cleanest workflow I've ever had.", name: "Ridhi P.", role: "Platform team lead", initials: "RP", color: "#fb7185" },
 ];
@@ -643,7 +622,6 @@ const COMPARE_ROWS = [
   ["Flat pricing (no token meter)",         ["yes","$9/mo"], ["no","$10/mo"], ["no","$20/mo"], ["no","$500/mo"], ["no","Token-billed"]],
   ["MCP server (Claude / Cursor / VS Code)",["yes","All"], ["no","No"], ["no","Partial"], ["no","No"], ["yes","Yes"]],
   ["VS Code extension",                     ["yes","Marketplace"], ["yes","Yes"], ["yes","Yes"], ["no","No"], ["no","No"]],
-  ["Run local on PC, no internet",          ["yes","Ollama / LM Studio"], ["no","No"], ["no","No"], ["no","No"], ["no","No"]],
   ["Codebase memory (warm-start)",          ["yes","Built-in"], ["no","Limited"], ["no","Limited"], ["yes","Yes"], ["no","Partial"]],
   ["Security scan every commit",            ["yes","Yes"], ["no","No"], ["no","No"], ["no","Partial"], ["no","No"]],
   ["OAuth 2.1 + PKCE for AI clients",       ["yes","Native"], ["no","No"], ["no","No"], ["no","No"], ["yes","Yes"]],
@@ -653,7 +631,7 @@ const COMPARE_ROWS = [
 // Every answer is written in AEO-optimal "direct-answer-first" format:
 // a 1-2 sentence definitive statement, then elaboration. Every claim
 // traces to VERIFIED product behavior (Loop Mode 5 phases, MAX_SELF_HEALS=2,
-// $9/mo flat, GitHub OAuth scope, Ollama/LM Studio local mode). No
+// $9/mo flat, GitHub OAuth scope). No
 // aspirational marketing copy — an AI engine citing us verbatim must
 // still be quoting the truth.
 const FAQS = [
@@ -672,11 +650,8 @@ const FAQS = [
   { q: "Do I need an IDE?",
     a: "No. ORA is a browser app (also installable as a PWA on mobile) and a terminal MCP 2.4 server — no IDE required. If you already live in VS Code, Cursor, Claude Desktop, or Claude Code, ORA has an MCP client for each, but the extension is optional." },
 
-  { q: "Can I run ORA locally without internet?",
-    a: "Yes, via Local mode. Point ORA at Ollama, LM Studio, or llama.cpp running on localhost, and your repo + prompts never leave the machine. Same MCP tools work; zero cloud inference; runs on air-gapped boxes." },
-
   { q: "Is my code safe with ORA?",
-    a: "ORA reads only the GitHub repos you explicitly authorize via GitHub OAuth. Inferences route through OpenRouter with data-collection: deny (code is not used to train third-party models); if you use Local mode nothing leaves your machine. Full data export is available anytime from Settings." },
+    a: "ORA reads only the GitHub repos you explicitly authorize via GitHub OAuth. Inferences route through OpenRouter with data-collection: deny (code is not used to train third-party models). Full data export is available anytime from Settings." },
 
   { q: "How is ORA different from GitHub Copilot or Cursor?",
     a: "Copilot and Cursor are autocompletes inside your IDE; ORA is an agent outside the IDE. ORA plans the change, writes multi-file diffs, runs Vanguard security patterns before every commit, and commits directly to GitHub — you never open an editor, and there's no copy-paste step." },
@@ -1451,7 +1426,7 @@ export default function Landing() {
                     {cells.map(([cls, val], j) => (
                       <td key={j} className={j === 0 ? "ora-cell" : ""}>
                         <span className={cls === "yes" ? "yes" : "no"}>
-                          {cls === "yes" ? "✓ " : (val.startsWith("$") || val === "All" || val === "Marketplace" || val === "Native" || val === "MIT extension" || val === "Built-in" || val === "Ollama / LM Studio" ? "" : "✗ ")}{val}
+                          {cls === "yes" ? "✓ " : (val.startsWith("$") || val === "All" || val === "Marketplace" || val === "Native" || val === "MIT extension" || val === "Built-in" ? "" : "✗ ")}{val}
                         </span>
                       </td>
                     ))}

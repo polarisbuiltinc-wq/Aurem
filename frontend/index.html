@@ -252,7 +252,7 @@
       "@id": "https://auremcto.com/#product",
       "name": "ORA by Aurem",
       "alternateName": ["ORA", "ORA AI Engineer"],
-      "description": "ORA is an autonomous AI software engineer that connects to your GitHub repository, reads your codebase, writes production-ready code, runs Vanguard pre-commit security scans, and ships code directly to your branches on manual approval. Every task runs through a verified 5-phase Loop (Plan → Execute → Verify → Scan → Ship) with a hard 2-attempt self-heal cap. No IDE required. Flat monthly pricing starting at $9/month with 10 tasks free. Supports MCP 2.4 clients (Claude Desktop, Claude Code, Cursor, VS Code) and a Local mode that runs against Ollama, LM Studio, or llama.cpp.",
+      "description": "ORA is an autonomous AI software engineer that connects to your GitHub repository, reads your codebase, writes production-ready code, runs Vanguard pre-commit security scans, and ships code directly to your branches on manual approval. Every task runs through a verified 5-phase Loop (Plan → Execute → Verify → Scan → Ship) with a hard 2-attempt self-heal cap. No IDE required. Flat monthly pricing starting at $9/month with 10 tasks free. Supports MCP 2.4 clients (Claude Desktop, Claude Code, Cursor, VS Code).",
       "url": "https://auremcto.com",
       "image": "https://auremcto.com/ora-logo.png",
       "screenshot": "https://auremcto.com/og-image.png",
@@ -286,7 +286,6 @@
         "One-click rollback — creates a real revert commit on GitHub, never force-pushes, preserves original commit in history",
         "GitHub OAuth with per-repo scope selection — code stays in the repos you authorize",
         "MCP 2.4 server — works with Claude Desktop, Claude Code, Cursor, VS Code, and any MCP 2.4 client",
-        "Local mode — point at Ollama, LM Studio or llama.cpp on localhost so repo + prompts never leave your machine",
         "Repository-level reasoning across Python, JavaScript, TypeScript, Go, Rust, Java, Kotlin, Swift, Ruby, PHP, C, C++",
         "Flat monthly pricing with no token metering",
         "Privacy: OpenRouter data_collection: deny — code is not used to train third-party models"
@@ -345,18 +344,10 @@
         },
         {
           "@type": "Question",
-          "name": "Can I run ORA locally without internet?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Yes, via Local mode. Point ORA at Ollama, LM Studio, or llama.cpp running on localhost, and your repo and prompts never leave the machine. Same MCP tools work; zero cloud inference; runs on air-gapped boxes."
-          }
-        },
-        {
-          "@type": "Question",
           "name": "Is my code safe with ORA?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "ORA reads only the GitHub repos you explicitly authorize via GitHub OAuth. Inferences route through OpenRouter with data-collection: deny (code is not used to train third-party models); if you use Local mode nothing leaves your machine. Full data export is available anytime from Settings."
+            "text": "ORA reads only the GitHub repos you explicitly authorize via GitHub OAuth. Inferences route through OpenRouter with data-collection: deny (code is not used to train third-party models). Full data export is available anytime from Settings."
           }
         },
         {

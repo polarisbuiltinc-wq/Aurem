@@ -276,7 +276,11 @@ async def run_slash(body: SlashBody,
 # ── Streaming message endpoint ──────────────────────────────────────
 class MessageBody(BaseModel):
     session_id: str
-    content: str = Field(..., min_length=1, max_length=4000)
+    # Iter 388e (2026-02-12) — was max_length=4000 (5x tighter than
+    # /chat/send's 20k cap on the same LLM tier, no comment explaining
+    # the asymmetry). Bumped to match user-facing chat; still well
+    # inside Claude/GPT/DeepSeek's 128k-200k token input windows.
+    content: str = Field(..., min_length=1, max_length=20000)
 
 
 @router.post("/message")
