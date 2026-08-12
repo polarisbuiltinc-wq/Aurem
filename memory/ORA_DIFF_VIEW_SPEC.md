@@ -2,7 +2,29 @@
 
 **Status**: Backlog · P1
 **Created**: 2026-02-12 (post-Iter 388d)
+**Updated**: 2026-02-12 (Iter 388f — Iter 114 reuse audit)
 **Scope target**: Developer Track only. Personal Track keeps current text bubbles.
+
+## 🔄 Relationship to Iter 114 (LiveTaskPopup) — READ FIRST
+
+**These are DIFFERENT features but share reusable machinery.**
+
+| | Iter 114 (already live) | This spec |
+|---|---|---|
+| Location | Floating side popup, `position: fixed` | Inline chat bubble in flow |
+| Trigger | Async CTO task dispatched | ORA edits file during a chat turn |
+| Data | Polls `GET /cto/tasks/{id}` every 2s | Structured `m.diff` streamed with message |
+| Diff format | Single old/new pair per file | Full unified-diff hunks with line numbers |
+| Gutter columns | ❌ | ✅ |
+| Command exec bar | ❌ | ✅ |
+
+**Existing assets to REUSE (do NOT rebuild):**
+- `backend/services/task_diff.py::build_files_changed` — extend it to emit full unified-diff hunks alongside the existing `old_value`/`new_value` single-pair output. Same function powers both popup + inline bubble.
+- `backend/services/task_diff.py::shape_vanguard_findings` — reuse as-is for the Vanguard row inside the diff bubble.
+- Red/green palette from `LiveTaskPopup.jsx` (`#ff6b6b` / `#6dd4a1`) — reuse for line backgrounds.
+- Backend tests `test_iter114_live_popup_data.py` — extend, don't parallel-create.
+
+**Scope after reuse**: ~700 LOC → ~400 LOC (frontend `EditedFileBubble.jsx` + `CommandExecutionBar.jsx` + gutter renderer, plus one backend helper extension).
 
 ## Confirmed existing behavior (audited 2026-02-12)
 - Fenced code blocks (` ```lang … ``` `) → Monaco syntax highlighting via `RenderedMessage`
