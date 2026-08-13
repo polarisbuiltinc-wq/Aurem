@@ -2,6 +2,35 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **GDPR/DSAR Self-Serve Account Deletion (Iter 388t · 2026-08-13 · commit 8a1aa62)** — compliance risk closed.
+  - **NEW `services/user_deletion.py`** — shared `cascade_delete_user_data(db, user_id)` helper. Three layers:
+    1. `stripe.Subscription.delete(sub_id)` immediate cancel (best-effort, error-swallowed)
+    2. `github_app.revoke_installation()` for each active install (per-install error-swallowed)
+    3. Mongo purge across **15 collections** — added 5 (`github_installations`, `ui_settings`, `user_seo_claims`, `login_attempts`, `oauth_states`) on top of the original 10.
+  - **NEW `POST /api/aurem-dev/auth/delete-me`** in `routers/auth.py:731+` — JWT-auth, founder refused (403), email-verbatim confirmation required (422 otherwise), calls shared helper on match.
+  - **REFACTORED `routers/admin_users.py:699-758`** — admin cascade now uses the same helper; automatically inherits Stripe cancel + GitHub revoke fixes that the old admin path silently skipped.
+  - **NEW `components/DangerZone.jsx`** — red-bordered card in Settings > Profile tab bottom. Multi-step modal with typed-email confirmation (button disabled until match). Escape closes. On success: `apiLogout()` + `window.location.replace("/login?deleted=1")`.
+  - **`Login.jsx`** reads `?deleted=1` → green success banner.
+  - **Tests**: `tests/test_iter388t_self_delete.py` — 7 pass (cascade all 15, stripe cancel mocked, github revoke mocked, stripe error swallowed, email mismatch 422, founder 403, success 200 + report).
+
+- **Bug 24 + Bug 25 + Bug 26 A11y batch (Iter 388t · 2026-08-13 · commit b97f83c)** — WCAG 2.4.7 focus rings + skip link.
+  - **Bug 24** (`index.css:339-372`) — `:focus-visible` outline (2px solid --accent-2) for every rail data-testid family.  Rail nav genuinely keyboard-navigable now. VERIFIED live.
+  - **Bug 26** (`index.css:334-337, 628-632`) — same `:focus-visible` treatment on `.input` and `.composer-input-bare`. VERIFIED live.
+  - **Bug 25** (`App.jsx:242-303`) — skip-to-content link repositioned `position: fixed` @ top:8/left:8, zIndex 10000, programmatic focus on `#main-content` in onClick. Works on Landing/Login/Signup (verified via /login preview screenshot); Dashboard scope-limited by design (autoFocus composer takes first Tab; rail nav directly keyboard-reachable via Bug 24 anyway). Doc comment explains the trade-off.
+
+- **/podshell slash command + Bug 29 F12 counter cap (Iter 388t · 2026-08-13 · commit f4525f4)** — Bug 20 UI-reachable.
+  - **NEW `routers/dev_tools.py`** — `POST /api/aurem-dev/dev-tools/podshell` and `GET /podshell/info`. Admin-gated. Runs `validate_founder_pod_command` (chaining/traversal/secret denylist) → `execute_bash` with founder_pod_mode=True. VERIFIED live on prod with `__pycache__` in real stdout (dispositive filesystem proof).
+  - **`ChatPanel.jsx` /podshell intercept** — bypasses LLM entirely; renders stdout in ```plaintext code fence.
+  - **Bug 29** (`public/F12ErrorCapture.js`) — network_errors.push() sites now check `MAX_ERRORS=20` before push; badge stops runaway growth (was 36→58→75→104 on normal navigation, now ≤40 total). VERIFIED live.
+
+- **Bug 20 root-cause deterministic bypass (Iter 388t · 2026-08-13 · commit 079e18b)** — 3rd try, finally correct.
+  - **REVISED DIAGNOSIS**: refusal was NOT LLM safety RLHF; our own `ORA_BOUNDARY_NO_REPO_RULE` template in `services/ora_context.py:165-166` literally instructed the LLM to reply with "I work with your repository only…". Combined with server-side `execute_bash` gate that refused /app/* for founder Home chat (bin_ctx=None → no debug_mode).
+  - **Fix (5 layers, no LLM involved)**: new `ORA_FOUNDER_POD_DEBUG_RULE` permissive template + `is_founder_pod_chat_session(is_founder, project_id)` detector + `validate_founder_pod_command(cmd)` safety layer (chaining/traversal/secret denylist) + `render_ora_boundary_prompt(ctx, founder_pod_mode=…)` router + orchestrator wiring populating `local_ctx['founder_pod_mode']` and execute_bash honouring it as escape hatch.  Scope limited to founder + no-project (Home) chat; customer chats still strict.
+  - **Tests**: 24 pass in `test_iter388t_bug20_founder_pod_bypass.py` + 8 pass in `test_iter388t_podshell_endpoint.py`.
+
+- **Bug 21-bold table cells (Iter 388t · 2026-08-13 · commit d0d4597)** — `RenderedMessage.jsx:164-188` `renderInline` splitter now parses `**bold**` alongside `` `code` `` in inline segments including table cells. VERIFIED live.
+
+
 - **`ora@auremcto.com` Bounce Fix (Iter 388b · 2026-02-12 · Preview only)** — direct-reply bounces resolved.
   - **Root cause identified**: `auremcto.com` has **no MX record** → every reply to `ora@auremcto.com` (referenced across policies, README, in-app error strings, orchestrator prompts, landing footer) was guaranteed to bounce. `aurem.live` DOES have MX (Cloudflare Email Routing) but that's a separate check the founder is doing.
   - **Two-layer fix shipped**:
