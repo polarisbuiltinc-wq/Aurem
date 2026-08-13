@@ -116,7 +116,39 @@ async def admin_reply(
     )
     if r.matched_count == 0:
         raise HTTPException(404, "Ticket not found")
-    return {"ok": True}
+
+    # Iter 388u · Support Reply UX Fix (Option A) — Fire admin-reply
+    # notification email so the user actually sees the reply. Was a
+    # black hole until now: reply went into Mongo, user never got
+    # anything. Best-effort: failure logged, never rolls back the
+    # reply which is already durable.
+    ticket = await db.cto_support.find_one(
+        {"ticket_id": ticket_id},
+        {"_id": 0, "user_email": 1, "user_name": 1},
+    )
+    if ticket and ticket.get("user_email"):
+        try:
+            from services.support_email import send_reply_notification
+            ok, err = await send_reply_notification(
+                user_email=ticket["user_email"],
+                user_name=ticket.get("user_name"),
+                ticket_id=ticket_id,
+                admin_message=msg,
+            )
+            if not ok:
+                logger.warning(
+                    "support_email: notification failed ticket=%s err=%s",
+                    ticket_id, err,
+                )
+            return {"ok": True, "email_notified": ok,
+                    "email_error": err if not ok else None}
+        except Exception as _e:  # noqa: BLE001
+            logger.warning("support_email: dispatch crashed ticket=%s err=%r",
+                           ticket_id, _e)
+            return {"ok": True, "email_notified": False,
+                    "email_error": str(_e)[:200]}
+    return {"ok": True, "email_notified": False,
+            "email_error": "no user_email on ticket"}
 
 
 @router.post("/support/{ticket_id}/resolve")

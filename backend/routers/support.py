@@ -186,3 +186,78 @@ async def get_my_ticket(
     ).sort("ts", 1).to_list(200)
     t["messages"] = msgs
     return t
+
+
+# ── Public HMAC-verified thread view ─────────────────────────────────
+# Used by the "View thread & reply" link in the admin-reply
+# notification email (services/support_email.py). Same HMAC token as
+# POST /support/tickets/token so a single signed link works for both
+# composing new tickets and reading replies — no login required.
+@router.get("/tickets/{ticket_id}/thread")
+async def get_ticket_thread_public(ticket_id: str, t: str, e: str) -> dict:
+    """Public thread read. `t` = HMAC token, `e` = email of ticket
+    owner. Verifies token matches email, then verifies ticket belongs
+    to that email."""
+    email = (e or "").strip().lower()
+    if not email:
+        raise HTTPException(400, "email required")
+    if not t or t != support_token(email):
+        raise HTTPException(403, "invalid token")
+
+    db = require_db()
+    ticket = await db.cto_support.find_one(
+        {"ticket_id": ticket_id, "user_email": email},
+        {"_id": 0},
+    )
+    if not ticket:
+        # Same 404 shape for wrong-owner and truly-not-found — never
+        # leak "this ticket exists but not for you".
+        raise HTTPException(404, "Ticket not found")
+    msgs = await db.cto_support_messages.find(
+        {"ticket_id": ticket_id}, {"_id": 0},
+    ).sort("ts", 1).to_list(200)
+    ticket["messages"] = msgs
+    return ticket
+
+
+class ReplyByToken(BaseModel):
+    t: str
+    e: str
+    body: str
+
+
+@router.post("/tickets/{ticket_id}/reply/token")
+async def reply_to_ticket_by_token(ticket_id: str, payload: ReplyByToken) -> dict:
+    """Public HMAC-verified reply to an existing ticket. Lets the user
+    continue the conversation from the thread-view page without logging
+    in (same signed link they got in the email)."""
+    email = (payload.e or "").strip().lower()
+    if not email:
+        raise HTTPException(400, "email required")
+    if not payload.t or payload.t != support_token(email):
+        raise HTTPException(403, "invalid token")
+    msg = (payload.body or "").strip()[:5000]
+    if not msg:
+        raise HTTPException(400, "message body is required")
+
+    db = require_db()
+    ticket = await db.cto_support.find_one(
+        {"ticket_id": ticket_id, "user_email": email},
+        {"_id": 0, "ticket_id": 1},
+    )
+    if not ticket:
+        raise HTTPException(404, "Ticket not found")
+
+    now = time.time()
+    await db.cto_support_messages.insert_one({
+        "ticket_id": ticket_id,
+        "sender":    "user",
+        "message":   msg,
+        "ts":        now,
+    })
+    await db.cto_support.update_one(
+        {"ticket_id": ticket_id},
+        {"$set": {"status": "open", "updated_at": now,
+                  "last_reply_at": now}},
+    )
+    return {"ok": True}

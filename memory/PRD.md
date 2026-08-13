@@ -33,6 +33,19 @@ Key rules established after 3 deploy race incidents in one day:
 - `BUILD_INFO.txt` is now untracked; `scripts/git_hooks/post-commit` stamps
   it with current HEAD SHA (Iter 314 fix, verified end-to-end on prod)
 
+
+### Iter 388u — Support Reply UX Fix, Option A (2026-08-13, NOT YET DEPLOYED)
+Bug caught by founder audit: `SupportPopup.jsx` promised "You'll see the reply in this same app" but no code fetched replies — admin replies were writing to Mongo with zero surface for user (no email, no badge, no polling). Ticketing system was a black hole.
+- Fix ships on a **separate deploy** after 4 pending verifications clear (GDPR modal, Deploy Insights, Bug 28 highlight, chat double-border).
+- Email fallback via Resend (`services/support_email.py`) — HTML+text with admin message inline + signed CTA link
+- Public HMAC-verified thread view (`GET /support/tickets/{id}/thread`) — no login required
+- Public reply-back (`POST /support/tickets/{id}/reply/token`) — user can continue thread from email link
+- New `/support/thread/:ticketId` route (`pages/SupportThread.jsx`)
+- Misleading popup copy replaced with truthful "email inbox" language
+- **10/10 backend tests pass** · smoke screenshot verified route + error state
+- Follow-up (Option B, next session): in-app inbox at `/support/inbox`, FAB red-dot badge with unread count, previous replies shown inline in SupportPopup.
+
+
 ### Phase 3 progress
 
 **HTTP wrapper migration** (raw `httpx.AsyncClient` → `services.http.ext_client`):

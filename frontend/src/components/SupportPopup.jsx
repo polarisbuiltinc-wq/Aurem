@@ -98,8 +98,8 @@ export function SupportPopup({ source = "in_app", onClose }) {
       try {
         toast({
           message: tid
-            ? `Support ticket received — ref ${tid.slice(0, 8)}. Reply will appear in the same popup.`
-            : "Support ticket received. Reply will appear in the same popup.",
+            ? `Support ticket received — ref ${tid.slice(0, 8)}. My reply will land in your email inbox.`
+            : "Support ticket received. My reply will land in your email inbox.",
           kind: "success",
           duration: 4500,
         });
@@ -163,8 +163,9 @@ export function SupportPopup({ source = "in_app", onClose }) {
               ✓ Message received
             </div>
             <div style={{ fontSize: 12, color: PAL.muted, lineHeight: 1.5 }}>
-              Thanks — I'll get back to you personally. You'll see the
-              reply in this same app once I respond.
+              Thanks — I'll get back to you personally. My reply lands
+              in your email inbox with a signed link to view the full
+              thread and reply back (no login needed).
               {ticketId && (
                 <div style={{ marginTop: 6, fontSize: 10,
                               fontFamily: "monospace" }}>

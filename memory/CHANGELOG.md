@@ -2,6 +2,19 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **Support Reply UX Fix — Option A (Iter 388u · 2026-08-13)** — closed the black-hole: admin replies were writing to Mongo but user never got a surface (no email, no badge, no polling). SupportPopup's success message "You'll see the reply in this same app" was a lie — no code fetched replies.
+  - **NEW `services/support_email.py`** — `send_reply_notification()` builds HTML+text email with admin message inline and CTA link to `/support/thread/{tid}?t=…&e=…`. HMAC token via existing `support_token()` (same scope as `/support?t=…&e=…` composer link). Sends via Resend using same pattern as `first50_campaign._resend_send`.
+  - **NEW public endpoints** in `routers/support.py`:
+    - `GET /support/tickets/{id}/thread?t=…&e=…` — public read; 403 bad token, 404 wrong-owner (never leaks existence), 200 returns ticket + messages.
+    - `POST /support/tickets/{id}/reply/token` — public reply-back; user can continue conversation from the thread page without logging in.
+  - **REFACTORED `admin_reply()` in `routers/admin_support.py`** — after DB insert, best-effort fires notification email; response now includes `email_notified` + `email_error`. Email failures NEVER break the reply (reply stays durable in Mongo).
+  - **NEW `pages/SupportThread.jsx`** — public thread view; renders full conversation (user + admin bubbles), textarea to send reply, refetches on send. Route registered at `/support/thread/:ticketId` in `App.jsx`.
+  - **Copy fix** in `SupportPopup.jsx` — replaced the jhoothi "you'll see the reply in this same app" promise with truthful "my reply lands in your email inbox with a signed link". Toast copy updated too.
+  - **Tests**: `tests/test_iter388u_support_reply_ux.py` — **10 pass** (HMAC deterministic + case-insensitive, thread_url shape, HTML escape safety, thread 403 bad token, thread 200 valid token, thread 404 wrong owner, reply/token 403 bad token, reply/token 200 appends + reopens, admin_reply fires email with correct args, admin_reply survives email failure).
+  - **Smoke test**: bad-token URL renders red "This link is invalid or has expired" — verified on preview.
+  - Deploy status: **NOT YET DEPLOYED** — user requested Option A to ship on a separate deploy after the 4 pending verifications clear (GDPR modal, Deploy Insights, Bug 28 highlight, chat double-border).
+
+
 - **GDPR/DSAR Self-Serve Account Deletion (Iter 388t · 2026-08-13 · commit 8a1aa62)** — compliance risk closed.
   - **NEW `services/user_deletion.py`** — shared `cascade_delete_user_data(db, user_id)` helper. Three layers:
     1. `stripe.Subscription.delete(sub_id)` immediate cancel (best-effort, error-swallowed)

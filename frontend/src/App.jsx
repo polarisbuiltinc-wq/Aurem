@@ -45,6 +45,7 @@ const Login             = lazy(() => import("./pages/Login"));
 const Signup            = lazy(() => import("./pages/Signup"));
 const Verify            = lazy(() => import("./pages/Verify"));  // Track 3 (item #31) — email verification landing
 const Support           = lazy(() => import("./pages/Support"));  // 2026-02-12 — public token-verified support inbox
+const SupportThread     = lazy(() => import("./pages/SupportThread"));  // 2026-02-13 · Iter 388u — public HMAC-verified reply-thread view
 const WhyOra            = lazy(() => import("./pages/WhyOra"));
 import { initTheme } from "./services/theme";
 
@@ -346,6 +347,7 @@ export default function App() {
           <Route path="/signup"          element={<Signup />} />
           <Route path="/verify"          element={<Verify />} />
           <Route path="/support"         element={<Support />} />
+          <Route path="/support/thread/:ticketId" element={<SupportThread />} />
           <Route path="/dashboard"       element={<PrivateRoute><Dashboard /></PrivateRoute>} />
           {/* Iter 212m-235 — Personal Track routes */}
           <Route path="/choose-track"    element={<PrivateRoute><ChooseTrack /></PrivateRoute>} />
