@@ -87,6 +87,38 @@ describe("Bug 21 — GFM pipe tables render as <table>", () => {
     expect(cell.querySelector("code")).toBeTruthy();
     expect(cell.querySelector("code").textContent).toBe("pip");
   });
+
+  // Iter 388t — Bug 21 follow-up: bold `**text**` inside table cells
+  // used to render as literal asterisks.  The renderInline splitter
+  // now parses **bold** in addition to `code`.
+  it("renders **bold** inside table cells (Bug 21 gap)", () => {
+    const md = [
+      "| Feature | Note |",
+      "|---------|------|",
+      "| Typing  | **dynamic** typing |",
+      "| **Compile** | JIT |",
+    ].join("\n");
+    const { getByTestId } = render(<RenderedMessage text={md} />);
+    const table = getByTestId("rendered-md-table");
+    const strongs = table.querySelectorAll("strong");
+    expect(strongs.length).toBe(2);
+    expect(strongs[0].textContent).toBe("dynamic");
+    expect(strongs[1].textContent).toBe("Compile");
+    // Literal asterisks must NOT appear in the rendered text.
+    expect(table.textContent).not.toMatch(/\*\*/);
+  });
+
+  it("renders **bold** in table header cells", () => {
+    const md = [
+      "| **Feature** | Value |",
+      "|-------------|-------|",
+      "| A | 1 |",
+    ].join("\n");
+    const { getByTestId } = render(<RenderedMessage text={md} />);
+    const th = getByTestId("rendered-md-table").querySelector("th");
+    expect(th.querySelector("strong")).toBeTruthy();
+    expect(th.querySelector("strong").textContent).toBe("Feature");
+  });
 });
 
 describe("Bug 23 — retry short-circuit locked in ChatPanel source", () => {
