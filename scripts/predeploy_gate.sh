@@ -44,6 +44,16 @@ echo "── Lane 6: integration_health snapshot (Iter 388-aa · non-blocking) �
 python3 scripts/predeploy_integration_health.py || \
     echo "⚠️  Lane 6 flagged degraded integrations — see output above BEFORE dispatching deploy."
 
+echo "── Lane 7: frontend bundle secrets sweep (Iter 388-ac · non-blocking) ──"
+# Scans frontend/dist for leaked keys/DSNs/PEMs. Exit 3 == CRITICAL
+# leaks; halt deploy and rotate before proceeding.
+if [ -d frontend/dist ]; then
+  python3 scripts/bundle_secrets_sweep.py || \
+    echo "⚠️  Lane 7 flagged bundle findings — see output above BEFORE dispatching deploy."
+else
+  echo "   (skipped — frontend/dist not built; the build step runs later in the deploy pipeline)"
+fi
+
 echo "── Post-lane: regenerate backend/qa_manifest.json (Iter 351) ──"
 (cd backend && python scripts/gen_qa_manifest.py)
 

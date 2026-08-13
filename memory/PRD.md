@@ -552,3 +552,54 @@ consistent global nav pattern), remove the top tab bar.
   testids, TABS metadata retained, section header renders, URL-sync
   effect present, no stray setTab calls outside sync effect).
 
+
+---
+
+### Iter 388-ac — Slice 3 CVE bumps + Task #19 bundle secrets sweep (2026-02-14)
+
+**Slice 3 — medium-risk backend bumps (preview-verified):**
+
+| Package      | Before → After   | CVEs closed |
+|--------------|------------------|-------------|
+| aiohttp      | 3.13.5 → 3.14.3  | 14 (request smuggling, digest cross-origin, DoS via pipelined requests, memory-bomb decompress, TLS SNI bypass) |
+| PyJWT        | 2.10.0 → 2.13.0  | 11 (algorithm confusion + audience-bypass family) |
+| cryptography | 44.0.0 → 50.0.0  | 7 (PKCS7 Bleichenbacher oracle, name-constraint bypass, wildcard-SAN escape, ECC subgroup skip, RFC5280 DoS) |
+
+Regression:
+- `pip-audit` re-run: **67 → 32 vulns, 10 → 7 packages (35 CVEs closed this slice)**.
+- Cumulative Slice 2+3: **95 → 32 vulns, 15 → 7 packages (63 CVEs closed)**.
+- 52 JWT/HMAC/signature tests PASS ✅ (auth surface unaffected).
+- Rolled-back-baseline verified: the 4 pre-existing test failures (yarn-audit + qa-manifest freshness) also fail on the pre-bump commit — NOT regressions from the bumps.
+- Backend `/api/health` returns 200 post-restart.
+
+**Task #19 — Frontend bundle secrets sweep:**
+
+- New script: `/app/scripts/bundle_secrets_sweep.py` — regex-based detector
+  covering Stripe (sk_live_, pk_live_, whsec_, rk_), GitHub (ghp_, gho_,
+  ghs_, github_pat_), OpenAI/Anthropic/OpenRouter, PEM private keys,
+  AWS AKID, MongoDB URI with creds, JWT-shape tokens, Sentry DSN
+  with secret, plus name-based detection for server-only env
+  variable names.
+- Wired into `scripts/predeploy_gate.sh` as Lane 7 (non-blocking).
+- New regression test: `backend/tests/test_iter388ac_bundle_secrets_sweep.py`
+  (2 tests, both PASS) — locks in the "no critical, WARN allow-list
+  only" contract.
+
+**Bundle sweep results — production bundle CLEAN ✅:**
+- 218 files scanned in `frontend/dist/` (20 MB)
+- 0 CRITICAL findings
+- 3 WARN findings — all verified as harmless UI copy references:
+  1. `RESEND_API_KEY` in `Admin-*.js` — dry-run status label
+  2. `MONGO_URL` in `OpsRecipes-*.js` — diagnostic shell command example
+  3. `EMERGENT_LLM_KEY` in `WhyOra-*.js` — marketing copy
+- Zero real value leaks. No rotation needed.
+
+**Cumulative deliverables this session (Iter 388-aa/ab/ac):**
+- Systemic: AGENT_STANDING_RULES.md (Rules 1-4), predeploy_gate.sh Lane 6+7.
+- Backend security: 63 CVEs closed across 8 packages, 1 IDOR tightened.
+- Frontend UX: duplicate-nav cleanup on `/settings`.
+- Frontend security: production bundle proven clean of secrets.
+- 12 new regression tests total, all green.
+
+**Ready for founder to queue a single consolidated deploy of everything above.**
+
