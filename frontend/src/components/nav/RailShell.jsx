@@ -104,7 +104,17 @@ export default function RailShell({
   // launcher) is the one-tap way in. When the founder toggles AUTO
   // OFF, the effect below flips `hiddenForTyping` back to false so
   // the rail re-appears — semantics preserved.
-  const [hiddenForTyping, setHiddenForTyping] = useState(true);
+  // Iter 388i — Bug 8 fix. Rail was starting HIDDEN on every mount
+  // (`useState(true)`), so any founder landing on /dashboard with an
+  // already-active chat session saw the rail off-screen with
+  // `pointerEvents: none`.  Clicks on the barely-visible Insights /
+  // Admin icons fell through to the chat area and the founder
+  // perceived "chat reloaded, nothing navigated".  Correct default is
+  // VISIBLE — the rail should only hide AFTER the user actually
+  // starts typing (via `aurem:chat-session-started`).  Ship section
+  // worked before because founders reached it via the top-bar chip,
+  // not the rail.
+  const [hiddenForTyping, setHiddenForTyping] = useState(false);
   const [autoHideEnabled, setAutoHideEnabled] = useState(() => {
     try {
       const v = localStorage.getItem(AUTO_HIDE_KEY);
@@ -112,7 +122,22 @@ export default function RailShell({
     } catch { return true; }
   });
   useEffect(() => {
-    const onStart = () => { if (autoHideEnabled) { setHiddenForTyping(true); setOpen(null); } };
+    // Iter 388i — Bug 8 fix, part 2. ChatPanel dispatches
+    // `chat-session-started` TWICE:
+    //   1. From line 1240 with `detail.restored = true` on every page
+    //      reload where an existing session has messages (i.e. any
+    //      non-empty chat view). This should NOT hide the rail —
+    //      the founder just landed on the page and needs to navigate.
+    //   2. From line 1631 (no `restored` flag) when the founder
+    //      actually types + sends the first message of a fresh
+    //      session. This SHOULD hide the rail (distraction-free
+    //      typing). Only respect the second event.
+    const onStart = (e) => {
+      if (!autoHideEnabled) return;
+      if (e?.detail?.restored) return;
+      setHiddenForTyping(true);
+      setOpen(null);
+    };
     const onReset = () => setHiddenForTyping(false);
     window.addEventListener("aurem:chat-session-started", onStart);
     window.addEventListener("aurem:chat-session-reset", onReset);

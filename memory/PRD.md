@@ -131,48 +131,66 @@ Key rules established after 3 deploy race incidents in one day:
 - `/app/memory/CHANGELOG.md` — append-only ledger of substantive changes
 
 
-## Iter 388h — Bug 1 + Bug 2 fixes (2026-02-13, awaiting deploy)
+## Iter 388h — Bug 1 + Bug 2 fixes (2026-02-13, ✅ DEPLOYED to auremcto.com)
 
-**Bug 1 — ORA Diff View silent-failure on real Loop runs**
+**Bug 1 — ORA Diff View silent-failure on real Loop runs** — FIXED
 - Root cause: `_run_task_with_git` (git-path task worker, used by all
   real PAT-connected users) never persisted the `edited_files` unified-
-  diff payload or the `task_handoff`/`done` SSE frames. Only the
-  `_run_task_via_api` path was wired for Iter 388g. Result: real prod
-  loops shipped code but the ChatPanel `LiveTaskPopup.onDone` handler
-  had no `edited_files.files` to attach → inline `EditedFileBubble`
-  never rendered.
-- Fix: mirrored the API-path Iter 388g block into `_run_task_with_git`
-  in `backend/routers/cto_projects.py` (rich `files_changed` via
-  `build_files_changed`, unified diff hunks via `build_unified_diff_hunks`,
-  `wrap_edited_files` envelope, `github_url`, `time_taken_seconds`,
-  `task_handoff` + terminal `done` SSE emit). Also added a
-  `commit_full_sha` fetch so the github_url matches API-path shape.
+  diff payload or the `task_handoff`/`done` SSE frames.
+- Fix: mirrored API-path Iter 388g block into `_run_task_with_git`.
 - Test: `backend/tests/test_iter388h_bug1_bug2_fixes.py` (2 tests).
 
-**Bug 2 — Raw `<longcat_tool_call>` XML leaking in Prompt mode**
-- Root cause: `RenderedMessage.sanitizeForDisplay` regex only stripped
-  the unprefixed `<tool_call>` shape. LongCat / Claude / Qwen / GPT
-  variants (`<longcat_tool_call>`, etc.) passed through into the
-  bubble.
-- Fix: widened the internal-tag alternation in
-  `frontend/src/components/RenderedMessage.jsx` to match any
-  `<vendor_tool_call>` / `<vendor_tool_result>` / `<vendor_thinking>`
-  variant via a `[a-z0-9]+_tool_*` regex class, and added the explicit
-  longcat_/claude_/qwen_/gpt_ variants to the `INTERNAL_FENCES` set so
-  fenced-code-block variants are also stripped.
-- Test: 5 sanitizer regression tests in the same file above.
+**Bug 2 — `<longcat_tool_call>` XML leaking in Prompt mode** — FIXED
+- Root cause: sanitizer regex only stripped unprefixed `<tool_call>`.
+- Fix: widened alternation in `RenderedMessage.sanitizeForDisplay` to
+  match `[a-z0-9]+_tool_*` variants; explicit vendor variants added to
+  `INTERNAL_FENCES` set.
+- Test: 5 sanitizer regression tests in same file.
 
-**Awaiting user GO for deploy.** After deploy, user will retest on a
-real Loop run to verify the inline diff bubble renders + Prompt mode
-no longer leaks raw tool-call XML.
+## Iter 388i — Bug 8 fix (Batch A, 2026-02-13, awaiting deploy)
 
-## Bug 3 + Bug 4 — Advisor panel investigation (pending, next session)
+**Bug 8 — Rail nav Insights/Admin unclickable, clicks fell through**
+- Root cause: `hiddenForTyping` was `useState(true)` on mount, then
+  ChatPanel emits `aurem:chat-session-started` with `detail.restored:
+  true` on every dashboard reload with an active session, keeping the
+  rail hidden.  Rail had `pointerEvents:none` when hidden → clicks on
+  the barely-visible Insights/Admin icons passed through to chat area
+  underneath ("chat reloaded" perception).  Ship worked because
+  founders reached it via top-bar chip, not the rail.
+- Fix: `frontend/src/components/nav/RailShell.jsx`
+  - Line 107: default `hiddenForTyping = false` (rail visible on mount)
+  - Lines 114-127: `onStart` listener now ignores events with
+    `detail.restored === true` — only real first-send events hide the
+    rail.
+- Test: `frontend/src/components/nav/__tests__/RailShell.iter388i.bug8.test.jsx`
+  (6 tests, all green).
+- Verified via Playwright: clicking Insights opens flyout, clicking
+  Analytics link navigates to `/analytics` successfully.
 
-- Bug 3: "Diagnose failed run" fabricates confident claims from stale
-  scrollback (says loop is stuck when it's already shipped; hallucinates
-  project name). Violates ORA's own anti-fabrication rule.
-- Bug 4: "Summarize open PRs" silently hangs after "One moment while I
-  fetch that information for you" — no error, no timeout.
-- Suspected shared root cause: `backend/routers/advisor_context.py` +
-  `backend/services/advisor_vision.py` + system-prompt anti-fabrication
-  layer. Investigate together in one audit session per user request.
+## Advisor Audit (Batch B — Bug 3 + 4 + 5, pending)
+
+- Bug 3 "Diagnose failed run" → fabricated state (screenshot-vision
+  treated as ground truth when advisor_context has no run state)
+- Bug 4 "Summarize open PRs" → silent 45s+ hang (no `open_prs` data
+  source in advisor_context.py; LLM has nothing to answer with)
+- Bug 5 "Token breakdown" → describes UI elements as if they were
+  token data (no per-model breakdown in advisor_context.py; falls
+  back to screenshot)
+- Shared root cause CONFIRMED: `chat.py:2400-2431` prompt structure
+  has `_vision_block` at the END with rule "ground concrete UI
+  observations in the SCREENSHOT ANALYSIS above" — overrides the
+  admin's DATA HONESTY rule for data-oriented chip prompts.
+- Preview DB has `advisor_prompt_enabled=False` + empty prompt;
+  founder said prod has it ON with DATA HONESTY text — awaiting
+  full text paste to seed preview / verify override behavior.
+
+## Task Tracking Audit (Batch C — Bug 6 + 7, pending)
+
+- Bug 6: Ops History shows "0 steps" for real 5-step ships; contradictory
+  "in progress | failed" status combinations
+- Bug 7: Analytics 0% success rate despite real successful commits
+- Suspected root cause: git-path task worker (`_run_task_with_git`)
+  never wrote `total_steps` / `step_progress` metadata — only
+  `loop_engine.py` sets those fields.  Bug 1 fix already patched the
+  same worker for `edited_files`; need to add step counter next to it.
+
