@@ -1538,6 +1538,33 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     }, 5000);
     if (promptOverride == null) setInput("");
 
+    // Iter 388-af (2026-02-14) — sidebar-auto-collapse fix.
+    //
+    // The `aurem:chat-session-started` dispatch used to live down at
+    // line ~1715 inside the "normal chat send" branch, AFTER the
+    // `execMode === LOOP` early-return that routes to `runLoopPlan()`.
+    // Consequence: sending the first message in AUTO / Loop / Build
+    // mode never fired the event, so RailShell.jsx never received the
+    // signal to auto-hide the rail. The rail stayed visible even
+    // though the founder had explicitly turned AUTO ON. `/diagram`
+    // chat commands had the same bug — their branch also returned
+    // before the dispatch.
+    //
+    // Fix: hoist the dispatch here — AFTER input-validity guard has
+    // passed (so we only fire on real user sends) but BEFORE any
+    // mode-specific branching. The `sessionStartedRef` gate keeps
+    // this idempotent across the rest of a session; `promptOverride`
+    // (internal re-invocations like plan-approve execute-phase) also
+    // reuse the same ref so they never re-fire.
+    if (!sessionStartedRef.current && promptOverride == null) {
+      sessionStartedRef.current = true;
+      try {
+        window.dispatchEvent(new CustomEvent("aurem:chat-session-started", {
+          detail: { session_id: sessionId },
+        }));
+      } catch { /* ignore */ }
+    }
+
     // ──────────────────────────────────────────────────────────────
     // Iter 212m-61 — /diagram chat command.
     // Bypass the normal SSE chat orchestration entirely and call the
@@ -1706,18 +1733,11 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       await runLoopPlan(text, readyAttachments, opts);
       return;
     }
-    // Iter 146 — once the user fires off the first message of this
-    // session, broadcast `aurem:chat-session-started` so Shell.jsx
-    // can hide the sidebar for the rest of the session. The peek hot
-    // zone on the left edge remains the only way to bring it back.
-    if (!sessionStartedRef.current) {
-      sessionStartedRef.current = true;
-      try {
-        window.dispatchEvent(new CustomEvent("aurem:chat-session-started", {
-          detail: { session_id: sessionId },
-        }));
-      } catch { /* ignore */ }
-    }
+    // Iter 388-af — the `aurem:chat-session-started` dispatch that
+    // used to sit here has been hoisted to the top of `send()` (just
+    // after `setInput("")`) so it fires for ALL send paths — chat,
+    // Loop/AUTO, `/diagram`, `/scan`, etc. — not just the plain-chat
+    // branch below. See the note there for the full rationale.
     // Clear any leftover ambiguous-mode banner from the previous turn —
     // a new prompt = new classification.
     setModeAmbiguous(null);

@@ -115,6 +115,10 @@ export default function RailShell({
   // worked before because founders reached it via the top-bar chip,
   // not the rail.
   const [hiddenForTyping, setHiddenForTyping] = useState(false);
+  // Iter 388-af — track whether a chat session has ever started in
+  // this page load. Powers the "toggle AUTO ON mid-session → collapse
+  // immediately" behaviour (founder feedback 2026-02-14).
+  const sessionActiveRef = useRef(false);
   const [autoHideEnabled, setAutoHideEnabled] = useState(() => {
     try {
       const v = localStorage.getItem(AUTO_HIDE_KEY);
@@ -132,13 +136,25 @@ export default function RailShell({
     //      actually types + sends the first message of a fresh
     //      session. This SHOULD hide the rail (distraction-free
     //      typing). Only respect the second event.
+    //
+    // Iter 388-af — mark the session as active on EITHER event (even
+    // restored=true) so the `autoHideEnabled` effect below can hide
+    // the rail immediately when the founder toggles AUTO ON while a
+    // conversation is already in progress. Restored sessions still
+    // won't auto-hide on landing — that Bug 8 behaviour is preserved
+    // via the `restored` short-circuit — but they should count as
+    // "active" for the AUTO-toggle-ON path.
     const onStart = (e) => {
+      sessionActiveRef.current = true;
       if (!autoHideEnabled) return;
       if (e?.detail?.restored) return;
       setHiddenForTyping(true);
       setOpen(null);
     };
-    const onReset = () => setHiddenForTyping(false);
+    const onReset = () => {
+      sessionActiveRef.current = false;
+      setHiddenForTyping(false);
+    };
     window.addEventListener("aurem:chat-session-started", onStart);
     window.addEventListener("aurem:chat-session-reset", onReset);
     return () => {
@@ -146,9 +162,19 @@ export default function RailShell({
       window.removeEventListener("aurem:chat-session-reset", onReset);
     };
   }, [autoHideEnabled]);
-  // If the user disables auto-hide mid-session, re-show the rail.
+  // Iter 388-af — mirror behaviour on the AUTO toggle:
+  //   - AUTO OFF  →  always re-show the rail (existing behaviour).
+  //   - AUTO ON while a session is already active → collapse
+  //     immediately. Without this, the founder had to send a fresh
+  //     message BEFORE the rail would honour the newly-enabled AUTO
+  //     preference — surprising and off-brand for a "AUTO" pill.
   useEffect(() => {
-    if (!autoHideEnabled) setHiddenForTyping(false);
+    if (!autoHideEnabled) {
+      setHiddenForTyping(false);
+    } else if (sessionActiveRef.current) {
+      setHiddenForTyping(true);
+      setOpen(null);
+    }
   }, [autoHideEnabled]);
   const toggleAutoHide = useCallback(() => {
     setAutoHideEnabled((v) => {
