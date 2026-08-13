@@ -105,12 +105,24 @@ export default function SlashCommandMenu({ matches, selectedIndex, onPick }) {
             role="option"
             aria-selected={active}
             data-testid={`slash-cmd-${cmd.id}`}
+            data-active={active}
             onMouseEnter={() => setHighlighted(idx)}
             onClick={() => onPick?.(cmd)}
             className={
               "flex w-full items-start gap-2 rounded-md px-2 py-2 text-left " +
-              (active ? "bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-white/5")
+              (active ? "text-foreground" : "text-muted-foreground hover:bg-white/5")
             }
+            // Iter 388t · Bug 28 follow-up · make keyboard highlight
+            // genuinely visible.  The Tailwind `bg-primary/10` class
+            // that used to signal the active row rendered at ~10%
+            // alpha — invisible on the dark composer background so
+            // arrow-key nav felt broken to the founder.  Inline the
+            // active state at ~18% alpha of the accent-2 (orange)
+            // colour + a 2px left rail so it reads at a glance.
+            style={active ? {
+              background: "rgba(255, 197, 96, 0.14)",
+              boxShadow: "inset 2px 0 0 var(--accent-2, #ffc560)",
+            } : undefined}
           >
             <Icon className="mt-[3px] size-3.5 shrink-0" strokeWidth={2} />
             <div className="min-w-0 flex-1">

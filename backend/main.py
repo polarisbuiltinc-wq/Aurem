@@ -2282,6 +2282,42 @@ def _resolve_build_hash() -> str:
     return _BUILD_HASH
 
 
+# Iter 388t · Deploy Insights Panel · P1.  Resolves the deploy's
+# built-at timestamp with the same precedence as routers/version.py:
+# explicit AUREM_BUILT_AT env → mtime of backend/.build_info →
+# pod-start START_TIME (ISO string).  Cached on first read so we
+# don't stat the filesystem on every /api/health poll (30 s cadence
+# from AdminOverview would otherwise spin unnecessarily).
+_BUILT_AT_CACHED: str | None = None
+
+
+def _resolve_built_at() -> str:
+    global _BUILT_AT_CACHED
+    if _BUILT_AT_CACHED is not None:
+        return _BUILT_AT_CACHED
+    env_ts = os.environ.get("AUREM_BUILT_AT")
+    if env_ts:
+        _BUILT_AT_CACHED = env_ts
+        return _BUILT_AT_CACHED
+    try:
+        info_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), ".build_info",
+        )
+        if os.path.exists(info_path):
+            from datetime import datetime, timezone
+            mt = os.path.getmtime(info_path)
+            _BUILT_AT_CACHED = datetime.fromtimestamp(mt, tz=timezone.utc).isoformat()
+            return _BUILT_AT_CACHED
+    except Exception:
+        pass
+    try:
+        from datetime import datetime, timezone
+        _BUILT_AT_CACHED = datetime.fromtimestamp(START_TIME, tz=timezone.utc).isoformat()
+    except Exception:
+        _BUILT_AT_CACHED = ""
+    return _BUILT_AT_CACHED
+
+
 # ── Health ──
 @app.get("/api/health")
 async def health():
@@ -2330,6 +2366,14 @@ async def health():
         "uptime_s": round(time.time() - START_TIME, 2),
         "db": app.state.db is not None,
         "build_hash": _resolve_build_hash(),
+        # Iter 388t · Deploy Insights Panel · P1.  Surface built_at
+        # on /api/health too (was only on /api/aurem-dev/version) so
+        # the AdminOverview build-hash banner can show 'built Xh ago'
+        # at a glance without a second fetch.  Reuses the same
+        # resolution chain (env AUREM_BUILT_AT → .build_info mtime →
+        # pod start time) as /version so the two endpoints never
+        # disagree.
+        "built_at": _resolve_built_at(),
         "env": os.getenv("ENVIRONMENT", "production"),
         # Iter 212m-166 — surface Loop Verify linter status so founder
         # dashboards can show a "Verify phase degraded" pill when the

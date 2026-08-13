@@ -205,6 +205,28 @@ export default function AdminOverview() {
           build <span style={{ color: "var(--accent-2)" }}>
             {health.build_hash}
           </span>
+          {/* Iter 388t · Deploy Insights Panel · P1. Show built_at as
+              a relative timestamp ("built 2h ago") so the founder can
+              tell at a glance how fresh the current deploy is —
+              without navigating to /admin/system-health. */}
+          {health.built_at && (
+            <> · <span
+              data-testid="admin-build-banner-builtat"
+              title={health.built_at}
+              style={{ color: "var(--text-dim)" }}
+            >
+              built {(() => {
+                const t = new Date(health.built_at).getTime();
+                if (isNaN(t)) return "—";
+                const s = Math.floor(Date.now() / 1000 - t / 1000);
+                if (s < 0) return "just now";
+                if (s < 60) return `${s}s ago`;
+                if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+                if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+                return `${Math.floor(s / 86400)}d ago`;
+              })()}
+            </span></>
+          )}
           {health.env && <> · <span>{health.env}</span></>}
           {uptimeMin > 0 && <> · uptime {uptimeMin}m</>}
           {/* Iter 357 · Guard 8 — GitHub sync state, same data source
