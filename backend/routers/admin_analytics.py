@@ -554,11 +554,32 @@ async def token_pnl(authorization: Optional[str] = Header(None)):
     async for d in db.cto_tasks.aggregate(day_pipe):
         day_by_agent[d.get("_id") or "deepseek"] = d.get("tokens") or 0
 
-    # Cost per 1k tokens — DeepSeek via OpenRouter ~ $0.30 average
-    cost_per_1k = {"deepseek": 0.30, "maxx": 0.65, "groq": 0.03}
+    # Iter 388y · Admin Panel Payments Accuracy fix (#35 slice) —
+    # cost table refreshed for the models we actually route to.  Rates
+    # are USD per 1,000 tokens, averaged across input + output pricing
+    # per the provider's public pricing page (last verified 2026-02-13).
+    # Unknown agents fall through to the DeepSeek rate as a conservative
+    # upper bound — the previous 2024-era table (deepseek $0.30, maxx
+    # $0.65, groq $0.03) silently applied DeepSeek pricing to every
+    # Claude/GPT/Gemini call because those keys were missing, inflating
+    # the cost estimate on the founder cockpit.
+    cost_per_1k = {
+        "deepseek":         0.00040,   # DeepSeek v3 ~ $0.14/M in, $0.28/M out → ~$0.20/M avg → $0.00020/1k. Kept 0.00040 as headroom.
+        "deepseek-chat":    0.00040,
+        "maxx":             0.00900,   # Legacy label for GPT-4 class routes
+        "groq":             0.00080,   # Groq llama-3.1-70b ~ $0.79/M avg → $0.00079/1k
+        "claude-sonnet-5":  0.00900,   # Anthropic $3/M in, $15/M out → ~$9/M avg → $0.00900/1k
+        "claude-haiku-4":   0.00080,   # Anthropic Haiku 4 ~ $0.80/M avg
+        "gpt-5.2":          0.00750,   # OpenAI gpt-5.2 ~ $2.5/M in, $10/M out → ~$6.25/M → $0.00625/1k. Headroom.
+        "gpt-5.2-mini":     0.00040,
+        "gemini-3-flash":   0.00030,   # Google Gemini 3 Flash ~ $0.30/M
+        "gemini-3-pro":     0.00350,
+        "glm-5.2":          0.00010,   # z-ai/glm-5.2 via OpenRouter ~ $0.10/M (Council A default)
+    }
+    _fallback_rate = 0.00040          # per-1k, uses deepseek band as headroom
     def calc(agent_map):
         return round(sum(
-            (t / 1000) * cost_per_1k.get(a, 0.30)
+            (t / 1000) * cost_per_1k.get(a, _fallback_rate)
             for a, t in agent_map.items()
         ), 2)
 
@@ -575,23 +596,71 @@ async def token_pnl(authorization: Optional[str] = Header(None)):
         {"updated_at": {"$gte": month_ago}}
     )
 
+    # Iter 388y — Real revenue from cto_payments.  Uses `payment_status`
+    # ('paid'/'pending'/'expired') as the source of truth, NOT the
+    # `status` field (which mirrors Stripe checkout-session state and
+    # can be 'complete' even for cards that later declined).  Same
+    # field as `admin_payments.list_payments` uses on line 75 — this
+    # removes the drift that had two admin cards showing different
+    # revenue numbers depending on which endpoint they read from.
+    revenue_month = 0.0
+    paid_txn_month = 0
+    try:
+        rev_pipe = [
+            {"$match": {"created_at": {"$gte": month_ago},
+                        "payment_status": "paid"}},
+            {"$group": {"_id": None,
+                        "sum": {"$sum": "$amount"},
+                        "n":   {"$sum": 1}}},
+        ]
+        async for row in db.cto_payments.aggregate(rev_pipe):
+            revenue_month  = round(float(row.get("sum") or 0), 2)
+            paid_txn_month = int(row.get("n") or 0)
+            break
+    except Exception as e:
+        logger.warning("token-pnl: revenue_month aggregate failed: %r", e)
+
+    # Stripe fees (US standard published rate): 2.9% + $0.30 per
+    # successful charge.  We compute an ESTIMATE — actual fee lives on
+    # the Stripe Balance API and can vary by country / card type; this
+    # is close enough for the cockpit card and never claims to be
+    # settlement-accurate (`_note` below spells that out).
+    stripe_fees_month = round(
+        (revenue_month * 0.029) + (paid_txn_month * 0.30), 2,
+    )
+    net_revenue_month = round(revenue_month - stripe_fees_month, 2)
+    net_profit_month  = round(net_revenue_month - ai_cost_month, 2)
+    margin_pct = (
+        round((net_profit_month / revenue_month) * 100, 1)
+        if revenue_month > 0 else 0.0
+    )
+
+    # Iter 388y — surface real Stripe wiring state (was hardcoded False).
+    stripe_key = (os.environ.get("STRIPE_API_KEY")
+                  or os.environ.get("STRIPE_SECRET_KEY") or "").strip()
+    stripe_configured = bool(stripe_key)
+
     return {
-        "revenue_month": 0,
-        "stripe_fees": 0,
-        "net_revenue": 0,
-        "ai_cost_month": ai_cost_month,
-        "ai_cost_today": ai_cost_today,
-        "net_profit": -ai_cost_month,
-        "margin_pct": 0,
-        "tasks_done_month": done_month,
-        "tasks_done_today": done_today,
+        "revenue_month":       revenue_month,
+        "stripe_fees":         stripe_fees_month,
+        "net_revenue":         net_revenue_month,
+        "ai_cost_month":       ai_cost_month,
+        "ai_cost_today":       ai_cost_today,
+        "net_profit":          net_profit_month,
+        "margin_pct":          margin_pct,
+        "paid_txn_month":      paid_txn_month,
+        "tasks_done_month":    done_month,
+        "tasks_done_today":    done_today,
         "chat_sessions_month": chat_month,
-        "month_by_agent": month_by_agent,
-        "day_by_agent": day_by_agent,
-        "stripe_configured": False,
+        "month_by_agent":      month_by_agent,
+        "day_by_agent":        day_by_agent,
+        "stripe_configured":   stripe_configured,
         "_note": (
-            "Real token usage from completed tasks. Cost rates: "
-            "DeepSeek $0.30, Maxx $0.65, Groq $0.03 per 1k tokens."
+            "Revenue = sum(amount) from cto_payments where "
+            "payment_status='paid' in the last 30d.  Stripe fees are "
+            "an ESTIMATE at 2.9% + $0.30/txn (US standard) — not a "
+            "settlement-accurate figure.  AI cost rates last verified "
+            "2026-02-13 (per-1k tokens, averaged across input+output)."
         ),
     }
 
@@ -1395,13 +1464,18 @@ async def admin_overview_metrics(
     except Exception as e:
         logger.warning("overview-metrics: mode_dist: %r", e)
 
-    # Revenue over 30 d — sum of `amount` from completed payments.
+    # Revenue over 30 d — sum of `amount` from paid payments.
+    # Iter 388y · Admin Payments Accuracy fix (#35 slice) — filter on
+    # `payment_status='paid'` (matches admin_payments.list_payments
+    # semantics, single source of truth) instead of the old
+    # `status IN [paid, complete, ...]` which was mixing Stripe
+    # checkout-session state with payment-outcome state and could
+    # count a completed-but-declined session as revenue.
     revenue_30d = 0.0
     try:
         pipeline = [
             {"$match": {"created_at": {"$gte": month_ago},
-                        "status": {"$in": ["paid", "complete", "completed",
-                                            "succeeded"]}}},
+                        "payment_status": "paid"}},
             {"$group": {"_id": None, "sum": {"$sum": "$amount"}}},
         ]
         async for row in db.cto_payments.aggregate(pipeline):

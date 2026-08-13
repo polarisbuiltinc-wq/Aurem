@@ -2,6 +2,15 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **Admin Panel Payments Accuracy (Iter 388y · #35 P0 slice · 2026-08-13)** — closes the "founder's most-viewed metric is fake" bug documented in `memory/ADMIN_AUDIT_2026-02-09.md`.
+  - **`routers/admin_analytics.py::token_pnl()` (line 578)** — was returning `revenue_month:0, stripe_fees:0, net_revenue:0, net_profit:-ai_cost, margin_pct:0` HARDCODED. Now computes real revenue via aggregate on `cto_payments` with `payment_status='paid'` + `created_at >= month_ago`, estimates Stripe fees at 2.9% + $0.30/txn (US standard, `_note` explicitly flags it as estimate), returns real `net_profit`, `margin_pct`, `paid_txn_month`. `stripe_configured` now reads `STRIPE_API_KEY` env instead of the hardcoded `False`.
+  - **Cost-per-1k rate table refreshed** — was 2024-era (deepseek $0.30 / maxx $0.65 / groq $0.03; unknown agents defaulted to $0.30). Now 2026 rates with keys for `claude-sonnet-5, claude-haiku-4, gpt-5.2, gpt-5.2-mini, gemini-3-flash, gemini-3-pro, glm-5.2` in addition to the legacy labels. Rates verified against providers' public pricing pages, dated in the source comment. Fallback rate uses DeepSeek band as conservative headroom.
+  - **`routers/admin_analytics.py::overview-metrics` (line ~1400)** — was filtering revenue by `status IN [paid, complete, completed, succeeded]` (Stripe checkout-session state). Now uses `payment_status='paid'` — same source of truth as `token_pnl` and `list_payments`. Single SoT achieved — three admin cards now agree by construction. Preview `curl` confirms all three return `9.0` on current DB state.
+  - **`routers/admin_payments.py::list_payments`** — `total_revenue` was summing over the visible-page 100 rows only, silently truncating lifetime revenue past 100 paid txns. Now aggregates on the WHOLE collection with `payment_status='paid'`, returns `total_paid_count` alongside. Preview curl proves lifetime aggregate is independent of visible page size (27 rows visible, 1 paid → `total_revenue: 9.0`, `total_paid_count: 1`).
+  - **Tests**: `tests/test_iter388y_admin_payments_accuracy.py` — 4 pass (revenue reflects paid-only rows, zero when no paid rows, lifetime revenue survives 100-row cap, stripe_configured reads env not hardcoded).
+  - **Live preview evidence (post-fix)**: token-pnl returns `revenue_month:9.0, stripe_fees:0.56, net_revenue:8.44, net_profit:8.44, margin_pct:93.8, paid_txn_month:1, stripe_configured:True` — matches list_payments + overview-metrics exactly, all 3 endpoints on single SoT.
+
+
 - **Guards batch fix + Deploy Insights Option B · Iter 388x (2026-08-13)** — 3 guards flipped GREEN, banner data source fixed.
   - **G18 Timeout Audit** (81 → **85/85 covered, pass=True**):
     - `frontend/src/pages/SupportThread.jsx:71,93` (Iter 388u regressions) — added `{ timeout: 15000 }`

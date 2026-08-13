@@ -67,17 +67,42 @@ from routers._admin_common import _require_admin  # noqa: E402
 async def list_payments(authorization: Optional[str] = Header(None)):
     await _require_admin(authorization)
     db = require_db()
+    # Visible page — most recent 100 for the table UI.
     payments = await db.cto_payments.find(
         {}, {"_id": 0},
     ).sort("created_at", -1).limit(100).to_list(100)
-    total_revenue = round(sum(
-        p.get("amount", 0) for p in payments
-        if p.get("payment_status") == "paid"
-    ), 2)
+    # Iter 388y · Admin Payments Accuracy fix (#35 slice) — lifetime
+    # revenue was previously computed by summing `amount` over the
+    # visible-page 100 rows only, so once we crossed 100 paid
+    # transactions the total_revenue card silently truncated.  Now
+    # revenue comes from an aggregate over the WHOLE collection with
+    # the same `payment_status='paid'` filter as the token-pnl +
+    # overview-metrics endpoints (single source of truth).
+    total_revenue = 0.0
+    total_paid_count = 0
+    try:
+        rev_pipe = [
+            {"$match": {"payment_status": "paid"}},
+            {"$group": {"_id": None,
+                        "sum": {"$sum": "$amount"},
+                        "n":   {"$sum": 1}}},
+        ]
+        async for row in db.cto_payments.aggregate(rev_pipe):
+            total_revenue    = round(float(row.get("sum") or 0), 2)
+            total_paid_count = int(row.get("n") or 0)
+            break
+    except Exception as e:
+        logger.warning("admin-payments: total_revenue aggregate failed: %r", e)
     return {
-        "payments": payments,
-        "total_revenue": total_revenue,
-        "count": len(payments),
+        "payments":         payments,
+        "total_revenue":    total_revenue,
+        "total_paid_count": total_paid_count,
+        "count":            len(payments),
+        "_note": (
+            "total_revenue is lifetime sum over ALL paid rows "
+            "(payment_status='paid'), independent of the 100-row "
+            "visible page cap.  `count` is the visible-page row count."
+        ),
     }
 
 
