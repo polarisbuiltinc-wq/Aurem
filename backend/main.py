@@ -53,6 +53,7 @@ from routers.admin_ops_config import router as admin_ops_config_router  # 2026-0
 from routers.admin_analytics import router as admin_analytics_router  # 2026-02-11 — Phase 2 split: /admin/dashboard, /audit, /loop-metrics, /council, /skills
 from routers.support import router as support_router
 from routers.payments import router as payments_router
+from routers.stripe_webhook_compat import router as stripe_webhook_compat_router  # Iter 388-ae — legacy /api/stripe/webhook alias (see Payments $0 root-cause memo)
 from routers.mcp import router as mcp_router, mcp_discovery_root
 from routers.vercel import router as vercel_router  # Iter 212m-84 — Vercel platform tools for ORA
 from routers.oauth import router as oauth_router
@@ -2784,6 +2785,12 @@ app.include_router(admin_ops_config_router,     prefix="/api/aurem-dev")  # 2026
 app.include_router(admin_analytics_router,      prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split
 app.include_router(support_router,       prefix="/api/aurem-dev")
 app.include_router(payments_router,      prefix="/api/aurem-dev")
+# Iter 388-ae · legacy Stripe dashboard path compatibility. Prod logs
+# on 2026-02-14 showed `POST /api/stripe/webhook 404` repeated for
+# every real payment — Stripe's endpoint had been configured at that
+# URL. This alias forwards to the canonical handler in payments.py so
+# no dashboard change is required.
+app.include_router(stripe_webhook_compat_router, prefix="/api")
 app.include_router(usage_router,         prefix="/api/aurem-dev")
 app.include_router(lint_preview_router,  prefix="/api/aurem-dev")
 app.include_router(shipwall_router,      prefix="/api/aurem-dev")

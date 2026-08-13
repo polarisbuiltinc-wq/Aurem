@@ -651,3 +651,82 @@ to publish 1.84 first. Flagged for founder.
 **No production changes shipped in Iter 388-ad — preview-only cleanup
 + audit-memo work.**
 
+
+---
+
+### Iter 388-ae — Payments $0 mystery ROOT CAUSE FOUND + fixed (2026-02-14)
+
+**Founder pasted prod tail** — production logs revealed the smoking
+gun for the #35 Payments $0 mystery that had been chased across three
+recurrences of "preview-verified but prod-broken":
+
+```
+POST /api/stripe/webhook HTTP/1.1" 404 Not Found     (×7 in one min)
+POST /api/stripe/webhook HTTP/1.1" 404 Not Found
+POST /api/stripe/webhook HTTP/1.1" 404 Not Found
+POST /api/stripe/webhook HTTP/1.1" 404 Not Found
+POST /api/stripe/webhook HTTP/1.1" 404 Not Found
+```
+
+**Root cause:** Stripe's dashboard endpoint was configured with the
+URL `/api/stripe/webhook` (no `/aurem-dev` prefix), but our real
+webhook handler lives at `/api/aurem-dev/payments/webhook`. Every
+real payment webhook 404'd → `cto_payments.payment_status` never
+transitioned "pending" → "paid" → admin dashboards truthfully
+reported $0 revenue despite 68 ledger rows.
+
+This **confirms Possibility (2)** from the Iter 388-aa preview-verified
+diagnosis matrix: "webhook URL misconfigured on Stripe dashboard".
+Founder's Stripe dashboard didn't need to be checked — the prod logs
+told us.
+
+**Fix — code-only, no dashboard change required:**
+
+- New file: `backend/routers/stripe_webhook_compat.py` — a tiny
+  compat router that exposes `POST /stripe/webhook` and delegates to
+  the canonical handler `stripe_webhook` in `routers/payments.py`.
+  Same signature verification, same DB writes, same idempotency —
+  zero divergence.
+- Wired into `main.py` at `prefix="/api"` so the final URL is
+  `/api/stripe/webhook` (the exact path Stripe was hitting).
+
+**Preview-verified:**
+```
+POST /api/stripe/webhook              → 400 "Invalid webhook signature"  ← was 404
+POST /api/aurem-dev/payments/webhook  → 400 "Invalid webhook signature"  (unchanged)
+POST /api/aurem-dev/webhook/stripe    → 400 "Invalid webhook signature"  (unchanged)
+```
+All three return the SAME error for an unsigned payload, confirming
+the alias delegates to (not diverges from) the canonical handler.
+
+**Tests:** `backend/tests/test_iter388ae_stripe_webhook_compat.py` —
+3/3 PASS. Asserts:
+1. Canonical path still registered.
+2. New alias path present.
+3. Both endpoints return byte-identical error responses.
+
+**Post-deploy expectation:** After the next prod deploy, Stripe's
+webhook attempts will start returning `200 OK`. cto_payments rows
+will begin transitioning "pending" → "paid" as events arrive.
+For the 68 historical `pending` rows, founder still needs to click
+Admin → Payments → "Reconcile pending with Stripe" once — that
+button pulls Stripe's ground-truth status per row and back-fills
+whichever ones were actually paid but silently 404'd.
+
+**Bonus finding from same prod tail (NOT deploy-blocking):**
+
+Upstash Redis rate-limit quota exhausted:
+```
+Redis unavailable at gentle-civet-209255.upstash.io:6379
+error=ResponseError: max requests limit exceeded. Limit: 500000,
+Usage: 500003 — falling back to per-process in-memory
+```
+
+Code already handles this gracefully via
+`services/rate_limiter.py` — falls back to in-memory limiting when
+Redis is unreachable. **No deploy blocker.** But founder should
+either bump the Upstash plan (recommended for prod scale) or migrate
+to a bigger quota to restore distributed rate limiting. Flagged for
+follow-up — no code action needed unless founder wants tighter
+suppression on the warning noise.
+
