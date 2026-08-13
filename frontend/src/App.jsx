@@ -254,7 +254,27 @@ export default function App() {
             don't move focus on plain `href="#…"` links).
           Visually hidden by default; slides into view on `:focus-visible`
           so a founder who Tabs into the page can see + activate it as
-          the first reachable element. */}
+          the first reachable element.
+
+          SCOPE NOTE (Iter 388t · 2026-08-13 · founder decision):
+          The Dashboard's ChatPanel composer carries `autoFocus`
+          (see components/ChatPanel.jsx:4630) so keyboard focus
+          lands on the textarea immediately on page load — natural
+          Tab from there moves forward through the composer/toolbar,
+          not backward to this skip link.  That is DELIBERATE:
+            • Dashboard is a single-purpose focused-work surface;
+              its rail nav is already keyboard-reachable with
+              visible focus rings (Bug 24 fix).  The "skip repeated
+              nav blocks" purpose of a skip link is already solved
+              there by direct rail keyboard-navigation.
+            • Landing / Login / Signup pages have NO autoFocus at
+              first mount, so THIS link IS the first Tab stop and
+              genuinely jumps to `#main-content` — verified on
+              /login (screenshot proof kept in commit history).
+          If a future page adds autoFocus at first mount AND wants
+          the skip link to still lead the Tab order, either drop the
+          autoFocus or add a keyboard shortcut (Alt+S) that focuses
+          this link programmatically. */}
       <a
         href="#main-content"
         data-testid="skip-to-content-link"

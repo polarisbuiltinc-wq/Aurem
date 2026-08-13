@@ -727,3 +727,88 @@ async def revoke_all_sessions(
             "sessions_nuked": modified,
             "actor": "self" if is_self else "admin"}
 
+
+
+# ═════════════════════════════════════════════════════════════════════
+# Iter 388t · GDPR/DSAR self-serve delete.
+#
+# `POST /auth/delete-me` — the current user's OWN account, hard-deleted.
+# Cascade covers 15 collections, cancels active Stripe subscription
+# immediately, and revokes GitHub App installations (see
+# services/user_deletion.py for the shared helper).  Founder accounts
+# cannot self-delete (they must contact support — deleting one would
+# brick login + billing infra for every other user).
+# ═════════════════════════════════════════════════════════════════════
+
+
+class DeleteMeBody(BaseModel):
+    email_confirmation: str
+
+
+@router.post("/delete-me")
+async def delete_me(
+    body: DeleteMeBody,
+    authorization: Optional[str] = Header(None),
+) -> dict:
+    """Self-serve account deletion for GDPR / DSAR compliance.
+
+    Body: {"email_confirmation": "<user's own email verbatim>"}
+
+    - Requires the caller's JWT (`current_dev`).
+    - Refuses if the caller is a founder (403).
+    - Refuses if `email_confirmation` doesn't match the caller's
+      registered email exactly (422).
+    - On success:
+        1. Cancels active Stripe subscription (immediate).
+        2. Revokes every GitHub App installation the caller owns.
+        3. Purges rows across 15 user-scoped Mongo collections.
+        4. Emits an audit log line.
+        5. Returns 200 with the deletion report.
+      The caller's JWT is now dangling (their `dev_users` row is gone),
+      so the client-side flow logs out immediately after this call.
+    """
+    user = await current_dev(authorization)
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "Database not connected")
+
+    email = (user.get("email") or "").strip().lower()
+    user_id = user.get("user_id")
+    if not user_id or not email:
+        raise HTTPException(400, "Malformed session — please sign in again")
+
+    # Founder-block first — belt + suspenders alongside is_founder helper.
+    from services.user_deletion import is_founder as _is_founder
+    if await _is_founder(email):
+        raise HTTPException(
+            403,
+            "Founder accounts cannot self-delete. Contact support if a "
+            "genuine deletion is required — this refusal exists to "
+            "prevent bricking the platform for other users.",
+        )
+
+    # Confirmation phrase must exactly match the caller's own email.
+    typed = (body.email_confirmation or "").strip().lower()
+    if typed != email:
+        raise HTTPException(
+            422,
+            "email_confirmation does not match your account email. "
+            "Type your email exactly to confirm.",
+        )
+
+    from services.user_deletion import cascade_delete_user_data
+    report = await cascade_delete_user_data(db, user_id)
+
+    logger.info(
+        "user self-deleted user_id=%s email=%s stripe_cancelled=%s "
+        "github_revoked=%d deletions=%s",
+        user_id, email, report.get("stripe_cancelled"),
+        len(report.get("github_revoked") or []),
+        report.get("deletions"),
+    )
+    return {
+        "ok":       True,
+        "message":  "Your account and all associated data have been permanently deleted.",
+        "report":   report,
+    }
+

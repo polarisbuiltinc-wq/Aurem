@@ -23,6 +23,7 @@ import PricingCards from "../components/PricingCards";
 import OraWrapped from "../components/OraWrapped";
 import ReferralShare from "../components/ReferralShare";
 import TrustLevelCard from "../components/TrustLevelCard";
+import DangerZone from "../components/DangerZone";
 
 const TABS = [
   { id: "profile",      label: "Profile",       icon: User },
@@ -354,6 +355,7 @@ export default function Settings() {
 
             <TrustLevelCard />
             <ReferralShare />
+            <DangerZone email={me?.email} />
           </div>
         )}
 

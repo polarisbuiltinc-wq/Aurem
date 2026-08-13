@@ -28,6 +28,11 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // Iter 388t · GDPR self-delete flow lands here with ?deleted=1.
+  // Surface a one-shot success banner (auto-dismisses on next Tab).
+  const [deletedBanner, setDeletedBanner] = useState(
+    () => searchParams.get("deleted") === "1",
+  );
   // Iter 212m-187 — admin-editable welcome message
   const [welcomeMsg, setWelcomeMsg] = useState("");
   useEffect(() => {
@@ -135,6 +140,39 @@ export default function Login() {
       }
     >
       <section style={{ maxWidth: 440, margin: "20px auto" }}>
+        {deletedBanner && (
+          <div
+            data-testid="login-deleted-banner"
+            role="status"
+            style={{
+              background: "rgba(74, 222, 128, 0.10)",
+              border: "1px solid rgba(74, 222, 128, 0.35)",
+              color: "rgb(74, 222, 128)",
+              padding: "10px 14px",
+              borderRadius: 6,
+              marginBottom: 20,
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            <strong>Your account has been permanently deleted.</strong>
+            <br />
+            <span style={{ opacity: 0.85 }}>
+              All associated data has been purged from our systems.
+              You can create a new account at any time.
+            </span>
+            <button
+              type="button"
+              onClick={() => setDeletedBanner(false)}
+              aria-label="Dismiss deletion notice"
+              style={{
+                float: "right", background: "transparent", border: "none",
+                color: "inherit", cursor: "pointer", fontSize: 16,
+                lineHeight: 1, opacity: 0.7, marginLeft: 8,
+              }}
+            >×</button>
+          </div>
+        )}
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <span className="eyebrow">sign in</span>
           <h1 className="serif" style={{ fontSize: 32, marginTop: 10 }}>Welcome back, builder.</h1>

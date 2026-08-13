@@ -724,37 +724,29 @@ async def admin_delete_user(
     if user_id == actor.get("user_id"):
         raise HTTPException(403, "Cannot delete your own account from this UI")
 
-    deletions: dict[str, int] = {}
-    # Collections that key off user_id. Each is deleted in its own
-    # try/except so one failed collection doesn't block the rest.
-    for coll, key in [
-        ("dev_users",        "user_id"),
-        ("cto_sessions",     "user_id"),
-        ("chat_sessions",    "user_id"),
-        ("cto_projects",     "user_id"),
-        ("cto_tasks",        "user_id"),
-        ("cto_payments",     "user_id"),
-        ("api_keys",         "user_id"),
-        ("post_task_scans",  "user_id"),
-        ("warm_start_jobs",  "user_id"),
-        ("oauth_codes",      "user_id"),
-    ]:
-        try:
-            res = await db[coll].delete_many({key: user_id})
-            deletions[coll] = res.deleted_count
-        except Exception as e:
-            logger.warning("admin_delete_user[%s]: %s failed: %r", user_id, coll, e)
-            deletions[coll] = -1
+    # Iter 388t · GDPR self-serve delete refactor.  Reuse the shared
+    # cascade helper so admin-initiated + self-serve delete follow the
+    # exact same purge path — including Stripe subscription cancel and
+    # GitHub App revocation which the old inline cascade skipped.
+    from services.user_deletion import cascade_delete_user_data
+    report = await cascade_delete_user_data(db, user_id)
+    deletions = report.get("deletions") or {}
 
     logger.info(
-        "user deleted by admin=%s target_user=%s target_email=%s deletions=%s",
-        actor.get("email"), user_id, target_email, deletions,
+        "user deleted by admin=%s target_user=%s target_email=%s "
+        "stripe_cancelled=%s github_revoked=%d deletions=%s",
+        actor.get("email"), user_id, target_email,
+        report.get("stripe_cancelled"),
+        len(report.get("github_revoked") or []),
+        deletions,
     )
     return {
-        "ok":         True,
-        "user_id":    user_id,
-        "email":      target_email,
-        "deletions":  deletions,
+        "ok":               True,
+        "user_id":          user_id,
+        "email":            target_email,
+        "deletions":        deletions,
+        "stripe_cancelled": report.get("stripe_cancelled"),
+        "github_revoked":   report.get("github_revoked"),
     }
 
 
