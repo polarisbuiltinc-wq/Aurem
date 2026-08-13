@@ -232,6 +232,32 @@ export default function RenderedMessage({ text }) {
   // raw "```tool_call …```" code blocks. Sanitize at the boundary.
   const cleaned = useMemo(() => sanitizeForDisplay(text || ""), [text]);
   const segments = useMemo(() => splitFences(cleaned), [cleaned]);
+  // Iter 388m — Bug 9 fix.  If the raw message was ENTIRELY internal
+  // tool-call XML (some upstream models emit `<longcat_tool_call>…`
+  // with no user-facing prose), `cleaned` collapses to empty and the
+  // bubble showed only the attribution footer — the founder saw a
+  // ghost message with no content on reload.  Detect that case and
+  // render a subtle italic placeholder so the user knows the turn
+  // completed with no visible reply, and can rephrase.  A legitimately
+  // empty `text` (never happens for a persisted assistant row, but
+  // guard anyway) still renders the empty span below so we don't spam
+  // the UI with placeholders.
+  const originalHadBody = !!(text && text.trim().length);
+  const isStrippedToNothing = originalHadBody && !cleaned.trim();
+  if (isStrippedToNothing) {
+    return (
+      <span
+        data-testid="rendered-message-empty-placeholder"
+        style={{
+          fontStyle: "italic",
+          opacity: 0.55,
+          fontSize: 13,
+        }}
+      >
+        (assistant emitted an internal tool call with no visible reply — try rephrasing)
+      </span>
+    );
+  }
   if (segments.length === 0) {
     return (
       <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>

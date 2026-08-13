@@ -198,6 +198,15 @@ text (Bug 3+5) or silently hung waiting for data that didn't exist
 
 3. **`backend/routers/chat.py`** — Screenshot vision is now SKIPPED
    entirely when the prompt is one of the three chip labels
+## Iter 388k — Bug 12 CRITICAL fix (query-tier read loop, 2026-02-13)
+
+See `backend/tests/test_iter388k_bug12_loop_fix.py` for full contract.
+Query tier max_iters bumped 2→3, orchestrator injects `=== FINAL
+ANSWER ROUND ===` directive on last iter, `_synthesise_max_iters_
+summary` rewrote — "send the same prompt again" template banned by
+regression assertion.
+
+
    ("Diagnose failed run" / "Summarize open PRs" / "Token breakdown").
    Data questions get pure structured data; no vision noise.
 
@@ -214,7 +223,49 @@ text (Bug 3+5) or silently hung waiting for data that didn't exist
 verify override behavior; the code-level fixes are ready to deploy
 regardless.
 
-## Iter 388k — Bug 12 CRITICAL fix (query-tier read loop, 2026-02-13)
+## Iter 388m — Bug 9 fix (message empty on reload, 2026-02-13)
+
+**Reported by senior QA pass**: The exact message that used to leak
+raw `<longcat_tool_call>read_repo_file …</longcat_tool_call>` (Bug 2)
+now shows as **completely empty** on reload — only the "via
+longcat-2.0" attribution footer visible.  Founder correctly flagged
+this as data-loss looking.
+
+**Root cause (verified — NOT persistence)**:
+- `backend/services/ora_chat/session.py::append_message` stores the
+  assistant reply verbatim.  No server-side sanitization at write.
+- The reply for that specific turn was ENTIRELY internal tool-call
+  XML with **zero user-facing prose** (the LLM decided the tool
+  call itself was the whole answer).
+- Frontend `RenderedMessage.sanitizeForDisplay` (widened in Iter 388h
+  to handle `<longcat_tool_call>` variants) correctly stripped 100%
+  of the content on render → empty span.  Nothing was actually lost
+  from Mongo — it's a display collapse.
+
+**Fix (`frontend/src/components/RenderedMessage.jsx`)**:
+- Detect `originalHadBody && !cleaned.trim()` — i.e. the input had
+  characters but sanitizer erased everything.
+- Render a subtle italic placeholder in that case: *"(assistant
+  emitted an internal tool call with no visible reply — try
+  rephrasing)"* with `data-testid=rendered-message-empty-placeholder`.
+- Empty / whitespace-only inputs still render the empty span (no
+  placeholder spam) so we don't hallucinate messages that never
+  existed.
+
+**Testing**: 6 vitest regressions green
+(`frontend/src/components/__tests__/iter388m.bug9.test.jsx`) —
+placeholder appears for longcat/claude/qwen/gpt vendor variants and
+orphan-open streaming cutoffs; does NOT appear for legitimate prose
+mixes or truly empty messages.  Combined with 388i / 388l tests, all
+23 frontend regressions green.
+
+**Deeper root cause note**: Bug 12's `=== FINAL ANSWER ROUND ===`
+directive on the last iter should reduce the frequency of assistant
+replies containing ONLY tool-call XML, since it explicitly forbids
+tool calls on the final round.  Bug 9 fix is the defensive display
+layer; Bug 12 fix is the upstream generation layer.
+
+
 
 See test file `backend/tests/test_iter388k_bug12_loop_fix.py` for full
 regression contract.  Summary:
