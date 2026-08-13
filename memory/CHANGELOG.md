@@ -2,6 +2,12 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **Brand P0 follow-up · SEO pre-render fix + P1 deploy_logger default · Iter 388-brand2 (2026-08-13)** — first P0 brand deploy left search-engine HTML stale.
+  - After P0 landed, real-curl on prod showed 9× "AUREM CTO" on `/vs/devin` and 13× on `/compare` **in the raw HTML** — root-caused to `frontend/scripts/seo-prerender.mjs` which pre-renders static HTML for crawlers before React hydrates. Client-side render (Playwright) was correct; server-served HTML was not. Search engines were seeing deprecated branding.
+  - Fixed `seo-prerender.mjs` end-to-end: H1s, related-link anchors, table column header, pick-card CTA copy ("Choose ORA if you want…"), BreadcrumbList JSON-LD positions 1 (`AUREM` company root) + 3 (`ORA vs {name}`), ItemList JSON-LD name + items. Post-fix: **0 "AUREM CTO" in the pre-render script, 8 correct "ORA" replacements.**
+  - Also shipped P1 (user-confirmed): `backend/services/deploy_logger.py:26` `_DEFAULT_REPO` fallback `AUREMBeauty/AUREM-` → `polarisbuiltinc-wq/auremdev`. Only surfaces if `AUREM_GITHUB_REPO` env var is unset. 7/7 regression tests still pass.
+
+
 - **Brand identity P0 alignment · Iter 388-brand (2026-08-13)** — deep-scan revealed user-visible surfaces mixing "AUREM CTO" (deprecated product label) with the correct hierarchy (Legal: Polaris Built Inc., Trade name: AUREM, Product: ORA by Aurem).
   - **`frontend/src/pages/VsPage.jsx`** — H1 template, related-comparisons badges, breadcrumb JSON-LD position 3, pick-card CTA all switched from "AUREM vs {competitor}" / "Choose AUREM if you want…" to "ORA vs {competitor}" / "Choose ORA if you want…". Body copy referring to AUREM as the acting company (e.g. "AUREM ships an MCP server") kept unchanged — matches trade-name usage per user hierarchy.
   - **`frontend/src/pages/CompareHub.jsx`** — `<h1>How ORA compares</h1>` (was `How AUREM compares`), ItemList JSON-LD `name: "ORA comparisons"`, per-card headings `ORA vs {c.name}`.

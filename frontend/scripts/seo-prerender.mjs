@@ -76,19 +76,19 @@ function vsBody(c) {
     `<h2>${esc(h)}</h2><ul>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`;
   const others = Object.values(COMPETITORS)
     .filter((o) => o.slug !== c.slug)
-    .map((o) => `<a href="/vs/${o.slug}">AUREM CTO vs ${esc(o.name)}</a>`)
+    .map((o) => `<a href="/vs/${o.slug}">ORA vs ${esc(o.name)}</a>`)
     .join(" · ");
   return `<main>
-<h1>AUREM CTO vs ${esc(c.name)}</h1>
+<h1>ORA vs ${esc(c.name)}</h1>
 <p>Honest comparison · data verified ${esc(LAST_VERIFIED)}.</p>
 <p>${esc(c.intro)}</p>
-${pick("Choose AUREM CTO if you want…", c.pickAurem)}
+${pick("Choose ORA if you want…", c.pickAurem)}
 ${pick(`Choose ${c.name} if you want…`, c.pickThem)}
 <h2>The pricing difference, in real numbers</h2>
 ${c.pricingProse.map((p) => `<p>${esc(p)}</p>`).join("")}
 <p><small>${esc(c.pricingFootnote)}</small></p>
 <h2>Feature by feature</h2>
-<table><thead><tr><th></th><th>AUREM CTO</th><th>${esc(c.name)}</th></tr></thead>
+<table><thead><tr><th></th><th>ORA</th><th>${esc(c.name)}</th></tr></thead>
 <tbody>${rows}</tbody></table>
 <h2>Frequently asked</h2>
 ${faq}
@@ -100,10 +100,10 @@ ${faq}
 
 function compareBody() {
   const cards = Object.values(COMPETITORS).map((c) =>
-    `<li><a href="/vs/${c.slug}">AUREM CTO vs ${esc(c.name)}</a> — ${esc(c.intro.slice(0, 150))}…</li>`)
+    `<li><a href="/vs/${c.slug}">ORA vs ${esc(c.name)}</a> — ${esc(c.intro.slice(0, 150))}…</li>`)
     .join("");
   return `<main>
-<h1>How AUREM CTO compares</h1>
+<h1>How ORA compares</h1>
 <p>${esc(COMPARE_HUB.description)}</p>
 <ul>${cards}</ul>
 <p><a href="/signup">Start free — 10 tasks/month, no credit card</a></p>
@@ -120,12 +120,12 @@ function ldForVs(c) {
           acceptedAnswer: { "@type": "Answer", text: a } })) },
       { "@type": "BreadcrumbList",
         itemListElement: [
-          { "@type": "ListItem", position: 1, name: "AUREM CTO",
+          { "@type": "ListItem", position: 1, name: "AUREM",
             item: "https://auremcto.com/" },
           { "@type": "ListItem", position: 2, name: "Compare",
             item: "https://auremcto.com/compare" },
           { "@type": "ListItem", position: 3,
-            name: `AUREM CTO vs ${c.name}`, item: c.canonical } ] },
+            name: `ORA vs ${c.name}`, item: c.canonical } ] },
     ],
   };
 }
@@ -149,10 +149,10 @@ for (const c of Object.values(COMPETITORS)) {
   html = injectLd(html, {
     "@context": "https://schema.org",
     "@type": "ItemList",
-    name: "AUREM CTO comparisons",
+    name: "ORA comparisons",
     itemListElement: Object.values(COMPETITORS).map((c, i) => ({
       "@type": "ListItem", position: i + 1,
-      name: `AUREM CTO vs ${c.name}`, url: c.canonical })),
+      name: `ORA vs ${c.name}`, url: c.canonical })),
   });
   html = injectRoot(html, compareBody());
   mkdirSync(join(DIST, "compare"), { recursive: true });
