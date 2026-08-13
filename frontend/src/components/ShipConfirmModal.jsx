@@ -28,6 +28,7 @@ import {
   CheckCircle2, FileText, X, Loader2, ExternalLink, Undo2, ShieldAlert,
 } from "lucide-react";
 import { api } from "../lib/api";
+import useModalA11y from "../hooks/useModalA11y";
 
 const POLL_MS = 1500;
 const TERMINAL = new Set(["done", "failed"]);
@@ -109,16 +110,16 @@ export default function ShipConfirmModal() {
     return () => window.removeEventListener("aurem:open-ship-modal", handler);
   }, []);
 
-  // close on Esc (only during non-flying phases — don't lose the polling
-  // ref mid-ship by closing the modal)
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e) => {
-      if (e.key === "Escape" && phase !== "shipping") closeAll();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, phase]);
+  // Iter 388t · Bug 27 · replace ad-hoc keydown listener with reusable
+  // focus-trap hook.  Still refuses to close during "shipping" phase
+  // by conditionally passing a no-op onClose (protects mid-ship state
+  // from Escape/Tab-blur causing polling ref loss).
+  const modalRef = useRef(null);
+  useModalA11y({
+    ref:     modalRef,
+    isOpen:  open && phase !== "shipping",
+    onClose: closeAll,
+  });
 
   // poll task status while shipping
   useEffect(() => {
@@ -233,6 +234,11 @@ export default function ShipConfirmModal() {
     >
       <div
         data-testid="ship-modal"
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ship-modal-title"
+        tabIndex={-1}
         data-phase={phase}
         style={{
           width: "min(520px, 100%)", background: "#161616",
@@ -246,7 +252,9 @@ export default function ShipConfirmModal() {
           display: "flex", alignItems: "center", justifyContent: "space-between",
           marginBottom: 18,
         }}>
-          <h2 style={{
+          <h2
+            id="ship-modal-title"
+            style={{
             fontSize: 18, fontWeight: 700, margin: 0, letterSpacing: "-0.01em",
             display: "flex", alignItems: "center", gap: 10,
           }}>

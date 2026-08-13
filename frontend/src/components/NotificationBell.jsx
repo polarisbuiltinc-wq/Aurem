@@ -140,8 +140,19 @@ export default function NotificationBell() {
         setOpen(false);
       }
     };
+    // Iter 388t · Bug 28 · Escape key closes the dropdown for keyboard
+    // users.  Doesn't need arrow-nav since items are read-only (no
+    // per-row action to select); Tab through the list is the natural
+    // keyboard workflow.
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
   const markAllRead = async () => {

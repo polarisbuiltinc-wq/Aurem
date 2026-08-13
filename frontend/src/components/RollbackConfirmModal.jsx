@@ -22,8 +22,9 @@
  *       - `rollback-confirm-approve`    (confirm button)
  *       - `rollback-confirm-cancel`     (cancel button)
  */
-import React, { useEffect, useRef } from "react";
+import React, { useRef } from "react";
 import { AlertTriangle, RotateCcw, X } from "lucide-react";
+import useModalA11y from "../hooks/useModalA11y";
 
 export default function RollbackConfirmModal({
   open,
@@ -32,33 +33,28 @@ export default function RollbackConfirmModal({
   onCancel,
 }) {
   const confirmBtnRef = useRef(null);
+  const modalRef = useRef(null);
 
-  // Escape-to-cancel + focus the confirm button on open.
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e) => {
-      if (e.key === "Escape") { e.stopPropagation(); onCancel && onCancel(); }
-    };
-    window.addEventListener("keydown", onKey);
-    // Delay focus a frame so the button node is mounted.
-    const t = setTimeout(() => {
-      try { confirmBtnRef.current && confirmBtnRef.current.focus(); }
-      catch { /* noop */ }
-    }, 0);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      clearTimeout(t);
-    };
-  }, [open, onCancel]);
+  // Iter 388t · Bug 27 · use reusable focus-trap hook.  Replaces the
+  // hand-rolled Escape listener + focus-timeout below with a WCAG-
+  // compliant trap that also wraps Tab within the modal.
+  useModalA11y({
+    ref:          modalRef,
+    isOpen:       open,
+    onClose:      onCancel,
+    initialFocus: confirmBtnRef,
+  });
 
   if (!open) return null;
 
   return (
     <div
       data-testid="rollback-confirm-modal"
+      ref={modalRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="rollback-confirm-title"
+      tabIndex={-1}
       onClick={(e) => {
         // Backdrop click cancels (like other modals in the app).
         if (e.target === e.currentTarget) onCancel && onCancel();

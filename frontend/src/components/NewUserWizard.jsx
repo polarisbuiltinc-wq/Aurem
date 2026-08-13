@@ -17,6 +17,7 @@ import { api, getToken, API_BASE } from "../lib/api";
 import TaskLiveTape from "./TaskLiveTape";
 import { setActiveProjectId } from "./TabBar";
 import RobotGuide, { RobotGuideKeyframes, escapeHtml, oraPulseRingStyle } from "./RobotGuide";
+import useModalA11y from "../hooks/useModalA11y";
 
 const DISMISS_KEY = "aurem_wizard_dismissed";
 const REPO_RX = /^(https?:\/\/)?(www\.)?github\.com\/[\w.-]+\/[\w.-]+\/?$/i;
@@ -410,10 +411,24 @@ export default function NewUserWizard({ onComplete }) {
   const robotMsg = buildRobotMessage({ step, ghStatus, busy, err, repoUrl, task, taskId });
   const stepLabel = ["Connect repo", "First task", "Shipping"][step - 1];
 
+  // Iter 388t · Bug 27 · Escape + focus trap.  Wizard was aria-modal
+  // but had NO keyboard-close path — a keyboard-only user who hit
+  // the first-time wizard could not Escape out of it if the form was
+  // broken.  Now hooks in the reusable a11y trap; onClose invokes
+  // the same `close()` function the "Skip for now" link uses.
+  const wizardRef = useRef(null);
+  useModalA11y({
+    ref:     wizardRef,
+    isOpen:  true,
+    onClose: close,
+  });
+
   return (
     <div
       data-testid="new-user-wizard"
+      ref={wizardRef}
       role="dialog" aria-modal="true" aria-labelledby="wizard-title"
+      tabIndex={-1}
       style={{
         position: "fixed", inset: 0, zIndex: 9000,
         background: "rgba(8,10,14,0.72)",

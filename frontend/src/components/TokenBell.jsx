@@ -9,6 +9,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { Bell, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "./Toast";
+import useModalA11y from "../hooks/useModalA11y";
 
 const THRESHOLDS = [500, 200, 100, 50, 10];
 const SEEN_KEY = "aurem_token_warn_seen";
@@ -166,6 +167,11 @@ export default function TokenBell({ tokens, unlimited, collapsed }) {
 }
 
 function RechargeModal({ tokens, onRecharge, onDismiss }) {
+  // Iter 388t · Bug 27 · Escape + focus-trap for the low-tokens modal.
+  // Users on 10-tokens threshold were UI-blocked with no keyboard exit.
+  const modalRef = useRef(null);
+  useModalA11y({ ref: modalRef, isOpen: true, onClose: onDismiss });
+
   return (
     <div
       data-testid="recharge-modal-overlay"
@@ -179,6 +185,11 @@ function RechargeModal({ tokens, onRecharge, onDismiss }) {
     >
       <div
         data-testid="recharge-modal"
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="recharge-modal-title"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={{
           maxWidth: 440,
@@ -195,7 +206,7 @@ function RechargeModal({ tokens, onRecharge, onDismiss }) {
           size={28}
           style={{ color: "var(--danger)", marginBottom: 12 }}
         />
-        <h2 className="serif" style={{ margin: "0 0 10px", fontSize: 22 }}>
+        <h2 id="recharge-modal-title" className="serif" style={{ margin: "0 0 10px", fontSize: 22 }}>
           You&apos;re almost out of tokens
         </h2>
         <p style={{ color: "var(--text-dim)", fontSize: 13, margin: "0 0 22px" }}>

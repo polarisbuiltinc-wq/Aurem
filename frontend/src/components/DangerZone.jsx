@@ -17,15 +17,17 @@
  *     but the inline error banner catches it if a race sneaks through.
  *   • Network / 5xx → banner with a Retry hint.
  */
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { AlertTriangle, Trash2 } from "lucide-react";
 import { api, logout as apiLogout } from "../lib/api";
+import useModalA11y from "../hooks/useModalA11y";
 
 export default function DangerZone({ email }) {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const modalRef = useRef(null);
 
   const emailLower = (email || "").trim().toLowerCase();
   const typedLower = typed.trim().toLowerCase();
@@ -37,6 +39,11 @@ export default function DangerZone({ email }) {
     setError(null);
     setSubmitting(false);
   };
+
+  // Iter 388t · Bug 27 · focus trap + Escape close + focus restore.
+  // (The old inline `onKeyDown={(e) => if Escape` handler is now
+  // handled centrally by the hook; keeping the same close semantics.)
+  useModalA11y({ ref: modalRef, isOpen: open, onClose: reset });
 
   const onDelete = async () => {
     if (!canSubmit) return;
@@ -102,10 +109,11 @@ export default function DangerZone({ email }) {
       {open && (
         <div
           data-testid="danger-zone-modal"
+          ref={modalRef}
           role="dialog"
           aria-modal="true"
           aria-labelledby="danger-zone-modal-title"
-          onKeyDown={(e) => { if (e.key === "Escape") reset(); }}
+          tabIndex={-1}
           style={{
             position: "fixed", inset: 0, zIndex: 10001,
             background: "rgba(0,0,0,0.6)", display: "flex",

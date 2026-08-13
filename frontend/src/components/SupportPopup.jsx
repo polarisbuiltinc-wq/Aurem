@@ -13,8 +13,9 @@
  * modal. Use different `source` props on different screens so the
  * founder can tell where a ticket came from (badge shows in admin).
  */
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { api } from "../lib/api";
+import useModalA11y from "../hooks/useModalA11y";
 
 const PAL = {
   bg:        "#0b0b0b",
@@ -71,6 +72,12 @@ export function SupportPopup({ source = "in_app", onClose }) {
   const [status, setStatus] = useState(null); // "ok" | "err" | null
   const [err, setErr] = useState("");
   const [ticketId, setTicketId] = useState("");
+  const modalRef = useRef(null);
+
+  // Iter 388t · Bug 27 · Escape close + focus trap for the popup.
+  // Was missing entirely — a keyboard-only user had no way to
+  // dismiss the popup once opened.
+  useModalA11y({ ref: modalRef, isOpen: true, onClose });
 
   async function submit(e) {
     e.preventDefault();
@@ -99,6 +106,11 @@ export function SupportPopup({ source = "in_app", onClose }) {
       }}>
       <div
         data-testid="support-popup"
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="support-popup-title"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={{
           background: PAL.card, border: `1px solid ${PAL.border}`,
@@ -110,7 +122,7 @@ export function SupportPopup({ source = "in_app", onClose }) {
         }}>
         <div style={{ display: "flex", justifyContent: "space-between",
                       alignItems: "center", marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+          <h3 id="support-popup-title" style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
             Need help?
           </h3>
           <button
