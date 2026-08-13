@@ -799,3 +799,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 ### Iter 0 · 2026-08-13
 
 - `AUREM_DEPLOY_COMMIT` — auto-detected in backend/services/deploy_logger.py (verify) (default: unset) [Iter 0, 2026-08-13T05:31:50.658178Z] <!-- inv:envvar:AUREM_DEPLOY_COMMIT -->
+| `routers/stripe_webhook_compat.py` | `(none)` | 1 | auto-detected new router (verify) (Iter 0, 2026-08-13T22:17:35.710523Z) | <!-- inv:router:routers/stripe_webhook_compat.py -->
