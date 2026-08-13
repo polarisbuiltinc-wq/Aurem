@@ -99,6 +99,20 @@ export default function Settings() {
     else navigate("/dashboard");
   };
 
+  // Iter 388-ab (2026-02-14): the visible tab bar was removed in favour
+  // of the left-rail drawer as the single source of navigation truth.
+  // Since the drawer changes the URL (`?tab=plans` etc.) without a
+  // full page reload, we now sync `tab` state whenever the URL search
+  // string changes. Without this, clicking a rail item while already
+  // on `/settings` would only update the URL but not the content.
+  useEffect(() => {
+    const q = new URLSearchParams(location.search);
+    const next = q.get("tab");
+    if (next && TABS.some((t) => t.id === next) && next !== tab) {
+      setTab(next);
+    }
+  }, [location.search, tab]);
+
   const switchTab = (id) => {
     setTab(id);
     navigate(`/settings?tab=${id}`, { replace: true });
@@ -165,34 +179,33 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* ── Tabs ── */}
-        <div role="tablist" style={{
-          display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap",
-          padding: 5, borderRadius: 12,
-          background: "var(--panel)", border: "1px solid var(--border)",
-          width: "fit-content",
-        }}>
-          {TABS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              role="tab"
-              aria-selected={tab === id}
-              data-testid={`settings-tab-${id}`}
-              onClick={() => switchTab(id)}
+        {/* ── Current section header (Iter 388-ab: tab bar removed —
+             navigation now lives in the left rail drawer only, per
+             founder review 2026-02-14). This heading preserves the
+             visual anchor so users still see which section they're on. */}
+        {(() => {
+          const current = TABS.find((t) => t.id === tab);
+          if (!current) return null;
+          const Icon = current.icon;
+          return (
+            <div
+              data-testid={`settings-section-header-${current.id}`}
               style={{
-                display: "inline-flex", alignItems: "center", gap: 7,
-                padding: "8px 15px", borderRadius: 8, cursor: "pointer",
-                fontSize: 12.5, fontFamily: "inherit", border: "none",
-                background: tab === id ? "var(--accent-soft)" : "transparent",
-                color: tab === id ? "var(--accent)" : "var(--text-dim)",
-                fontWeight: tab === id ? 600 : 400,
-                transition: "background .15s ease, color .15s ease",
+                display: "flex", alignItems: "center", gap: 10,
+                marginBottom: 20, paddingBottom: 12,
+                borderBottom: "1px solid var(--border)",
               }}
             >
-              <Icon size={13} /> {label}
-            </button>
-          ))}
-        </div>
+              <Icon size={16} style={{ color: "var(--accent)" }} />
+              <span style={{
+                fontSize: 14, fontWeight: 600, color: "var(--text)",
+                letterSpacing: 0.2,
+              }}>
+                {current.label}
+              </span>
+            </div>
+          );
+        })()}
 
         {billingMsg && (
           <div data-testid="billing-banner" style={{
@@ -321,7 +334,7 @@ export default function Settings() {
                     {usage.is_exhausted && (
                       <span style={{ color: "var(--danger)", marginLeft: 8 }}>
                         · quota exhausted — <span
-                          onClick={() => setTab("plans")}
+                          onClick={() => switchTab("plans")}
                           style={{ textDecoration: "underline", cursor: "pointer" }}
                           data-testid="quota-upgrade-link"
                         >upgrade →</span>

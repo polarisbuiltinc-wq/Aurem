@@ -516,3 +516,39 @@ Zero-risk semver patches + 5-line IDOR fix:
 - Stripe dashboard → Webhooks → Recent deliveries screenshot
 - Admin → Payments → Reconcile button click → JSON output
 - Confirm Tavily top-up decision (still WARN'd)
+
+---
+
+### Iter 388-ab — Settings duplicate-navigation cleanup (2026-02-14)
+
+**Founder screenshot review:** `/settings` had TWO navigation surfaces
+showing the SAME 4 items — top tab bar inside `Settings.jsx` (Profile
+/ Plans & Usage / Integrations / Vault) AND the left rail drawer
+(same four + IDE setup). Redundant.
+
+**Decision:** keep the left rail drawer (superset — has IDE setup;
+consistent global nav pattern), remove the top tab bar.
+
+**Changes (`frontend/src/pages/Settings.jsx`):**
+- Removed the `role="tablist"` block + all `settings-tab-<id>` buttons.
+- Added a small section header (`settings-section-header-<id>`) with
+  accent-coloured icon + label + separator so users still see which
+  section they're on.
+- Added a `useEffect` that watches `location.search` and syncs the
+  `tab` state — clicking a rail drawer item while already on `/settings`
+  now updates content (rail changes only URL, no page reload).
+- Fixed a stray `setTab("plans")` → `switchTab("plans")` (the quota
+  upgrade link inside the Profile tab wasn't updating the URL).
+
+**Preview-verified:**
+- Playwright + logged-in `test@aurem.dev` account
+- `[VAULT] tablist=0 vault_header=1` ✅
+- `[PLANS] plans_header=1 vault_header=0` ✅ (drawer URL change flips content)
+- Screenshot: clean Vault section with orange 🔑 header, tab bar gone.
+
+**Tests:**
+- `frontend/src/pages/__tests__/Settings.iter388ab.dup-nav.test.js` —
+  6/6 pass (source-level assertions: no tablist, no settings-tab-*
+  testids, TABS metadata retained, section header renders, URL-sync
+  effect present, no stray setTab calls outside sync effect).
+
