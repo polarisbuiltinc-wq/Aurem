@@ -20,6 +20,7 @@
 import React, { useRef, useState, useMemo } from "react";
 import { AlertTriangle, Trash2 } from "lucide-react";
 import { api, logout as apiLogout } from "../lib/api";
+import { maskEmail } from "../lib/mask";
 import useModalA11y from "../hooks/useModalA11y";
 
 export default function DangerZone({ email }) {
@@ -35,26 +36,15 @@ export default function DangerZone({ email }) {
 
   // Iter 388v · P0 Security Fix — MASK the confirm-email display so a
   // shoulder-surfer / screen-share viewer cannot copy-paste it back
-  // into the input. Confirmation only works if the user KNOWS their
+  // into the input.  Confirmation only works if the user KNOWS their
   // own email; the masked version won't match on paste.
-  //   Rule: hide the local part entirely except the last 2 chars.
-  //   Example: teji.ss1986@gmail.com → *********86@gmail.com
+  //   Iter 388w — masking policy extracted to `lib/mask.js` so the
+  //   same shield can protect Stripe / GitHub / API-key IDs elsewhere.
   // Validation stays against the real, unmasked email (line 34).
-  const emailMasked = useMemo(() => {
-    if (!emailLower) return "";
-    const at = emailLower.lastIndexOf("@");
-    if (at < 0) return emailLower;  // malformed — nothing to mask meaningfully
-    const local = emailLower.slice(0, at);
-    const domain = emailLower.slice(at);
-    if (local.length <= 2) {
-      // Local part too short — mask everything with 4 stars so we
-      // still never reveal it verbatim on the screen.
-      return "****" + domain;
-    }
-    const last2 = local.slice(-2);
-    const mask = "*".repeat(local.length - 2);
-    return mask + last2 + domain;
-  }, [emailLower]);
+  const emailMasked = useMemo(
+    () => maskEmail(emailLower, { reveal: 2, minMask: 4 }),
+    [emailLower],
+  );
 
   const reset = () => {
     setOpen(false);

@@ -2,6 +2,13 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **Reusable mask utility · Iter 388w (2026-08-13)** — extracted the shoulder-surf masking policy from `DangerZone.jsx` into `frontend/src/lib/mask.js` so the same shield can protect Stripe / GitHub / API-key IDs anywhere in the app.
+  - `maskEmail(email, {reveal=2, minMask=4})` — preserves `@domain`, hides local part except trailing `reveal` chars, falls back to `minMask` stars for tiny/short inputs.
+  - `maskId(value, {reveal=4, minMask=4})` — generic opaque-identifier masking; keeps the trailing fingerprint chars.
+  - `DangerZone.jsx` refactored to consume `maskEmail()` — behaviour identical, 7/7 integration tests still pass after refactor.
+  - **Contract tests**: `lib/__tests__/mask.test.js` — **14 pass** covering happy path, reveal option, minMask floor, empty/null coercion, whitespace trim, malformed-email fallthrough, multi-@ handling, long-local-part masking, number coercion for `maskId`.
+
+
 - **P0 Security · Danger Zone email masking (Iter 388v · 2026-08-13)** — user-caught shoulder-surf gap. The confirm-email display in `DangerZone.jsx` was showing the full plaintext email directly above the input, letting any screen-share / shoulder-surf viewer copy-paste it back and unlock the delete. Confirmation step was security theatre.
   - Fix: `emailMasked` derived value hides the local part entirely except last 2 chars (e.g. `teji.ss1986@gmail.com` → `*********86@gmail.com`; `test@aurem.dev` → `**st@aurem.dev`). Wrapping span carries `userSelect: "none"` to block mouse-drag copy. Copy updated to "type your full account email exactly — from memory, not copied from here".
   - Validation unchanged — server + client both require the FULL lowercase email to match.
