@@ -1934,17 +1934,47 @@ async def execute_bash(ctx: dict, args: dict) -> dict:
     # filesystem — they must opt-in to debug_mode first (via the
     # admin panel toggle, tracked in ORAContext.debug_mode).
     #
+    # Iter 388t — Bug 20 fix.  Founder-pod-debug mode (is_founder
+    # AND no project attached) is a SECOND escape hatch specifically
+    # for the founder's own no-project workspace.  It runs the
+    # additional `validate_founder_pod_command` safety check
+    # (no `;`/`&&`/`||` chaining, no `..` traversal, path args
+    # confined to /app, /tmp, /var, /etc, /usr and outside the
+    # secret denylist) BEFORE lifting the ora-boundary refusal.
+    #
     # Non-founder sessions never reach this point (blocked above),
     # but the boundary check runs anyway as defence-in-depth.
-    from services.ora_context import path_hits_ora_boundary
+    from services.ora_context import (
+        path_hits_ora_boundary,
+        validate_founder_pod_command,
+    )
     _hit = path_hits_ora_boundary(cmd)
     if _hit is not None:
-        # Founder + debug_mode → allow.  Every other combination refuses.
+        # Founder + debug_mode → allow.  Founder + pod-mode (no
+        # project) → allow after the founder-pod command validator
+        # accepts the command.  Every other combination refuses.
+        _founder_pod = bool(ctx.get("founder_pod_mode"))
         allow = (
             _bc is not None
             and bool(getattr(_bc, "is_founder", False))
             and bool(getattr(_bc, "debug_mode", False))
         )
+        if not allow and _founder_pod:
+            # Run the extra safety validator before unlocking.  If
+            # the founder's command trips a rule (chaining, traversal,
+            # path outside allowlist, secret denylist), we refuse
+            # here with a specific reason so the founder can fix it.
+            _ok, _reason = validate_founder_pod_command(cmd)
+            if _ok:
+                allow = True
+            else:
+                return {
+                    "ok": False,
+                    "error": (
+                        f"execute_bash refused (founder-pod-mode safety): {_reason}"
+                    ),
+                    "error_class": "founder_pod_validation",
+                }
         if not allow:
             # Iter 212m-171 — log to audit_log so /admin/boundary-probes
             # can surface it as an admin overview tile.

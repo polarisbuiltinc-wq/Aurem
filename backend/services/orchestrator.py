@@ -1433,6 +1433,20 @@ async def chat_with_tools(
         "project_id":    project_id,
         "is_founder":    bool(is_founder),   # Iter 212m-168 — gates execute_bash
         "bin_ctx":       bin_ctx,            # Iter 212m-169 — locked user+project+PAT
+        # Iter 388t — Bug 20 fix.  Founder-pod-debug mode unlocks
+        # execute_bash on the pod filesystem WHEN the caller is
+        # is_founder=True AND has no project attached (Home chat).
+        # A founder on a customer project chat still runs in strict
+        # mode — the escape hatch is only for the founder's own
+        # no-project workspace so an accidental /app/* inspection
+        # during a customer session still refuses.  Combined with
+        # the founder-pod system-prompt template (see line ~1615)
+        # this deterministically eliminates the "I only work with
+        # your repo" refusal loop for legitimate founder queries.
+        "founder_pod_mode": bool(is_founder) and (
+            not (project_id or "").strip()
+            or (project_id or "").strip().lower() == "home"
+        ),
         "system_signals": [],
         "tool_calls":    [],
     }
@@ -1611,8 +1625,15 @@ async def chat_with_tools(
     # this — a superset of the earlier rule that additionally protects
     # ORA internal names (parliament, loop_engine, orchestrator, vault,
     # AUREM_MASTER_KEY, JWT_SECRET, LANGFUSE, …).
-    from services.ora_context import render_ora_boundary_prompt
-    extra = render_ora_boundary_prompt(bin_ctx) + extra
+    from services.ora_context import (
+        render_ora_boundary_prompt,
+        is_founder_pod_chat_session,
+    )
+    _founder_pod = is_founder_pod_chat_session(bool(is_founder), project_id)
+    extra = render_ora_boundary_prompt(
+        bin_ctx,
+        founder_pod_mode=_founder_pod,
+    ) + extra
 
     # Iter 104 — escalation memory for repeated founder-contact asks.
     founder_ask_count = _count_founder_asks(history_lines, prompt)

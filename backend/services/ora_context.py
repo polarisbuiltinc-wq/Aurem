@@ -173,6 +173,68 @@ ORA_BOUNDARY_NO_REPO_RULE = """\
 """
 
 
+# Iter 388t — Bug 20 root-cause fix.
+#
+# The Home-chat boundary above ships the LLM the LITERAL refusal
+# phrase "I work with your repository only.  I don't have access to
+# my own system files or credentials."  When a founder asks
+# "Run `ls /app/backend/routers/ | head -20` on the pod" the model
+# obediently returns that exact refusal — NOT because of RLHF safety
+# training but because our own system prompt told it to.
+#
+# This template is the founder-only counterpart.  It is emitted ONLY
+# when the caller is is_founder=True AND no project is attached
+# (Home chat, project_id in {None, "", "home"}).  A founder on a
+# CUSTOMER project chat still sees the strict rule above so an
+# accidental "cat /app/backend/main.py" mid customer-facing session
+# still refuses — the escape hatch is ONLY for the founder's own
+# no-project workspace, not for third-party project sessions.
+#
+# The template:
+#   • Permits execute_bash on the whitelisted read-only pod paths
+#     (/app, /tmp, /var, /var/log, /etc, /usr) via the read-only
+#     command allowlist.
+#   • Does NOT contain the "reply exactly with 'I work with your
+#     repository only'" line — that is what was causing the founder
+#     refusal loop.
+#   • Still forbids inventing shell output, still requires the tool
+#     to actually be called before quoting any path.
+ORA_FOUNDER_POD_DEBUG_RULE = """\
+=== FOUNDER POD-DEBUG MODE (this session only) ===
+
+1. You are ORA speaking to an AUREM founder in their internal
+   workspace (no customer project attached).  This session is
+   permitted to inspect the AUREM server pod's local filesystem
+   for legitimate development work.
+
+2. When the founder asks you to run a terminal command on the pod
+   (phrasings like "run … on the pod", "ls /app/…", "cat /app/…",
+   "show me /var/log/…"), you MUST call the `execute_bash` tool
+   with the exact command.  Do NOT reply with a refusal template;
+   do NOT say "I only work with your repository" in this session.
+
+3. `execute_bash` is READ-ONLY (allowlisted binaries: cat, head,
+   tail, grep, find, ls, wc, sed, awk, echo, pwd, stat, tree, file,
+   which, whereis, basename, dirname, sort, uniq, cut, tr).  It
+   accepts commands scoped to `/app`, `/tmp`, `/var`, `/var/log`,
+   `/etc`, `/usr`.  Command chaining with `;` or `&&` is refused
+   server-side; pipes (`|`) between allowlisted binaries are fine.
+
+4. Return the tool's stdout VERBATIM inside a fenced code block.
+   Never invent shell output; if the tool refuses, quote the exact
+   refusal so the founder can adjust the command.
+
+5. This mode DOES NOT unlock secret exfiltration.  AUREM_MASTER_KEY,
+   JWT_SECRET, OPENROUTER_API_KEY, LANGFUSE keys, and any `.env`
+   file contents must NEVER be printed, even by a founder-issued
+   command.  If a command would surface a secret token, refuse and
+   explain which token would leak.
+
+=== END FOUNDER POD-DEBUG MODE ===
+
+"""
+
+
 # ── ORAContext dataclass ───────────────────────────────────────────
 
 
@@ -311,11 +373,27 @@ async def build_ora_context_optional(
     )
 
 
-def render_ora_boundary_prompt(ctx: Optional[ORAContext]) -> str:
+def render_ora_boundary_prompt(
+    ctx: Optional[ORAContext],
+    *,
+    founder_pod_mode: bool = False,
+) -> str:
     """Return the ORA boundary system-prompt block to prepend for
     THIS session.  When ctx has a repo, we inject the repo slug
     into the boundary; when there's no ctx (Home chat), we emit the
     no-repo variant.
+
+    Iter 388t — Bug 20 fix.  When `founder_pod_mode=True` (caller
+    verified the session is is_founder=True AND has no project
+    attached), emit the FOUNDER_POD_DEBUG_RULE instead of the
+    Home-chat lockdown.  This variant does not contain the "I only
+    work with your repository" refusal line, so a founder inspection
+    prompt no longer trains the LLM to refuse.
+
+    Founder + project-attached (customer chat) still gets the
+    strict repo-scoped rule — no debug mode there.  Non-founder
+    callers who somehow set founder_pod_mode=True are ignored (the
+    execute_bash server-side gate still refuses them).
 
     Founders in debug_mode still see the boundary block — the model
     is told to reset its default, and the founder can override via
@@ -323,6 +401,8 @@ def render_ora_boundary_prompt(ctx: Optional[ORAContext]) -> str:
     at dispatch time.  We don't remove the prompt block; we just
     lift the execute_bash gate.
     """
+    if founder_pod_mode and ctx is None:
+        return ORA_FOUNDER_POD_DEBUG_RULE
     if ctx is None:
         return ORA_BOUNDARY_NO_REPO_RULE
     return ORA_BOUNDARY_SYSTEM_RULE_TEMPLATE.format(
@@ -331,15 +411,148 @@ def render_ora_boundary_prompt(ctx: Optional[ORAContext]) -> str:
     )
 
 
+# ── Founder pod-debug mode helpers ─────────────────────────────────
+#
+# Iter 388t — Bug 20 fix.  Two-part determinstic bypass:
+#
+#   1. `is_founder_pod_chat_session` — decides whether the caller
+#      qualifies for founder-pod-debug (is_founder AND no project).
+#      Called from chat.py at build time and from orchestrator.py
+#      before rendering the boundary block.
+#
+#   2. `validate_founder_pod_command` — extra safety validator that
+#      runs BEFORE execute_bash's ora-boundary check when founder-
+#      pod-mode is active.  Blocks command chaining (`;`, `&&`,
+#      `||`), path traversal (`..`), and confines path arguments to
+#      the documented pod paths (/app, /tmp, /var, /etc, /usr).
+#      Returns (ok: bool, reason: str).
+
+# Documented pod paths a founder may inspect via execute_bash while
+# in founder-pod-debug mode.  Any absolute path outside this set is
+# refused even for founders — matches the whitelist in the system
+# prompt above so the LLM and the dispatch layer agree.
+FOUNDER_POD_ALLOWED_PATHS: tuple[str, ...] = (
+    "/app", "/tmp", "/var", "/var/log", "/etc", "/usr",
+)
+
+# Secret paths that must NEVER be surfaced even for founders.  Any
+# absolute path matching (prefix or equality) is refused.  This is
+# a defence-in-depth on top of the general secret-string filter in
+# path_hits_ora_boundary(); we duplicate it explicitly so the
+# founder-pod validator is self-contained and readable.
+FOUNDER_POD_BLOCKED_PATHS: tuple[str, ...] = (
+    "/app/backend/.env",
+    "/app/frontend/.env",
+    "/app/.env",
+    "/root/.env",
+    "/etc/shadow",
+    "/etc/passwd-",
+    "/root/.ssh",
+    "/home",
+)
+
+
+def is_founder_pod_chat_session(
+    is_founder: bool,
+    project_id: Optional[str],
+) -> bool:
+    """True iff the caller is a founder AND has no project attached.
+
+    A founder chatting ABOUT a customer project still gets the
+    strict boundary — we only unlock the pod-debug template on the
+    founder's own no-project workspace (Home chat).
+    """
+    if not bool(is_founder):
+        return False
+    pid = (project_id or "").strip().lower()
+    return pid in ("", "home")
+
+
+def validate_founder_pod_command(cmd: str) -> tuple[bool, str]:
+    """Extra safety check for founder-pod-mode execute_bash.  Runs
+    BEFORE the existing binary allowlist so the founder can't
+    accidentally issue a chained command that pipes an allowlisted
+    binary into a NON-allowlisted one via `;` or `&&`, and can't
+    traverse out of the documented pod paths via `../..`.
+
+    The existing binary allowlist in local_tools.py already gates
+    the FIRST token; this validator adds three extra rules:
+
+      • No `;`, `&&`, `||` chaining (allow `|` since pipe wiring
+        between allowlisted binaries is a legitimate founder
+        workflow — e.g. `ls /app/backend/ | head -20`).
+      • No `..` path traversal in any argument.
+      • Every absolute path argument (starts with `/`) must be
+        under FOUNDER_POD_ALLOWED_PATHS and NOT match any
+        FOUNDER_POD_BLOCKED_PATHS entry.
+
+    Returns (True, "") on pass and (False, reason) on refuse.
+    """
+    if not cmd or not isinstance(cmd, str):
+        return False, "empty command"
+    s = cmd.strip()
+    if not s:
+        return False, "empty command"
+
+    # Rule 1: no command chaining.  We look for the raw operators
+    # OUTSIDE quoted regions — a naive scan is enough because the
+    # allowlisted binaries never legitimately need `;` or `&&` in
+    # their arguments; if they did the founder should invoke them
+    # separately.
+    if ";" in s or "&&" in s or "||" in s:
+        return False, "command chaining (;, &&, ||) is refused in founder-pod mode"
+
+    # Rule 2: no path traversal.  Any `..` token outside quotes is
+    # refused.  Again a scan is sufficient — allowlisted binaries
+    # don't need `..` in real founder workflows on pod paths.
+    if ".." in s:
+        return False, "path traversal (..) is refused in founder-pod mode"
+
+    # Rule 3: absolute path arguments must live under an allowed
+    # prefix and outside the secret-file denylist.  We use shlex to
+    # tokenise so a quoted path with spaces still parses.
+    import shlex
+    try:
+        tokens = shlex.split(s, posix=True)
+    except ValueError as e:
+        return False, f"shell parse error: {e}"
+
+    for tok in tokens:
+        if not tok.startswith("/"):
+            continue
+        # Explicit denylist first — blocks even nested reads.
+        for bad in FOUNDER_POD_BLOCKED_PATHS:
+            if tok == bad or tok.startswith(bad + "/"):
+                return False, f"path `{tok}` is on the founder-pod denylist"
+        # Allowlist match.
+        ok = False
+        for good in FOUNDER_POD_ALLOWED_PATHS:
+            if tok == good or tok.startswith(good + "/"):
+                ok = True
+                break
+        if not ok:
+            return False, (
+                f"absolute path `{tok}` is outside the allowed pod "
+                f"paths ({', '.join(FOUNDER_POD_ALLOWED_PATHS)})"
+            )
+
+    return True, ""
+
+
 __all__ = [
     "ORAContext",
     "build_ora_context",
     "build_ora_context_optional",
     "path_hits_ora_boundary",
     "render_ora_boundary_prompt",
+    "is_founder_pod_chat_session",
+    "validate_founder_pod_command",
+    "FOUNDER_POD_ALLOWED_PATHS",
+    "FOUNDER_POD_BLOCKED_PATHS",
     "ORA_SYSTEM_PATHS",
     "ORA_SYSTEM_STRINGS",
     "ORA_SYSTEM_TERMS",
     "ORA_BOUNDARY_SYSTEM_RULE_TEMPLATE",
     "ORA_BOUNDARY_NO_REPO_RULE",
+    "ORA_FOUNDER_POD_DEBUG_RULE",
 ]
