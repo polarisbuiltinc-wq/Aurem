@@ -239,6 +239,35 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      {/* Iter 388t — Bug 25 fix.  Skip-to-content landmark link for
+          keyboard-only users (WCAG 2.4.1).  Visually hidden by
+          default; slides into view on `:focus-visible` so a founder
+          who Tabs into the page can see + activate it as the first
+          reachable element.  `#main-content` is set on the main
+          route container below. */}
+      <a
+        href="#main-content"
+        data-testid="skip-to-content-link"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          padding: "8px 14px",
+          background: "var(--accent, #ff6b35)",
+          color: "#fff",
+          fontSize: 13,
+          fontWeight: 700,
+          borderRadius: 4,
+          textDecoration: "none",
+          zIndex: 9999,
+          transform: "translateY(-120%)",
+          transition: "transform 140ms ease",
+        }}
+        onFocus={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+        onBlur={(e) => { e.currentTarget.style.transform = "translateY(-120%)"; }}
+      >
+        Skip to content
+      </a>
       <AutoClearConsoleHost />
       <MetaPixelRouteTracker />
       <SessionExpiredListener />
@@ -255,6 +284,9 @@ export default function App() {
         {/* Iter 356b — crashed lazy chunks / render errors show a retry
             card instead of a silent blank page. */}
         <RouteErrorBoundary>
+        {/* Iter 388t — Bug 25 skip-link anchor + WCAG landmark
+            (semantic `<main>` was missing from the shell entirely). */}
+        <main id="main-content" tabIndex={-1}>
         <Routes>
           <Route path="/"                element={<Landing />} />
           <Route path="/both"            element={<Both />} />
@@ -388,6 +420,7 @@ export default function App() {
               noindex meta) instead. */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </main>
         </RouteErrorBoundary>
       </Suspense>
       </FixJobProvider>

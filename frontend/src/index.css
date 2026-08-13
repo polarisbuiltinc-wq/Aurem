@@ -326,6 +326,15 @@ a:hover { color: var(--accent); }
   outline: none;
   transition: border-color 150ms, background 150ms;
 }
+/* Iter 388t — Bug 26 fix.  `.input` had `outline: none` above without a
+   `:focus-visible` replacement — WCAG 2.4.7 fail for keyboard users.
+   Restore a visible focus ring ONLY for keyboard focus (`:focus-visible`
+   never triggers on mouse click, so pointer users don't see the ring
+   they didn't ask for). */
+.input:focus-visible {
+  outline: 2px solid var(--accent-2, #ffc560);
+  outline-offset: 2px;
+}
 .input::placeholder {
   color: var(--text-faint);
   -webkit-text-fill-color: var(--text-faint);
@@ -613,6 +622,13 @@ body.aurem-glass #root {
   font-family: inherit;
   padding: 4px 2px;
   min-height: 28px;
+}
+/* Iter 388t — Bug 26 fix, composer variant.  Same `:focus-visible`
+   ring for keyboard users on the composer textarea. */
+.composer-card .composer-input-bare:focus-visible {
+  outline: 2px solid var(--accent-2, #ffc560);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 .composer-card .composer-input-bare::placeholder {
   color: var(--text-faint);

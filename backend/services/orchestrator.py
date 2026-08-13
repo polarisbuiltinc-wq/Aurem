@@ -158,53 +158,101 @@ def _synthesise_max_iters_summary(prompt: str, invocations: list[dict]) -> str:
     or per-turn time budget.
 
     Iter 212m-208 — Founder directive: never blame system limits and
-    never push work back onto the user with "narrow your ask".  If we
-    hit the budget, we still deliver a *useful* reply built from
-    whatever the model already inspected this turn.  The tone is
-    "here's what I found so far" — NOT "I ran out of time, please
-    reformulate your question".
+    never push work back onto the user with "narrow your ask".
 
-    Iter 388k — Bug 12 fix.  The previous template ended with "Send
-    the same prompt again" which was an INFINITE LOOP for query-tier
-    reads (the model would hit the same wall on the resend).  Now the
-    message is a honest close: "here's what was inspected, tell me if
-    you want a specific slice" — with NO suggestion to resend the
-    identical prompt.
+    Iter 388k — removed the "send the same prompt again" template
+    (banned by regression assertion — it caused infinite loops).
 
-    Kept dependency-free so it can't itself crash the response path.
+    Iter 388s — Bug 18 root fix.  When invocations carry actual
+    `result` payloads (populated by the orchestrator, see line ~2295),
+    INLINE the substantive content in the fallback message so the
+    founder gets a real answer instead of "rephrase".  Trimmed to
+    stay within a reasonable size budget so a huge search result
+    doesn't blow up the reply.
     """
     seen_paths: list[str] = []
     seen_tools: list[str] = []
+    web_search_content: list[str] = []
+    file_content: list[tuple[str, str]] = []
+    fetch_summaries: list[tuple[str, str]] = []
     for inv in invocations or []:
         name = inv.get("tool") or ""
         if name and name not in seen_tools:
             seen_tools.append(name)
         args = inv.get("args") or {}
+        result = inv.get("result") or {}
+        # Track paths for read tools.
         if name == "read_repo_file" and args.get("path"):
             seen_paths.append(args["path"])
+            # Iter 388s — file body from read_repo_file result.
+            body = result.get("content") or result.get("text") or ""
+            if body:
+                file_content.append((args["path"], body[:1500]))
         elif name == "read_repo_files":
             for p in args.get("paths") or []:
                 if p and p not in seen_paths:
                     seen_paths.append(p)
+            files_map = result.get("files") or {}
+            if isinstance(files_map, dict):
+                for p, body in list(files_map.items())[:3]:
+                    if body:
+                        file_content.append((p, str(body)[:1000]))
+        elif name in {"web_search", "web_search_and_summarize"}:
+            # Iter 388s — inline the search summaries so the founder
+            # sees SOMETHING instead of a rephrase pointer.
+            summ = result.get("summary") or result.get("answer") or ""
+            if summ:
+                web_search_content.append(str(summ)[:1500])
+            hits = result.get("results") or []
+            if isinstance(hits, list):
+                for h in hits[:3]:
+                    if isinstance(h, dict):
+                        title = h.get("title") or h.get("url") or ""
+                        snip  = h.get("snippet") or h.get("summary") or ""
+                        if title:
+                            web_search_content.append(f"• **{title[:120]}** — {str(snip)[:200]}")
+        elif name in {"fetch_url", "firecrawl_scrape"}:
+            body = result.get("text") or result.get("content") or ""
+            url  = args.get("url") or ""
+            if body:
+                fetch_summaries.append((url[:80], str(body)[:1200]))
 
     lines: list[str] = []
-    if seen_paths:
-        sample = ", ".join(f"`{p}`" for p in seen_paths[:4])
-        more = f" (and {len(seen_paths) - 4} more)" if len(seen_paths) > 4 else ""
-        lines.append(
-            f"I inspected {sample}{more} but couldn't wrap the answer in one "
-            "turn.  Tell me the specific slice you want (a function name, a "
-            "line range, or the exact question about that code) and I'll "
-            "reply with the concrete content in the next message — no "
-            "extra tool calls needed."
-        )
-    else:
-        lines.append(
-            "I started digging into this but couldn't produce a concrete "
-            "answer in one turn.  Rephrase with the exact file path, "
-            "function name, or line range you want — that lets me skip "
-            "the exploration step and reply with the content directly."
-        )
+    # Case 1 — we have real file bodies to inline.
+    if file_content:
+        for path, body in file_content[:2]:
+            lines.append(f"**`{path}`** (partial view):")
+            lines.append(f"```\n{body}\n```")
+        if seen_paths and len(seen_paths) > 2:
+            lines.append(
+                f"_Additional paths inspected: {', '.join(seen_paths[2:6])}_"
+            )
+    # Case 2 — web search / fetch content.
+    if web_search_content:
+        lines.append("**Web-search context:**")
+        lines.extend(web_search_content[:4])
+    if fetch_summaries:
+        for url, body in fetch_summaries[:2]:
+            lines.append(f"**Fetched `{url}`:**\n{body}")
+    # Case 3 — no substantive results.
+    if not lines:
+        if seen_paths:
+            sample = ", ".join(f"`{p}`" for p in seen_paths[:4])
+            more = f" (and {len(seen_paths) - 4} more)" if len(seen_paths) > 4 else ""
+            lines.append(
+                f"I inspected {sample}{more} but couldn't wrap the answer in one "
+                "turn.  Tell me the specific slice you want (a function name, a "
+                "line range, or the exact question about that code) and I'll "
+                "reply with the concrete content in the next message — no "
+                "extra tool calls needed."
+            )
+        else:
+            lines.append(
+                "I started digging into this but couldn't produce a concrete "
+                "answer in one turn.  Rephrase with the exact file path, "
+                "function name, or line range you want — that lets me skip "
+                "the exploration step and reply with the content directly."
+            )
     if seen_tools:
         lines.append(f"_Context loaded via: {', '.join(seen_tools)}._")
     return "\n\n".join(lines)
@@ -2291,6 +2339,15 @@ async def chat_with_tools(
                 "elapsed_ms": None,
                 "error":      None,
                 "web_sources": [],
+                # Iter 388s — Bug 18 root fix.  Store the actual tool
+                # RESULT alongside the invocation record so the
+                # synthesiser has real content to inline in the
+                # fallback message when iters exhaust.  Previously
+                # invocations carried tool NAMES + args only, so the
+                # fallback could only say "I called `read_repo_file`
+                # on X" — never "and here is what X actually contains".
+                # Filled after the tool returns (below).
+                "result":     None,
             }
             invocations.append(entry)
             if activity_hook:
@@ -2332,6 +2389,26 @@ async def chat_with_tools(
                        "timed_out": True}
             entry["elapsed_ms"] = res.get("elapsed_ms")
             entry["error"]      = res.get("error")
+            # Iter 388s — Bug 18 root fix.  Store a trimmed copy of the
+            # tool result so `_synthesise_max_iters_summary` can inline
+            # actual content (file bytes, web-search snippets, PR
+            # titles) in the fallback message instead of the useless
+            # "rephrase your question" placeholder.  We shallow-copy
+            # only the fields we ever want to surface — no raw payload
+            # dumps — so a hostile tool result can't blow up the
+            # fallback message size.
+            entry["result"] = {
+                "ok":       bool(res.get("ok")) if res else False,
+                "content":  (res.get("content")  if isinstance(res, dict) else None),
+                "text":     (res.get("text")     if isinstance(res, dict) else None),
+                "results":  (res.get("results")  if isinstance(res, dict) else None),
+                "summary":  (res.get("summary")  if isinstance(res, dict) else None),
+                "answer":   (res.get("answer")   if isinstance(res, dict) else None),
+                "files":    (res.get("files")    if isinstance(res, dict) else None),
+                "sources":  (res.get("sources")  if isinstance(res, dict) else None),
+                "matches":  (res.get("matches")  if isinstance(res, dict) else None),
+                "timed_out": bool(res.get("timed_out")) if res else False,
+            }
             # Iter 119 — web sources for citation chip
             entry["web_sources"] = _extract_web_sources(tool_name, tool_args, res)
             # Iter 212m — Post-Edit Build Hook. If this tool wrote to a

@@ -156,7 +156,12 @@ function splitFences(text) {
 // Inline single-backtick code spans inside a plain-text segment.
 function renderInline(text, keyPrefix) {
   if (!text) return null;
-  const parts = text.split(/(`[^`\n]+`)/g);
+  // Iter 388t — Bug 21 follow-up.  Table-cell contents (and any other
+  // inline text) need to parse **bold** in addition to `code`.  The
+  // combined splitter captures either `code` or **bold** spans so we
+  // don't recursively re-parse cells that mix both.  Everything else
+  // falls through as a plain fragment.
+  const parts = text.split(/(`[^`\n]+`|\*\*[^*\n][^*\n]*\*\*)/g);
   return parts.map((p, i) => {
     if (p.startsWith("`") && p.endsWith("`") && p.length > 2) {
       return (
@@ -170,6 +175,13 @@ function renderInline(text, keyPrefix) {
         }}>
           {p.slice(1, -1)}
         </code>
+      );
+    }
+    if (p.startsWith("**") && p.endsWith("**") && p.length > 4) {
+      return (
+        <strong key={`${keyPrefix}-${i}`} style={{ fontWeight: 700 }}>
+          {p.slice(2, -2)}
+        </strong>
       );
     }
     return <React.Fragment key={`${keyPrefix}-${i}`}>{p}</React.Fragment>;
