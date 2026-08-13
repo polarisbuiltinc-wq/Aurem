@@ -178,12 +178,145 @@ async def get_advisor_context(
     except Exception as e:
         quota["error"] = str(e)[:80]
 
+    # ── 5. Recent tasks (Iter 388j · Bug 3 fix) ─────────────────
+    # Advisor previously had ZERO run-state data — so "Diagnose failed
+    # run" fell through to screenshot vision, which described stale
+    # scrollback as "current state". Fetch the last 5 tasks for this
+    # project so the LLM can name the actual latest failure (or say
+    # "no recent failures" honestly).
+    recent_tasks: dict = {"items": [], "error": None}
+    try:
+        cursor = db["cto_tasks"].find(
+            {"project_id": project_id, "user_id": user_id},
+            projection={
+                "_id": 0, "task_id": 1, "status": 1, "task": 1,
+                "result": 1, "commit_sha": 1, "error": 1,
+                "created_at": 1, "completed_at": 1, "tokens_used": 1,
+            },
+            sort=[("created_at", -1)],
+            max_time_ms=1500,
+        ).limit(5)
+        rows = await cursor.to_list(5)
+        for r in rows:
+            recent_tasks["items"].append({
+                "task_id":      (r.get("task_id") or "")[:36],
+                "status":       r.get("status"),
+                "summary":      (r.get("task") or "")[:140],
+                "result":       (r.get("result") or "")[:200],
+                "sha":          (r.get("commit_sha") or "")[:12],
+                "error":        (r.get("error") or "")[:200],
+                "created_at":   r.get("created_at"),
+                "completed_at": r.get("completed_at"),
+                "tokens_used": r.get("tokens_used"),
+            })
+    except Exception as e:
+        recent_tasks["error"] = str(e)[:80]
+
+    # ── 6. Open PRs (Iter 388j · Bug 4 fix) ─────────────────────
+    # Advisor "Summarize open PRs" chip was silently hanging because
+    # there was no GitHub data source at all — the LLM either froze
+    # or fell back to screenshot description. Fetch open PRs via
+    # unauthenticated GitHub API (public repos work; private repos
+    # will 404 gracefully). Hard 4s timeout so a slow GitHub can't
+    # stall the advisor.
+    open_prs: dict = {"items": [], "error": None, "count": 0}
+    _gh_owner = proj.get("github_owner")
+    _gh_repo  = proj.get("github_repo")
+    if _gh_owner and _gh_repo:
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as cx:
+                r = await cx.get(
+                    f"https://api.github.com/repos/{_gh_owner}/{_gh_repo}/pulls",
+                    params={"state": "open", "per_page": 10, "sort": "updated"},
+                    headers={"Accept": "application/vnd.github+json"},
+                )
+                if r.status_code == 200:
+                    _prs = r.json() or []
+                    open_prs["count"] = len(_prs)
+                    for pr in _prs[:10]:
+                        open_prs["items"].append({
+                            "number":     pr.get("number"),
+                            "title":      (pr.get("title") or "")[:200],
+                            "author":     (pr.get("user") or {}).get("login"),
+                            "draft":      bool(pr.get("draft")),
+                            "created_at": pr.get("created_at"),
+                            "updated_at": pr.get("updated_at"),
+                            "url":        pr.get("html_url"),
+                        })
+                elif r.status_code == 404:
+                    # Private repo without a token, or repo doesn't
+                    # exist — treat as "no data available", never guess.
+                    open_prs["error"] = "repo_not_public_or_missing"
+                else:
+                    open_prs["error"] = f"github_{r.status_code}"
+        except Exception as e:
+            open_prs["error"] = f"github_fetch_failed: {str(e)[:60]}"
+    else:
+        open_prs["error"] = "repo_not_configured"
+
+    # ── 7. Token breakdown (Iter 388j · Bug 5 fix) ──────────────
+    # "Token breakdown" chip previously described SCREENSHOT UI
+    # elements because advisor_context only exposed the aggregate
+    # tokens_used integer. Provide the top 5 recent tasks' token
+    # counts + project-scoped monthly total so the LLM has real
+    # numbers to answer with.
+    token_breakdown: dict = {
+        "recent_task_tokens": [], "project_month_total": 0,
+        "user_month_total": None, "error": None,
+    }
+    try:
+        _month_start_dt = datetime.now(timezone.utc).replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0,
+        )
+        _month_start = _month_start_dt.timestamp()
+        # Per-task recent-5 tokens (already fetched above, reuse).
+        for item in recent_tasks["items"]:
+            if item.get("tokens_used") is not None:
+                token_breakdown["recent_task_tokens"].append({
+                    "task_id":     item["task_id"][:8],
+                    "summary":     item["summary"][:80],
+                    "status":      item["status"],
+                    "tokens_used": item["tokens_used"],
+                })
+        # Project-scoped month total (sum across THIS project only).
+        agg = await db["cto_tasks"].aggregate([
+            {"$match": {
+                "project_id": project_id,
+                "user_id":    user_id,
+                "status":     "done",
+                "created_at": {"$gte": _month_start},
+            }},
+            {"$group": {"_id": None, "total": {"$sum": "$tokens_used"}}},
+        ], maxTimeMS=1500).to_list(1)
+        if agg:
+            token_breakdown["project_month_total"] = int(agg[0].get("total") or 0)
+        # User-scoped month total (all projects).
+        agg2 = await db["cto_tasks"].aggregate([
+            {"$match": {
+                "user_id":    user_id,
+                "status":     "done",
+                "created_at": {"$gte": _month_start},
+            }},
+            {"$group": {"_id": None, "total": {"$sum": "$tokens_used"}}},
+        ], maxTimeMS=1500).to_list(1)
+        if agg2:
+            token_breakdown["user_month_total"] = int(agg2[0].get("total") or 0)
+    except Exception as e:
+        token_breakdown["error"] = str(e)[:80]
+
     resp: dict = {
         "project_id":   project_id,
         "project_name": proj_name,
         "role":         "founder" if is_founder else "user",
         "findings":     findings,
         "quota":        quota,
+        # Iter 388j — three new blocks for the Advisor chip buttons.
+        # Each block carries an `error` field so the LLM can honestly
+        # say "yeh data abhi available nahi hai" when a source is
+        # unreachable, rather than fabricating from the screenshot.
+        "recent_tasks":    recent_tasks,
+        "open_prs":        open_prs,
+        "token_breakdown": token_breakdown,
         "checked_at":   datetime.now(timezone.utc).isoformat(),
     }
     # Tier-2 keys only appear for founders — non-founders never see

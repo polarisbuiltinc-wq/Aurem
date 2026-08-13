@@ -167,30 +167,73 @@ Key rules established after 3 deploy race incidents in one day:
 - Verified via Playwright: clicking Insights opens flyout, clicking
   Analytics link navigates to `/analytics` successfully.
 
-## Advisor Audit (Batch B — Bug 3 + 4 + 5, pending)
+## Iter 388j — Advisor audit fix (Batch B, Bug 3+4+5, 2026-02-13)
 
-- Bug 3 "Diagnose failed run" → fabricated state (screenshot-vision
-  treated as ground truth when advisor_context has no run state)
-- Bug 4 "Summarize open PRs" → silent 45s+ hang (no `open_prs` data
-  source in advisor_context.py; LLM has nothing to answer with)
-- Bug 5 "Token breakdown" → describes UI elements as if they were
-  token data (no per-model breakdown in advisor_context.py; falls
-  back to screenshot)
-- Shared root cause CONFIRMED: `chat.py:2400-2431` prompt structure
-  has `_vision_block` at the END with rule "ground concrete UI
-  observations in the SCREENSHOT ANALYSIS above" — overrides the
-  admin's DATA HONESTY rule for data-oriented chip prompts.
-- Preview DB has `advisor_prompt_enabled=False` + empty prompt;
-  founder said prod has it ON with DATA HONESTY text — awaiting
-  full text paste to seed preview / verify override behavior.
+**Root cause confirmed**: `chat.py` advisor prompt structure put the
+SCREENSHOT ANALYSIS block last with rule "ground concrete UI
+observations in the screenshot" — this overrode anti-fabrication rules
+for DATA questions.  Meanwhile `advisor_context.py` had NO data
+sources for run state, open PRs, or per-task token breakdown.  Result:
+the three Advisor chip buttons fabricated confidently from screenshot
+text (Bug 3+5) or silently hung waiting for data that didn't exist
+(Bug 4).
 
-## Task Tracking Audit (Batch C — Bug 6 + 7, pending)
+**Fixes shipped in this batch:**
 
-- Bug 6: Ops History shows "0 steps" for real 5-step ships; contradictory
-  "in progress | failed" status combinations
-- Bug 7: Analytics 0% success rate despite real successful commits
-- Suspected root cause: git-path task worker (`_run_task_with_git`)
-  never wrote `total_steps` / `step_progress` metadata — only
-  `loop_engine.py` sets those fields.  Bug 1 fix already patched the
-  same worker for `edited_files`; need to add step counter next to it.
+1. **`backend/routers/advisor_context.py`** — 3 new blocks added:
+   - `recent_tasks`: last 5 `cto_tasks` rows for the project (task_id,
+     status, summary, sha, error, timestamps).  Powers Bug 3.
+   - `open_prs`: GitHub API `/repos/{owner}/{repo}/pulls?state=open`
+     w/ 4s hard timeout; graceful `error:` field on 404/private.
+     Powers Bug 4.
+   - `token_breakdown`: per-task tokens from the last 5 tasks + this-
+     month project total + user total.  Powers Bug 5.
+
+2. **`backend/routers/chat.py::_adv_directive`** — HARD DATA HONESTY
+   block added at highest priority.  Explicitly forbids using
+   SCREENSHOT text for run/PR/token facts; requires exact ADVISOR
+   CONTEXT numbers; pins project name from the `Project:` line
+   verbatim.  Visual-context rule now explicitly cedes precedence to
+   Data Honesty.
+
+3. **`backend/routers/chat.py`** — Screenshot vision is now SKIPPED
+   entirely when the prompt is one of the three chip labels
+   ("Diagnose failed run" / "Summarize open PRs" / "Token breakdown").
+   Data questions get pure structured data; no vision noise.
+
+**Live verification (preview API, `test@aurem.dev`)**:
+- Advisor endpoint returns all 3 new keys
+- `open_prs` cleanly reports `repo_not_public_or_missing` instead of
+  hanging (Bug 4 root fixed at the data layer)
+- `token_breakdown.user_month_total = 7963` (matches Analytics
+  screenshot exactly — real data, no fabrication)
+- 6 pytest regressions green
+  (`backend/tests/test_iter388j_advisor_bug345_fixes.py`)
+
+**Awaiting user's prod DATA HONESTY text** to seed preview and cross-
+verify override behavior; the code-level fixes are ready to deploy
+regardless.
+
+## New bugs tracked from senior QA pass (2026-02-13)
+
+- **Bug 9** (P0): Chat message content EMPTY on reload — same message
+  that previously showed the `<longcat_tool_call>` leak (Bug 2) now
+  shows only the "via longcat-2.0" footer.  Persistence path is
+  dropping content.  URGENT — needs investigation into message
+  storage path (Mongo `chat_messages` collection + how Bug 2's
+  sanitizer might be stripping content pre-persist).
+- **Bug 10** (P0): No 404 page — broken URLs silently redirect to
+  homepage.  SEO + UX issue.  React Router catch-all `<Route path="*">`
+  is missing.
+- **Bug 11** (P2): Two "founder spots" counters conflict on landing —
+  hero says "48/50 First-50" and lower section says "496 of 500 founder
+  spots" — either duplicate/wrong or need clearer naming to
+  distinguish two separate promos.
+- **Vercel styling** (P2): Settings → Integrations shows Vercel "NOT
+  CONNECTED" in red error style even though disable was intentional
+  (Option B). Should be neutral "not enabled" style.
+- **Bug 6+7 scope narrowed**: Settings → Profile confirms `Tasks
+  this month: 0 / unlimited` (broken) while `Tokens Used: 448,583`
+  (correct).  Root cause is specifically in the TASK-count tracking
+  pipeline, not tokens.
 

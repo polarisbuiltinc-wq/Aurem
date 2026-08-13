@@ -2290,6 +2290,62 @@ async def chat_stream(
                                     f"period={_ctx['quota'].get('period')}"
                                 ),
                             ]
+                            # Iter 388j — Recent tasks block (Bug 3 fix).
+                            _rt = (_ctx.get("recent_tasks") or {})
+                            _items = _rt.get("items") or []
+                            if _items:
+                                _lines.append("Recent tasks (last 5, newest first):")
+                                for _it in _items:
+                                    _st = _it.get("status") or "?"
+                                    _sh = (_it.get("sha") or "")[:7]
+                                    _sum = (_it.get("summary") or "")[:80]
+                                    _err = (_it.get("error") or "")[:80]
+                                    _tail = (
+                                        f"  sha={_sh}" if _sh else ""
+                                    ) + (
+                                        f"  err={_err}" if _err else ""
+                                    )
+                                    _lines.append(f"  - [{_st}] {_sum}{_tail}")
+                            elif _rt.get("error"):
+                                _lines.append(f"Recent tasks: (fetch error: {_rt['error']})")
+                            else:
+                                _lines.append("Recent tasks: none in the last 5 rows")
+                            # Iter 388j — Open PRs block (Bug 4 fix).
+                            _pr = (_ctx.get("open_prs") or {})
+                            _pr_items = _pr.get("items") or []
+                            if _pr_items:
+                                _lines.append(f"Open PRs on {_ctx.get('project_name')} (count={_pr.get('count')}):")
+                                for _p in _pr_items:
+                                    _lines.append(
+                                        f"  - #{_p.get('number')} "
+                                        f"{'[draft] ' if _p.get('draft') else ''}"
+                                        f"{(_p.get('title') or '')[:120]} "
+                                        f"— @{_p.get('author')}"
+                                    )
+                            elif _pr.get("error"):
+                                _lines.append(f"Open PRs: (fetch error: {_pr['error']})")
+                            else:
+                                _lines.append("Open PRs: 0 open on this repo")
+                            # Iter 388j — Token breakdown block (Bug 5 fix).
+                            _tb = (_ctx.get("token_breakdown") or {})
+                            _rtok = _tb.get("recent_task_tokens") or []
+                            if _rtok or _tb.get("project_month_total"):
+                                _lines.append(
+                                    f"Tokens (this month): project={_tb.get('project_month_total')}, "
+                                    f"user_all_projects={_tb.get('user_month_total')}"
+                                )
+                                if _rtok:
+                                    _lines.append("Tokens per recent task:")
+                                    for _t in _rtok:
+                                        _lines.append(
+                                            f"  - {_t.get('task_id')} [{_t.get('status')}] "
+                                            f"{(_t.get('summary') or '')[:60]} → "
+                                            f"{_t.get('tokens_used')} tokens"
+                                        )
+                            elif _tb.get("error"):
+                                _lines.append(f"Token breakdown: (fetch error: {_tb['error']})")
+                            else:
+                                _lines.append("Token breakdown: no completed tasks this month")
                             # Tier-2 — founders only. Non-founders never see
                             # commit SHAs or council router state in the
                             # prompt at all.
@@ -2338,9 +2394,24 @@ async def chat_stream(
                     # text response continues.  We NEVER re-raise from
                     # this block; the pattern mirrors the Suggestion
                     # Box's Groq sidecar.
+                    #
+                    # Iter 388j — DATA-CHIP CARVEOUT.  Three Advisor
+                    # chips ("Diagnose failed run", "Summarize open
+                    # PRs", "Token breakdown") are DATA questions, not
+                    # UI questions.  For those we deliberately SKIP
+                    # the screenshot vision block — otherwise the
+                    # vision-derived text (which often shows stale
+                    # scrollback) hijacks the LLM and overrides the
+                    # real structured data now in ADVISOR CONTEXT.
+                    _prompt_head = ((body.prompt or "").strip().lower())[:64]
+                    _is_data_chip = _prompt_head in (
+                        "diagnose failed run",
+                        "summarize open prs",
+                        "token breakdown",
+                    )
                     _vision_block = ""
                     _vision_status = "not_requested"
-                    if body.screenshot_b64:
+                    if body.screenshot_b64 and not _is_data_chip:
                         import base64 as _b64
                         try:
                             # Accept both raw base64 and data-URI prefixes.
@@ -2413,20 +2484,54 @@ async def chat_stream(
                         "note the assumption in one line.  Reply in "
                         "plain prose only — no ```tool_call``` fences, "
                         "no JSON blocks."
+                        # Iter 388j — HARD DATA-HONESTY RULE.  Applies
+                        # to Bug 3+4+5 fabrication where the LLM was
+                        # treating SCREENSHOT ANALYSIS as authoritative
+                        # for run/PR/token state.  This rule wins
+                        # against the visual-context rule below and
+                        # against any admin house-rule that says
+                        # otherwise.  Structured data > vision text,
+                        # always, for DATA questions.
+                        "\n\nDATA HONESTY (highest priority):"
+                        "\n1. For run status, task history, open PRs, "
+                        "and token usage: ONLY cite values from the "
+                        "ADVISOR CONTEXT block above (Recent tasks / "
+                        "Open PRs / Tokens fields).  NEVER derive "
+                        "these facts from SCREENSHOT ANALYSIS — "
+                        "screenshot text is often stale scrollback "
+                        "from earlier failed loops."
+                        "\n2. If the required structured field is "
+                        "empty, null, or carries an `error:` note, "
+                        "reply exactly: 'yeh data abhi available "
+                        "nahi hai — <field name>' and stop.  Do NOT "
+                        "extrapolate."
+                        "\n3. When you name the project, use the "
+                        "'Project:' line from ADVISOR CONTEXT verbatim.  "
+                        "Do not use any other name (especially not one "
+                        "that appears only in the screenshot)."
+                        "\n4. Numbers you cite (counts, SHAs, PR "
+                        "numbers, token totals) MUST appear verbatim "
+                        "in ADVISOR CONTEXT.  If a number would help "
+                        "your answer but isn't in ADVISOR CONTEXT, "
+                        "say 'don't have that number' — don't invent."
                         # Iter 212m-213 — Visual grounding rule.
                         "\n\nVISUAL CONTEXT RULE: If a SCREENSHOT "
                         "ANALYSIS block appears below, the user IS "
-                        "currently looking at that screen.  For any "
-                        "UI question ('where is X?', 'what does this "
-                        "button do?', 'why is this looking weird?'), "
-                        "answer with SPATIAL SPECIFICITY grounded in "
-                        "the analysis — e.g. 'the orange button in "
-                        "the top-right corner labelled Start Free' — "
-                        "NEVER reply with 'mujhe nahi pata' or 'I "
-                        "can't see your screen' when the analysis "
-                        "block IS present.  If the analysis block is "
-                        "MISSING, answer the text question normally "
-                        "without mentioning screenshots at all."
+                        "currently looking at that screen.  For UI-"
+                        "layout questions ('where is X?', 'what does "
+                        "this button do?', 'why is this looking "
+                        "weird?'), answer with SPATIAL SPECIFICITY "
+                        "grounded in the analysis — e.g. 'the orange "
+                        "button in the top-right corner labelled Start "
+                        "Free' — NEVER reply with 'mujhe nahi pata' "
+                        "or 'I can't see your screen' when the "
+                        "analysis block IS present.  If the analysis "
+                        "block is MISSING, answer the text question "
+                        "normally without mentioning screenshots at "
+                        "all.  IMPORTANT: the DATA HONESTY rule above "
+                        "takes precedence — do not describe screenshot "
+                        "text as if it were run status, PR state, or "
+                        "token data."
                     )
                     _sys_for_advisor = (extra_sys or "") + _adv_directive + _ctx_block + _vision_block
 
