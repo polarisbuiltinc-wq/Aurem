@@ -2,6 +2,24 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **Guards batch fix + Deploy Insights Option B · Iter 388x (2026-08-13)** — 3 guards flipped GREEN, banner data source fixed.
+  - **G18 Timeout Audit** (81 → **85/85 covered, pass=True**):
+    - `frontend/src/pages/SupportThread.jsx:71,93` (Iter 388u regressions) — added `{ timeout: 15000 }`
+    - `frontend/src/pages/Support.jsx:58` (pre-existing) — same fix
+    - `backend/services/http/client.py:170` (false positive: `httpx.AsyncClient(**kwargs)` DID pass `timeout=to`) — added `# g18-exempt` marker on same line, guard's exempt-line detection now recognises it
+  - **G20 Open Incidents** — root-cause chain fix (`services/process_recovery.py:196-207`): `resolve_incident()` was only fired when `topup_alerts.update_many` returned modified_count > 0. If the alert was already resolved out-of-band, the G20 incident stayed OPEN forever (why MTTR was 40h). Decoupled — `resolve_incident()` now runs unconditionally whenever boots < LOOP_THRESHOLD; it's a no-op when no open incident exists (safe + idempotent).
+  - **G21 Security Scan** (2 findings → **0, pass=True**):
+    - `backend/routers/admin_first50_campaign.py` — router had no `dependencies=[Depends(require_admin_dep)]` gate. All handlers still called `_require_admin()` inline, but the router-level gate was missing (defense-in-depth). Added.
+    - `respx>=0.23.0` in `requirements.txt` — unpinned dep flagged by supply-chain check. Pinned to `respx==0.23.1` (current installed version).
+  - **G15 Dependency CVE** (previously STALE — never run) — 1 real HIGH finding surfaced:
+    - `extract-zip::CVE-2026-56876` — transitive dev-only dep via `@lhci/cli → lighthouse → puppeteer-core → @puppeteer/browsers`. Never runs in prod runtime. Upstream reports `fix=<0.0.0` (no patch shipped yet). Added to `backend/scripts/g15_allowlist.json` with 90-day expiry + revisit-when-upstream-patches reason. Guard now returns `OK — 0 unhandled HIGH/CRITICAL findings`.
+  - **Deploy Insights Panel · Option B** — `/api/health` now surfaces `build_hash` + `built_at` from the `deploy_events` collection (freshly recorded at every backend boot from real `git rev-parse HEAD` + real UTC timestamp) instead of the legacy cascade (BUILD_INFO.txt / emergent.yml.created_at / .build_info mtime), which was lagging deploys by 24h+. Implementation caches the boot's deploy_event on `app.state.deploy_event`; health-endpoint prefers those values with clean fallback to legacy resolvers if unset. Preview verified: `build_hash: f2be127f5107` (matches current HEAD), `built_at: 2026-08-13T05:07:42` (matches actual backend boot log).
+  - **Tests**: `tests/test_iter388x_deploy_insights_option_b.py` — 3 pass (prefers deploy_event when set, falls back to legacy when unset, falls back when commit_sha empty).
+  - **Open G20 items remaining after this deploy:**
+    - `inc_33092d8376` (G19 restart-loop) — will auto-resolve within 60s of the next backend boot on prod (new chain-fix logic kicks in)
+    - `inc_11357babd9` (Tavily 432 credits exhausted) — GENUINELY OPEN, real external billing issue. Live probe confirms Tavily still returns `warn` with "Credits exhausted or rate-limited (432)". Not a code fix — founder action needed: top up Tavily plan OR gracefully degrade OR remove Tavily integration.
+
+
 - **Reusable mask utility · Iter 388w (2026-08-13)** — extracted the shoulder-surf masking policy from `DangerZone.jsx` into `frontend/src/lib/mask.js` so the same shield can protect Stripe / GitHub / API-key IDs anywhere in the app.
   - `maskEmail(email, {reveal=2, minMask=4})` — preserves `@domain`, hides local part except trailing `reveal` chars, falls back to `minMask` stars for tiny/short inputs.
   - `maskId(value, {reveal=4, minMask=4})` — generic opaque-identifier masking; keeps the trailing fingerprint chars.

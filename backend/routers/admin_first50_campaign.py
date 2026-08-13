@@ -7,9 +7,10 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Depends
 from fastapi.responses import HTMLResponse
 
+from cto_services.auth import require_admin_dep
 from cto_services.db import get_db, require_db
 from routers._admin_common import _require_admin
 from services.first50_campaign import (
@@ -18,8 +19,13 @@ from services.first50_campaign import (
 )
 
 logger = logging.getLogger(__name__)
+# Iter 388x · G21 finding — router-level admin gate (defense-in-depth)
+# added to match the pattern used by admin_support.py / admin_qa.py etc.
+# Individual handlers keep their inline `await _require_admin(...)` calls
+# too (harmless redundancy — belt AND suspenders).
 router = APIRouter(prefix="/admin/first50-campaign",
-                    tags=["Admin First-50 campaign"])
+                    tags=["Admin First-50 campaign"],
+                    dependencies=[Depends(require_admin_dep)])
 
 
 async def _promo_remaining() -> Optional[int]:

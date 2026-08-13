@@ -193,17 +193,26 @@ async def resolve_if_stable(db) -> bool:
                 {"integration_id": "process_recovery", "status": "active"},
                 {"$set": {"status": "resolved", "resolved_at": time.time(),
                           "resolved_by": "auto_recovery_stable"}})
-            if res.modified_count:
-                try:
-                    from services.incident_log import resolve_incident
-                    await resolve_incident(
-                        db, source_key="process_recovery",
-                        resolution="Boots settled below loop threshold; "
-                                   "process stable again.",
-                        root_cause="Transient restart burst (deploy/hot-reload "
-                                   "or recovered crash).")
-                except Exception:
-                    pass
+            # Iter 388x — G20 resolve-chain gap fix. Previous version only
+            # called resolve_incident() if topup_alerts.update_many()
+            # modified rows.  If the alert row was already resolved
+            # out-of-band (e.g. by a prior sweep or manual dismiss),
+            # the G20 incident stayed OPEN forever — this was causing
+            # incidents to accumulate with 2h+ MTTR.  Now: whenever
+            # boots < LOOP_THRESHOLD, we ALSO try to resolve the G20
+            # incident, independent of whether the alert row moved.
+            # resolve_incident() is a no-op if no open incident exists,
+            # so calling it unconditionally is safe + idempotent.
+            try:
+                from services.incident_log import resolve_incident
+                await resolve_incident(
+                    db, source_key="process_recovery",
+                    resolution="Boots settled below loop threshold; "
+                               "process stable again.",
+                    root_cause="Transient restart burst (deploy/hot-reload "
+                               "or recovered crash).")
+            except Exception:
+                pass
             return bool(res.modified_count)
     except Exception as e:                                    # noqa: BLE001
         logger.warning("[G19] resolve_if_stable failure: %r", e)

@@ -1067,11 +1067,47 @@ async def lifespan(app: FastAPI):
             from services.deploy_logger import log_deploy_event
             evt = await log_deploy_event(app.state.db, trigger="boot")
             if evt:
+                # Iter 388x · Deploy Insights Panel — Option B fix.
+                # Cache the just-recorded deploy event on app.state so
+                # /api/health can surface the REAL commit_sha + boot
+                # timestamp instead of the stale identifiers coming
+                # from BUILD_INFO.txt / emergent.yml.created_at (both
+                # of which are known to lag behind actual deploys).
+                # See routers/version.py:150-200 for the legacy cascade
+                # this new field bypasses when available.
+                app.state.deploy_event = {
+                    "commit_sha":  (evt.get("commit_sha") or "")[:12],
+                    "commit_msg":  evt.get("commit_message") or "",
+                    "commit_ts":   evt.get("commit_timestamp"),
+                    "boot_ts_iso": evt.get("timestamp"),
+                    "boot_id":     evt.get("boot_id"),
+                    "trigger":     evt.get("trigger"),
+                }
                 logger.info(
                     "📌 deploy recorded: %s %s",
                     evt.get("commit_sha", "")[:7],
                     evt.get("branch", ""),
                 )
+            else:
+                # log_deploy_event returned None (no commit or dup) —
+                # try to hydrate from the latest deploy_events row so
+                # /api/health still shows a fresh identifier from a
+                # prior successful record.
+                try:
+                    latest = await app.state.db.deploy_events.find_one(
+                        {}, sort=[("timestamp", -1)],
+                    )
+                    if latest:
+                        app.state.deploy_event = {
+                            "commit_sha":  (latest.get("commit_sha") or "")[:12],
+                            "commit_msg":  latest.get("commit_message") or "",
+                            "commit_ts":   latest.get("commit_timestamp"),
+                            "boot_ts_iso": latest.get("timestamp"),
+                            "boot_id":     latest.get("boot_id"),
+                            "trigger":     latest.get("trigger"),
+                        }
+                except Exception:
+                    pass
         except Exception as _e:
             logger.warning(f"log_deploy_event failed: {_e}")
         # Iter 123 — wire github_deploy_service DB so it doesn't depend on
@@ -2360,12 +2396,23 @@ async def health():
         longcat_live = False
         longcat_enabled = False
 
+    # Iter 388x · Deploy Insights Panel — Option B.  Prefer real deploy
+    # identifiers from the `deploy_events` collection (recorded fresh
+    # on every backend boot from `git rev-parse HEAD` + real UTC
+    # timestamp) over the legacy BUILD_INFO.txt / emergent.yml.created_at
+    # cascade, which is known to lag behind actual deploys.  Falls back
+    # to the legacy resolvers if the deploy_event row hasn't hydrated
+    # yet (first-boot race or migration lag).
+    _dep = getattr(app.state, "deploy_event", None)
+    build_hash_val = (_dep or {}).get("commit_sha") or _resolve_build_hash()
+    built_at_val   = (_dep or {}).get("boot_ts_iso") or _resolve_built_at()
+
     return {
         "ok": True,
         "service": "aurem-dev",
         "uptime_s": round(time.time() - START_TIME, 2),
         "db": app.state.db is not None,
-        "build_hash": _resolve_build_hash(),
+        "build_hash": build_hash_val,
         # Iter 388t · Deploy Insights Panel · P1.  Surface built_at
         # on /api/health too (was only on /api/aurem-dev/version) so
         # the AdminOverview build-hash banner can show 'built Xh ago'
@@ -2373,7 +2420,7 @@ async def health():
         # resolution chain (env AUREM_BUILT_AT → .build_info mtime →
         # pod start time) as /version so the two endpoints never
         # disagree.
-        "built_at": _resolve_built_at(),
+        "built_at": built_at_val,
         "env": os.getenv("ENVIRONMENT", "production"),
         # Iter 212m-166 — surface Loop Verify linter status so founder
         # dashboards can show a "Verify phase degraded" pill when the

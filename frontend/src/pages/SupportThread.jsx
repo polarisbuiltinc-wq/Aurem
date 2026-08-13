@@ -70,7 +70,7 @@ export default function SupportThread() {
     try {
       const r = await axios.get(
         `${API_BASE}/support/tickets/${ticketId}/thread`,
-        { params: { t: token, e: email } },
+        { params: { t: token, e: email }, timeout: 15000 },
       );
       setTicket(r.data);
     } catch (ex) {
@@ -93,6 +93,7 @@ export default function SupportThread() {
       await axios.post(
         `${API_BASE}/support/tickets/${ticketId}/reply/token`,
         { t: token, e: email, body: replyBody },
+        { timeout: 15000 },
       );
       setReplyBody("");
       await fetchThread();

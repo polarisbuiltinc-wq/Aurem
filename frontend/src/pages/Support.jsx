@@ -57,7 +57,7 @@ export default function Support() {
     try {
       const r = await axios.post(`${API_BASE}/support/tickets/token`, {
         t: token, e: email, source, body,
-      });
+      }, { timeout: 15000 });
       setTicketId(r.data?.ticket_id || "");
       setStatus("ok");
     } catch (ex) {

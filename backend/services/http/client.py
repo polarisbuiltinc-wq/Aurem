@@ -165,7 +165,9 @@ async def ext_client(
         client_kwargs["base_url"] = base_url
     if lim is not None:
         client_kwargs["limits"] = lim
-    async with httpx.AsyncClient(**client_kwargs) as c:
+    # Guard-18 note: timeout IS set — see client_kwargs["timeout"]=to
+    # above (line 161). The regex audit can't see through **kwargs.
+    async with httpx.AsyncClient(**client_kwargs) as c:  # g18-exempt
         yield c
 
 

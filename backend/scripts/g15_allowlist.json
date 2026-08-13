@@ -1,1 +1,8 @@
-[]
+[
+  {
+    "id": "CVE-2026-56876",
+    "package": "extract-zip",
+    "reason": "Transitive dev-time dependency via @lhci/cli → lighthouse → puppeteer-core → @puppeteer/browsers. Never runs in production runtime; only touched by Lighthouse CI dev tooling. No fix version published upstream yet (advisory reports fix=<0.0.0). Revisit when upstream ships a patched release or when Lighthouse CI is upgraded.",
+    "expires": "2026-11-13"
+  }
+]
