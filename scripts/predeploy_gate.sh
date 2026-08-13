@@ -38,6 +38,12 @@ echo "── Lane 4: Guard 18 — universal timeout audit (Iter 359) ──"
 echo "── Lane 5: Guard 21 — OWASP/CWE misconfig + supply-chain scan (Iter 361) ──"
 (cd backend && python scripts/g21_security_scan.py)
 
+echo "── Lane 6: integration_health snapshot (Iter 388-aa · non-blocking) ──"
+# Exit codes: 0=clean, 2=warn, 3=broken.  Non-blocking — surfaces to
+# founder in deploy-request message. Rule 3 in memory/AGENT_STANDING_RULES.md.
+python3 scripts/predeploy_integration_health.py || \
+    echo "⚠️  Lane 6 flagged degraded integrations — see output above BEFORE dispatching deploy."
+
 echo "── Post-lane: regenerate backend/qa_manifest.json (Iter 351) ──"
 (cd backend && python scripts/gen_qa_manifest.py)
 

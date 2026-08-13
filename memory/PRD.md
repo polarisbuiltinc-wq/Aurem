@@ -438,3 +438,81 @@ regression run: 33/33 green across 388g/h/j/k.
 open, unrelated code path (Mongo persistence write, not the tool-loop
 synthesizer).
 
+
+
+---
+
+### Iter 388-aa — Tier-1 Security Audit + systemic deploy-verification rules (2026-02-14)
+
+**Founder trigger:** `#35 Admin Payments Accuracy` "fixed" claim in Iter
+388y was **preview-verified but not prod-verified** — prod showed
+$0.00 revenue while claim was `revenue_month: 9.0`. Third recurrence
+of "preview-truth != prod-truth" bug (Bug 20 was the first).
+Simultaneously, OpenRouter balance fell to $-0.20 (already negative)
+and Tavily rate-limit-exhausted, with NO pre-deploy signal surfacing
+either — silent CRITICAL alerts sitting in `integration_health`.
+
+**Investigation (evidence-only, no false claims):**
+- Prod `build_hash`: `e1f40f39944e` (commit `e1f40f3`), which
+  **contains** the #35 fix commit `38e9ca1` — deploy landed correctly.
+- Prod webhook probe: `POST /api/aurem-dev/payments/webhook` returns
+  `400 "Invalid webhook signature"`, NOT `503`. Confirms
+  `STRIPE_WEBHOOK_SECRET` env IS set on prod. Root cause of $0 is
+  either (a) secret rotation without env update, (b) webhook URL
+  misconfig on Stripe dashboard, or (c) genuine abandonment — needs
+  founder to check Stripe dashboard + click Reconcile.
+
+**Systemic fixes shipped (permanent, don't need re-instructing):**
+
+1. **Rule 2 — "preview-verified" vs "prod-verified" labeling**
+   (`/app/memory/AGENT_STANDING_RULES.md`). Data-shape claims (revenue,
+   counts, aggregations) require prod-verified or founder-confirmed
+   evidence, NEVER preview-only.
+2. **Rule 3 — Pre-deploy `integration_health` gate**. New Lane 6 in
+   `scripts/predeploy_gate.sh` runs
+   `scripts/predeploy_integration_health.py` which reads the latest
+   snapshot and surfaces WARN (exit 2) / BROKEN (exit 3) integrations.
+   Never dispatch a deploy silently while a service is critical.
+3. **Recurrence log** started (Bug 20 + #35). Third violation → founder
+   authorises "stop shipping, systemic pipeline audit" protocol.
+
+**Tier-1 audits (memo: `/app/memory/TIER1_SECURITY_AUDIT_2026-02-14.md`):**
+
+- **#17 CVE audit** — 9 frontend + 95 backend vulns catalogued with
+  patch-risk classification (zero-risk / minor-risk / coupled-risk /
+  no-fix).
+- **#18 IDOR self-audit** — 11 mutating routers sampled. Uniform
+  `find_one({resource_id, user_id})` pattern confirmed across
+  `managed_db`, `supabase`, `scaffold`, `cto_projects`, `automations`,
+  `loop`, `hosted_deploy`, `deploy`, `support`, `chat`, `ora_chat`.
+  One P3/LOW finding in `chat.py:1636+` (see Slice 2).
+
+**Slice 2 shipped (preview-verified only, awaiting deploy ack):**
+
+Zero-risk semver patches + 5-line IDOR fix:
+- `pillow 12.2.0 → 12.3.0` (12 CVEs closed)
+- `httplib2 0.31.2 → 0.32.0` (1)
+- `h2 4.3.0 → 4.4.1` (1)
+- `pyasn1 0.6.3 → 0.6.4` (2)
+- `python-dotenv 1.0.1 → 1.2.2` (1)
+- `routers/chat.py:1636-1662` — IDOR tightened: `pending_fix_task`
+  find/update filter now includes `user_id`; legacy "no user_id →
+  allow" branch removed.
+- Total: **28 backend CVEs closed, 95 → 67 vulns / 15 → 10 packages**.
+
+**Tests:**
+- `backend/tests/test_iter388aa_chat_pending_fix_task_idor.py` —
+  4/4 pass (regression net for IDOR fix + projection cleanup).
+- Full backend pytest: 537 pass, 12 fail (all pre-existing, verified
+  against git-stashed baseline).
+- Mode-D redirect (`test_iter212m46_mode_d_no_autoship.py`): 3/3 pass.
+
+**Deferred to next slices:**
+- Slice 3 (P1 medium-risk): aiohttp / pyjwt / cryptography.
+- Slice 4 (P2 coupled): starlette / fastapi / litellm major bumps.
+- #19 Frontend bundle secrets sweep (still queued).
+
+**Open action items on founder:**
+- Stripe dashboard → Webhooks → Recent deliveries screenshot
+- Admin → Payments → Reconcile button click → JSON output
+- Confirm Tavily top-up decision (still WARN'd)

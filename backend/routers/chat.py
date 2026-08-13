@@ -1636,17 +1636,23 @@ async def chat_stream(
                 if body.session_id and is_fix_confirmation(body.prompt or ""):
                     _db = get_db()
                     if _db is not None:
+                        # Iter 388-aa (2026-02-14): tightened IDOR — require
+                        # user_id in BOTH filter and update filter so a caller
+                        # who knows another user's session_id can't $unset
+                        # their pending_fix_task flag. Removed the legacy
+                        # "row has no user_id → allow" branch; any legacy
+                        # row that would trip it is a schema-drift bug that
+                        # should be backfilled, not silently mutable.
                         _sess = await _db.chat_sessions.find_one(
-                            {"session_id": body.session_id},
-                            {"_id": 0, "pending_fix_task": 1, "user_id": 1},
+                            {"session_id": body.session_id, "user_id": user_id},
+                            {"_id": 0, "pending_fix_task": 1},
                         )
-                        _pending = (_sess or {}).get("pending_fix_task") if _sess else None
-                        if _pending and (not _sess.get("user_id") or _sess.get("user_id") == user_id):
+                        if _sess and _sess.get("pending_fix_task"):
                             # Clear the legacy pending flag (we no longer
                             # act on it; it's kept on the schema only so
                             # we don't break older deployments mid-roll).
                             await _db.chat_sessions.update_one(
-                                {"session_id": body.session_id},
+                                {"session_id": body.session_id, "user_id": user_id},
                                 {"$unset": {"pending_fix_task": ""}},
                             )
                             await q.put({"type": "mode", "mode": "D"})
