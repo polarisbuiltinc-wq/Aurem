@@ -603,3 +603,51 @@ Regression:
 
 **Ready for founder to queue a single consolidated deploy of everything above.**
 
+
+---
+
+### Iter 388-ad — IDOR expand + Slice 4 attempt (2026-02-14)
+
+**IDOR audit expanded from 11 → 30 routers** (memo:
+`/app/memory/TIER1_SECURITY_AUDIT_2026-02-14.md`).
+
+- 8 admin path-param routers: all router-level gated by
+  `require_admin_dep`. Verified via source count of admin gates vs
+  endpoints.
+- 11 non-admin path-param routers: uniform ownership pattern
+  confirmed (`payments`, `github_app`, `fix_pipeline`, `chat_commits`,
+  `domain`, `shipwall`, `mcp`, `suggestions`, `thinking_hints`,
+  `stacks`, `dev_sse_probe`).
+- One initial suspicion in `payments.py::/payments/status/{session_id}`
+  turned out to have an explicit ownership check on the second line
+  (`if pay.get("user_id") != user.get("user_id"): raise 404`) — safe.
+- `github_app.py`'s `github_installations.find_one` calls at lines
+  164/513/534 are inside webhook handlers (server-to-server), the
+  only user-facing `DELETE /installations/{id}` at line 771 correctly
+  filters by `user_id`.
+- **Cumulative coverage: 30 of ~77 routers (all path-param carriers).
+  Zero exploitable IDORs. One P3/LOW cleared in Iter 388-ab.**
+
+**Slice 4 (fastapi/starlette/litellm) — DEFERRED as P2:**
+
+Attempted `fastapi 0.115 → 0.141.1` + `starlette 0.37.2 → 1.6.0`.
+Runtime clean but starlette 1.6 introduces a **breaking change on
+`request.state.<key>` access** — missing keys now raise `KeyError`
+(was `AttributeError`). This trips ~40 tests that use bare
+`TestClient(app)` without a lifespan context manager.
+
+**Decision:** rolled back preview to fastapi 0.115 + starlette 0.37.2
+(matches prod requirements.txt — prod was never exposed since I hadn't
+`pip freeze`d yet). Slice 4 needs a dedicated migration branch that:
+1. Audits every `.state.<x>` access → wraps in `getattr` with default.
+2. Migrates all `TestClient(app)` to `with TestClient(app) as c:` for
+   lifespan.
+3. Runs full regression on the migrated code.
+
+`litellm 1.80 → 1.84` also deferred — our litellm is pinned to a
+custom Emergent-hosted wheel (not PyPI), so bumping requires Emergent
+to publish 1.84 first. Flagged for founder.
+
+**No production changes shipped in Iter 388-ad — preview-only cleanup
++ audit-memo work.**
+
