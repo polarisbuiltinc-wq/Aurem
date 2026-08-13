@@ -3812,12 +3812,63 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
         if push.returncode != 0:
             raise RuntimeError(f"git push failed: {_scrub(push.stderr)[:300]}")
         sha = _sh(["git", "rev-parse", "--short", "HEAD"], repo_path).stdout.strip()
+        commit_full_sha = _sh(["git", "rev-parse", "HEAD"], repo_path).stdout.strip()
         await _log(task_id, f"🚀 pushed — {sha}", "success")
         await _set_status(task_id, status="done", result=summary,
                           commit_sha=sha,
-                          files_changed=list(edits.keys()),
+                          files_changed_simple=list(edits.keys()),
                           edits=_frontend_subset(edits),
                           completed_at=time.time())
+        # Iter 388g-fix — parity with `_run_task_via_api`: persist the
+        # rich diff payload (files_changed + unified-diff hunks +
+        # github_url + time_taken_seconds) so /cto/tasks/{id} returns
+        # the same shape on git-path completions, and the ChatPanel
+        # LiveTaskPopup can inject the inline EditedFileBubble via its
+        # `onDone` handler. Without this the git-path (real production
+        # PAT-connected runs) silently ships tasks with no diff view.
+        try:
+            from services.task_diff import (
+                build_files_changed, shape_vanguard_findings,
+                build_unified_diff_hunks,
+            )
+            from services.ora_chat.tool_output_wrapper import wrap_edited_files
+            rich_changes = build_files_changed(contents, edits)
+            findings_clean = shape_vanguard_findings([], status="fixed")
+            hunk_files = []
+            for _path, _after in (edits or {}).items():
+                _before = (contents or {}).get(_path)
+                hunk_files.append({
+                    "path":  _path,
+                    "hunks": build_unified_diff_hunks(
+                        _before, _after, context=2,
+                    ),
+                })
+            edited_files_payload = wrap_edited_files(hunk_files)
+            _started = (await get_db().cto_tasks.find_one(
+                {"task_id": task_id}, {"started_at": 1, "_id": 0}
+            )) or {}
+            elapsed = max(0, int(time.time() - (_started.get("started_at") or time.time())))
+            await _set_status(
+                task_id,
+                files_changed=rich_changes,
+                vanguard_findings=findings_clean,
+                edited_files=edited_files_payload,
+                time_taken_seconds=elapsed,
+                github_url=f"https://github.com/{owner}/{repo}/commit/{commit_full_sha}",
+            )
+        except Exception as _diff_e:
+            logger.warning("task_diff/popup persistence (git path) failed: %r", _diff_e)
+        # Mirror API-path SSE frames — task_handoff frame BEFORE the
+        # terminal `done` frame so LiveTaskPopup's `onDone` fires with
+        # the completed task payload that now carries edited_files.
+        await _emit(
+            task_id, "task_handoff",
+            kind="task_handoff",
+            project_id=proj.get("project_id"),
+            sha=(sha[:7] if sha else ""),
+            source="task_worker_done",
+        )
+        await _emit(task_id, f"Done — {sha[:7]}", kind="done", pct=100)
         db = get_db()
         # Iter 167 — post-task scan on git-path too (parity with API path).
         if db is not None:

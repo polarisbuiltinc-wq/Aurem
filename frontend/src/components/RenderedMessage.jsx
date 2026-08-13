@@ -30,6 +30,19 @@ const INTERNAL_FENCES = new Set([
   "tool_response", "function_call", "function_result", "function_response",
   "system", "system_prompt", "internal", "orchestrator", "scratchpad",
   "thinking", "chain_of_thought",
+  // Iter 388h — vendor-prefixed variants some upstream models emit
+  // (LongCat, Claude, Qwen, etc.). Same protocol shape, just with a
+  // provider prefix. Added after a prod user reported seeing
+  // "<longcat_tool_call>read_repo_file …" leak into a chat bubble
+  // during Prompt-mode replies. Kept alongside a generic-suffix
+  // regex below to cover future providers we haven't seen yet.
+  "longcat_tool_call", "longcat_tool_calls", "longcat_tool_use",
+  "longcat_tool_result", "longcat_tool_results", "longcat_tool_response",
+  "longcat_function_call", "longcat_function_result",
+  "longcat_function_response", "longcat_thinking",
+  "claude_tool_call", "claude_tool_use", "claude_tool_result",
+  "qwen_tool_call", "qwen_tool_result",
+  "gpt_tool_call", "gpt_tool_result",
 ]);
 
 function sanitizeForDisplay(raw) {
@@ -48,15 +61,24 @@ function sanitizeForDisplay(raw) {
   //      <thinking>…</thinking> etc.
   //    Iter 212m-106 — added after a prod user reported seeing
   //    "<tool_call>read_repo_file {"path":"…"}" leak into a chat bubble.
+  //    Iter 388h — widen the tag alternation to also catch vendor-
+  //    prefixed variants: `<longcat_tool_call>…`, `<claude_tool_use>…`,
+  //    `<qwen_tool_result>…`, etc. Match anything ending in
+  //    `_tool_call|_tool_use|_tool_result|_tool_response|
+  //    _function_call|_function_result|_function_response|_thinking|
+  //    _chain_of_thought` regardless of the vendor prefix.
+  const _INTERNAL_TAG_RE =
+    /(?:tool_call|tool_calls|tool_use|tool_result|tool_results|tool_response|function_call|function_result|function_response|thinking|chain_of_thought|scratchpad|internal|system|system_prompt|orchestrator|[a-z0-9]+_tool_call|[a-z0-9]+_tool_calls|[a-z0-9]+_tool_use|[a-z0-9]+_tool_result|[a-z0-9]+_tool_results|[a-z0-9]+_tool_response|[a-z0-9]+_function_call|[a-z0-9]+_function_result|[a-z0-9]+_function_response|[a-z0-9]+_thinking|[a-z0-9]+_chain_of_thought)/
+      .source;
   out = out.replace(
-    /<\s*(tool_call|tool_calls|tool_use|tool_result|tool_results|tool_response|function_call|function_result|function_response|thinking|chain_of_thought|scratchpad|internal|system|system_prompt|orchestrator)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi,
+    new RegExp(`<\\s*(${_INTERNAL_TAG_RE})\\b[^>]*>[\\s\\S]*?<\\s*\\/\\s*\\1\\s*>`, "gi"),
     "",
   );
   // 3b. Some models leave an opening tag without a closing one when the
   //     stream is cut. Strip orphan opens too so we don't render
   //     "<tool_call>{..." raw.
   out = out.replace(
-    /<\s*(tool_call|tool_calls|tool_use|tool_result|tool_results|tool_response|function_call|function_result|function_response|thinking|chain_of_thought|scratchpad|internal|system|system_prompt|orchestrator)\b[^>]*>[\s\S]*$/gi,
+    new RegExp(`<\\s*(${_INTERNAL_TAG_RE})\\b[^>]*>[\\s\\S]*$`, "gi"),
     "",
   );
   // 4. Strip any fenced block whose lang label is in the internal set.

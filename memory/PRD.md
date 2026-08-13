@@ -129,3 +129,50 @@ Key rules established after 3 deploy race incidents in one day:
 - `/app/memory/BATCH_8_SURVEY_2026-02-12.md` — surveyed sites + rationales
 - `/app/memory/PRD.md` — this document
 - `/app/memory/CHANGELOG.md` — append-only ledger of substantive changes
+
+
+## Iter 388h — Bug 1 + Bug 2 fixes (2026-02-13, awaiting deploy)
+
+**Bug 1 — ORA Diff View silent-failure on real Loop runs**
+- Root cause: `_run_task_with_git` (git-path task worker, used by all
+  real PAT-connected users) never persisted the `edited_files` unified-
+  diff payload or the `task_handoff`/`done` SSE frames. Only the
+  `_run_task_via_api` path was wired for Iter 388g. Result: real prod
+  loops shipped code but the ChatPanel `LiveTaskPopup.onDone` handler
+  had no `edited_files.files` to attach → inline `EditedFileBubble`
+  never rendered.
+- Fix: mirrored the API-path Iter 388g block into `_run_task_with_git`
+  in `backend/routers/cto_projects.py` (rich `files_changed` via
+  `build_files_changed`, unified diff hunks via `build_unified_diff_hunks`,
+  `wrap_edited_files` envelope, `github_url`, `time_taken_seconds`,
+  `task_handoff` + terminal `done` SSE emit). Also added a
+  `commit_full_sha` fetch so the github_url matches API-path shape.
+- Test: `backend/tests/test_iter388h_bug1_bug2_fixes.py` (2 tests).
+
+**Bug 2 — Raw `<longcat_tool_call>` XML leaking in Prompt mode**
+- Root cause: `RenderedMessage.sanitizeForDisplay` regex only stripped
+  the unprefixed `<tool_call>` shape. LongCat / Claude / Qwen / GPT
+  variants (`<longcat_tool_call>`, etc.) passed through into the
+  bubble.
+- Fix: widened the internal-tag alternation in
+  `frontend/src/components/RenderedMessage.jsx` to match any
+  `<vendor_tool_call>` / `<vendor_tool_result>` / `<vendor_thinking>`
+  variant via a `[a-z0-9]+_tool_*` regex class, and added the explicit
+  longcat_/claude_/qwen_/gpt_ variants to the `INTERNAL_FENCES` set so
+  fenced-code-block variants are also stripped.
+- Test: 5 sanitizer regression tests in the same file above.
+
+**Awaiting user GO for deploy.** After deploy, user will retest on a
+real Loop run to verify the inline diff bubble renders + Prompt mode
+no longer leaks raw tool-call XML.
+
+## Bug 3 + Bug 4 — Advisor panel investigation (pending, next session)
+
+- Bug 3: "Diagnose failed run" fabricates confident claims from stale
+  scrollback (says loop is stuck when it's already shipped; hallucinates
+  project name). Violates ORA's own anti-fabrication rule.
+- Bug 4: "Summarize open PRs" silently hangs after "One moment while I
+  fetch that information for you" — no error, no timeout.
+- Suspected shared root cause: `backend/routers/advisor_context.py` +
+  `backend/services/advisor_vision.py` + system-prompt anti-fabrication
+  layer. Investigate together in one audit session per user request.
