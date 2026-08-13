@@ -814,7 +814,7 @@ export default function Landing() {
                     boxShadow: "0 0 6px rgba(234,179,8,0.9)",
                   }}></span>
                   <span data-testid="hero-promo-chip-text">
-                    First-50 · <b>{promo.remaining}/{promo.total}</b> founder spots left
+                    First-50 promo · <b>{promo.remaining}/{promo.total}</b> free Pro trials left
                   </span>
                 </div>
               ) : (

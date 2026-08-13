@@ -16,6 +16,7 @@
 import React, { useRef, useState } from "react";
 import { api } from "../lib/api";
 import useModalA11y from "../hooks/useModalA11y";
+import { toast } from "./Toast";
 
 const PAL = {
   bg:        "#0b0b0b",
@@ -86,8 +87,23 @@ export function SupportPopup({ source = "in_app", onClose }) {
     setErr("");
     try {
       const r = await api.post("/support/tickets", { body, source });
-      setTicketId(r.data?.ticket_id || "");
+      const tid = r.data?.ticket_id || "";
+      setTicketId(tid);
       setStatus("ok");
+      // Iter 388t · UX polish — fire a top-level toast in addition to
+      // the in-popup success block so the founder gets an obvious
+      // confirmation even if they close the popup right away.  The
+      // in-popup block shows the ticket ref + longer copy; this
+      // toast surfaces the "sent!" signal at the app chrome level.
+      try {
+        toast({
+          message: tid
+            ? `Support ticket received — ref ${tid.slice(0, 8)}. Reply will appear in the same popup.`
+            : "Support ticket received. Reply will appear in the same popup.",
+          kind: "success",
+          duration: 4500,
+        });
+      } catch { /* toast optional — never block submit success */ }
     } catch (ex) {
       setStatus("err");
       setErr(ex?.response?.data?.detail || ex?.message ||

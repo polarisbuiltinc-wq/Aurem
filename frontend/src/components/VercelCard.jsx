@@ -95,10 +95,17 @@ export default function VercelCard() {
             style={{
               display: "inline-flex", alignItems: "center", gap: 4,
               fontSize: 10, padding: "2px 8px", borderRadius: 999,
-              background: "rgba(239,68,68,0.12)", color: "#ef4444",
+              // Iter 388t · UX polish — was red (rgba(239,68,68,…)) which
+              // read as "error" to the founder, but "not connected" is
+              // a deliberate opt-out state on this pod (Vercel is an
+              // optional integration, not required).  Neutral grey now
+              // matches the app's language for "off / not enabled".
+              background: "rgba(148,163,184,0.10)",
+              color: "var(--text-faint)",
+              border: "1px solid rgba(148,163,184,0.22)",
               fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.05em",
             }}>
-            <AlertCircle size={10} /> NOT CONNECTED
+            <AlertCircle size={10} /> NOT ENABLED
           </span>
         )}
         <span style={{ flex: 1 }} />
@@ -138,12 +145,14 @@ export default function VercelCard() {
 
       {!status?.connected && (
         <div style={{
-          fontSize: 12, marginBottom: 12, color: "#ef4444",
+          // Iter 388t · UX polish — neutral message, not red "error"
+          // styling.  Not-enabled ≠ broken.
+          fontSize: 12, marginBottom: 12, color: "var(--text-dim)",
           padding: "8px 12px", borderRadius: 6,
-          background: "rgba(239,68,68,0.06)",
-          border: "1px solid rgba(239,68,68,0.2)",
+          background: "rgba(148,163,184,0.06)",
+          border: "1px solid rgba(148,163,184,0.18)",
         }}>
-          {status?.reason || "Vercel not connected. Set VERCEL_API_TOKEN to enable."}
+          {status?.reason || "Vercel integration is off. Set VERCEL_API_TOKEN to enable ORA-side deployments."}
         </div>
       )}
 
