@@ -37,6 +37,12 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { getActiveLoop, getLoopStatus, cancelLoop } from "../lib/loopApi";
 
 const POLL_MS = 10_000;
+// Iter 388l — Bug 16 fix. When there's no active loop for two
+// consecutive polls, back off to a 60s interval so we're not
+// hammering `/loop/active` 6 times per minute for an idle project.
+// This cut ~85% of the observed idle polling in preview traces.
+const POLL_IDLE_MS = 60_000;
+const IDLE_STREAK_TRIGGER = 2;
 const CONFIRM_WINDOW_MS = 4_000;
 // ── Iter 323 · Bug B — post-terminal grace window ───────────────
 // When getActiveLoop() transitions active → null (backend filters
@@ -254,23 +260,70 @@ export default function LoopStatusChip({ projectId = null, onPhaseUpdate = null 
         if (p) onPhaseUpdate(String(p).toLowerCase(), String(s).toLowerCase());
       }
     } catch (e) {
-      setErr(e?.response?.data?.detail || e?.message || "loop status fetch failed");
+      // Iter 388l — Bug 14 + 15 fix.  Cloudflare/ingress 5xx return
+      // HTML bodies; axios surfaces the raw HTML string on
+      // `e.response.data`.  Never let that raw HTML land in the chip
+      // (it would render inside the `Loop status error · <html>...`
+      // span the moment the error span goes visible).  Also drop
+      // network-level errors entirely — a transient 520 is not a
+      // "loop status" problem, it's an infra blip that will heal on
+      // the next poll.  Only surface a real backend-authored detail
+      // string.
+      const raw =
+        (e?.response?.data && typeof e.response.data.detail === "string" && e.response.data.detail) ||
+        e?.message ||
+        "";
+      const looksLikeHtml = /^\s*(<!doctype\s+html|<html|<head|<body)/i.test(raw);
+      const status = e?.response?.status;
+      const isCloudflareOrigin = status >= 502 && status <= 530;
+      if (looksLikeHtml || isCloudflareOrigin) {
+        // Suppress the noisy banner for transient infra hiccups.
+        // The next successful poll will clear any stale err state.
+        setErr(null);
+      } else {
+        setErr(raw || "loop status fetch failed");
+      }
     }
   }, [projectId, onPhaseUpdate, terminalSnapshot]);
 
   // Poll on mount + interval + on tab-focus (users often alt-tab
   // during a 20-min loop; refreshing the chip immediately when they
   // come back removes any perceived staleness).
+  //
+  // Iter 388l — Bug 16 fix.  Old code polled every 10s forever, so
+  // idle projects fired 6 requests/min at `/loop/active` even when
+  // Loop mode was OFF and no loop existed.  Two-tier interval now:
+  // 10s while any loop is live or terminal-snapshot is showing, 60s
+  // once we've seen `null` twice in a row.  Any active/terminal
+  // signal on a poll resets the interval back to 10s so the founder
+  // never sees a stale-by-a-minute chip when a run starts.
   useEffect(() => {
     poll();
-    const t = setInterval(poll, POLL_MS);
+    let idleStreak = 0;
+    let currentInterval = POLL_MS;
+    let timer = setInterval(runPoll, currentInterval);
+
+    async function runPoll() {
+      await poll();
+      const hasSignal = !!lastActiveRef.current || !!terminalSnapshot;
+      const nextStreak = hasSignal ? 0 : idleStreak + 1;
+      const nextInterval =
+        nextStreak >= IDLE_STREAK_TRIGGER ? POLL_IDLE_MS : POLL_MS;
+      if (nextInterval !== currentInterval) {
+        clearInterval(timer);
+        currentInterval = nextInterval;
+        timer = setInterval(runPoll, currentInterval);
+      }
+      idleStreak = nextStreak;
+    }
+
     const onFocus = () => poll();
     window.addEventListener("focus", onFocus);
     return () => {
-      clearInterval(t);
+      clearInterval(timer);
       window.removeEventListener("focus", onFocus);
     };
-  }, [poll]);
+  }, [poll, terminalSnapshot]);
 
   // Reset stop-confirm state whenever the active loop changes id or
   // the loop terminates, so the button never gets stuck showing

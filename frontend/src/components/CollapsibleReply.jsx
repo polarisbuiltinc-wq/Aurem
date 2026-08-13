@@ -17,7 +17,15 @@ export function isCollapsibleReply(text) {
 function firstLinePreview(text) {
   const line = (text || "")
     .replace(/```[\s\S]*?```/g, " [code] ")
-    .replace(/[#*_`>-]/g, "")
+    // Iter 388l — Bug 13 fix. The previous regex `/[#*_`>-]/g`
+    // stripped hyphens too because `-` was the LAST char inside the
+    // character class (treated as a literal, not a range).  Result:
+    // a user who typed `/repo-tree` saw "/repotree" in the collapsed
+    // preview and thought the slash command had been mangled by the
+    // composer.  Removed `-` from the strip set; markdown bullets
+    // that start with "- " are already handled by the "trim + first
+    // non-empty line" logic below.
+    .replace(/[#*_`>]/g, "")
     .split("\n")
     .map((l) => l.trim())
     .find((l) => l.length > 0) || "";

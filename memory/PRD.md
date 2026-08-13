@@ -216,6 +216,63 @@ regardless.
 
 ## Iter 388k — Bug 12 CRITICAL fix (query-tier read loop, 2026-02-13)
 
+See test file `backend/tests/test_iter388k_bug12_loop_fix.py` for full
+regression contract.  Summary:
+- Query-tier `_max_iters_eff` bumped `2 → 3` in `chat.py`
+- Orchestrator injects `=== FINAL ANSWER ROUND ===` directive on the
+  last iter (`iters >= max_iters`)
+- `_synthesise_max_iters_summary` rewrote — banned "send the same
+  prompt again" template locked out by string-level assertions
+- 5 new pytest + full regression (33/33) green
+
+
+## Iter 388l — Bug 13/14/15/16 (Batch D + infra hardening, 2026-02-13)
+
+**Bug 13 — Slash-command hyphen strip in user-message preview** — FIXED
+- Root cause: `CollapsibleReply.firstLinePreview` regex was
+  `/[#*_`>-]/g`.  `-` at the end of the char class = literal hyphen
+  (not a range end).  User typing `/repo-tree` saw `/repotree` in the
+  collapsed preview — looked like the composer had mangled the input.
+- Fix: `frontend/src/components/CollapsibleReply.jsx` regex tightened
+  to `/[#*_`>]/g`.  Every hyphenated slash-command (`/repo-tree`,
+  `/loop-stats`, `/users-today`, etc.) now displays verbatim.
+
+**Bug 15 — Raw Cloudflare 520 HTML rendering in chat bubble** — FIXED
+- Root cause: `frontend/src/lib/api.js::streamChat` non-OK response
+  handler called `onError(\`HTTP ${status}: ${txt}\`)` where `txt` was
+  the raw HTML body Cloudflare/ingress ship on 520/502/etc.  The
+  ChatPanel wrote that raw string into the assistant message content
+  and RenderedMessage / markdown pass-through rendered the HTML tags.
+- Fix: added HTML sniffer (`/^\s*(<!doctype\s+html|<html|<head|<body)/i`)
+  in the streamChat error branch.  When the body looks like HTML,
+  the callback receives a friendly text message instead
+  ("The server was briefly unavailable (Cloudflare origin error).
+  Try again in a moment.").  No raw HTML can reach the chat UI again.
+
+**Bug 14 + 16 — LoopStatusChip idle polling + raw HTML error text** — FIXED
+- Root cause part A (Bug 16): `POLL_MS = 10_000` fired forever, so
+  every project polled `/loop/active` 6×/min regardless of Loop state.
+- Root cause part B (Bug 14): the `setErr` call on failure passed
+  through `e.response.data?.detail || e.message` untouched — 5xx HTML
+  bodies became `err` state and rendered inside the chip's error span.
+- Fix (`frontend/src/components/LoopStatusChip.jsx`):
+  - Added `POLL_IDLE_MS = 60_000` + 2-poll idle streak trigger.  Idle
+    projects now poll once per minute instead of once per 10s
+    (~85% reduction in idle traffic).  Any active/terminal signal
+    resets the interval to 10s.
+  - Error path sanitised: HTML-looking bodies + all Cloudflare 5xx
+    statuses (502-530) SUPPRESS the red banner entirely (transient
+    infra hiccups aren't loop errors); only backend-authored detail
+    strings surface.
+
+**Testing done:**
+- 11 new vitest regressions green
+  (`frontend/src/components/__tests__/iter388l.bug13_14_15_16.test.jsx`)
+  — hyphen preservation across every hyphenated slash-command, HTML
+  detection true/false positives, poll-backoff state machine
+- No lint errors, backend + frontend supervisor RUNNING
+- No new backend files touched — all four fixes are frontend-only
+
 **Reported by senior QA pass**: *"Read backend/routers/health.py and
 show me the first 50 lines"* → response 1: *"I've mapped the surface
 area but need one more round — Send the same prompt again..."*.

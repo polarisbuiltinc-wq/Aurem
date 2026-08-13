@@ -321,6 +321,27 @@ export async function streamChat({ prompt, sessionId, session_id,
       onError?.(friendly || `HTTP 422: ${txt || res.statusText}`);
       return;
     }
+    // Iter 388l — Bug 15 fix. Cloudflare (520/521/522/523/524/525/
+    // 526/527/530) and the ingress (502/503/504) return an HTML
+    // error page as the response body, not JSON.  The old handler
+    // passed that raw HTML into `onError(text)`, which the chat UI
+    // then stored as assistant message content — a raw
+    // `<html><body>...</body></html>` blob rendered inside the
+    // bubble.  Detect HTML bodies and replace with a friendly text
+    // message; NEVER surface raw HTML to the UI layer.
+    const looksLikeHtml =
+      typeof txt === "string" &&
+      /^\s*(<!doctype\s+html|<html|<head|<body)/i.test(txt);
+    if (looksLikeHtml) {
+      const friendly =
+        res.status >= 520 && res.status < 530
+          ? "The server was briefly unavailable (Cloudflare origin error). Try again in a moment."
+          : res.status === 502 || res.status === 503 || res.status === 504
+          ? "The server is temporarily unavailable. Try again in a moment."
+          : `Something went wrong (HTTP ${res.status}). Try again in a moment.`;
+      onError?.(friendly);
+      return;
+    }
     onError?.(`HTTP ${res.status}: ${txt || res.statusText}`);
     return;
   }
