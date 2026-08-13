@@ -240,18 +240,42 @@ export default function App() {
   return (
     <BrowserRouter>
       {/* Iter 388t — Bug 25 fix.  Skip-to-content landmark link for
-          keyboard-only users (WCAG 2.4.1).  Visually hidden by
-          default; slides into view on `:focus-visible` so a founder
-          who Tabs into the page can see + activate it as the first
-          reachable element.  `#main-content` is set on the main
-          route container below. */}
+          keyboard-only users (WCAG 2.4.1).  Repositioned + hardened
+          after prod feedback ("present but useless as-is"):
+          - `position: fixed` so it sits above the sticky rail chrome
+            and doesn't scroll away with the page.
+          - `top: 8px, left: 8px` when focused so it appears in a
+            predictable, obvious spot (was `top: 0, left: 0` which
+            landed under browser chrome on some viewports).
+          - `zIndex: 10000` to beat every drawer / modal in the app.
+          - `onClick` programmatically focuses `#main-content` in
+            addition to the fragment jump, so screen readers actually
+            move the focus ring to the landmark (some browsers
+            don't move focus on plain `href="#…"` links).
+          Visually hidden by default; slides into view on `:focus-visible`
+          so a founder who Tabs into the page can see + activate it as
+          the first reachable element. */}
       <a
         href="#main-content"
         data-testid="skip-to-content-link"
+        onClick={(e) => {
+          // Programmatic focus so screen readers land on the landmark.
+          // We still let the browser resolve the `#main-content`
+          // fragment (default behaviour), we just add explicit focus.
+          try {
+            const target = document.getElementById("main-content");
+            if (target) {
+              // Small setTimeout to run after the browser's hash jump
+              // so the scroll happens first and focus lands on the
+              // already-in-view landmark.
+              setTimeout(() => target.focus({ preventScroll: true }), 0);
+            }
+          } catch { /* noop */ }
+        }}
         style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
+          position: "fixed",
+          top: 8,
+          left: 8,
           padding: "8px 14px",
           background: "var(--accent, #ff6b35)",
           color: "#fff",
@@ -259,12 +283,12 @@ export default function App() {
           fontWeight: 700,
           borderRadius: 4,
           textDecoration: "none",
-          zIndex: 9999,
-          transform: "translateY(-120%)",
+          zIndex: 10000,
+          transform: "translateY(-140%)",
           transition: "transform 140ms ease",
         }}
         onFocus={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
-        onBlur={(e) => { e.currentTarget.style.transform = "translateY(-120%)"; }}
+        onBlur={(e) => { e.currentTarget.style.transform = "translateY(-140%)"; }}
       >
         Skip to content
       </a>

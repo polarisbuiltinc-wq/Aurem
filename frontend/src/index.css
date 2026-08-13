@@ -335,6 +335,48 @@ a:hover { color: var(--accent); }
   outline: 2px solid var(--accent-2, #ffc560);
   outline-offset: 2px;
 }
+
+/* Iter 388t — Bug 24 fix.  The rail nav buttons (RailShell.jsx) are
+   real `<button>` elements so Tab lands on them, but they had NO
+   focus-visible styling — the founder pressed Tab, focus was in fact
+   on the icon, but there was zero visual indicator so it looked like
+   the icons were "unreachable".  WCAG 2.4.7 fail.  Same ring style
+   as `.input:focus-visible` above for consistency.  Selectors cover
+   every keyboard-reachable control on the rail: section icons, logo,
+   auto-hide toggle, peek pill, sign-out, flyout close, flyout Links
+   / repo buttons / new-chat / session rows.  We target them by
+   `data-testid` (already stamped in RailShell.jsx) so this stays
+   robust across future style tweaks. */
+[data-testid="rail-shell"] button:focus-visible,
+[data-testid="rail-shell"] a:focus-visible,
+[data-testid^="rail-icon-"]:focus-visible,
+[data-testid^="rail-item-"]:focus-visible,
+[data-testid^="rail-repo-"]:focus-visible,
+[data-testid^="rail-session-"]:focus-visible,
+[data-testid="rail-new-chat"]:focus-visible,
+[data-testid="rail-add-repo"]:focus-visible,
+[data-testid="rail-flyout-close"]:focus-visible,
+[data-testid="rail-autohide-toggle"]:focus-visible,
+[data-testid="rail-logout-btn"]:focus-visible,
+[data-testid="rail-peek-pill"]:focus-visible,
+[data-testid="ds2-sidebar-logo"]:focus-visible {
+  outline: 2px solid var(--accent-2, #ffc560);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* Iter 388t — Bug 25 fix (companion).  Ensure the semantic
+   `<main id="main-content">` landmark scrolls into view with breathing
+   room from the top when the skip-link jumps to it.  Without
+   `scroll-margin-top` the skip target lands FLUSH against the browser
+   chrome and the founder can't tell the jump happened.  We also
+   forbid a focus ring on `#main-content` itself (it has tabIndex=-1
+   so it accepts programmatic focus but the outline would look like
+   noise on every page reload). */
+#main-content {
+  scroll-margin-top: 20px;
+  outline: none;
+}
 .input::placeholder {
   color: var(--text-faint);
   -webkit-text-fill-color: var(--text-faint);
