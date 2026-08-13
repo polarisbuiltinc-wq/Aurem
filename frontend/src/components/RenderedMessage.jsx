@@ -176,10 +176,144 @@ function renderInline(text, keyPrefix) {
   });
 }
 
+// Iter 388q — Bug 21 fix.  Minimal GFM pipe-table renderer.  The
+// codebase deliberately doesn't ship react-markdown / remark-gfm to
+// keep the bundle small, but that meant `| Col | Col |` tables from
+// the LLM landed as raw pipe-text in the bubble.  Detect a table
+// block (header line + separator row + N body rows) and render an
+// actual `<table>`.  Everything else falls back to the original
+// line-by-line renderer below so plain prose, pill tags, and inline
+// code all keep working unchanged.
+const _TABLE_ROW_RE = /^\s*\|(.+)\|\s*$/;
+const _TABLE_SEP_RE = /^\s*\|\s*:?-{2,}:?(?:\s*\|\s*:?-{2,}:?)+\s*\|?\s*$/;
+function _parseTableRow(line) {
+  // Strip leading/trailing pipe, split by unescaped `|`.
+  const inner = line.trim().replace(/^\|/, "").replace(/\|\s*$/, "");
+  return inner.split("|").map((c) => c.trim());
+}
+function _extractTables(text) {
+  // Returns an array of { kind: "text"|"table", value } segments.
+  const lines = text.split("\n");
+  const out = [];
+  let buf = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const isHeader = _TABLE_ROW_RE.test(line);
+    const next = lines[i + 1] || "";
+    if (isHeader && _TABLE_SEP_RE.test(next)) {
+      // We found a header + separator — collect body rows.
+      if (buf.length) {
+        out.push({ kind: "text", value: buf.join("\n") });
+        buf = [];
+      }
+      const header = _parseTableRow(line);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && _TABLE_ROW_RE.test(lines[i])) {
+        rows.push(_parseTableRow(lines[i]));
+        i += 1;
+      }
+      out.push({ kind: "table", value: { header, rows } });
+      continue;
+    }
+    buf.push(line);
+    i += 1;
+  }
+  if (buf.length) out.push({ kind: "text", value: buf.join("\n") });
+  return out;
+}
+function TableSegment({ header, rows, keyPrefix }) {
+  return (
+    <table
+      data-testid="rendered-md-table"
+      style={{
+        borderCollapse: "collapse",
+        margin: "10px 0",
+        fontSize: 13,
+        width: "100%",
+        border: "1px solid rgba(255,255,255,0.12)",
+      }}
+    >
+      <thead>
+        <tr>
+          {header.map((h, i) => (
+            <th
+              key={`${keyPrefix}-h${i}`}
+              style={{
+                padding: "6px 10px",
+                textAlign: "left",
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                fontWeight: 700,
+                fontSize: 12,
+                letterSpacing: "0.02em",
+              }}
+            >
+              {renderInline(h, `${keyPrefix}-h${i}-i`)}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, ri) => (
+          <tr key={`${keyPrefix}-r${ri}`}>
+            {row.map((cell, ci) => (
+              <td
+                key={`${keyPrefix}-r${ri}-c${ci}`}
+                style={{
+                  padding: "6px 10px",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  verticalAlign: "top",
+                }}
+              >
+                {renderInline(cell, `${keyPrefix}-r${ri}-c${ci}-i`)}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 // Iter 212m-12 — wrap each text segment's lines in optional color
 // pills. Lines without a tag are passed through to the existing
 // inline-code renderer untouched.
 function renderTextSegment(text, keyPrefix) {
+  if (!text) return null;
+  // Iter 388q — Bug 21 fix.  Extract GFM pipe-tables into their own
+  // <table> render, and pass the rest through the existing per-line
+  // pill/tag renderer.  Tables must be split BEFORE the split("\n")
+  // pipeline below or the header + separator row would land in
+  // separate line-fragments and lose their table shape.
+  const segments = _extractTables(text);
+  const hasTable = segments.some((s) => s.kind === "table");
+  if (hasTable) {
+    return segments.map((s, si) => {
+      if (s.kind === "table") {
+        return (
+          <TableSegment
+            key={`${keyPrefix}-t${si}`}
+            header={s.value.header}
+            rows={s.value.rows}
+            keyPrefix={`${keyPrefix}-t${si}`}
+          />
+        );
+      }
+      // Recurse into the plain-text branch below via a single call
+      // so we don't duplicate the line-pill logic.
+      return (
+        <React.Fragment key={`${keyPrefix}-txt${si}`}>
+          {_renderTextSegmentLines(s.value, `${keyPrefix}-txt${si}`)}
+        </React.Fragment>
+      );
+    });
+  }
+  return _renderTextSegmentLines(text, keyPrefix);
+}
+
+function _renderTextSegmentLines(text, keyPrefix) {
   if (!text) return null;
   const lines = text.split("\n");
   return lines.map((line, li) => {

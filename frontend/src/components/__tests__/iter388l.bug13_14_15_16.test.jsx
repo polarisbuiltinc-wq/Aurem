@@ -28,7 +28,6 @@ function firstLinePreview(text) {
   const PREVIEW_CHARS = 110;
   const line = (text || "")
     .replace(/```[\s\S]*?```/g, " [code] ")
-    .replace(/[#*_`>]/g, "")
     .split("\n")
     .map((l) => l.trim())
     .find((l) => l.length > 0) || "";
@@ -36,21 +35,32 @@ function firstLinePreview(text) {
     ? `${line.slice(0, PREVIEW_CHARS)}…` : line;
 }
 
-describe("Bug 13 — hyphens survive the collapsed preview", () => {
-  it("preserves the hyphen in /repo-tree", () => {
+describe("Bug 13/17/19 — user-typed content preserved verbatim in previews", () => {
+  it("preserves hyphens in slash commands (Bug 13)", () => {
     expect(firstLinePreview("/repo-tree")).toBe("/repo-tree");
+    expect(firstLinePreview("/loop-stats")).toBe("/loop-stats");
   });
-  it("preserves the hyphen in every hyphenated slash command we ship", () => {
-    for (const cmd of [
-      "/repo-stats", "/loop-stats", "/users-today", "/active-users",
-      "/revenue-snapshot", "/personal-track-signups", "/legacy-nudge-clicks",
-    ]) {
-      expect(firstLinePreview(cmd)).toBe(cmd);
-    }
+  it("preserves asterisk wildcards (Bug 17)", () => {
+    expect(firstLinePreview("/find *.jsx")).toBe("/find *.jsx");
+    expect(firstLinePreview("grep '*' package.json")).toBe("grep '*' package.json");
   });
-  it("still strips the other markdown noise", () => {
-    expect(firstLinePreview("# **Bold** header")).toBe("Bold header");
-    expect(firstLinePreview("> quoted line")).toBe("quoted line");
+  it("preserves hyphens in normal shell-command messages (Bug 19)", () => {
+    expect(firstLinePreview("Run `ls | head -20` on the pod"))
+      .toBe("Run `ls | head -20` on the pod");
+    expect(firstLinePreview("Try npm install --save-dev vitest"))
+      .toBe("Try npm install --save-dev vitest");
+  });
+  it("preserves markdown noise verbatim too (was a bad trade-off)", () => {
+    // Cosmetic: markdown chars now render as-is in previews.  Small
+    // UX price for correctly preserving user input.
+    expect(firstLinePreview("# Bold header")).toBe("# Bold header");
+    expect(firstLinePreview("> quoted line")).toBe("> quoted line");
+    expect(firstLinePreview("**bold**")).toBe("**bold**");
+  });
+  it("still collapses fenced code to the [code] placeholder", () => {
+    expect(firstLinePreview("```js\nconsole.log(1)\n```after")).toBe(
+      "[code] after",
+    );
   });
 });
 

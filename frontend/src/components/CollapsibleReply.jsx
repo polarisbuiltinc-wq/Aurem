@@ -15,17 +15,21 @@ export function isCollapsibleReply(text) {
 }
 
 function firstLinePreview(text) {
+  // Iter 388p — Bug 17/19 follow-up.  The previous approach stripped
+  // markdown noise chars (`#`, `*`, `_`, `` ` ``, `>`, and — worst —
+  // `-`) from the preview.  That was fine for assistant replies but
+  // corrupted USER-typed content that legitimately contains those
+  // characters as data, not markup:
+  //   • `/find *.jsx` displayed as `/find .jsx` (Bug 17)
+  //   • `/repo-tree`   displayed as `/repotree` (Bug 13)
+  //   • `ls … | head -20` displayed as `head 20` (Bug 19)
+  // Since CollapsibleReply is used for BOTH roles and firstLinePreview
+  // can't tell which, we now strip NOTHING except fenced code blocks
+  // (which would break the one-line invariant).  A few markdown
+  // asterisks leaking into an assistant preview is a far smaller UX
+  // problem than silently mangling user input.
   const line = (text || "")
     .replace(/```[\s\S]*?```/g, " [code] ")
-    // Iter 388l — Bug 13 fix. The previous regex `/[#*_`>-]/g`
-    // stripped hyphens too because `-` was the LAST char inside the
-    // character class (treated as a literal, not a range).  Result:
-    // a user who typed `/repo-tree` saw "/repotree" in the collapsed
-    // preview and thought the slash command had been mangled by the
-    // composer.  Removed `-` from the strip set; markdown bullets
-    // that start with "- " are already handled by the "trim + first
-    // non-empty line" logic below.
-    .replace(/[#*_`>]/g, "")
     .split("\n")
     .map((l) => l.trim())
     .find((l) => l.length > 0) || "";

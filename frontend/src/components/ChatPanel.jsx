@@ -1760,6 +1760,39 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         abortRef.current = null;
         if (retryAttemptRef.current < MAX_RETRIES) {
           retryAttemptRef.current += 1;
+          // Iter 388q — Bug 23 fix.  If the ORIGINAL stream's onDone
+          // fired between the abort schedule and this retry (very
+          // possible when the LLM finishes right around the 90s
+          // mark), the assistant bubble is already `streaming:false`
+          // with committed content — and the retry's fresh tokens
+          // would APPEND to that content, giving the founder the
+          // exact "response duplicated 2x back-to-back" symptom
+          // reported in Bug 21+23.  Skip the retry entirely in that
+          // case (the answer is already there), and only fire when
+          // the bubble is still mid-stream.
+          setMessages((msgs) => {
+            const copy = msgs.slice();
+            const last = copy[copy.length - 1];
+            // NB: if the last assistant bubble already completed
+            // (streaming=false with any content), leave it alone —
+            // the retry short-circuit below will bail out.
+            return copy;
+          });
+          // Read latest streaming state via functional update.
+          let alreadyDone = false;
+          setMessages((cur) => {
+            const last = cur[cur.length - 1];
+            alreadyDone = !!(last && last.role === "assistant"
+              && last.streaming === false
+              && last.content && last.content.length > 0);
+            return cur;
+          });
+          if (alreadyDone) {
+            // Answer already landed — no retry, no duplication.
+            setBusy(false);
+            setStreamHealth({ phase: "idle", silentFor: 0, retryEtaSec: null });
+            return;
+          }
           // Iter 212m-57 — surface a "Reconnecting…" pill with a short
           // countdown so the wait between abort and retry is explained.
           setStreamHealth({
@@ -1768,14 +1801,18 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           });
           // Reset the streaming bubble so the retry starts clean and
           // the user sees a subtle "retrying…" hint instead of a
-          // dead bubble.
+          // dead bubble.  Iter 388q — reset UNCONDITIONALLY (even
+          // if the previous streaming flag flipped false during the
+          // race), so a late-arriving onToken from the aborted stream
+          // can't stack on top of the retry's fresh tokens.
           setMessages((msgs) => {
             const copy = msgs.slice();
             const last = copy[copy.length - 1];
-            if (last && last.role === "assistant" && last.streaming) {
+            if (last && last.role === "assistant") {
               copy[copy.length - 1] = {
                 ...last,
                 content: "",
+                streaming: true,
                 activity: "Reconnecting… (auto-recovery)",
                 progressPct: 0,
                 seenActivities: [],
@@ -2203,12 +2240,24 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         // Iter 212m-19 — hide the floating card on error so it
         // doesn't sit there with an in-progress ⏳ forever.
         setLiveStepCard(null);
+        // Iter 388p — Bug 15 defensive fix.  `streamChat` in api.js
+        // already sanitises Cloudflare / ingress HTML bodies, but a
+        // caller path we haven't accounted for (or an error object
+        // reshaped by an interceptor) could still hand us raw HTML.
+        // Do a second pass here at the message-write boundary so no
+        // raw HTML can ever land inside `content` — the ONE thing
+        // that reaches the rendered chat bubble.  Idempotent with
+        // the api.js sanitiser; both may fire and it's still fine.
+        let errText = typeof err === "string" ? err : (err?.message || String(err || ""));
+        if (/^\s*(<!doctype\s+html|<html|<head|<body)/i.test(errText)) {
+          errText = "The server was briefly unavailable. Try again in a moment.";
+        }
         setMessages((msgs) => {
           const copy = msgs.slice();
           const last = copy[copy.length - 1];
           if (last && last.role === "assistant") {
             copy[copy.length - 1] = {
-              ...last, content: `⚠ ${err}`, error: true, streaming: false,
+              ...last, content: `⚠ ${errText}`, error: true, streaming: false,
             };
           }
           return copy;
@@ -3326,8 +3375,13 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       onError: (err) => {
         // eslint-disable-next-line no-console
         console.warn("[loop-sse] onError →", err);
-        // Surface a soft notice; engine state still persisted in Mongo.
-        const msg = err?.message || "Loop stream interrupted";
+        // Iter 388p — Bug 15 defensive fix for the loop-SSE path too.
+        // Same rationale as the chat SSE onError above: never let raw
+        // Cloudflare/ingress HTML land in message content.
+        let msg = err?.message || (typeof err === "string" ? err : "Loop stream interrupted");
+        if (/^\s*(<!doctype\s+html|<html|<head|<body)/i.test(msg)) {
+          msg = "Loop stream briefly disconnected — engine state safe in Mongo.";
+        }
         setMessages((m) => {
           const out = m.slice();
           for (let i = out.length - 1; i >= 0; i--) {
