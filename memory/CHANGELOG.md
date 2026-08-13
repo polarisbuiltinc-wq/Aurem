@@ -2,6 +2,15 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **Deploy Logger cascade fix · Iter 388z (2026-08-13)** — the Option B banner fix landed in the previous deploy but PROD `/api/health` still returned the stale legacy values. Root-caused via live prod curl:
+  - `/api/aurem-dev/version` returned fresh `commit_sha: 6017337dfdb3` (uses `routers/version.py::_read_commit()` cascade which includes BUILD_INFO.txt fallback).
+  - `/api/health` returned stale `build_hash: ed5b698` (used `app.state.deploy_event` which was never populated).
+  - Cause: `services/deploy_logger.py::get_current_commit()` cascade was only `git rev-parse HEAD` → `AUREM_DEPLOY_COMMIT` env. Prod strips `.git`, env var isn't set → returns `None` → `log_deploy_event()` bails at "no commit sha resolvable — skip" → `app.state.deploy_event` stays unset → `/api/health` falls back to legacy resolvers with cached stale SHA.
+  - Fix: extended `get_current_commit()` cascade to include `backend/BUILD_INFO.txt` as final fallback (same file `/version` route reads successfully on prod). Added `_read_build_info_sha()` helper with hex validation (never surfaces garbage as a SHA), tries backend path then repo-root path.
+  - **Tests**: `tests/test_iter388z_deploy_logger_build_info_fallback.py` — 7 pass (backend path read, repo-root fallback, non-hex rejection, both-paths-missing, prod scenario, git wins over BUILD_INFO when present, env var wins over BUILD_INFO).
+  - **Preview verified**: after fix, `/api/health` returns `build_hash: 38e9ca104aeb` (matches `git rev-parse HEAD`) and `built_at: <current boot ISO>`. Prod will get this in the next deploy.
+
+
 - **Admin Panel Payments Accuracy (Iter 388y · #35 P0 slice · 2026-08-13)** — closes the "founder's most-viewed metric is fake" bug documented in `memory/ADMIN_AUDIT_2026-02-09.md`.
   - **`routers/admin_analytics.py::token_pnl()` (line 578)** — was returning `revenue_month:0, stripe_fees:0, net_revenue:0, net_profit:-ai_cost, margin_pct:0` HARDCODED. Now computes real revenue via aggregate on `cto_payments` with `payment_status='paid'` + `created_at >= month_ago`, estimates Stripe fees at 2.9% + $0.30/txn (US standard, `_note` explicitly flags it as estimate), returns real `net_profit`, `margin_pct`, `paid_txn_month`. `stripe_configured` now reads `STRIPE_API_KEY` env instead of the hardcoded `False`.
   - **Cost-per-1k rate table refreshed** — was 2024-era (deepseek $0.30 / maxx $0.65 / groq $0.03; unknown agents defaulted to $0.30). Now 2026 rates with keys for `claude-sonnet-5, claude-haiku-4, gpt-5.2, gpt-5.2-mini, gemini-3-flash, gemini-3-pro, glm-5.2` in addition to the legacy labels. Rates verified against providers' public pricing pages, dated in the source comment. Fallback rate uses DeepSeek band as conservative headroom.

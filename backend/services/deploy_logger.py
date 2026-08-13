@@ -26,6 +26,20 @@ _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")
 _DEFAULT_REPO = os.environ.get("AUREM_GITHUB_REPO", "AUREMBeauty/AUREM-")
 _BOOT_ID = uuid.uuid4().hex[:12]
 
+# Iter 388z · Deploy Insights Panel · Option B follow-up.  The prod
+# container strips .git, so `git rev-parse HEAD` returns None on prod
+# and log_deploy_event() was giving up at that point ("no commit sha
+# resolvable — skip").  That left app.state.deploy_event unset →
+# /api/health kept surfacing stale build_hash / built_at from an old
+# deploy_events row.  Extended the cascade to match what
+# routers/version.py::_read_commit() already does successfully on
+# prod: read BUILD_INFO.txt (post-commit hook stamps the fresh SHA
+# there; the deploy pipeline snapshots the file with the build).
+_BUILD_INFO_PATH_BACKEND = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "BUILD_INFO.txt")
+)
+_BUILD_INFO_PATH_REPO = os.path.join(_REPO_ROOT, "BUILD_INFO.txt")
+
 
 def _safe_run(cmd: list[str]) -> Optional[str]:
     try:
@@ -35,9 +49,39 @@ def _safe_run(cmd: list[str]) -> Optional[str]:
         return None
 
 
+def _read_build_info_sha() -> Optional[str]:
+    """Read the SHA from backend/BUILD_INFO.txt (post-commit hook
+    output) — the fallback that /api/health/version cascade uses on
+    prod when .git is stripped."""
+    for p in (_BUILD_INFO_PATH_BACKEND, _BUILD_INFO_PATH_REPO):
+        try:
+            if os.path.exists(p):
+                s = open(p, "r", encoding="utf-8").read().strip()
+                # BUILD_INFO.txt content is just the raw SHA (7-40 hex).
+                s = s.split()[0] if s else ""
+                if s and all(c in "0123456789abcdef" for c in s.lower()):
+                    return s
+        except Exception:
+            pass
+    return None
+
+
 def get_current_commit() -> dict:
-    """Return {commit_sha, branch, message, author, timestamp_iso} for HEAD."""
-    sha = _safe_run(["git", "rev-parse", "HEAD"]) or os.environ.get("AUREM_DEPLOY_COMMIT")
+    """Return {commit_sha, branch, message, author, timestamp_iso} for HEAD.
+
+    Cascade (Iter 388z):
+      1. `git rev-parse HEAD`               — dev / any container with .git
+      2. `AUREM_DEPLOY_COMMIT` env var      — pipelines that stamp it
+      3. `backend/BUILD_INFO.txt`           — post-commit-hook fallback
+                                              (works on prod containers
+                                              that strip .git but keep
+                                              this file in the snapshot)
+    """
+    sha = (
+        _safe_run(["git", "rev-parse", "HEAD"])
+        or os.environ.get("AUREM_DEPLOY_COMMIT")
+        or _read_build_info_sha()
+    )
     branch = _safe_run(["git", "rev-parse", "--abbrev-ref", "HEAD"]) or os.environ.get("AUREM_DEPLOY_BRANCH", "main")
     message = _safe_run(["git", "log", "-1", "--pretty=%s"]) or ""
     author = _safe_run(["git", "log", "-1", "--pretty=%an"]) or ""
