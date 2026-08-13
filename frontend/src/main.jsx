@@ -2,6 +2,11 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
+// Iter 388-p1 — Frontend Sentry wiring (Item #20).  NO-OP unless
+// REACT_APP_SENTRY_DSN is set in frontend/.env — safe to import
+// unconditionally.  See src/lib/sentry.js for activation steps.
+import { initSentry } from "./lib/sentry";
+initSentry();
 // Iter 212h — silent global error reporter; POSTs every console.error
 // and unhandledrejection to /admin/errors/report so prod bugs surface
 // in the Admin → Errors tab instead of disappearing into the void.

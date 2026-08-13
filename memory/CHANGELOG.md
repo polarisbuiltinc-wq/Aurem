@@ -2,6 +2,17 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **Frontend Sentry wiring · Iter 388-p1 (Item #20 · 2026-08-13)** — coded, preview-verified, IDLE until user pastes DSN.
+  - `frontend/src/lib/sentry.js` — NEW. Exports `initSentry()` + `reportSentryException()` + `SentryErrorBoundary`. Reads `REACT_APP_SENTRY_DSN` from env; if empty, silent no-op (safe to import unconditionally). Auto-detects environment from hostname (`production` / `preview` / `dev`). Release tag pulled from `<meta name="build-hash">` so every event carries the exact deploy SHA.
+  - `frontend/src/main.jsx` — imports + calls `initSentry()` at boot, before `errorReporter`.
+  - `frontend/src/components/RouteErrorBoundary.jsx` — `componentDidCatch` now ALSO calls `reportSentryException(err, {componentStack, source: "route-error-boundary"})` in addition to the existing console.error → `/admin/errors/report` pipeline. Sentry is an ADDITIONAL surface, not a replacement.
+  - Config: `tracesSampleRate: 0.1`, `replaysSessionSampleRate: 0.0`, `replaysOnErrorSampleRate: 1.0`, `blockAllMedia: true`, `beforeSend` drops "ResizeObserver loop" browser-quirk noise + all `dev` env events.
+  - **Tests**: `frontend/src/lib/__tests__/sentry.test.js` — 6 pass (no-op when DSN missing, init when DSN present, trims whitespace-only DSN, idempotent init, reportSentryException no-op when uninit'd, reportSentryException forwards when init'd).
+  - **Smoke test**: preview `/` renders with 0 console errors, `window.__SENTRY__` absent (no-DSN safe path).
+  - **Package**: `yarn add @sentry/react` (transitively brings @sentry/browser + @sentry/replay).
+  - **Activation guide**: `memory/SENTRY_ACTIVATION_GUIDE.md` — step-by-step for founder to create free-tier Sentry account, copy DSN, paste in `frontend/.env`, redeploy. No further code changes needed.
+
+
 - **Rate-limiter WARNING throttle · Iter 388-noise (2026-08-13)** — user flagged the deploy log stream as "failing" due to volume; audit showed the deploy actually succeeded (200 OK responses across all endpoints, `/health` healthy) but the log stream was drowning in ~100 identical `rate_limiter: Redis unavailable ... max requests limit exceeded` warnings per minute after Upstash's free-tier monthly quota (500,000 req) exhausted.
   - Real cause: `services/rate_limiter.py::_ensure_redis()` deliberately logged WARNING on every failed attempt ("so a Redis flap is visible") — great for transient flaps, terrible for sustained same-error outages like a quota cap.
   - Fix: throttle policy keyed on `(error_signature, minute_bucket)`. Signature = `type(e).__name__:str(e)[:80]`.

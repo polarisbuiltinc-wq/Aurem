@@ -7,6 +7,7 @@
  * remounts the tree (and re-attempts the chunk fetch).
  */
 import React from "react";
+import { reportSentryException } from "../lib/sentry";
 
 export default class RouteErrorBoundary extends React.Component {
   constructor(props) {
@@ -21,6 +22,14 @@ export default class RouteErrorBoundary extends React.Component {
   componentDidCatch(error, info) {
     // eslint-disable-next-line no-console
     console.error("[route-error-boundary]", error, info?.componentStack);
+    // Iter 388-p1 — forward render errors to Sentry too (no-op if
+    // Sentry DSN not configured).  Preserves the local console.error
+    // so the existing errorReporter → /admin/errors/report pipeline
+    // keeps working in parallel; Sentry is an ADDITIONAL surface.
+    reportSentryException(error, {
+      component_stack: info?.componentStack || "",
+      source: "route-error-boundary",
+    });
   }
 
   render() {
