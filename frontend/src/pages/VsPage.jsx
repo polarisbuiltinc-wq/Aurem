@@ -104,7 +104,7 @@ function MetaTags({ c }) {
             { "@type": "ListItem", position: 2, name: "Compare",
               item: "https://auremcto.com/compare" },
             { "@type": "ListItem", position: 3,
-              name: `AUREM vs ${c.name}`, item: c.canonical },
+              name: `ORA vs ${c.name}`, item: c.canonical },
           ],
         },
       ],
@@ -138,7 +138,7 @@ export default function VsPage({ forcedSlug }) {
           </span>
           <h1 style={{ fontSize: 40, fontWeight: 700, margin: "20px 0 14px",
                        lineHeight: 1.15 }}>
-            AUREM vs {c.name}
+            ORA vs {c.name}
           </h1>
           <p style={{ ...S.dim, maxWidth: 640, margin: "0 auto", fontSize: 17 }}>
             {c.intro}
@@ -151,7 +151,7 @@ export default function VsPage({ forcedSlug }) {
           <div style={{ ...S.card, borderColor: "var(--border-strong)" }}
                data-testid={`vs-${c.slug}-pick-aurem`}>
             <h2 style={{ fontSize: 18, fontWeight: 600, margin: "0 0 10px" }}>
-              Choose AUREM if you want…
+              Choose ORA if you want…
             </h2>
             <ul style={{ ...S.dim, margin: 0, paddingLeft: 18, lineHeight: 1.9 }}>
               {c.pickAurem.map((li) => <li key={li}>{li}</li>)}
@@ -259,7 +259,7 @@ export default function VsPage({ forcedSlug }) {
               .map((o) => (
                 <Link key={o.slug} to={`/vs/${o.slug}`} style={S.badge}
                       data-testid={`vs-link-${o.slug}`}>
-                  AUREM vs {o.name}
+                  ORA vs {o.name}
                 </Link>
               ))}
             <Link to="/compare" style={S.badge} data-testid="vs-link-compare-hub">

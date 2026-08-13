@@ -38,9 +38,9 @@ export const COMPETITORS = {
   devin: {
     slug: "devin",
     name: "Devin",
-    title: "AUREM vs Devin (2026) — honest comparison | Devin alternative",
+    title: "ORA vs Devin (2026) — honest comparison | Devin alternative",
     description:
-      "AUREM vs Devin, compared honestly: flat $9–$49/mo vs $20 + $2.25/ACU " +
+      "ORA vs Devin, compared honestly: flat $9–$49/mo vs $20 + $2.25/ACU " +
       "metered billing, free tier vs none, direct GitHub commit or PR, 25+ pattern " +
       "pre-commit security scan, two-model Maxx review. June 2026 data.",
     canonical: "https://auremcto.com/vs/devin",
@@ -139,9 +139,9 @@ export const COMPETITORS = {
   cursor: {
     slug: "cursor",
     name: "Cursor",
-    title: "AUREM vs Cursor (2026) — honest comparison | Cursor alternative",
+    title: "ORA vs Cursor (2026) — honest comparison | Cursor alternative",
     description:
-      "AUREM vs Cursor, compared honestly: autonomous AI engineer that ships " +
+      "ORA vs Cursor, compared honestly: autonomous AI engineer that ships " +
       "commits vs an AI-first IDE you drive. Flat $9–$49/mo vs $20–$200/mo with " +
       "usage limits. Pre-commit security scan, works from mobile. June 2026 data.",
     canonical: "https://auremcto.com/vs/cursor",
@@ -230,9 +230,9 @@ export const COMPETITORS = {
   "github-copilot": {
     slug: "github-copilot",
     name: "GitHub Copilot",
-    title: "AUREM vs GitHub Copilot (2026) — honest comparison | Copilot alternative",
+    title: "ORA vs GitHub Copilot (2026) — honest comparison | Copilot alternative",
     description:
-      "AUREM vs GitHub Copilot, compared honestly: autonomous task shipping vs " +
+      "ORA vs GitHub Copilot, compared honestly: autonomous task shipping vs " +
       "in-IDE assistance and premium-request metering. Flat $9–$49/mo, pre-commit " +
       "security scan, mobile access. June 2026 data.",
     canonical: "https://auremcto.com/vs/github-copilot",
@@ -322,9 +322,9 @@ export const COMPETITORS = {
   "replit-agent": {
     slug: "replit-agent",
     name: "Replit Agent",
-    title: "AUREM vs Replit Agent (2026) — honest comparison | Replit alternative",
+    title: "ORA vs Replit Agent (2026) — honest comparison | Replit alternative",
     description:
-      "AUREM vs Replit Agent, compared honestly: shipping to YOUR GitHub repo " +
+      "ORA vs Replit Agent, compared honestly: shipping to YOUR GitHub repo " +
       "vs building inside Replit's cloud workspace. Flat $9–$49/mo vs $25/mo + " +
       "effort-based billing. June 2026 data.",
     canonical: "https://auremcto.com/vs/replit-agent",
@@ -409,9 +409,9 @@ export const COMPETITORS = {
   windsurf: {
     slug: "windsurf",
     name: "Windsurf",
-    title: "AUREM vs Windsurf (2026) — honest comparison | Windsurf alternative",
+    title: "ORA vs Windsurf (2026) — honest comparison | Windsurf alternative",
     description:
-      "AUREM vs Windsurf, compared honestly: autonomous task shipping to GitHub " +
+      "ORA vs Windsurf, compared honestly: autonomous task shipping to GitHub " +
       "vs an agentic IDE (Cascade). Flat $9–$49/mo vs $20/mo quota plans. " +
       "Pre-commit security scan, mobile access. June 2026 data.",
     canonical: "https://auremcto.com/vs/windsurf",
@@ -493,7 +493,7 @@ export const COMPETITORS = {
 export const ALL_SLUGS = ["devin", "cursor", "github-copilot", "replit-agent", "windsurf"];
 
 export const COMPARE_HUB = {
-  title: "AUREM vs Devin, Cursor, Copilot, Replit & Windsurf (2026) — honest comparisons",
+  title: "ORA vs Devin, Cursor, Copilot, Replit & Windsurf (2026) — honest comparisons",
   description:
     "How AUREM compares to Devin, Cursor, GitHub Copilot, Replit Agent and " +
     "Windsurf in 2026 — pricing, delivery mode, security gates and where each " +

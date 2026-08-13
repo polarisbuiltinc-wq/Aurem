@@ -2,6 +2,16 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **Brand identity P0 alignment · Iter 388-brand (2026-08-13)** — deep-scan revealed user-visible surfaces mixing "AUREM CTO" (deprecated product label) with the correct hierarchy (Legal: Polaris Built Inc., Trade name: AUREM, Product: ORA by Aurem).
+  - **`frontend/src/pages/VsPage.jsx`** — H1 template, related-comparisons badges, breadcrumb JSON-LD position 3, pick-card CTA all switched from "AUREM vs {competitor}" / "Choose AUREM if you want…" to "ORA vs {competitor}" / "Choose ORA if you want…". Body copy referring to AUREM as the acting company (e.g. "AUREM ships an MCP server") kept unchanged — matches trade-name usage per user hierarchy.
+  - **`frontend/src/pages/CompareHub.jsx`** — `<h1>How ORA compares</h1>` (was `How AUREM compares`), ItemList JSON-LD `name: "ORA comparisons"`, per-card headings `ORA vs {c.name}`.
+  - **`frontend/src/data/competitors.mjs`** — 7× `"AUREM vs …"` in `title` + `description` fields for all 5 competitor entries + the compare-hub aggregate flipped to `"ORA vs …"`. Drives `<title>` / `<meta description>` / OG tags.
+  - **`frontend/index.html:194`** — Organization JSON-LD `alternateName` reduced from `["AUREM", "AUREM Labs"]` to `["AUREM"]`. "AUREM Labs" was never a registered name — dropping fixes Google Knowledge Graph disambiguation.
+  - **Preview verified**: `/vs/devin` renders `<h1>ORA vs Devin</h1>`, `<title>ORA vs Devin (2026) — honest comparison | Devin alternative</title>`, 0 occurrences of "AUREM CTO" in body text, 5 correct "ORA vs" occurrences (H1 + related badges + breadcrumb).
+  - **Legal/policy pages already correct** — Terms, Privacy, DPA, Cookie, Subprocessors, Security, AI Code Processing, Status all consistently use "Polaris Built Inc." + "AUREM™ is a trademark of Polaris Built Inc." — no changes needed there.
+  - **Deferred (P1/P2, not touched)**: `deploy_logger.py` default repo (`AUREMBeauty/AUREM-` → `polarisbuiltinc-wq/auremdev`), internal `AUREM_CTO_PERSONA` constant, `AUREM_CTO_MASTER_KEY` env, `aurem_cto_*` Mongo collections, `aurem-dev.*` log tag prefixes — all internal/ops-facing, cost > value to rename without migration plan.
+
+
 - **Frontend Sentry wiring · Iter 388-p1 (Item #20 · 2026-08-13)** — coded, preview-verified, IDLE until user pastes DSN.
   - `frontend/src/lib/sentry.js` — NEW. Exports `initSentry()` + `reportSentryException()` + `SentryErrorBoundary`. Reads `REACT_APP_SENTRY_DSN` from env; if empty, silent no-op (safe to import unconditionally). Auto-detects environment from hostname (`production` / `preview` / `dev`). Release tag pulled from `<meta name="build-hash">` so every event carries the exact deploy SHA.
   - `frontend/src/main.jsx` — imports + calls `initSentry()` at boot, before `errorReporter`.
