@@ -131,6 +131,26 @@ async def get_usage(user_id: str) -> dict:
         {"_id": 0, "count": 1},
     ) or {}
     tasks_this_month += int(_sf.get("count") or 0)
+    # Iter 388n — Bug 6+7 fix.  Loop runs live in `loop_sessions`,
+    # NOT in `cto_tasks`.  Before this patch, a founder who ran five
+    # successful Plan→Ship loops in a month saw "Tasks this month: 0"
+    # on Settings, "Success rate: 0%" on Analytics, and "0 steps" on
+    # Ops History — because the counter was ignoring the collection
+    # loops actually write to.  Now count `loop_sessions` where the
+    # session reached COMPLETED (successful ship) OR is currently
+    # running (matches the semantics of the cto_tasks query above).
+    # Note: `loop_sessions.created_at` is a datetime (not a float
+    # timestamp), so we pass `month_start` directly here.
+    loop_runs_this_month = await db.loop_sessions.count_documents({
+        "user_id": user_id,
+        "created_at": {"$gte": month_start},
+        "state": {"$in": [
+            "completed", "shipping", "executing", "verifying",
+            "scanning", "planning", "self_healing",
+            "awaiting_confirmation", "paused_for_user",
+        ]},
+    })
+    tasks_this_month += loop_runs_this_month
     task_cap = MONTHLY_TASK_LIMITS.get(tier, MONTHLY_TASK_LIMITS["free"])
 
     return {

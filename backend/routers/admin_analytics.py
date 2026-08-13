@@ -1036,6 +1036,29 @@ async def product_analytics(
     tasks_failed = await db.cto_tasks.count_documents(
         {"created_at": {"$gte": window_start}, "status": "failed"}
     )
+    # Iter 388n — Bug 6+7 fix.  Loop runs live in `loop_sessions` under
+    # a `state` field (COMPLETED / FAILED / …), NOT `cto_tasks.status`.
+    # Without this backfill Analytics showed "0/1 tasks · 0% success"
+    # for a founder who'd just shipped a real Plan→Ship loop 30 min
+    # earlier.  `loop_sessions.created_at` is stored as a datetime
+    # (via `_now()` in loop_engine.py), so we compare against a
+    # datetime bound here — not the `time.time()` float used for
+    # cto_tasks above.
+    from datetime import datetime as _dt, timezone as _tz
+    window_start_dt = _dt.fromtimestamp(window_start, tz=_tz.utc)
+    loop_total = await db.loop_sessions.count_documents(
+        {"created_at": {"$gte": window_start_dt}}
+    )
+    loop_done = await db.loop_sessions.count_documents(
+        {"created_at": {"$gte": window_start_dt}, "state": "completed"}
+    )
+    loop_failed = await db.loop_sessions.count_documents(
+        {"created_at": {"$gte": window_start_dt},
+         "state": {"$in": ["failed", "aborted", "expired"]}},
+    )
+    tasks_total  += loop_total
+    tasks_done   += loop_done
+    tasks_failed += loop_failed
     success_rate = (
         round((tasks_done / tasks_total * 100), 1) if tasks_total else 0
     )

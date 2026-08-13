@@ -100,6 +100,7 @@ const VsPage            = lazy(() => import("./pages/VsPage"));      // Iter 358
 const CompareHub        = lazy(() => import("./pages/CompareHub"));  // Iter 358
 const Pricing          = lazy(() => import("./pages/Pricing"));
 const Demo             = lazy(() => import("./pages/Demo"));                  // Iter 212m-200
+const NotFound         = lazy(() => import("./pages/NotFound"));              // Iter 388o · Bug 10
 // Iter 212m-235 — Personal Track (Phase 6). Warm cream/terracotta
 // aesthetic; distinct from Developer Track's IDE-dark shell.
 const ChooseTrack      = lazy(() => import("./pages/personal/ChooseTrack"));
@@ -380,7 +381,12 @@ export default function App() {
               "session was killed". The auth token lives in localStorage,
               not the URL, so this redirect preserves the session. */}
           <Route path="/dashboard/*" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* Iter 388o — Bug 10 fix.  Previously the catch-all silently
+              redirected every broken URL to `/`, so Google indexed the
+              homepage under every stale link and founders couldn't
+              tell links were broken.  Serve a real 404 SPA page (with
+              noindex meta) instead. */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
         </RouteErrorBoundary>
       </Suspense>

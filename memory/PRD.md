@@ -214,6 +214,61 @@ regression assertion.
 - Advisor endpoint returns all 3 new keys
 - `open_prs` cleanly reports `repo_not_public_or_missing` instead of
   hanging (Bug 4 root fixed at the data layer)
+## Iter 388n — Batch C · Bug 6 + 7 task tracking fix (2026-02-13)
+
+**Root cause (verified from source)**:
+- `_run_task_with_git` writes to `cto_tasks`
+- Real user Plan→Ship loops run through `loop_engine.py`, which writes
+  to `loop_sessions` / `loop_run_log` / `loop_events` — but NEVER
+  touches `cto_tasks`
+- Both `usage.py::tasks_this_month` and `admin_analytics.py::
+  product_analytics` counted ONLY `cto_tasks`, so loop-driven work
+  was invisible to Settings ("Tasks this month: 0"), Analytics
+  ("Success Rate 0% (0/1)"), and Ops History ("0 steps")
+
+**Fixes**:
+- `backend/services/usage.py::compute_effective_usage`: adds
+  `loop_sessions.count_documents` aggregate over the same month
+  window, using a datetime bound (not float timestamp) since
+  `loop_sessions.created_at` is stored as a datetime via `_now()`.
+  Counts active states (`completed`, `shipping`, `executing`,
+  `verifying`, `scanning`, `planning`, `self_healing`,
+  `awaiting_confirmation`, `paused_for_user`) — deliberately
+  excludes `failed`/`aborted`/`expired` to preserve the Iter 52
+  BUG 3 rule (failed tasks don't burn quota).
+- `backend/routers/admin_analytics.py::product_analytics`: same
+  `loop_sessions` backfill added to `tasks_total` / `tasks_done` /
+  `tasks_failed`.  Uses `window_start_dt` (datetime) for the
+  loop-sessions query since the collection stores datetimes.
+
+**Live verified**: `curl /api/aurem-dev/usage/me` → `tasks_this_month:
+2` for test@aurem.dev (was 0 before) — matches the two completed
+loops the account had in `loop_sessions`.
+
+**Tests**: 4 pytest regressions green
+(`backend/tests/test_iter388n_bug67_task_tracking.py`) — marker phrase
+locks, datetime-vs-timestamp guard, combined-total accumulator, Iter 52
+BUG 3 exclusion still respected.
+
+## Iter 388o — Bug 10 · Real 404 page (2026-02-13)
+
+- Removed the `<Route path="*" element={<Navigate to="/" replace/>}>`
+  silent redirect
+- Added `frontend/src/pages/NotFound.jsx` — proper 404 SPA page with
+  echoed URL, home + dashboard links, and a `<meta name="robots"
+  content="noindex, follow">` mutation that mutates the existing
+  meta tag (not just appends) so older crawlers reading the first
+  meta match still respect the noindex directive.  Restored on unmount.
+- Live verified via Playwright screenshot on
+  `/random-broken-url-test-12345` → 404 page renders, URL preserved,
+  noindex applied.
+- Tests: 6 vitest regressions green
+  (`frontend/src/pages/__tests__/iter388o.bug10.notfound.test.jsx`)
+- **SPA caveat**: React SPA cannot set an HTTP 404 status from client
+  code (would need SSR or edge middleware).  If prod SEO demands a
+  real 404 status header, that fix belongs in the Vercel/CDN layer.
+
+
 - `token_breakdown.user_month_total = 7963` (matches Analytics
   screenshot exactly — real data, no fabrication)
 - 6 pytest regressions green
