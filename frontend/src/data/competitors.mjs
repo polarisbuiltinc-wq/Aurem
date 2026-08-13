@@ -238,8 +238,8 @@ export const COMPETITORS = {
     canonical: "https://auremcto.com/vs/github-copilot",
     intro:
       "Copilot is the default AI assistant inside your IDE and GitHub — " +
-      "completions, chat, and a coding agent that opens PRs from issues. AUREM " +
-      "CTO is a standalone autonomous engineer with its own verify-and-ship " +
+      "completions, chat, and a coding agent that opens PRs from issues. ORA " +
+      "is a standalone autonomous engineer with its own verify-and-ship " +
       "pipeline. The real comparison is metered requests vs flat tasks, and " +
       "assistance vs delegation.",
     pickAurem: [
