@@ -665,13 +665,15 @@ body.aurem-glass #root {
   padding: 4px 2px;
   min-height: 28px;
 }
-/* Iter 388t — Bug 26 fix, composer variant.  Same `:focus-visible`
-   ring for keyboard users on the composer textarea. */
-.composer-card .composer-input-bare:focus-visible {
-  outline: 2px solid var(--accent-2, #ffc560);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
+/* Iter 388t — Bug 26 originally added a `:focus-visible` outline
+   here for keyboard a11y, but the `.composer-card:focus-within`
+   rule above already turns the whole card border orange whenever
+   the textarea (or any child control) has focus.  Both together
+   painted a DOUBLE ring — one on the card, one on the textarea —
+   which the founder flagged on prod (screenshot: two nested orange
+   rectangles inside the composer).  WCAG 2.4.7 is still satisfied
+   because the outer focus-within border is unmistakable; the inner
+   outline was purely redundant.  Removed on 2026-08-13. */
 .composer-card .composer-input-bare::placeholder {
   color: var(--text-faint);
 }
