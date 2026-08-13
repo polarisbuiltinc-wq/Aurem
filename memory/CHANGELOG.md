@@ -2,6 +2,13 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **P0 Security · Danger Zone email masking (Iter 388v · 2026-08-13)** — user-caught shoulder-surf gap. The confirm-email display in `DangerZone.jsx` was showing the full plaintext email directly above the input, letting any screen-share / shoulder-surf viewer copy-paste it back and unlock the delete. Confirmation step was security theatre.
+  - Fix: `emailMasked` derived value hides the local part entirely except last 2 chars (e.g. `teji.ss1986@gmail.com` → `*********86@gmail.com`; `test@aurem.dev` → `**st@aurem.dev`). Wrapping span carries `userSelect: "none"` to block mouse-drag copy. Copy updated to "type your full account email exactly — from memory, not copied from here".
+  - Validation unchanged — server + client both require the FULL lowercase email to match.
+  - **Tests**: `components/__tests__/DangerZone.iter388v.mask.test.jsx` — **7 pass** (mask never contains full local part, last 2 + domain the only reveal, short local part → 4 stars, pasted-mask keeps button disabled, real email enables button, case-insensitive match works, userSelect:none set, long emails still hide local).
+  - **Real-preview E2E screenshot proof**: modal opened as `test@aurem.dev`, mask rendered as `**st@aurem.dev`, filling input with masked value kept confirm button DISABLED (`is_disabled=True`), filling with real email ENABLED it. Deployed to preview via hot reload.
+
+
 - **Support Reply UX Fix — Option A (Iter 388u · 2026-08-13)** — closed the black-hole: admin replies were writing to Mongo but user never got a surface (no email, no badge, no polling). SupportPopup's success message "You'll see the reply in this same app" was a lie — no code fetched replies.
   - **NEW `services/support_email.py`** — `send_reply_notification()` builds HTML+text email with admin message inline and CTA link to `/support/thread/{tid}?t=…&e=…`. HMAC token via existing `support_token()` (same scope as `/support?t=…&e=…` composer link). Sends via Resend using same pattern as `first50_campaign._resend_send`.
   - **NEW public endpoints** in `routers/support.py`:

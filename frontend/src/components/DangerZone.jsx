@@ -17,7 +17,7 @@
  *     but the inline error banner catches it if a race sneaks through.
  *   • Network / 5xx → banner with a Retry hint.
  */
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useMemo } from "react";
 import { AlertTriangle, Trash2 } from "lucide-react";
 import { api, logout as apiLogout } from "../lib/api";
 import useModalA11y from "../hooks/useModalA11y";
@@ -32,6 +32,29 @@ export default function DangerZone({ email }) {
   const emailLower = (email || "").trim().toLowerCase();
   const typedLower = typed.trim().toLowerCase();
   const canSubmit = !!emailLower && typedLower === emailLower && !submitting;
+
+  // Iter 388v · P0 Security Fix — MASK the confirm-email display so a
+  // shoulder-surfer / screen-share viewer cannot copy-paste it back
+  // into the input. Confirmation only works if the user KNOWS their
+  // own email; the masked version won't match on paste.
+  //   Rule: hide the local part entirely except the last 2 chars.
+  //   Example: teji.ss1986@gmail.com → *********86@gmail.com
+  // Validation stays against the real, unmasked email (line 34).
+  const emailMasked = useMemo(() => {
+    if (!emailLower) return "";
+    const at = emailLower.lastIndexOf("@");
+    if (at < 0) return emailLower;  // malformed — nothing to mask meaningfully
+    const local = emailLower.slice(0, at);
+    const domain = emailLower.slice(at);
+    if (local.length <= 2) {
+      // Local part too short — mask everything with 4 stars so we
+      // still never reveal it verbatim on the screen.
+      return "****" + domain;
+    }
+    const last2 = local.slice(-2);
+    const mask = "*".repeat(local.length - 2);
+    return mask + last2 + domain;
+  }, [emailLower]);
 
   const reset = () => {
     setOpen(false);
@@ -146,14 +169,19 @@ export default function DangerZone({ email }) {
               <li>Log you out of every device</li>
             </ul>
             <p style={{ fontSize: 12.5, color: "var(--text)", margin: "0 0 8px" }}>
-              To confirm, type your account email exactly:
+              To confirm, type your full account email exactly — from
+              memory, not copied from here:
             </p>
-            <div style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: 12, color: "var(--accent-2)",
-              marginBottom: 8, letterSpacing: "0.02em",
-            }}>
-              {emailLower}
+            <div
+              data-testid="danger-zone-email-masked"
+              aria-label="masked account email (hint only — type the full email from memory)"
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 12, color: "var(--accent-2)",
+                marginBottom: 8, letterSpacing: "0.02em",
+                userSelect: "none",
+              }}>
+              {emailMasked}
             </div>
             <input
               className="input"
