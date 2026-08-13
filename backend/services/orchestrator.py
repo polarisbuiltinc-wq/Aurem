@@ -164,6 +164,13 @@ def _synthesise_max_iters_summary(prompt: str, invocations: list[dict]) -> str:
     "here's what I found so far" — NOT "I ran out of time, please
     reformulate your question".
 
+    Iter 388k — Bug 12 fix.  The previous template ended with "Send
+    the same prompt again" which was an INFINITE LOOP for query-tier
+    reads (the model would hit the same wall on the resend).  Now the
+    message is a honest close: "here's what was inspected, tell me if
+    you want a specific slice" — with NO suggestion to resend the
+    identical prompt.
+
     Kept dependency-free so it can't itself crash the response path.
     """
     seen_paths: list[str] = []
@@ -180,29 +187,23 @@ def _synthesise_max_iters_summary(prompt: str, invocations: list[dict]) -> str:
                 if p and p not in seen_paths:
                     seen_paths.append(p)
 
-    # Build a first-person, answer-shaped reply from the gathered
-    # evidence.  If we read any files, summarise what we saw and what
-    # the likely next move is; if we read none, still answer in a
-    # helpful, non-blame tone.
     lines: list[str] = []
     if seen_paths:
         sample = ", ".join(f"`{p}`" for p in seen_paths[:4])
         more = f" (and {len(seen_paths) - 4} more)" if len(seen_paths) > 4 else ""
         lines.append(
-            f"Here's what I found while looking at {sample}{more}:"
-        )
-        lines.append(
-            "I've mapped the surface area for your question but need "
-            "one more round to write the exact patch.  Send the same "
-            "prompt again — with the context I've already loaded, the "
-            "next response will land the concrete answer."
+            f"I inspected {sample}{more} but couldn't wrap the answer in one "
+            "turn.  Tell me the specific slice you want (a function name, a "
+            "line range, or the exact question about that code) and I'll "
+            "reply with the concrete content in the next message — no "
+            "extra tool calls needed."
         )
     else:
         lines.append(
-            "I've started digging into this for you but couldn't "
-            "complete every step in one round.  Send the same prompt "
-            "again and I'll pick up from where I left off with the "
-            "context I've already gathered."
+            "I started digging into this but couldn't produce a concrete "
+            "answer in one turn.  Rephrase with the exact file path, "
+            "function name, or line range you want — that lets me skip "
+            "the exploration step and reply with the content directly."
         )
     if seen_tools:
         lines.append(f"_Context loaded via: {', '.join(seen_tools)}._")
@@ -1941,9 +1942,10 @@ async def chat_with_tools(
                 iters, _elapsed, int(_ORCH_BUDGET_S),
             )
             clean = _synthesise_max_iters_summary(prompt, invocations) or (
-                "I've started on this and gathered some context — send "
-                "the same prompt again and I'll pick up from here with "
-                "a concrete answer."
+                "I started on this and gathered some context but couldn't "
+                "wrap the answer in one turn.  Rephrase with the specific "
+                "file, function, or line range you want and I'll reply "
+                "with the content directly next turn."
             )
             return {
                 "ok": True,
@@ -1974,7 +1976,32 @@ async def chat_with_tools(
             except Exception:
                 pass
         meta = await call_llm_with_meta(
-            first_iter_system if iters == 1 else followup_iter_system,
+            first_iter_system if iters == 1 else (
+                # Iter 388k — Bug 12 fix.  Last-iter guard.  If we're
+                # about to enter the FINAL allowed round, hard-inject a
+                # "produce a final answer now, no more tools" directive
+                # into the system prompt.  Without this, query-tier
+                # asks like "read backend/x.py and show me lines 1-50"
+                # would land in `_synthesise_max_iters_summary` with
+                # its "send the same prompt again" template — a loop
+                # the user can't escape.  We keep the followup system
+                # for earlier rounds unchanged.
+                followup_iter_system + (
+                    "\n\n=== FINAL ANSWER ROUND ===\n"
+                    "This is your LAST reply for this turn.  You have "
+                    "already gathered context via the tool calls above.  "
+                    "Do NOT emit any more tool calls, JSON blocks, or "
+                    "`tool_call` fences — they will be dropped and the "
+                    "user will see a generic 'try again' message.  "
+                    "Write a complete, self-contained answer using the "
+                    "tool results in the transcript.  If the user asked "
+                    "for file content or line ranges, quote the actual "
+                    "lines you already read; if the answer is a "
+                    "summary, produce the summary now.  Never respond "
+                    "with 'send the same prompt again' or 'need one "
+                    "more round' — that path is disabled."
+                ) if iters >= max_iters else followup_iter_system
+            ),
             transcript,
             max_tokens=token_budget, mode=llm_mode,
             user_id=user_id,

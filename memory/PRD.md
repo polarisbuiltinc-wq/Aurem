@@ -214,26 +214,51 @@ text (Bug 3+5) or silently hung waiting for data that didn't exist
 verify override behavior; the code-level fixes are ready to deploy
 regardless.
 
-## New bugs tracked from senior QA pass (2026-02-13)
+## Iter 388k — Bug 12 CRITICAL fix (query-tier read loop, 2026-02-13)
 
-- **Bug 9** (P0): Chat message content EMPTY on reload — same message
-  that previously showed the `<longcat_tool_call>` leak (Bug 2) now
-  shows only the "via longcat-2.0" footer.  Persistence path is
-  dropping content.  URGENT — needs investigation into message
-  storage path (Mongo `chat_messages` collection + how Bug 2's
-  sanitizer might be stripping content pre-persist).
-- **Bug 10** (P0): No 404 page — broken URLs silently redirect to
-  homepage.  SEO + UX issue.  React Router catch-all `<Route path="*">`
-  is missing.
-- **Bug 11** (P2): Two "founder spots" counters conflict on landing —
-  hero says "48/50 First-50" and lower section says "496 of 500 founder
-  spots" — either duplicate/wrong or need clearer naming to
-  distinguish two separate promos.
-- **Vercel styling** (P2): Settings → Integrations shows Vercel "NOT
-  CONNECTED" in red error style even though disable was intentional
-  (Option B). Should be neutral "not enabled" style.
-- **Bug 6+7 scope narrowed**: Settings → Profile confirms `Tasks
-  this month: 0 / unlimited` (broken) while `Tokens Used: 448,583`
-  (correct).  Root cause is specifically in the TASK-count tracking
-  pipeline, not tokens.
+**Reported by senior QA pass**: *"Read backend/routers/health.py and
+show me the first 50 lines"* → response 1: *"I've mapped the surface
+area but need one more round — Send the same prompt again..."*.
+Resending EXACTLY that prompt → response 2: **identical** template
+again.  Content never delivered.  Core chat flow broken.
+
+**Root cause** (source-code confirmed):
+- `chat.py:2231` gave the "query" intent tier `max_iters=2`
+- Query task like "read + show me lines 1-50" burns iter 1 on
+  `read_repo_file` tool call.  If the LLM makes ANY 2nd exploratory
+  tool call (very common — `list_repo_files` after read) before
+  producing final text, iter 2 exhausts.
+- `orchestrator.py::_synthesise_max_iters_summary` (lines 156-209)
+  fired with template: *"Send the same prompt again — with the
+  context I've already loaded, the next response will land the
+  concrete answer."*
+- Resending hit the exact same 2-iter budget → same template → LOOP.
+  User never got file content.
+
+**Fix — 3 layers**:
+1. `chat.py`: query-tier `_max_iters_eff` bumped `2 → 3`.  Gives the
+   model a guaranteed round after exploratory tool calls.
+2. `orchestrator.py`: on the LAST allowed iter, the system prompt is
+   patched with a `=== FINAL ANSWER ROUND ===` directive telling the
+   model "no more tools, produce a complete answer using the
+   transcript's tool results".  Guaranteed by `iters >= max_iters`
+   guard so it can't fire early.
+3. `orchestrator.py::_synthesise_max_iters_summary`: rewrote the
+   fallback text.  Removed EVERY mention of "send the same prompt
+   again" / "need one more round" / "next response will land the
+   concrete answer".  New message: *"I inspected `<paths>` but
+   couldn't wrap the answer in one turn.  Tell me the specific slice
+   (function name, line range, or exact question) and I'll reply
+   with concrete content next message — no extra tool calls needed."*
+   Locked by pytest regression: banned-phrase string assertions fire
+   if anyone regresses the wording.
+
+**Tests**: `backend/tests/test_iter388k_bug12_loop_fix.py` — 5 green
+(banned-phrase guard, path naming, empty-invocation actionability,
+`max_iters=3` locked-in, `FINAL ANSWER ROUND` presence).  Full
+regression run: 33/33 green across 388g/h/j/k.
+
+**⚠️ Bug 9 (message empty on reload) not fixed in this batch** — still
+open, unrelated code path (Mongo persistence write, not the tool-loop
+synthesizer).
 

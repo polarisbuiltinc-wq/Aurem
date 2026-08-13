@@ -2229,8 +2229,16 @@ async def chat_stream(
                         )
 
                 if _tier == "query":
-                    # Limited tool iterations — context retrieval only.
-                    _max_iters_eff = 2
+                    # Iter 388k — Bug 12 fix. Bumped from 2 → 3.  At 2
+                    # iters a simple "read this file and show me lines
+                    # 1-50" got EXHAUSTED whenever the model made a
+                    # 2nd exploratory tool call (list_repo_files after
+                    # read_repo_file), and the founder saw the
+                    # "send the same prompt again" loop template with
+                    # no actual content.  3 iters + the last-round
+                    # `final_answer_now` directive below gives the
+                    # model one guaranteed round to summarise.
+                    _max_iters_eff = 3
                 else:
                     # Agentic or clarify — full pipeline.
                     _max_iters_eff = min(max(body.max_tool_iters, 4), 6)
