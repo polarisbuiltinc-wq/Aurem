@@ -128,6 +128,20 @@ _REDIS_LAST_ERROR: str | None = None  # last connection-attempt error, for
 _REDIS_LAST_ATTEMPT_TS: float | None = None
 _REDIS_HOST_REDACTED: str | None = None  # "host:port" only, no user:pass
 
+# Iter 388-noise · rate_limiter warning throttle.  When Redis is
+# sustained-unhealthy (e.g. Upstash monthly quota exhausted with the
+# same "max requests limit exceeded" ResponseError on every attempt),
+# the previous "log every attempt" policy blasted the pod logs with
+# 100+ identical WARNING lines per minute — real signal drowned by
+# noise + risk of tripping downstream log-ingestion quotas.  This
+# tracks (error_signature, minute_bucket) and lets exactly ONE warning
+# per unique error per minute through.  A NEW error signature (real
+# flap / different failure mode) still logs immediately — so incident
+# visibility is preserved.
+_REDIS_WARN_LAST_SIG: str | None = None
+_REDIS_WARN_LAST_MINUTE: int = 0
+_REDIS_WARN_SUPPRESSED_COUNT: int = 0
+
 
 def _redact_redis_url(url: str) -> str:
     """Return `host:port` from a redis[s]:// URL without ever exposing
@@ -185,18 +199,41 @@ async def _ensure_redis():
             _REDIS_TRIED = True
         return client
     except Exception as e:
+        global _REDIS_WARN_LAST_SIG, _REDIS_WARN_LAST_MINUTE, _REDIS_WARN_SUPPRESSED_COUNT
         _REDIS_CLIENT = None
         _REDIS_BACKEND_ACTIVE = False
         # Capture the FULL error string (type + message) so the health
         # probe can surface WHY the connection failed. Truncated to
         # 300 chars so a huge traceback doesn't blow up the JSON.
         _REDIS_LAST_ERROR = f"{type(e).__name__}: {str(e)[:250]}"
-        # Log every attempt (not just the first) so a Redis flap is
-        # visible in `journalctl -u backend | grep rate_limiter`.
-        logger.warning(
-            "rate_limiter: Redis unavailable at host=%s error=%s — "
-            "falling back to per-process in-memory",
-            _REDIS_HOST_REDACTED, _REDIS_LAST_ERROR)
+        # Iter 388-noise · throttle policy:
+        #   · NEW error signature       → log immediately (flap visible)
+        #   · SAME signature, new minute → log once with a suppression tally
+        #   · SAME signature, same minute → drop silently (still counted)
+        # Signature keys on error type + first 80 chars of message so
+        # different reasons (quota-exceeded vs conn-refused vs timeout)
+        # each get their own visibility.
+        sig = f"{type(e).__name__}:{str(e)[:80]}"
+        now_min = int(time.time() // 60)
+        if sig != _REDIS_WARN_LAST_SIG:
+            logger.warning(
+                "rate_limiter: Redis unavailable at host=%s error=%s "
+                "— falling back to per-process in-memory",
+                _REDIS_HOST_REDACTED, _REDIS_LAST_ERROR)
+            _REDIS_WARN_LAST_SIG = sig
+            _REDIS_WARN_LAST_MINUTE = now_min
+            _REDIS_WARN_SUPPRESSED_COUNT = 0
+        elif now_min != _REDIS_WARN_LAST_MINUTE:
+            logger.warning(
+                "rate_limiter: Redis unavailable at host=%s error=%s "
+                "— falling back to per-process in-memory "
+                "(%d identical warnings suppressed in the last minute)",
+                _REDIS_HOST_REDACTED, _REDIS_LAST_ERROR,
+                _REDIS_WARN_SUPPRESSED_COUNT)
+            _REDIS_WARN_LAST_MINUTE = now_min
+            _REDIS_WARN_SUPPRESSED_COUNT = 0
+        else:
+            _REDIS_WARN_SUPPRESSED_COUNT += 1
         _REDIS_TRIED = True
         return None
 

@@ -795,3 +795,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `HOW_TO_START_VIDEO_URL` — auto-detected in backend/services/first50_campaign.py (verify) (default: unset) [Iter 0, 2026-08-12T19:35:34.277369Z] <!-- inv:envvar:HOW_TO_START_VIDEO_URL -->
 - `services/email_reply_to.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-12T20:58:59.199708Z] <!-- inv:service:services/email_reply_to.py -->
 - `REPLY_TO_EMAIL` — auto-detected in backend/services/email_reply_to.py (verify) (default: unset) [Iter 0, 2026-08-12T20:58:59.199740Z] <!-- inv:envvar:REPLY_TO_EMAIL -->
+
+### Iter 0 · 2026-08-13
+
+- `AUREM_DEPLOY_COMMIT` — auto-detected in backend/services/deploy_logger.py (verify) (default: unset) [Iter 0, 2026-08-13T05:31:50.658178Z] <!-- inv:envvar:AUREM_DEPLOY_COMMIT -->

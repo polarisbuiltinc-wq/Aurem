@@ -2,6 +2,17 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **Rate-limiter WARNING throttle · Iter 388-noise (2026-08-13)** — user flagged the deploy log stream as "failing" due to volume; audit showed the deploy actually succeeded (200 OK responses across all endpoints, `/health` healthy) but the log stream was drowning in ~100 identical `rate_limiter: Redis unavailable ... max requests limit exceeded` warnings per minute after Upstash's free-tier monthly quota (500,000 req) exhausted.
+  - Real cause: `services/rate_limiter.py::_ensure_redis()` deliberately logged WARNING on every failed attempt ("so a Redis flap is visible") — great for transient flaps, terrible for sustained same-error outages like a quota cap.
+  - Fix: throttle policy keyed on `(error_signature, minute_bucket)`. Signature = `type(e).__name__:str(e)[:80]`.
+    - NEW signature → log immediately (flap visibility preserved)
+    - SAME signature, new minute → one WARNING with "N identical warnings suppressed" tally
+    - SAME signature, same minute → dropped silently, counted for the next roll-up
+  - **Tests**: `tests/test_iter388_noise_rate_limiter_throttle.py` — 4 pass (new error logs immediately, repeats within minute suppressed, minute rollover logs with tally, different-signature always logs).
+  - App functionality unaffected — code already gracefully falls back to in-memory rate limiting when Redis is down. This is purely a log-noise/observability fix.
+  - **Follow-up recommendation to user**: Upstash Redis is at 500,003/500,000 monthly requests. Options: (a) upgrade Upstash paid tier ($10/mo → 10M req), (b) accept per-pod in-memory rate limiting until next month's cycle rolls over. Current fallback is safe but doesn't enforce a cross-pod ceiling.
+
+
 - **Deploy Logger cascade fix · Iter 388z (2026-08-13)** — the Option B banner fix landed in the previous deploy but PROD `/api/health` still returned the stale legacy values. Root-caused via live prod curl:
   - `/api/aurem-dev/version` returned fresh `commit_sha: 6017337dfdb3` (uses `routers/version.py::_read_commit()` cascade which includes BUILD_INFO.txt fallback).
   - `/api/health` returned stale `build_hash: ed5b698` (used `app.state.deploy_event` which was never populated).
