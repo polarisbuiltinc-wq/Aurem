@@ -1608,6 +1608,91 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     }
 
     // ──────────────────────────────────────────────────────────────
+    // Iter 388t · Bug 20 companion — `/podshell` slash command.
+    // Founder-only deterministic shell.  Bypasses the LLM entirely
+    // and POSTs the command straight to
+    // `/api/aurem-dev/dev-tools/podshell`.  Backend runs
+    // `validate_founder_pod_command` (chaining / traversal / secret-
+    // path safety) then `execute_bash` with founder_pod_mode=True.
+    //
+    // Why this exists: the Home-chat Bug 20 fix relies on
+    // project_id being empty, but the UI has no Home tab (removed
+    // in Iter 212m-20).  `/podshell` gives the founder a first-class
+    // way to run whitelisted read-only shell commands on the pod
+    // from ANY chat context.
+    //
+    // Rendering: the user sees the command they typed in the user
+    // bubble and the stdout inside a ```plaintext code fence in the
+    // assistant bubble so long output stays scrollable and
+    // monospaced.  Errors render in a red pill-tinted paragraph.
+    // ──────────────────────────────────────────────────────────────
+    const podShellMatch = text.match(/^\/podshell\b\s*(.*)$/is);
+    if (podShellMatch && promptOverride == null) {
+      const cmd = (podShellMatch[1] || "").trim();
+      if (!cmd) {
+        setInput(text);   // restore — they typed only `/podshell`
+        return;
+      }
+      const userBubble = text;
+      setMessages((m) => [
+        ...m,
+        { role: "user", content: userBubble },
+        { role: "assistant", content: "", streaming: true,
+          podShellPending: true },
+      ]);
+      setBusy(true);
+      try {
+        const r = await api.post("/dev-tools/podshell", { command: cmd });
+        const payload = r?.data || r;
+        const stdout = payload?.stdout || "";
+        const stderr = payload?.stderr || "";
+        const exitCode = payload?.exit_code;
+        const err = payload?.error;
+        let content;
+        if (payload?.ok) {
+          content = `\`\`\`plaintext\n$ ${cmd}\n${stdout || "(no output)"}\n\`\`\``;
+          if (stderr) {
+            content += `\n\n**stderr:**\n\`\`\`plaintext\n${stderr}\n\`\`\``;
+          }
+        } else if (err) {
+          content = `[ISSUE] \`/podshell\` refused\n\n\`${cmd}\`\n\n${err}` +
+                    (exitCode != null ? `\n\nExit code: ${exitCode}` : "");
+        } else {
+          content = `[ISSUE] \`/podshell\` returned no output\n\n\`${cmd}\``;
+        }
+        setMessages((m) => {
+          const out = m.slice();
+          for (let i = out.length - 1; i >= 0; i--) {
+            if (out[i].role === "assistant" && out[i].podShellPending) {
+              out[i] = { role: "assistant", streaming: false, content };
+              break;
+            }
+          }
+          return out;
+        });
+      } catch (e) {
+        const status = e?.response?.status;
+        const detail = e?.response?.data?.detail || e?.message || "podshell failed";
+        const msg = status === 403
+          ? "[ISSUE] `/podshell` is founder-only — you don't have admin access on this account."
+          : `[ISSUE] \`/podshell\` failed (${status || "network"})\n\n${detail}`;
+        setMessages((m) => {
+          const out = m.slice();
+          for (let i = out.length - 1; i >= 0; i--) {
+            if (out[i].role === "assistant" && out[i].podShellPending) {
+              out[i] = { role: "assistant", streaming: false, content: msg };
+              break;
+            }
+          }
+          return out;
+        });
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // Iter 212m-65 — Loop Mode fresh-turn fork.
     // In Loop mode, the FIRST user turn no longer streams through
     // `/chat/stream` with a `LOOP_PHASE:plan` suffix; it kicks off

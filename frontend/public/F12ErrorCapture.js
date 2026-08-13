@@ -215,6 +215,14 @@
         /aborted|abort/i.test(err.message || "")
       );
       if (!isAbort && !isTracker) {
+        // Iter 388t — Bug 29 fix.  network_errors was uncapped so
+        // normal navigation on prod (401/404/5xx from optional polls)
+        // accumulated indefinitely — the founder saw the badge climb
+        // 36 → 58 → 75 → 104 across a few clicks.  Match the
+        // console_errors cap so the store stays bounded.
+        if (store.network_errors.length >= MAX_ERRORS) {
+          throw err;
+        }
         store.network_errors.push({
           url:           url.slice(0, 200),
           method:        method.toUpperCase(),
@@ -245,6 +253,10 @@
         return response;
       }
 
+      // Iter 388t — Bug 29 fix (cap network_errors, part 2).
+      if (store.network_errors.length >= MAX_ERRORS) {
+        return response;
+      }
       store.network_errors.push({
         url:           url.slice(0, 200),
         method:        method.toUpperCase(),
@@ -281,6 +293,8 @@
         if (_isTransientProxyError(this.status, body, ct)) {
           return;
         }
+        // Iter 388t — Bug 29 fix (cap network_errors, part 3 — XHR).
+        if (store.network_errors.length >= MAX_ERRORS) return;
         store.network_errors.push({
           url:           (this._aurem_url || "").slice(0, 200),
           method:        (this._aurem_method || "GET").toUpperCase(),
