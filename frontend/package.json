@@ -12,7 +12,9 @@
     "test:visual:report": "playwright show-report",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:a11y": "vitest run src/components/__tests__/a11y_components.test.jsx"
+    "test:a11y": "vitest run src/components/__tests__/a11y_components.test.jsx",
+    "verify:prod": "node scripts/postdeploy-verify.mjs https://auremcto.com/signup",
+    "verify:preview": "node scripts/postdeploy-verify.mjs https://launch-pad-237.emergent.host/signup"
   },
   "dependencies": {
     "@codesandbox/sandpack-react": "^2.20.0",

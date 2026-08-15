@@ -2,6 +2,14 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **Bug L-01 institutional log + `postdeploy-verify.mjs` guard · Iter 389.1 (2026-02-15)** — while trigger-verifying Iter 389 on prod, founder's `curl` + grep on the initially-loaded bundles returned zero hits for `CompleteRegistration` / `Lead` string literals. This looked identical to a "deploy didn't propagate" bug and burned ~2 hours across two false RCAs (backend-only-deploy false negative + stale Cloudflare cache). Actual root cause: **Vite production build code-splits shared modules into their own chunks** — `lib/analytics.js` (holding all Iter 389 helpers) was compiled into a separate lazy chunk `analytics-DAsU-d0r.js` (898 bytes) that only loads on-demand as React Router mounts Signup/OAuthFinish/Settings. Founder's grep never fetched that chunk → false negative. Three-layer SHA-256 comparison (custom-domain `auremcto.com` / platform origin / local `yarn build` output) proved the deployed artifact was byte-identical to the local build all along.
+  - Logged permanently to `/app/memory/BUGS_LEDGER.md` as **L-01** (new institutional ledger, fresh numbering to avoid collision with scattered legacy Bug 1–29 entries in CHANGELOG/PRD).
+  - Shipped `/app/frontend/scripts/postdeploy-verify.mjs` — chunk-aware synthetic verifier that fetches deployed HTML → extracts main entry chunk → recursively walks the ENTIRE lazy-chunk dependency tree (fetched 183 chunks on `/signup` for Iter 389 verification) → greps every chunk for a **SENTINELS manifest** (`PageView`, `1571887197933821`, `CompleteRegistration`, `"Lead"`, `"Purchase"`, `AW-18239920865`) → fails loud with `process.exit(1)` on any miss. Both success (all 6 present on prod) and fail-injection paths tested.
+  - Added `yarn verify:prod` and `yarn verify:preview` scripts to `frontend/package.json` for one-command runs.
+  - Standing rule reinforced in the ledger: **bundle-verified ≠ trigger-verified**. Code present in served chunks (SHA-256 comparable) is NOT the same as a code path actually firing at runtime; both labels are valid and separately verified.
+
+
+
 - **Meta Pixel conversion events · Iter 389 (2026-02-15)** — Meta Pixel base script was already loaded (Iter 388-ag) but only firing `PageView`. This iter adds 3 standard-event conversion helpers wired to real backend confirmations:
   - `metaCompleteRegistration(method)` — fires from `Signup.jsx` on `/auth/signup` success (method=`email`) and from `OAuthFinish.jsx` when the backend flags `d.new === true` (method=`google`) or `?new=1` (method=`github`). Runs alongside existing Google Ads `trackSignup()`.
   - `metaLead("project_added")` — fires from `AddProjectWizard.jsx` immediately after `/cto/projects/add` returns success (strongest intent signal: user actually connected a repo). NOT fired on GitHub connect click alone (would overlap with signup).
