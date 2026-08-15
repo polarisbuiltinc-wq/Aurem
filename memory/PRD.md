@@ -810,3 +810,90 @@ patched streaming path is deferred to post-deploy. Rule 2 keeps this
 labelled preview-verified until the founder confirms `proactive_caveat_ok: true`
 across three back-to-back canary runs on prod.
 
+
+---
+
+### Iter 388-ai — Sidebar hide belt+suspenders (2026-02-14)
+
+**Founder prod-verified regression report** (Iter 388-af NOT working
+on live prod `db3d0257ecca`):
+
+```
+{
+  "sidebar": {
+    "autohide_localStorage": null,          ← AUTO=default (ON)
+    "rail_present": true,
+    "rail_hidden_typing_attr": "true",      ← state correctly toggled
+    "auto_pill_text": "AUTO",
+    "after_event_hidden": "true"            ← state stayed true
+  }
+}
+```
+
+Founder observation: `data-hidden-typing="true"` was correctly set on
+the outer wrapper (React state = `hiddenForTyping = true`), BUT the
+rail stayed visually visible with all 5 icons rendered. Meaning the
+INNER `<nav>` `transform: translateX(-105%)` + `marginLeft: -56` was
+NOT collapsing the wrapper's flex-column contribution in this
+particular browser / cached-bundle context.
+
+**Fix — outer wrapper collapse** (belt+suspenders on top of Iter 388-af):
+
+`frontend/src/components/nav/RailShell.jsx` — added to the outer
+wrapper `<div data-testid="rail-shell">`:
+
+```jsx
+width: hiddenForTyping ? 0 : "auto",
+overflow: hiddenForTyping ? "hidden" : "visible",
+transition: "width 240ms cubic-bezier(0.4,0,0.2,1)",
+```
+
+Now the OUTER wrapper collapses its width to 0 with hidden overflow
+when `hiddenForTyping` is true, guaranteeing the rail vanishes
+regardless of whether the inner-nav transform succeeded. The inner-nav
+transform stays (Iter 388-af) as the belt of belt+suspenders.
+
+**Preview-verified via Playwright (5-state test):**
+
+```
+State           hidden_attr   wrapper_width   nav_transform            nav_opacity
+initial         false         56px            matrix(1,0,0,1,0,0)      1
+after_reset     false         56px            matrix(1,0,0,1,0,0)      1
+after_start     true          0px             matrix(1,0,0,1,-58.8,0)  0
+```
+
+`wrapper_width` transitioning `56px → 0px` on the after_start state is
+the definitive fix — screenshot confirms rail fully off-screen with
+only the "SIDEBAR" peek pill visible.
+
+**Regression net**: `frontend/src/components/__tests__/RailShell.iter388ai.wrapperCollapse.test.js`
+— 4/4 pass. Iter 388-af tests (9/9) still green.
+
+**Not yet prod-verified** — awaits deploy + founder's re-run of the
+diagnostic on prod.
+
+---
+
+### Iter 388-ai bonus — Meta Pixel PROD-VERIFIED (2026-02-14)
+
+Founder diagnostic on prod confirmed Meta Pixel is fully live:
+- `fbq_loaded: true`, `fbq_version: "2.9.379"`
+- `pixel_id_in_dom: true` (1571887197933821)
+- Custom event `DiagnosticPing` fired without error
+
+**Meta Pixel Iter 388-ag is officially prod-verified.**
+
+---
+
+### Open still — Canary trigger + Stripe
+
+- **Canary trigger** — cookie auth returned 401 (endpoint requires
+  Bearer header). Fix path forward: either add a "Run canary now"
+  button on Admin page that uses `apiCall()` (auto-attaches Bearer
+  from `localStorage.aurem_token`), OR update the diagnostic snippet
+  to read `localStorage.getItem('aurem_token')` and pass as Bearer.
+  Cheaper path = the updated snippet (below).
+- **Stripe reconcile** — founder to do manual Stripe dashboard
+  lookup for `cs_live_b14BL0LjNPIGB10Hm8lc6oW4YdyfRdBTXeIDK4OZROjSaA11NfdSLZJRfq`.
+  Awaiting result.
+

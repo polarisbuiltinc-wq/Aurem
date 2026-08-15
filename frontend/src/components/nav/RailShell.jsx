@@ -450,7 +450,22 @@ export default function RailShell({
   const rail = (
     <div ref={wrapRef} data-testid="rail-shell"
       data-hidden-typing={hiddenForTyping ? "true" : "false"}
-      style={{ position: "relative", display: "flex", flexShrink: 0, zIndex: 1200 }}>
+      style={{
+        position: "relative", display: "flex",
+        flexShrink: 0, zIndex: 1200,
+        // Iter 388-ai (2026-02-14) — belt+suspenders hide on the OUTER
+        // wrapper. Prior versions relied on the inner <nav> alone
+        // doing `transform: translateX(-105%) + marginLeft: -56` to
+        // collapse its own width contribution. Founder-reported prod
+        // regression: `data-hidden-typing` was "true" but visually the
+        // rail still rendered — the inner-nav collapse didn't happen
+        // for reasons that vary by cached bundle / browser layout.
+        // Adding an outer-wrapper collapse guarantees the rail vanishes
+        // even if the inner transform silently fails.
+        width: hiddenForTyping ? 0 : "auto",
+        overflow: hiddenForTyping ? "hidden" : "visible",
+        transition: "width 240ms cubic-bezier(0.4,0,0.2,1)",
+      }}>
       <nav aria-label="Primary"
         data-testid="rail-nav"
         style={{
