@@ -897,3 +897,68 @@ Founder diagnostic on prod confirmed Meta Pixel is fully live:
   lookup for `cs_live_b14BL0LjNPIGB10Hm8lc6oW4YdyfRdBTXeIDK4OZROjSaA11NfdSLZJRfq`.
   Awaiting result.
 
+
+---
+
+### Iter 388-aj — fabricated_total dedup (2026-02-14)
+
+**Founder-reported bug** from prod canary Run 1:
+```
+fabricated_total: ["test_security_gate.py", "test_security_gate.py"]
+```
+Same invented path listed twice — alerts / dashboards double-count.
+
+**Fix**: `backend/services/ora_chat/grounding_check.py::classify_claims()`
+now dedupes both `fabricated` and `unverified` output lists in
+first-seen order via a `set()` tracker. Preserves ordering, no other
+semantic change.
+
+**Tests** (`backend/tests/test_iter388aj_dedup.py` — 4/4 pass):
+- Same path repeated → dedup
+- First-seen order preserved
+- `unverified` list dedup on repeated real path
+- Symbol-claim dedup
+
+Iter 388-ah tests (10/10) still green — no regression.
+
+Preview-verified; awaits prod deploy + fresh canary run showing
+`fabricated_total: ["test_security_gate.py"]` (single entry) if the
+model still invents that name.
+
+---
+
+## Deferred backlog (dedicated session)
+
+### Iter 388-ak — Anti-fabrication regeneration (P1, deferred)
+
+Current safety math (Iter 388-ah caveat enforcement) closed the worst
+failure mode: silent confident lies. Fabrication itself still occurs
+but is now always caveated. Founder + main agent agreed this is an
+acceptable interim.
+
+**Deeper fix scope for a dedicated future session:**
+- When `run_post_response_check` detects any FABRICATED (non-index)
+  file path in the reply → trigger ONE regeneration with a corrective
+  system message ("your prior turn named files that don't exist in the
+  codebase — redo without any specific file names").
+- Complexity concerns to design carefully:
+  - Retry-loop safety (max 1, never chained)
+  - Latency budget (regen adds ~5-10s to some replies)
+  - Cost impact (extra LLM call per fabrication)
+  - Corner case: legitimate references to future/proposed files
+- Needs design doc + adversarial test corpus before implementation.
+
+### Iter 388-al — Slice 4 (fastapi/starlette major bump) migration branch
+
+Still deferred from Iter 388-ad. Needs dedicated branch that:
+1. Audits every `request.state.<key>` access → wraps in `getattr` with default (starlette 1.6 raises KeyError on missing keys).
+2. Migrates all `TestClient(app)` usages to `with TestClient(app) as c:` for lifespan.
+3. Full backend regression run before dispatch.
+
+### Iter 388-am — litellm 1.80 → 1.84 (blocked on Emergent)
+
+Our `litellm` is pinned to an internal Emergent-hosted wheel
+(`customer-assets.emergentagent.com/...litellm-1.80.0-py3-none-any.whl`),
+not PyPI. Requires Emergent to publish 1.84 to their asset host
+first. 10 CVEs pending closure.
+

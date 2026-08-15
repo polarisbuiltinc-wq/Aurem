@@ -343,6 +343,12 @@ def classify_claims(claims: Iterable[str], *, canonical: dict,
                     turn (no tree/BM25//read) → soft flag, log-only.
     Symbol claims (backticked names) are NEVER hard-flagged — too
     noisy — they go to UNVERIFIED at worst.
+
+    Iter 388-aj (2026-02-14) — output lists are deduped in first-seen
+    order. Prior canary evidence showed `fabricated:
+    ["test_security_gate.py", "test_security_gate.py"]` when the same
+    invented path was mentioned twice in a single reply; the alert /
+    UI would then double-count the same violation. Dedup fixes that.
     """
     joined = "\n".join(c or "" for c in (turn_contexts or []))
     q = user_query or ""
@@ -351,6 +357,8 @@ def classify_claims(claims: Iterable[str], *, canonical: dict,
     defs: set = canonical.get("defs") or set()
     fabricated: list[str] = []
     unverified: list[str] = []
+    fab_seen: set = set()
+    unv_seen: set = set()
     for c in claims:
         if not c or c in q:
             continue  # user typed it → they may discuss it freely
@@ -360,12 +368,18 @@ def classify_claims(claims: Iterable[str], *, canonical: dict,
             exists = (n in paths or base in basenames
                       or any(p.endswith("/" + n) for p in paths))
             if not exists:
-                fabricated.append(c)
+                if c not in fab_seen:
+                    fabricated.append(c)
+                    fab_seen.add(c)
             elif c not in joined and n not in joined:
-                unverified.append(c)
+                if c not in unv_seen:
+                    unverified.append(c)
+                    unv_seen.add(c)
         else:
             if c not in joined and c not in defs:
-                unverified.append(c)
+                if c not in unv_seen:
+                    unverified.append(c)
+                    unv_seen.add(c)
     return {"fabricated": fabricated, "unverified": unverified}
 
 
