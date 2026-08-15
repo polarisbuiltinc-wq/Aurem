@@ -2,6 +2,16 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **Meta Pixel conversion events · Iter 389 (2026-02-15)** — Meta Pixel base script was already loaded (Iter 388-ag) but only firing `PageView`. This iter adds 3 standard-event conversion helpers wired to real backend confirmations:
+  - `metaCompleteRegistration(method)` — fires from `Signup.jsx` on `/auth/signup` success (method=`email`) and from `OAuthFinish.jsx` when the backend flags `d.new === true` (method=`google`) or `?new=1` (method=`github`). Runs alongside existing Google Ads `trackSignup()`.
+  - `metaLead("project_added")` — fires from `AddProjectWizard.jsx` immediately after `/cto/projects/add` returns success (strongest intent signal: user actually connected a repo). NOT fired on GitHub connect click alone (would overlap with signup).
+  - `metaPurchase(value, "USD", sid)` — fires from `Settings.jsx` only after the Stripe session-status poller sees `payment_status === "paid"` (real backend confirmation, NOT checkout button click). Uses hard-coded plan values (Starter $9, Pro $19, Team $49) and the Stripe session id doubles as Meta's `eventID` for future CAPI dedup.
+  - **Guardrail (founder-approved):** if tier is missing/unknown when a paid session lands, `metaPurchase` is SKIPPED entirely (rather than firing with a fallback value). Better a small analytics gap than polluting the Meta ad account with $0 / unknown-currency purchase events.
+  - All helpers are silent no-ops when `window.fbq` is undefined (ad-blocker / SSR / pre-init) and swallow any fbq exceptions so business flows never surface analytics failures.
+  - Tests: `frontend/src/lib/__tests__/metaPixel.iter389.conversions.test.js` — 12 cases covering: no-op behaviour without fbq, correct standard-event names + params, value/currency guardrails, exception-safety. Full lib suite: **57/57 pass**. Preview-verified: `window.fbq.loaded === true` on `/signup`.
+
+
+
 - **Brand P0 follow-up · SEO pre-render fix + P1 deploy_logger default · Iter 388-brand2 (2026-08-13)** — first P0 brand deploy left search-engine HTML stale.
   - After P0 landed, real-curl on prod showed 9× "AUREM CTO" on `/vs/devin` and 13× on `/compare` **in the raw HTML** — root-caused to `frontend/scripts/seo-prerender.mjs` which pre-renders static HTML for crawlers before React hydrates. Client-side render (Playwright) was correct; server-served HTML was not. Search engines were seeing deprecated branding.
   - Fixed `seo-prerender.mjs` end-to-end: H1s, related-link anchors, table column header, pick-card CTA copy ("Choose ORA if you want…"), BreadcrumbList JSON-LD positions 1 (`AUREM` company root) + 3 (`ORA vs {name}`), ItemList JSON-LD name + items. Post-fix: **0 "AUREM CTO" in the pre-render script, 8 correct "ORA" replacements.**

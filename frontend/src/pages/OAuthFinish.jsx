@@ -11,7 +11,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { setToken, setUser, api } from "../lib/api";
-import { trackSignup } from "../lib/analytics";
+import { trackSignup, metaCompleteRegistration } from "../lib/analytics";
 
 export default function OAuthFinish() {
   const nav = useNavigate();
@@ -62,7 +62,10 @@ export default function OAuthFinish() {
             }
           } catch { /* non-blocking */ }
           try { localStorage.setItem("aurem_just_logged_in", "1"); } catch {}
-          if (d.new) trackSignup();
+          if (d.new) {
+            trackSignup();
+            metaCompleteRegistration("google");
+          }
           try { window.history.replaceState(null, "", "/oauth-finish"); } catch {}
           setStatus("Signed in. Redirecting to your dashboard…");
           nav("/dashboard", { replace: true });
@@ -106,6 +109,7 @@ export default function OAuthFinish() {
         // account; return-logins are a no-op.
         if (isNewAccount) {
           trackSignup();
+          metaCompleteRegistration("github");
         }
         // Clear the fragment so a refresh doesn't replay it.
         try {

@@ -74,3 +74,85 @@ export function trackPurchase(value = 9.0, currency = "CAD", txnId = null) {
   const extras = txnId ? { transaction_id: txnId } : {};
   return _fire(PURCHASE_LABEL, value, currency, extras);
 }
+
+// ================================================================
+// Meta Pixel conversion helpers — Iter 389
+// ----------------------------------------------------------------
+// The Pixel base script is injected in `CookieConsentBanner.jsx`
+// which calls `fbq('init', ...)` + `fbq('track', 'PageView')` on
+// load. These helpers fire ADDITIONAL standard events tied to
+// concrete backend confirmations (not button-clicks). Every wrapper
+// is a silent no-op when `window.fbq` is absent (ad-blocker, SSR,
+// pre-init) so business flows never surface analytics failures.
+//
+//   metaCompleteRegistration() — after /auth/signup or OAuth `new=1`
+//   metaLead(source)           — after /cto/projects/add success
+//   metaPurchase(v, ccy, sid)  — after /payments/status = "paid"
+//
+// The `eventID` field (Meta's dedup key) mirrors the transaction /
+// user context so a future CAPI (server-side) hop can dedupe against
+// the browser event.
+// ================================================================
+
+function _fbq(eventName, params = {}, eventID = undefined) {
+  try {
+    if (typeof window === "undefined" || typeof window.fbq !== "function") {
+      return false;
+    }
+    if (eventID) {
+      window.fbq("track", eventName, params, { eventID });
+    } else {
+      window.fbq("track", eventName, params);
+    }
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * Fire Meta Pixel `CompleteRegistration` once per successful account
+ * creation (email/password signup OR OAuth flow where backend flags
+ * `new=1`). Callers must ensure this only fires when the backend has
+ * actually minted a fresh account row.
+ */
+export function metaCompleteRegistration(method = "email") {
+  return _fbq("CompleteRegistration", {
+    content_name: method,
+    status: true,
+  });
+}
+
+/**
+ * Fire Meta Pixel `Lead` on a meaningful signal that the user is a
+ * genuine potential customer (currently: successful project add via
+ * `/cto/projects/add`). `source` is a short string included for
+ * Meta's `content_name` so we can slice by trigger later.
+ */
+export function metaLead(source = "project_added") {
+  return _fbq("Lead", {
+    content_name: source,
+  });
+}
+
+/**
+ * Fire Meta Pixel `Purchase` ONLY when the backend has confirmed a
+ * paid Stripe checkout (`payment_status === "paid"`). Callers MUST
+ * pass real `value` + `currency` — pass `null` for value to skip the
+ * event entirely (guardrail: never send $0 / unknown-value purchases
+ * to Meta because it pollutes the ad account's conversion data).
+ *
+ * `sid` (Stripe checkout session id) doubles as the Meta dedup key
+ * so a future CAPI server event can dedupe against this browser one.
+ */
+export function metaPurchase(value, currency, sid = null) {
+  if (value == null || Number.isNaN(Number(value)) || Number(value) <= 0) {
+    return false;
+  }
+  if (!currency || typeof currency !== "string") {
+    return false;
+  }
+  const params = { value: Number(value), currency };
+  if (sid) params.content_ids = [sid];
+  return _fbq("Purchase", params, sid || undefined);
+}

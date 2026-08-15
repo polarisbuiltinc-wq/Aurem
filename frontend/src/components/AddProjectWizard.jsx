@@ -33,6 +33,7 @@ import { useNavigate } from "react-router-dom";
 import { api, API_BASE, getToken } from "../lib/api";
 import { toast } from "./Toast";
 import { setActiveProjectId } from "./TabBar";
+import { metaLead } from "../lib/analytics";
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -239,6 +240,9 @@ export default function AddProjectWizard({ onClose, onAdded }) {
       }
       const r = await api.post("/cto/projects/add", payload);
       const newProjectId = r.data?.project?.project_id || r.data?.project_id;
+      // Iter 389 — Meta Pixel Lead. Fires only after backend confirms
+      // the project was created (real intent signal, not a click).
+      metaLead("project_added");
       toast({
         message: `Connected ${repo.full_name} — opening chat…`,
         kind:    "success",

@@ -962,3 +962,21 @@ Our `litellm` is pinned to an internal Emergent-hosted wheel
 not PyPI. Requires Emergent to publish 1.84 to their asset host
 first. 10 CVEs pending closure.
 
+
+### Iter 389 — Meta Pixel conversion events (2026-02-15)
+
+Meta Pixel was loading `PageView` only (Iter 388-ag). This iter adds
+3 standard-event helpers in `frontend/src/lib/analytics.js` wired to
+real backend confirmations:
+
+- `metaCompleteRegistration(method)` — `Signup.jsx` (`email`) + `OAuthFinish.jsx` (`google` / `github`), fires only when backend confirms fresh account
+- `metaLead("project_added")` — `AddProjectWizard.jsx` after `/cto/projects/add` success
+- `metaPurchase(value, "USD", sid)` — `Settings.jsx` after `payment_status === "paid"` (skipped if tier missing — no $0 events)
+
+Base pixel already loads without consent gate (founder's accepted
+GDPR risk from Iter 388-ag). Helpers are no-ops when `window.fbq`
+undefined (ad-blocker safe). 12/12 vitest cases + 57/57 lib suite
+pass; preview-verified `fbq.loaded === true`. **prod-verification
+pending** (founder will DevTools-check signup + project-add triggers
+after deploy).
+

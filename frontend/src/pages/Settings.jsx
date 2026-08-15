@@ -16,7 +16,7 @@ import {
   ArrowLeft, User, KeyRound, Receipt, Plug, ShieldCheck, Coins,
 } from "lucide-react";
 import { api, getUser } from "../lib/api";
-import { trackPurchase } from "../lib/analytics";
+import { trackPurchase, metaPurchase } from "../lib/analytics";
 import GitHubCard from "../components/GitHubCard";
 import VercelCard from "../components/VercelCard";
 import PricingCards from "../components/PricingCards";
@@ -74,8 +74,13 @@ export default function Settings() {
             const PLAN_VALUE_USD = { starter: 9, pro: 19, team: 49 };
             if (tier && PLAN_VALUE_USD[tier]) {
               trackPurchase(PLAN_VALUE_USD[tier], "USD", sid);
+              // Iter 389 — Meta Pixel Purchase. Guardrail: fire only
+              // when we have a real plan value; unknown tier => skip
+              // (avoid polluting Meta with $0/unknown-value events).
+              metaPurchase(PLAN_VALUE_USD[tier], "USD", sid);
             } else {
               trackPurchase();
+              // metaPurchase intentionally NOT fired — tier unknown.
             }
             const me2 = await api.get("/auth/me");
             if (me2.data?.user) setMe(me2.data.user);

@@ -7,7 +7,7 @@ import { Rocket, Github } from "lucide-react";
 import AuthShell from "../components/AuthShell";
 import usePageMeta from "../lib/usePageMeta";
 import { api, setToken, setUser } from "../lib/api";
-import { trackSignup } from "../lib/analytics";
+import { trackSignup, metaCompleteRegistration } from "../lib/analytics";
 import RobotGuide, { RobotGuideKeyframes, escapeHtml } from "../components/RobotGuide";
 import GoogleIcon from "../components/GoogleIcon";
 import { scorePassword, MIN_ACCEPTABLE_SCORE } from "../lib/passwordStrength";
@@ -97,6 +97,8 @@ export default function Signup() {
       // exists and BEFORE navigation so the event leaves the page
       // before React unmounts.
       trackSignup();
+      // Iter 389 — Meta Pixel CompleteRegistration (email/password).
+      metaCompleteRegistration("email");
       try { localStorage.setItem("aurem_just_logged_in", "1"); } catch { /* ignore */ }
       // Iter 212m-235 — Personal Track rollout: new users MUST pick a
       // track before landing on any product surface. Existing users
