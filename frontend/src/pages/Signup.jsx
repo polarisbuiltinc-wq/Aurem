@@ -329,16 +329,30 @@ export default function Signup() {
             <label
               data-testid="signup-terms-label"
               style={{
-                display: "flex", alignItems: "flex-start", gap: 8,
+                display: "flex", alignItems: "flex-start", gap: 10,
                 fontSize: 12, color: "var(--text-dim)",
                 cursor: "pointer", lineHeight: 1.5,
+                // Iter 390.1 — larger hit target. The default 13px
+                // native checkbox plus tightly-packed <Link> siblings
+                // in the label text made mistap easy (founder needed
+                // to force-click via JS during Iter 390 verification).
+                // Extra vertical padding gives the whole label a
+                // roomier tap zone without changing visual density.
+                padding: "6px 4px", marginLeft: -4, marginRight: -4,
+                borderRadius: 4,
               }}>
               <input
                 data-testid="signup-terms-checkbox"
                 type="checkbox"
                 checked={agreed}
                 onChange={(e) => setAgreed(e.target.checked)}
-                style={{ marginTop: 3 }}
+                style={{
+                  // Iter 390.1 — explicit 16×16 hit target with
+                  // `flexShrink:0` so the checkbox never gets squeezed
+                  // and mistap disappears at typical mouse precision.
+                  width: 16, height: 16, marginTop: 2,
+                  flexShrink: 0, cursor: "pointer",
+                }}
               />
               <span>
                 I agree to the{" "}

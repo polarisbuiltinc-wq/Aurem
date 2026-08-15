@@ -2,6 +2,10 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **Signup Terms checkbox hit-target polish · Iter 390.1 (2026-02-15)** — during Iter 390 prod verification, founder reported the T&C checkbox was hard to click precisely (had to force-click via JS). Root cause: default native `<input type="checkbox">` renders at ~13px, and the tightly-packed adjacent `<Link>` elements (Terms/Privacy) in the label text meant nearby clicks landed on the Link's hit target instead of the label. Fix: explicit `width:16, height:16, flexShrink:0, cursor:pointer` on the checkbox + `padding:6px 4px, borderRadius:4` on the label for a roomier tap zone. Preview-verified via Playwright: normal-precision click AND off-center label click (12px from left edge) both toggle checkbox state. No visual density change.
+
+
+
 - **Developer-only default · /choose-track removed · Iter 390 (2026-02-15)** — founder decision: AUREM is a developer-first product going forward. Personal Track opt-in remains alive for the (currently 0) users who might switch to it via Settings → TrackSwitcher, but the mandatory selector page after signup is gone.
   - **Prod DB check first** (respected "existing users unaffected" constraint): deployer ran `db.dev_users.count({track: "personal"})` on prod → **0 personal, 33 developer, 0 null**. Zero users affected by removal.
   - **Backend**: all 3 `dev_users.insert_one` paths now default `"track": "developer"` + `"track_updated_at": <epoch>` at creation time. Paths covered: (1) `/auth/signup` email+password (`routers/auth.py:264`), (2) Google OAuth new-user (`routers/auth.py:389`), (3) GitHub OAuth new-user (`routers/github_oauth.py:436`). The startup backfill `_backfill_dev_users_track` in `main.py:677` stays as a safety net for any future insert path that forgets to default.
