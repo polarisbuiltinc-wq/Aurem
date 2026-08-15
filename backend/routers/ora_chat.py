@@ -569,11 +569,38 @@ async def send_message(body: MessageBody,
                     codebase_tree=cb_tree_only or None,
                     system_highlights=cb_highlights or None,
                 )
+        # Iter 388-ah (2026-02-14) — proactive-caveat enforcement,
+        # applies to BOTH buffered and streaming paths.
+        #
+        # If the post-response grounding check surfaced unverified
+        # filename mentions that weren't self-caveated by the model,
+        # we append a compact caveat block:
+        #   (a) to `final_text` so the persisted assistant message
+        #       carries the disclaimer (audit trail + canary),
+        #   (b) as an additional streamed `delta` frame so the
+        #       founder sees the caveat visually even when the reply
+        #       already flushed to the client (buffered=False path).
+        #
+        # This closes the "meta_gaps" canary regression where 2/3 runs
+        # named specific files (`_loop.py`,
+        # `backend/services/security_gate.py`) confidently without any
+        # caveat marker.
+        _uncaveated = (grounding or {}).get("unverified_without_caveat") or []
+        _caveat_tail = ora_grounding.caveat_block_for(_uncaveated) if _uncaveated else ""
+        if _caveat_tail:
+            final_text = final_text + _caveat_tail
+
         if buffered:
             for i in range(0, len(final_text), _DELTA_CHUNK_LEN):
                 yield {"type": "delta",
                         "content": final_text[i:i+_DELTA_CHUNK_LEN]}
                 await asyncio.sleep(0)
+        elif _caveat_tail:
+            # Non-buffered path: original reply already streamed — just
+            # append the caveat as one extra delta so the founder sees
+            # it inline at the tail of the reply.
+            yield {"type": "delta", "content": _caveat_tail}
+            await asyncio.sleep(0)
 
         cost = 0.0
         if usage:

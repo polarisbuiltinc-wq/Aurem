@@ -57,6 +57,98 @@ _SYMBOL_STOP: frozenset = frozenset({
 })
 
 
+# ─── Iter 388-ah (2026-02-14) — proactive-caveat enforcement ──────
+#
+# Grounding canary evidence: on "meta_gaps"-style prompts ("what gaps
+# exist? what should we fix?"), ORA fabricates specific file names
+# 2/3 runs. When the founder challenges ("kya ye files real hain?"),
+# ORA correctly retracts. But by then the founder has ALREADY read the
+# confidently-worded reply. The bug isn't the model — it's that the
+# server never enforces the caveat rule; it only DETECTS violations
+# post-hoc and logs them (grounding_check.log_hallucination).
+#
+# This helper closes the loop by:
+#   1. Detecting reply text that names files ORA hasn't retrieved
+#      this turn AND that lack any nearby caveat marker.
+#   2. Returning that list to the caller (ora_chat.py streaming path),
+#      which yields an auto-appended caveat delta as the last chunk
+#      of the reply. The persisted reply therefore ALWAYS carries a
+#      caveat marker when unverified filenames are mentioned — the
+#      canary now passes deterministically.
+#
+# Kept as pure functions (no I/O) so the callers can decide when to
+# apply them.
+
+_CAVEAT_MARKERS = (
+    "inferred from naming",
+    "inferred from context",
+    "not /read this turn",
+    "unverified",
+    "haven't opened",
+    "havent opened",
+    "haven't read",
+    "havent read",
+    "not verified this turn",
+    "files i've /read this turn",
+    "files i'm inferring",
+    "index mein hai but",
+    "index se le raha",
+    "naming pattern se",
+    # Explicit auto-caveat banner we may add server-side.
+    "auto-added caveat",
+)
+
+# How many chars around a filename mention to inspect for a caveat.
+_CAVEAT_PROXIMITY = 200
+
+
+def find_uncaveated_mentions(reply: str, unverified_paths: list[str]) -> list[str]:
+    """For each unverified path present in the reply, return it iff the
+    surrounding text (± _CAVEAT_PROXIMITY chars) contains no caveat
+    marker. The list is deduped and returns in first-appearance order.
+    """
+    if not reply or not unverified_paths:
+        return []
+    lower = reply.lower()
+    seen: set[str] = set()
+    result: list[str] = []
+    for path in unverified_paths:
+        if not path or path in seen:
+            continue
+        idx = lower.find(path.lower())
+        if idx < 0:
+            continue
+        start = max(0, idx - _CAVEAT_PROXIMITY)
+        end   = min(len(lower), idx + len(path) + _CAVEAT_PROXIMITY)
+        window = lower[start:end]
+        if any(m in window for m in _CAVEAT_MARKERS):
+            continue
+        seen.add(path)
+        result.append(path)
+    return result
+
+
+def caveat_block_for(paths: list[str]) -> str:
+    """Compact caveat block to append to a reply that named unverified
+    files. Contains an explicit caveat marker that `_CAVEAT_MARKERS`
+    matches, so a subsequent proactive-caveat check on the patched
+    reply will register as satisfied."""
+    if not paths:
+        return ""
+    trimmed = paths[:6]
+    listed = ", ".join(f"`{p}`" for p in trimmed)
+    more = "" if len(paths) <= 6 else f" (+{len(paths) - 6} more)"
+    return (
+        "\n\n"
+        "⚠️ **Auto-added caveat** — I named "
+        f"{listed}{more} without `/read`ing them this turn. "
+        "Treat those as **unverified** references inferred from the "
+        "codebase index / naming pattern — I have not opened the actual "
+        "source. Ask me to `/read <path>` before relying on any specific "
+        "claim about their contents."
+    )
+
+
 def extract_claims(text: str) -> list[str]:
     """Extract concrete, verifiable claims from a chat reply.
 
@@ -292,7 +384,8 @@ async def run_post_response_check(*,
     Never raises; returns:
         {claims, fabricated, unverified, logged}
     """
-    empty = {"claims": [], "fabricated": [], "unverified": [], "logged": False}
+    empty = {"claims": [], "fabricated": [], "unverified": [],
+             "unverified_without_caveat": [], "logged": False}
     try:
         claims = extract_claims(reply)
         line_claims = extract_line_claims(reply)        # Iter 269 P2a
@@ -346,8 +439,14 @@ async def run_post_response_check(*,
                 },
             )
             logged = True
+        # Iter 388-ah — proactive-caveat enforcement input list. Callers
+        # decide whether to append `caveat_block_for(...)` to the reply.
+        uncaveated = find_uncaveated_mentions(
+            reply, cls["fabricated"] + cls["unverified"])
         return {"claims": claims, "fabricated": cls["fabricated"],
-                "unverified": cls["unverified"], "logged": logged}
+                "unverified": cls["unverified"],
+                "unverified_without_caveat": uncaveated,
+                "logged": logged}
     except Exception as e:                                   # noqa: BLE001
         logger.warning("post-response grounding hook failed: %r", e)
         return empty

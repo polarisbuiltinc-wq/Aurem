@@ -6,46 +6,36 @@
     <meta name="theme-color" content="#0A0A0A" />
     <meta name="color-scheme" content="dark" />
 
-    <!-- Meta Pixel Code — consent-gated (GDPR / DPDP / CCPA)
-         The pixel loader script is only executed if either:
-           (a) the user has previously granted "marketing" consent, or
-           (b) the visitor is outside a known opt-in jurisdiction AND
-               has not signalled Global Privacy Control (GPC).
-         Until then, `window.fbq` is a queue no-op so any React call
-         sites (`fbq("track","PageView")` on route change) don't crash. -->
+    <!-- Meta Pixel Code — Iter 388-ag (2026-02-14) · consent gate
+         REMOVED per founder decision. The pixel now fires for EVERY
+         visitor regardless of consent state or jurisdiction.
+
+         ⚠️ COMPLIANCE NOTE (retained for future audits):
+         This configuration is NOT GDPR / DPDP / CCPA compliant. If
+         Aurem scales into EU, UK, California, India, Brazil, or any
+         other opt-in jurisdiction, the consent-gated variant needs
+         to come back OR founder must accept the regulatory risk
+         (Meta itself is on the hook for its downstream tracking, but
+         the DATA CONTROLLER — Aurem — is on the hook for lawful
+         basis of collection). Global Privacy Control (GPC) is also
+         no longer respected.
+
+         Prior consent-gated version lived in this file at
+         Iter 388-af (see git blame). To restore, wrap the loader
+         below in `if (canLoad) { … }` where `canLoad` reads
+         `aurem_consent.cats.marketing` from localStorage and
+         checks `navigator.globalPrivacyControl`. -->
     <script>
-    (function(){
-      // Establish a no-op queue immediately so downstream code
-      // (e.g. src/App.jsx MetaPixelRouteTracker) never throws even
-      // if the real pixel never loads.
-      window.fbq = window.fbq || function(){ (window.fbq.q = window.fbq.q || []).push(arguments); };
-      window.fbq.q = window.fbq.q || [];
-
-      // Consent gate: check localStorage for prior marketing consent.
-      var canLoad = false;
-      try {
-        var raw = localStorage.getItem("aurem_consent");
-        if (raw) {
-          var parsed = JSON.parse(raw);
-          if (parsed && parsed.cats && parsed.cats.marketing === true) canLoad = true;
-        }
-      } catch (_) { /* ignore */ }
-      // Respect Global Privacy Control regardless of stored consent.
-      try { if (navigator && navigator.globalPrivacyControl) canLoad = false; } catch (_) {}
-
-      if (!canLoad) return;
-
-      !function(f,b,e,v,n,t,s)
-      {if(f.fbq && f.fbq.loaded)return;n=f.fbq=function(){n.callMethod?
-      n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-      n.queue=n.queue||[];t=b.createElement(e);t.async=!0;
-      t.src=v;s=b.getElementsByTagName(e)[0];
-      s.parentNode.insertBefore(t,s)}(window, document,'script',
-      'https://connect.facebook.net/en_US/fbevents.js');
-      fbq('init', '1571887197933821');
-      fbq('track', 'PageView');
-    })();
+    !function(f,b,e,v,n,t,s)
+    {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+    n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t,s)}(window, document,'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+    fbq('init', '1571887197933821');
+    fbq('track', 'PageView');
     </script>
     <!-- Note: <noscript> fallback for the pixel lives at the very top of
          <body> (HTML5 spec disallows <img> inside <head><noscript>). -->

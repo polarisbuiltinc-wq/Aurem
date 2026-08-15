@@ -730,3 +730,83 @@ to a bigger quota to restore distributed rate limiting. Flagged for
 follow-up — no code action needed unless founder wants tighter
 suppression on the warning noise.
 
+
+---
+
+### Iter 388-ah — ORA proactive-caveat enforcement (2026-02-14)
+
+**Founder finding from grounding canary tail:**
+On the `meta_gaps` prompt type ("kya gaps hain? fix suggestions bhi
+do") ORA fabricated specific file names 2/3 canary runs — e.g.
+`_loop.py`, `backend/services/security_gate.py` — with zero caveat
+markers in the reply text. Retraction only fired **after** the
+founder explicitly challenged ("kya tum sure ho ye files real hain?").
+By then a real founder would have already read the confidently-worded
+first reply and treated the fabricated names as fact.
+
+Root diagnosis: the `Proactive-caveat rule` existed in the
+`AUREM_CONTEXT` system prompt but was **text-only enforcement** — the
+server detected violations post-hoc (`grounding_check.log_hallucination`)
+but never mutated the reply. Model inconsistency → 2/3 miss rate.
+
+**Three-layer fix (server-side enforcement now guaranteed):**
+
+1. **Prompt hardening** (`services/ora_chat/safety.py`):
+   New dedicated bullet inside `AUREM_CONTEXT` — "Meta-level questions
+   get CATEGORIES, not filenames". Explicitly enumerates the trigger
+   phrases (gaps / missing / coverage / overall shape / audit /
+   improvements) and mandates a categorical default answer with a
+   `/find` or `/read` follow-up offer. Names past fabricated files as
+   worked examples.
+
+2. **New helpers in `services/ora_chat/grounding_check.py`:**
+   - `_CAVEAT_MARKERS` — the marker phrases (mirrors canary's list
+     plus `"auto-added caveat"`).
+   - `find_uncaveated_mentions(reply, unverified_paths)` — returns
+     unverified paths that appear in the reply text WITHOUT any
+     nearby caveat marker (±200 chars window).
+   - `caveat_block_for(paths)` — deterministic compact caveat block
+     ready for streaming.
+   - `run_post_response_check()` now returns a new
+     `unverified_without_caveat` key alongside the existing
+     `fabricated` / `unverified` lists.
+
+3. **Streaming path enforcement** (`routers/ora_chat.py` primary
+   `event_stream` for `/message`):
+   After the post-response grounding check, if
+   `unverified_without_caveat` is non-empty:
+     - `final_text` is patched with the caveat tail (persisted in
+       `ora_chat_messages` for audit).
+     - Buffered path: caveat rides the delta flush.
+     - Streaming path: caveat is yielded as ONE additional `delta`
+       frame so the founder sees it inline.
+
+**Regression net** (`backend/tests/test_iter388ah_proactive_caveat.py`
+— 10/10 pass):
+- `find_uncaveated_mentions` catches raw uncaveated mentions.
+- Pattern A inline caveat suppresses the flag.
+- Pattern B "verified vs inferred" split disclaimer suppresses too.
+- Empty inputs safe (no crashes).
+- Multiple occurrences deduped.
+- `caveat_block_for` returns text containing at least one of the
+  canary's `_PROACTIVE_CAVEAT_MARKERS` — so the very next canary run
+  reports `caveat_present: true` deterministically.
+- 6-path truncation with "+N more" summary works.
+- `run_post_response_check` still returns the new key even on the
+  empty-reply short-circuit path (backwards-compat contract).
+
+**Preview evidence:**
+- `pytest tests/test_iter388ah_proactive_caveat.py -v` → 10/10 PASS.
+- Backend restart clean, `/api/health` 200, LongCat probe green.
+- Lint: 3 modified files return "No lint errors found".
+- End-to-end canary run via HTTP admin trigger deferred to post-deploy
+  (standalone script hit `db_unavailable` due to init timing —
+  founder can trigger via `POST /api/aurem-dev/ora-chat/canary/run-now`
+  after deploy for the definitive prod-verified result).
+
+**What still counts as "preview-verified" only:**
+The unit + integration surface is proven; the LIVE canary against the
+patched streaming path is deferred to post-deploy. Rule 2 keeps this
+labelled preview-verified until the founder confirms `proactive_caveat_ok: true`
+across three back-to-back canary runs on prod.
+
