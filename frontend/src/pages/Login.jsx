@@ -69,10 +69,12 @@ export default function Login() {
         tokens_remaining: r.data.tokens_remaining,
       });
       try { localStorage.setItem("aurem_just_logged_in", "1"); } catch { /* ignore */ }
-      // Iter 212m-235 — Track-based routing on LOGIN (never re-prompt
-      // the /choose-track screen — that's signup-only). Fetch the
-      // user's persisted track from /auth/me and route accordingly.
-      // If ?next=… was set explicitly, that always wins.
+      // Iter 212m-235 — Track-based routing on LOGIN (there is no
+      // signup-time prompt anymore; /choose-track was removed in
+      // Iter 390). Fetch the user's persisted track from /auth/me
+      // and route accordingly. If ?next=… was set explicitly, that
+      // always wins. Existing users on track="personal" still land
+      // on /build so their workspace is preserved.
       if (next !== "/dashboard") {
         navigate(next, { replace: true });
       } else {

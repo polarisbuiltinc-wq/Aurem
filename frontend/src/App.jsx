@@ -104,7 +104,7 @@ const Demo             = lazy(() => import("./pages/Demo"));                  //
 const NotFound         = lazy(() => import("./pages/NotFound"));              // Iter 388o · Bug 10
 // Iter 212m-235 — Personal Track (Phase 6). Warm cream/terracotta
 // aesthetic; distinct from Developer Track's IDE-dark shell.
-const ChooseTrack      = lazy(() => import("./pages/personal/ChooseTrack"));
+// Iter 390 — ChooseTrack removed (developer-only rollout).
 const BuildHome        = lazy(() => import("./pages/personal/BuildHome"));
 const DraftReview      = lazy(() => import("./pages/personal/DraftReview"));
 const ShipProgress     = lazy(() => import("./pages/personal/ShipProgress"));
@@ -349,8 +349,8 @@ export default function App() {
           <Route path="/support"         element={<Support />} />
           <Route path="/support/thread/:ticketId" element={<SupportThread />} />
           <Route path="/dashboard"       element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-          {/* Iter 212m-235 — Personal Track routes */}
-          <Route path="/choose-track"    element={<PrivateRoute><ChooseTrack /></PrivateRoute>} />
+          {/* Iter 212m-235 — Personal Track routes.
+              Iter 390 — /choose-track removed (developer-only default). */}
           <Route path="/ora"             element={<PrivateRoute><OraDirect /></PrivateRoute>} />
           <Route path="/build"           element={<PrivateRoute><BuildHome /></PrivateRoute>} />
           <Route path="/build/:draftId"  element={<PrivateRoute><DraftReview /></PrivateRoute>} />

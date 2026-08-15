@@ -435,6 +435,9 @@ async def callback(
                     "avatar_url":   gh_avatar,
                     "connected_at": time.time(),
                 },
+                # Iter 390 — Developer-only default; see /signup handler.
+                "track":              "developer",
+                "track_updated_at":   time.time(),
             })
 
         jwt_token = create_token(user_id, user_mail, is_admin=is_admin)

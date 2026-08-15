@@ -261,6 +261,12 @@ async def signup(body: SignupBody, request: Request) -> dict:
         # verification click.
         "email_verified":       bool(is_founder),
         "promo_first50_claimed": False,
+        # Iter 390 — Developer-only rollout. Every new signup defaults
+        # to "developer" so /choose-track is no longer needed. Legacy
+        # backfill in main.py::_backfill_dev_users_track remains as a
+        # safety net for any null rows that predate this default.
+        "track":              "developer",
+        "track_updated_at":   _now_ts,
     })
     # Track 3 — fire verification email as a background task so the
     # signup response returns immediately. Skipped for founders (they
@@ -382,6 +388,9 @@ async def google_session(body: GoogleSessionBody) -> dict:
                 "name": name, "picture": picture,
                 "connected_at": created_at,
             },
+            # Iter 390 — Developer-only default; see /signup handler.
+            "track":              "developer",
+            "track_updated_at":   created_at,
         })
     token = create_token(user_id, email, is_admin=is_admin)
     return {

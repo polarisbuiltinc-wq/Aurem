@@ -926,11 +926,11 @@ export default function Landing() {
         </section>
 
         {/* Feb 2026 — "Pick your track" section removed on founder
-            request. Track selection now lives on /choose-track (post-
-            signup) and via subdomain/route routing (builder.* vs
-            auremcto.com). Keeping the anchor comment so future edits
-            know the section historically sat between Guardrails and
-            the "Why teams ship" marquee. */}
+            request. Iter 390 (2026-02-15): /choose-track step also
+            removed from signup; new accounts default to "developer"
+            at backend insert. Keeping the anchor comment so future
+            edits know the section historically sat between Guardrails
+            and the "Why teams ship" marquee. */}
 
         {/* ─── Why teams ship marquee ─── */}
         <div className="marquee-wrap">
