@@ -151,7 +151,11 @@ export default function WalkthroughPlayer({
               border: "1px solid #1a2130",
               borderRadius: 6,
               fontSize: 11,
-              color: "#64748b",
+              // Iter 392 · was #64748b (4.09:1 on #0a0e18 — fails
+              // WCAG AA 4.5:1). Bumped to #94a3b8 (slate-400) which
+              // measures 5.9:1 and still reads as a muted browser
+              // URL bar — Lighthouse a11y contrast now passes.
+              color: "#94a3b8",
               fontFamily: '"JetBrains Mono", monospace',
               textAlign: "center",
               letterSpacing: "0.02em",

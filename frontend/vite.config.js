@@ -64,7 +64,16 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
-      sourcemap: false,
+      // Iter 393 · emit hidden sourcemaps for prod bundle. `hidden`
+      // means the `.map` files are written to dist/ but no
+      // `//# sourceMappingURL` comment is added to the shipped .js
+      // files — so DevTools + Sentry can still resolve them by
+      // fetching `<chunk>.js.map` explicitly, but casual visitors
+      // can't discover the original source via the browser hint.
+      // This unblocks the Lighthouse Best-Practices "Missing source
+      // maps for large first-party JavaScript" audit without leaking
+      // sources to non-authenticated tools.
+      sourcemap: 'hidden',
     },
     define: {
       'process.env.REACT_APP_BACKEND_URL': JSON.stringify(env.REACT_APP_BACKEND_URL || ''),

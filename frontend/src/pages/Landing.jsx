@@ -31,6 +31,7 @@ import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import FounderOfferPill from "../components/FounderOfferPill";
 import PricingCards from "../components/PricingCards";
+import LazyVideo from "../components/LazyVideo"; // Iter 391 · viewport-lazy demo video
 // Iter 212m-200 — Interactive animated walkthrough embed. Same
 // component powers the standalone /demo route so the two paths
 // stay pixel-identical and drift-free.
@@ -371,7 +372,8 @@ const LANDING_CSS = `
 .ora-landing .win-preview { background: linear-gradient(135deg, #0a0e1a 0%, #1e293b 100%); font-family: inherit; }
 .ora-landing .win-preview .browser-bar { background: #1e293b; color: var(--muted-2); padding: 5px 10px; border-radius: 6px; font-size: 10px; margin-bottom: 16px; display: inline-block; font-family: var(--font-mono); }
 .ora-landing .win-preview .live-tag { float: right; background: rgba(34,197,94,0.15); color: #4ade80; padding: 2px 8px; border-radius: 999px; font-size: 9px; border: 1px solid rgba(34,197,94,0.35); margin-top: 4px; font-family: var(--font-mono); }
-.ora-landing .win-preview h4 { color: var(--text); font-size: 16px; margin: 0 0 6px; }
+.ora-landing .win-preview h4,
+.ora-landing .win-preview .win-preview-title { color: var(--text); font-size: 16px; margin: 0 0 6px; font-weight: 600; }
 .ora-landing .win-preview p  { color: var(--muted-1); font-size: 12px; margin: 0 0 12px; line-height: 1.5; }
 .ora-landing .win-preview .preview-btn { background: var(--accent); color: #000; padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 700; display: inline-block; font-family: var(--font-mono); }
 .ora-landing .win-advisor { background: linear-gradient(180deg, #0a0e1a 0%, #060912 100%); }
@@ -756,7 +758,10 @@ export default function Landing() {
       {/* ─── NAV ─── */}
       <nav className="nav" data-testid="ora-nav">
         <div className="nav-left">
-          <img src="/ora-icon.png" alt="ORA" className="logo-img" />
+          <picture>
+            <source srcSet="/ora-icon.webp 1x, /ora-icon@2x.webp 2x" type="image/webp" />
+            <img src="/ora-icon.png" srcSet="/ora-icon.png 1x, /ora-icon@2x.png 2x" alt="ORA" className="logo-img" width="67" height="67" decoding="async" />
+          </picture>
           <div className="logo-text">ORA<span> by Aurem</span></div>
         </div>
         <div className="nav-links">
@@ -1025,14 +1030,10 @@ export default function Landing() {
                 title: "Practical workflow — prompt to commit",
                 desc:  "Watch ORA read the issue, find the file, write the patch, and push to GitHub.",
               },
-              {
-                src:   "https://customer-assets.emergentagent.com/job_launch-pad-237/artifacts/9ioe1ylh_ora%20easy%20to%20use%20video.mp4",
-                tint:  "tinted-green",
-                badge: "",
-                badgeText: "Easy to use",
-                title: "Plain English in, code out",
-                desc:  "No IDE. No setup. Describe what you want — ORA handles the rest.",
-              },
+              // Iter 391 · removed broken 9ioe1ylh_ora%20easy%20to%20use…
+              // (ERR_CONNECTION_FAILED in prod, flagged by PageSpeed Best
+              // Practices). One of the remaining four covers the same
+              // "plain English → code" beat via the workflow tile above.
               {
                 src:   "https://customer-assets.emergentagent.com/job_launch-pad-237/artifacts/rhq9ed86_reliable%20ORA%20video.mp4",
                 tint:  "tinted-blue",
@@ -1051,19 +1052,18 @@ export default function Landing() {
               },
             ].map((v, i) => (
               <div className="video-card" key={i} data-testid={`landing-video-${i}`}>
-                <div className={`video-thumb ${v.tint}`}>
-                  {v.badge && (
-                    <span className={`video-badge ${v.badge}`}>{v.badgeText}</span>
-                  )}
-                  {!v.badge && <span className="video-badge">{v.badgeText}</span>}
-                  <video
-                    src={v.src}
-                    controls
-                    playsInline
-                    preload="metadata"
-                    poster=""
-                  />
-                </div>
+                {/* Iter 391 · LazyVideo defers the network request
+                    until the card scrolls into view (rootMargin 200px)
+                    with preload="none" so the ~10 MB file is only
+                    fetched on tap. On Slow 4G mobile this reclaims
+                    ~5 s of LCP time. */}
+                {v.badge && (
+                  <span className={`video-badge ${v.badge}`} style={{ position: "absolute", zIndex: 2 }}>{v.badgeText}</span>
+                )}
+                {!v.badge && (
+                  <span className="video-badge" style={{ position: "absolute", zIndex: 2 }}>{v.badgeText}</span>
+                )}
+                <LazyVideo src={v.src} tint={v.tint} />
                 <div className="video-info">
                   <div className="video-title">{v.title}</div>
                   <div className="video-desc">{v.desc}</div>
@@ -1174,7 +1174,11 @@ export default function Landing() {
                 <span className="browser-bar">▸ https://auremcto.com/login</span>
                 <span className="live-tag">● live</span>
                 <div style={{ clear: "both", marginTop: 14 }}>
-                  <h4>Welcome back</h4>
+                  {/* Iter 392 · was <h4> — this is decorative copy inside
+                      the "browser preview" mockup, not a semantic heading.
+                      Downgrading to <div> restores heading order (the
+                      surrounding sections use h2/h3) per Lighthouse a11y. */}
+                  <div className="win-preview-title">Welcome back</div>
                   <p>Sign in to ship your next commit.</p>
                   <div className="preview-btn">Login →</div>
                   <div style={{ marginTop: 14, fontSize: 11, color: "var(--muted-3)", fontFamily: "var(--font-mono)" }}>
@@ -1514,7 +1518,10 @@ export default function Landing() {
       {/* ─── Footer ─── */}
       <footer className="footer" data-testid="ora-footer" style={{ flexDirection: "column", alignItems: "stretch", gap: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <img src="/ora-icon.png" alt="ORA" className="logo-img" />
+          <picture>
+            <source srcSet="/ora-icon.webp 1x, /ora-icon@2x.webp 2x" type="image/webp" />
+            <img src="/ora-icon.png" srcSet="/ora-icon.png 1x, /ora-icon@2x.png 2x" alt="ORA" className="logo-img" width="67" height="67" decoding="async" />
+          </picture>
           <div className="footer-text">ORA by Aurem — Built for developers · MIT extension</div>
         </div>
 

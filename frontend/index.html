@@ -26,16 +26,34 @@
          `aurem_consent.cats.marketing` from localStorage and
          checks `navigator.globalPrivacyControl`. -->
     <script>
-    !function(f,b,e,v,n,t,s)
-    {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-    n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-    n.queue=[];t=b.createElement(e);t.async=!0;
-    t.src=v;s=b.getElementsByTagName(e)[0];
-    s.parentNode.insertBefore(t,s)}(window, document,'script',
-    'https://connect.facebook.net/en_US/fbevents.js');
-    fbq('init', '1571887197933821');
-    fbq('track', 'PageView');
+    // Iter 391 · Deferred Meta Pixel bootstrap.
+    // -----------------------------------------
+    // We used to run the fbevents.js loader + fbq('init') + PageView
+    // synchronously in <head>, which added ~250 ms of main-thread
+    // script eval BEFORE the LCP paint on mobile (fbevents.js is
+    // 110 KiB gzipped and its bootstrap logs a 192 ms long task per
+    // Lighthouse Mobile). Deferring to requestIdleCallback (with a
+    // 3 s setTimeout fallback for older browsers / Safari) moves that
+    // cost past LCP without dropping tracking — PageView is still
+    // sent well within the "first minute" window Meta expects and
+    // subsequent fbq('track', ...) calls (CompleteRegistration, Lead,
+    // Purchase — Iter 389) work identically because the fbq queue
+    // stub is created up-front and drained once fbevents.js loads.
+    !function(f,b,e,v,n,t,s){
+      if(f.fbq)return;
+      n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+      n.queue=[];
+      var boot=function(){
+        if(f._fbqBooted)return; f._fbqBooted=true;
+        t=b.createElement(e); t.async=!0; t.src=v;
+        s=b.getElementsByTagName(e)[0]; s.parentNode.insertBefore(t,s);
+        f.fbq('init','1571887197933821');
+        f.fbq('track','PageView');
+      };
+      if('requestIdleCallback' in f){ f.requestIdleCallback(boot,{timeout:3000}); }
+      else { setTimeout(boot,2500); }
+    }(window, document,'script','https://connect.facebook.net/en_US/fbevents.js');
     </script>
     <!-- Note: <noscript> fallback for the pixel lives at the very top of
          <body> (HTML5 spec disallows <img> inside <head><noscript>). -->
@@ -164,6 +182,19 @@
 
     <link rel="preload" as="image" href="/aurem-bg.webp" media="(min-width: 769px)" fetchpriority="high" />
     <link rel="preload" as="image" href="/aurem-bg-mobile.webp" media="(max-width: 768px)" fetchpriority="high" />
+
+    <!-- Iter 391 · preload critical Jost woff2 so the hero text
+         doesn't wait 1.1 s for Google Fonts CSS → discover → fetch
+         chain (per PageSpeed Mobile audit). Jost 400 is the primary
+         body-text weight; other weights land via the normal
+         font-display:swap flow with FOFT-style progressive swap. -->
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href="https://fonts.gstatic.com/s/jost/v20/92zatBhPNqw73oTd4jQmfxI.woff2"
+      crossorigin="anonymous"
+    />
 
     <!-- =============================================================== -->
     <!-- STRUCTURED DATA (Schema.org JSON-LD)                            -->
@@ -427,15 +458,21 @@
       (trackSignup / trackPurchase) — keep all label literals there
       so this block stays tiny and cache-friendly.
     -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18239920865"></script>
+    <!--
+      Iter 391 · Deferred Google Ads gtag bootstrap. The gtag.js file
+      is 152 KiB and its parse alone costs ~103 ms of main-thread
+      time on the emulated Moto G Power. We defer the <script>
+      injection to requestIdleCallback (2.5 s setTimeout fallback)
+      while pre-creating the dataLayer + gtag stub in <head> so any
+      early trackSignup / trackPurchase call from analytics.js just
+      pushes into the queue and runs when the library lands. Consent
+      Mode v2 defaults are set on the stub so the queued events
+      inherit the DENY defaults exactly as before.
+    -->
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){ dataLayer.push(arguments); }
       window.gtag = gtag;
-      // Consent Mode v2: default DENY for ads + analytics until the
-      // CookieConsentBanner (or GPC) explicitly grants. This is
-      // required for GDPR/DPDP compliance. The banner flips these
-      // to 'granted' via gtag('consent', 'update', ...).
       gtag('consent', 'default', {
         ad_storage:            'denied',
         analytics_storage:     'denied',
@@ -447,6 +484,17 @@
       });
       gtag('js', new Date());
       gtag('config', 'AW-18239920865', { 'send_page_view': true });
+      (function(){
+        var loadGtag=function(){
+          if(window.__gtagBooted)return; window.__gtagBooted=true;
+          var s=document.createElement('script');
+          s.async=true;
+          s.src='https://www.googletagmanager.com/gtag/js?id=AW-18239920865';
+          document.head.appendChild(s);
+        };
+        if('requestIdleCallback' in window){ window.requestIdleCallback(loadGtag,{timeout:3000}); }
+        else { setTimeout(loadGtag,2500); }
+      })();
     </script>
 
     <script type="module" src="/src/main.jsx"></script>

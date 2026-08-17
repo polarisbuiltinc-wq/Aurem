@@ -378,7 +378,10 @@ export default function BugHunt() {
       {/* NAV */}
       <nav className="bh-nav" data-testid="bh-nav">
         <div className="nav-left">
-          <img src="/ora-icon.png" alt="ORA" className="logo-img" />
+          <picture>
+            <source srcSet="/ora-icon.webp 1x, /ora-icon@2x.webp 2x" type="image/webp" />
+            <img src="/ora-icon.png" srcSet="/ora-icon.png 1x, /ora-icon@2x.png 2x" alt="ORA" className="logo-img" width="67" height="67" decoding="async" />
+          </picture>
           <div className="logo-text">ORA<span> by Aurem</span></div>
         </div>
         <div className="nav-links">
@@ -547,7 +550,10 @@ export default function BugHunt() {
       {/* FOOTER */}
       <footer className="footer" data-testid="bh-footer">
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <img src="/ora-icon.png" alt="ORA" className="logo-img" />
+          <picture>
+            <source srcSet="/ora-icon.webp 1x, /ora-icon@2x.webp 2x" type="image/webp" />
+            <img src="/ora-icon.png" srcSet="/ora-icon.png 1x, /ora-icon@2x.png 2x" alt="ORA" className="logo-img" width="67" height="67" decoding="async" />
+          </picture>
           <div className="footer-text">ORA by Aurem — Bug Hunt v1 · Iter 212m-73</div>
         </div>
         <div className="footer-links">
