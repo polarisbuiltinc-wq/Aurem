@@ -2,6 +2,22 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **Iter 391/392/393 deploy sequence — post-ship verification & correction (2026-02-15)** — founder-triggered PSI Mobile pre-check prompted a full prod side-check that surfaced a critical false-positive claim from earlier in the session.
+  - **Ground truth (curl + chunk-tree walked, evidence-backed)**:
+    - Iter 391 (perf) = **LIVE on prod** ✅ — verified via `requestIdleCallback` (4 hits) + font preload `<link>` + `/ora-icon.webp` (200, 6.4 KB) + `/ora-icon@2x.webp` (200, 15 KB) all on `auremcto.com`.
+    - Iter 392 (a11y + agentic) = **NOT LIVE** ❌ — prod main chunk `index-B2OwBVj7.js` still contains literal `<h4>Welcome back</h4>` (should be `<div className="win-preview-title">`); `win-preview-title` grep returns 0 hits across all prod chunks; `llms.txt` on prod SHA still Feb-4 version with bare URLs, not the Feb-15 Markdown-link rewrite.
+    - Iter 393 (Vite hidden sourcemaps) = **NOT LIVE** ❌ — `.map` fetch returns HTTP 200 but body is the SPA catch-all `<!DOCTYPE html>` fallback with `content-type: text/html`, NOT a real source map. Sourcemaps not emitted → Vite config change never shipped.
+  - **Root cause**: three sequential `send_to_deployer` calls in the same session returned identical `job_id 92e41e3e-9fa0-4499-a913-f3e3d1530c79`. Session-level queue dedup meant only call 1 (Iter 391) created a real run; calls 2 + 3 were silently absorbed. This is a **new failure mode** distinct from Bug L-01 (which was a false-negative in verification tooling); here the verifier was right and the deploy layer swallowed the intent.
+  - **Correction to previous CHANGELOG entries**: Iter 392 + 393 remain preview-verified only. Prod-verified label REMOVED. A fresh combined deploy request has been sent to the deployer with explicit language that this must create a NEW run distinct from `bc85023a-…` and `1a5d0682-…` — the two prior runs.
+  - **Post-deploy 4-check verification protocol** (before founder runs PSI Mobile):
+    1. `sha256sum` of prod `/llms.txt` must match local `frontend/public/llms.txt`
+    2. Grep any prod chunk for literal `win-preview-title` must return ≥1 hit (currently 0)
+    3. `curl https://auremcto.com/assets/<main>.js.map` must return real map content (Content-Type NOT `text/html`)
+    4. Iter 391 signals (requestIdleCallback, font preload, WebP variants) must all still resolve — regression check
+  - **Founder-blocking note**: PSI Mobile run explicitly deferred pending all 4 checks green. Attempting PSI now would only measure Iter 391 delta, not the full 3-iter sweep — misleading data point.
+
+
+
 - **Iter 393 · Best Practices security · source maps + Cloudflare CSP/XFO/COOP doc (2026-02-15)** — closes the four Best-Practices audits flagged by PSI Mobile (CSP, COOP, XFO/clickjacking, source-maps).
   - **`frontend/vite.config.js`** — `build.sourcemap: false → 'hidden'`. Emits `.map` files alongside every chunk (dist/assets/*.js.map) but omits the `//# sourceMappingURL` comment in the shipped `.js` files, so DevTools + Sentry + Lighthouse can resolve them by explicit fetch while casual visitors don't get the discovery hint. Unblocks "Missing source maps for large first-party JavaScript" audit.
   - **`memory/CLOUDFLARE_HEADERS_ITER393.md`** (created) — production-grade doc for founder to paste into Cloudflare Dashboard → Rules → Transform Rules → HTTP Response Header Modification. Contains exact copy-paste values for **7 headers**: `X-Frame-Options: DENY` (unlocks clickjacking audit), `Cross-Origin-Opener-Policy: same-origin` (unlocks COOP audit), `Content-Security-Policy-Report-Only` (partial credit — full 100 needs strict-dynamic nonces, deferred to Iter 395), `Strict-Transport-Security`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`. CSP allowlist tailored to actual sources (Meta Pixel, Google Ads/Analytics, Google Fonts, Emergent asset CDN, backend API, Sentry).
