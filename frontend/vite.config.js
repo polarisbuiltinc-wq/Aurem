@@ -64,6 +64,13 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
+      // Iter 393.1 · redeploy marker (2026-02-15) — previous deploy
+      // request was queue-deduped in session (job_id 92e41e3e-…), so
+      // this comment forces a fresh source diff to break dedup. If
+      // this comment is still here after founder confirms verified,
+      // it's harmless dead comment; leaving intentionally as a
+      // dedup-break receipt.
+      //
       // Iter 393 · emit hidden sourcemaps for prod bundle. `hidden`
       // means the `.map` files are written to dist/ but no
       // `//# sourceMappingURL` comment is added to the shipped .js

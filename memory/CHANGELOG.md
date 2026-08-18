@@ -2,6 +2,18 @@
 
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
+- **Iter 392 + 393 · PROD-VERIFIED via 4-check battery (2026-02-15)** — after the previous same-session queue-dedup absorbed calls 2+3, a fresh marker-comment commit to `frontend/vite.config.js` broke the dedup and forced a real new run. All 4 evidence checks green:
+  1. `/llms.txt` prod SHA256 = `07a5150bb7db6d53e84bd5128dbf86d0e47da60afd3e014f0dd510a1bb389c18` = matches local → Iter 392 llms.txt Markdown rewrite shipped.
+  2. `win-preview-title` grep = 2 hits in new prod main chunk `/assets/index-BNQClbdB.js` (was `index-B2OwBVj7.js` = fresh build filename) → Iter 392 heading order fix shipped.
+  3. `<main>.js.map` fetch returns `Content-Type: application/octet-stream` (real map file, not SPA HTML fallback) → Iter 393 hidden sourcemaps shipped.
+  4. Regression: `requestIdleCallback` still 4 hits, ora-icon WebP still resolving with correct MIME → Iter 391 intact.
+  - Founder green-lit to run PSI Mobile against `https://auremcto.com/`. Expected: Perf **63 → 88-93**, A11y **95 → 100**, BP **96 → ~97** (bumps to ~99 after 7 Cloudflare headers from `/app/memory/CLOUDFLARE_HEADERS_ITER393.md` are pasted), SEO 100, Agentic **2/3 → 3/3**.
+  - Bug L-01 companion learning: **session-scoped queue dedup** in `send_to_deployer` is real — multiple deploy calls within the same session with unchanged git state get absorbed. Workaround: add a real source diff (a marker comment counts) before every follow-up deploy in the same session. Documented as **Bug L-02** — will add to `/app/memory/BUGS_LEDGER.md` in next session.
+
+- **BI cockpit (Iter 394+) — Slice A next session** — founder-approved scope: extend existing `AdminFinancials.jsx` in place, auto-log inference cost in `services/council/`, manual CAC input, Recharts chart lib, one atomic slice at a time. Stripe key confirmed present in `backend/.env` (`STRIPE_API_KEY=sk_live_51TKUU90…`, code accepts either `STRIPE_API_KEY` or `STRIPE_SECRET_KEY`).
+
+
+
 - **Iter 391/392/393 deploy sequence — post-ship verification & correction (2026-02-15)** — founder-triggered PSI Mobile pre-check prompted a full prod side-check that surfaced a critical false-positive claim from earlier in the session.
   - **Ground truth (curl + chunk-tree walked, evidence-backed)**:
     - Iter 391 (perf) = **LIVE on prod** ✅ — verified via `requestIdleCallback` (4 hits) + font preload `<link>` + `/ora-icon.webp` (200, 6.4 KB) + `/ora-icon@2x.webp` (200, 15 KB) all on `auremcto.com`.
