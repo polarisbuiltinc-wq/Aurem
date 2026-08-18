@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re as _re
 
 
 logger = logging.getLogger(__name__)
@@ -149,6 +150,42 @@ async def _call_glm(system: str, user: str,
     return content or ""
 
 
+# ── Helper: strip tool-call XML + return remaining prose length ─────
+# 2026-02-18 — Mirror of frontend `sanitizeForDisplay` used to detect
+# LongCat responses that are ENTIRELY tool-call XML (no prose). Not a
+# full sanitizer — just enough to answer "would the frontend collapse
+# this to empty?". Same regex shape as `RenderedMessage.jsx` line 71.
+_INTERNAL_TAG_RE_LONGCAT = (
+    r"(?:tool_call|tool_calls|tool_use|tool_result|tool_results|"
+    r"tool_response|function_call|function_result|function_response|"
+    r"thinking|chain_of_thought|scratchpad|internal|system|"
+    r"system_prompt|orchestrator|"
+    r"[a-z0-9]+_tool_call|[a-z0-9]+_tool_calls|[a-z0-9]+_tool_use|"
+    r"[a-z0-9]+_tool_result|[a-z0-9]+_tool_results|"
+    r"[a-z0-9]+_tool_response|[a-z0-9]+_function_call|"
+    r"[a-z0-9]+_function_result|[a-z0-9]+_function_response|"
+    r"[a-z0-9]+_thinking|[a-z0-9]+_chain_of_thought)"
+)
+_TAG_PAIR_RE = _re.compile(
+    r"<\s*(" + _INTERNAL_TAG_RE_LONGCAT + r")\b[^>]*>[\s\S]*?<\s*/\s*\1\s*>",
+    _re.IGNORECASE,
+)
+_TAG_ORPHAN_RE = _re.compile(
+    r"<\s*(" + _INTERNAL_TAG_RE_LONGCAT + r")\b[^>]*>[\s\S]*$",
+    _re.IGNORECASE,
+)
+
+
+def _strip_tool_call_xml_len(raw: str) -> int:
+    """Return the length of `raw` after stripping tool-call XML tags.
+    Used to detect LongCat replies that collapse to empty on the client."""
+    if not raw:
+        return 0
+    out = _TAG_PAIR_RE.sub("", raw)
+    out = _TAG_ORPHAN_RE.sub("", out)
+    return len(out.strip())
+
+
 # ── LongCat-2.0 path (Iter 212m-159 — Council A primary) ─────
 
 async def _call_longcat(system: str, user: str,
@@ -198,6 +235,38 @@ async def _call_longcat(system: str, user: str,
         max_tokens=max_tokens,
         temperature=temperature,
     )
+    # 2026-02-18 — Detect the "content is ONLY tool-call XML with no
+    # prose" case. LongCat-2.0 occasionally responds with a bare
+    # `<longcat_tool_call>{…}</longcat_tool_call>` block and zero
+    # user-facing text. Our chat pipeline doesn't consume LongCat's
+    # inline XML tool-call protocol (we only route real OpenAI-format
+    # `tool_calls` responses), so those replies leak into the bubble
+    # and the frontend sanitizer collapses them to empty → the ugly
+    # "no visible reply" placeholder the founder saw on prod.
+    #
+    # Fix: treat a tool-call-only response the same way as a truly
+    # empty one — flip LONGCAT_LIVE=false so the next call goes
+    # straight to GLM, then fall through to GLM for THIS request too.
+    # No user-visible retry latency change vs. the existing empty-body
+    # branch below.
+    _stripped_len = _strip_tool_call_xml_len(content or "")
+    if _stripped_len == 0 and (content or "").strip():
+        if _p.LONGCAT_LIVE:
+            _p.set_longcat_live(False)
+            logger.warning(
+                "_call_longcat: %s returned tool-call-only content "
+                "(len_raw=%d, len_after_strip=0) — flipping LONGCAT_LIVE=False, "
+                "Council A on GLM-5.2 until next restart.",
+                _LONGCAT_MODEL, len(content or ""),
+            )
+        try:
+            return await _call_glm(
+                system=system, user=user,
+                max_tokens=max_tokens, temperature=temperature,
+            )
+        except Exception as e:
+            logger.error("_call_longcat: GLM-5.2 fallback also failed: %r", e)
+            return ""
     if not (content or "").strip():
         # LongCat suddenly unreachable mid-flight (probe said it was
         # live, but this call returned empty). Update the live flag

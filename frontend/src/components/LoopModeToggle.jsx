@@ -21,6 +21,7 @@
  */
 import React from "react";
 import { RefreshCw, Lock } from "lucide-react";
+import HoverTip from "./HoverTip";
 
 export const EXEC_MODE_KEY = "ora_execution_mode";
 export const EXEC_MODES = { PROMPT: "prompt", LOOP: "loop" };
@@ -48,38 +49,43 @@ export default function LoopModeToggle({ value, onChange, locked = false }) {
   // listens to.
   if (locked) {
     return (
-      <button
-        type="button"
-        data-testid="loop-mode-toggle-locked"
-        data-locked="1"
-        aria-disabled="true"
-        aria-pressed="false"
-        onClick={() => {
-          try {
-            window.dispatchEvent(new CustomEvent("aurem:loop-coming-soon"));
-          } catch { /* ignore */ }
-        }}
-        title="Loop Mode — coming soon (in hardening)"
-        style={{
-          display: "inline-flex", alignItems: "center", gap: 6,
-          padding: "7px 14px",
-          borderRadius: 999,
-          border: "1px dashed rgba(251,191,36,0.45)",
-          background: "rgba(251,191,36,0.06)",
-          color: "rgba(251,191,36,0.85)",
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
-          textTransform: "uppercase",
-          cursor: "not-allowed",
-          whiteSpace: "nowrap",
-          userSelect: "none",
-          opacity: 0.85,
-          transition: "background 140ms",
-        }}
+      <HoverTip
+        content="Loop mode auto-runs the full Plan → Execute → Verify → Scan → Ship pipeline. Currently in hardening — available to admin/founder accounts only."
+        placement="top"
+        maxWidth={280}
       >
-        <Lock size={11} strokeWidth={2.5} />
-        Loop · soon
-      </button>
+        <button
+          type="button"
+          data-testid="loop-mode-toggle-locked"
+          data-locked="1"
+          aria-disabled="true"
+          aria-pressed="false"
+          onClick={() => {
+            try {
+              window.dispatchEvent(new CustomEvent("aurem:loop-coming-soon"));
+            } catch { /* ignore */ }
+          }}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "7px 14px",
+            borderRadius: 999,
+            border: "1px dashed rgba(251,191,36,0.45)",
+            background: "rgba(251,191,36,0.06)",
+            color: "rgba(251,191,36,0.85)",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            cursor: "not-allowed",
+            whiteSpace: "nowrap",
+            userSelect: "none",
+            opacity: 0.85,
+            transition: "background 140ms",
+          }}
+        >
+          <Lock size={11} strokeWidth={2.5} />
+          Loop · soon
+        </button>
+      </HoverTip>
     );
   }
 
@@ -89,32 +95,41 @@ export default function LoopModeToggle({ value, onChange, locked = false }) {
     onChange?.(next);
   };
   return (
-    <button
-      type="button"
-      data-testid="loop-mode-toggle"
-      data-loop-active={isLoop ? "1" : "0"}
-      onClick={flip}
-      aria-pressed={isLoop}
-      title={isLoop ? "Loop mode ON — click to switch to Prompt mode" : "Click to enable Loop mode (Plan → Execute → Verify → Scan → Ship)"}
-      style={{
-        display: "inline-flex", alignItems: "center", gap: 6,
-        padding: "7px 14px",
-        borderRadius: 999,
-        border: isLoop ? "1px solid #FF6608" : "1px solid rgba(255,255,255,0.12)",
-        background: isLoop ? "#FF6608" : "transparent",
-        color: isLoop ? "#0A0A0A" : "rgba(255,255,255,0.72)",
-        fontFamily: "'JetBrains Mono', monospace",
-        fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
-        textTransform: "uppercase",
-        cursor: "pointer",
-        boxShadow: isLoop ? "0 0 18px -4px rgba(255,102,8,0.55)" : "none",
-        transition: "background 140ms, color 140ms, border-color 140ms, box-shadow 200ms",
-        whiteSpace: "nowrap",
-        userSelect: "none",
-      }}
+    <HoverTip
+      content={
+        isLoop
+          ? "Loop mode ON — ORA is running the full Plan → Execute → Verify → Scan → Ship pipeline. Click to return to one-shot Prompt mode."
+          : "Prompt mode: one reply per message (default). Turn Loop ON to have ORA auto-plan, execute, verify, scan, and ship without stopping between phases."
+      }
+      placement="top"
+      maxWidth={280}
     >
-      <RefreshCw size={12} strokeWidth={2.5} />
-      {isLoop ? "Loop on" : "Loop off"}
-    </button>
+      <button
+        type="button"
+        data-testid="loop-mode-toggle"
+        data-loop-active={isLoop ? "1" : "0"}
+        onClick={flip}
+        aria-pressed={isLoop}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          padding: "7px 14px",
+          borderRadius: 999,
+          border: isLoop ? "1px solid #FF6608" : "1px solid rgba(255,255,255,0.12)",
+          background: isLoop ? "#FF6608" : "transparent",
+          color: isLoop ? "#0A0A0A" : "rgba(255,255,255,0.72)",
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          cursor: "pointer",
+          boxShadow: isLoop ? "0 0 18px -4px rgba(255,102,8,0.55)" : "none",
+          transition: "background 140ms, color 140ms, border-color 140ms, box-shadow 200ms",
+          whiteSpace: "nowrap",
+          userSelect: "none",
+        }}
+      >
+        <RefreshCw size={12} strokeWidth={2.5} />
+        {isLoop ? "Loop on" : "Loop off"}
+      </button>
+    </HoverTip>
   );
 }

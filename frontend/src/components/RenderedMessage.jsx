@@ -388,6 +388,15 @@ export default function RenderedMessage({ text }) {
   // empty `text` (never happens for a persisted assistant row, but
   // guard anyway) still renders the empty span below so we don't spam
   // the UI with placeholders.
+  //
+  // 2026-02-18 — Founder reported the original placeholder ("assistant
+  // emitted an internal tool call with no visible reply — try rephrasing")
+  // itself reads as a raw internal-jargon leak. Replaced with a plain,
+  // user-facing sentence. Root cause of the empty-content case sits on
+  // the backend (LongCat-2.0 occasionally responds with pure tool-call
+  // XML and no prose) and is being addressed independently in
+  // `openrouter_providers._call_longcat` — this frontend layer only
+  // owns the graceful presentation.
   const originalHadBody = !!(text && text.trim().length);
   const isStrippedToNothing = originalHadBody && !cleaned.trim();
   if (isStrippedToNothing) {
@@ -396,11 +405,12 @@ export default function RenderedMessage({ text }) {
         data-testid="rendered-message-empty-placeholder"
         style={{
           fontStyle: "italic",
-          opacity: 0.55,
+          opacity: 0.6,
           fontSize: 13,
+          color: "var(--text-dim, #8a8f99)",
         }}
       >
-        (assistant emitted an internal tool call with no visible reply — try rephrasing)
+        ORA didn&apos;t have a text reply for that — mind rephrasing?
       </span>
     );
   }

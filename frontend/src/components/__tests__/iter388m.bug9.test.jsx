@@ -29,7 +29,7 @@ describe("Bug 9 — placeholder for messages fully stripped by sanitizer", () =>
     const raw = '<longcat_tool_call>read_repo_file {"path":"backend/routers/health.py"}</longcat_tool_call>';
     const { getByTestId } = render(<RenderedMessage text={raw} />);
     const el = getByTestId("rendered-message-empty-placeholder");
-    expect(el.textContent).toMatch(/internal tool call/i);
+    expect(el.textContent).toMatch(/didn't have a text reply|rephrasing/i);
   });
 
   it("renders the placeholder for orphan open tag (streaming cutoff)", () => {

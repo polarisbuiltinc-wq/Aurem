@@ -12,8 +12,20 @@
 import React, { useState, useEffect } from "react";
 import { Zap, Search, Rocket, Lock } from "lucide-react";
 import { api } from "../lib/api";
+import HoverTip from "./HoverTip";
 
 const ICONS = { swift: Zap, pro: Search, maxx: Rocket };
+
+// 2026-02-18 — Richer tooltip copy per mode. The backend `desc` is
+// concise catalog-style ("swift replies for casual chat") which the
+// founder reported doesn't explain what changes when you click. These
+// strings expand on trade-offs (cost, latency, model tier) so hover
+// answers "why would I pick this?" in one line.
+const MODE_TOOLTIPS = {
+  swift: "Fastest, cheapest replies. Casual chat + quick answers. Uses the economy model — no repo reads, no tool calls.",
+  pro:   "Balanced mode. Reads the repo when needed, edits files, runs the full toolchain. Default for most work.",
+  maxx:  "Deepest reasoning. Larger context, multi-pass planning, self-critique. Slower + higher cost. Use for gnarly bugs / architecture.",
+};
 
 export default function ModeSelector({ value, onChange, excludeKeys = [] }) {
   const [modes, setModes] = useState(null);
@@ -47,34 +59,39 @@ export default function ModeSelector({ value, onChange, excludeKeys = [] }) {
           const active = value === key;
           const locked = !m?.unlocked;
           return (
-            <button
+            <HoverTip
               key={key}
-              type="button"
-              data-testid={`mode-pill-${key}`}
-              onClick={() => locked ? setPopup(key) : onChange(key)}
-              title={m?.desc}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 4,
-                padding: "4px 9px", borderRadius: 6,
-                border: active
-                  ? "1px solid var(--accent, #f59e0b)"
-                  : "1px solid var(--border)",
-                background: active
-                  ? "var(--accent-soft, rgba(245,158,11,0.12))"
-                  : "transparent",
-                color: locked
-                  ? "var(--text-faint)"
-                  : active
-                    ? "var(--accent-2, #ffb347)"
-                    : "var(--text-dim)",
-                cursor: "pointer",
-                fontSize: 11,
-                fontWeight: active ? 600 : 400,
-              }}
+              content={MODE_TOOLTIPS[key] || m?.desc || ""}
+              placement="top"
+              maxWidth={280}
             >
-              {locked ? <Lock size={11} /> : <Icon size={12} />}
-              {m?.label}
-            </button>
+              <button
+                type="button"
+                data-testid={`mode-pill-${key}`}
+                onClick={() => locked ? setPopup(key) : onChange(key)}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                  padding: "4px 9px", borderRadius: 6,
+                  border: active
+                    ? "1px solid var(--accent, #f59e0b)"
+                    : "1px solid var(--border)",
+                  background: active
+                    ? "var(--accent-soft, rgba(245,158,11,0.12))"
+                    : "transparent",
+                  color: locked
+                    ? "var(--text-faint)"
+                    : active
+                      ? "var(--accent-2, #ffb347)"
+                      : "var(--text-dim)",
+                  cursor: "pointer",
+                  fontSize: 11,
+                  fontWeight: active ? 600 : 400,
+                }}
+              >
+                {locked ? <Lock size={11} /> : <Icon size={12} />}
+                {m?.label}
+              </button>
+            </HoverTip>
           );
         })}
       </div>

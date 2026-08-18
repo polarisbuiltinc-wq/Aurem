@@ -1766,10 +1766,19 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       ? (loopPhaseHint || "plan")
       : null;
     const phasePrefix = resolvedPhase ? `LOOP_PHASE:${resolvedPhase}\n\n` : "";
-    // Auto-augment prompt with active project context so the LLM stays scoped.
-    const finalPrompt = activeProject
-      ? `${phasePrefix}[Working on project: ${activeProject.name} — repo ${activeProject.github_owner}/${activeProject.github_repo}@${activeProject.branch}]\n\n${finalText}`
-      : `${phasePrefix}${finalText}`;
+    // 2026-02-18 — Removed the legacy `[Working on project: …]` prompt
+    // preamble that used to be auto-prepended for every send. The
+    // backend already receives `project_id` in the streamChat body
+    // (see api.js line 289) and resolves the project + brain context
+    // itself (`routers/chat.py` line 1405 onward). Prepending the
+    // scoping bracket string was redundant AND it leaked into
+    // persisted user messages, so the history replay on refresh
+    // showed the bracket in every prior bubble. The sanitizer in
+    // RenderedMessage still strips leftover `^[Working on project:...]`
+    // preambles from any legacy stored messages, and a persistent
+    // chip above the input now surfaces the same project scope
+    // visually — see the ActiveProjectChip render below.
+    const finalPrompt = `${phasePrefix}${finalText}`;
     // Iter 212m-58 — drive the LoopStepBar from here. On a fresh loop
     // turn we set `plan_pending` (waits for the model to emit the
     // [PLAN_READY] marker, then the SSE onToken below flips it to
@@ -4571,6 +4580,63 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                 </span>
               );
             })}
+          </div>
+        )}
+
+        {/* 2026-02-18 — Active project chip.
+            Replaces the legacy `[Working on project: …]` prompt-preamble
+            approach (that leaked into every persisted user bubble). A
+            single persistent chip above the composer keeps the scope
+            visible without cluttering the message list. Hidden when
+            no active project (home mode). */}
+        {activeProject && activeProject.project_id !== "home" && (
+          <div
+            data-testid="active-project-chip"
+            style={{
+              display:       "inline-flex",
+              alignItems:    "center",
+              gap:           6,
+              padding:       "5px 10px 5px 8px",
+              marginBottom:  8,
+              background:    "var(--panel-2, rgba(255,255,255,0.03))",
+              border:        "1px solid var(--border, rgba(255,255,255,0.09))",
+              borderRadius:  999,
+              fontSize:      12,
+              lineHeight:    1.3,
+              color:         "var(--text-dim, #9aa0aa)",
+              fontFamily:    "ui-monospace, 'JetBrains Mono', monospace",
+              maxWidth:      "100%",
+              overflow:      "hidden",
+            }}
+            title={`ORA is scoped to ${activeProject.github_owner}/${activeProject.github_repo}@${activeProject.branch}. Every message inherits this repo context — no need to paste paths.`}
+          >
+            <span aria-hidden="true" style={{ fontSize: 11 }}>📌</span>
+            <span style={{ color: "var(--text-faint, #6a6f78)" }}>Scope:</span>
+            <span
+              data-testid="active-project-chip-name"
+              style={{
+                color:        "var(--text, #d8dae0)",
+                fontWeight:   500,
+                overflow:     "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace:   "nowrap",
+              }}
+            >
+              {activeProject.name}
+            </span>
+            <span style={{ color: "var(--text-faint, #6a6f78)" }}>·</span>
+            <span
+              data-testid="active-project-chip-branch"
+              style={{
+                color:      "var(--text-dim, #9aa0aa)",
+                overflow:   "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {activeProject.github_owner}/{activeProject.github_repo}
+              @{activeProject.branch}
+            </span>
           </div>
         )}
 
