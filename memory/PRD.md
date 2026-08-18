@@ -12,6 +12,27 @@ answer questions, propose fixes, apply them via GitHub commits/PRs, and
 run scan+fix pipelines (health, security, quality). Zero-mock — every fix
 is a real GitHub commit with a verified SHA.
 
+## Latest ship — Slice A · BI Cockpit (2026-02-18)
+
+**Preview-verified**, prod-verification pending founder run.
+
+Live Business Intelligence added to the Financial Command Center.
+Extends `AdminFinancials.jsx` with a new `<BiCockpit>` section rendering
+real Stripe (`list_subscriptions`) MRR/ARR/active/churn cards + real
+inference cost cards + 30-day cost line-chart + cost-by-model bar-chart
++ `🧹 Reconcile Orphans` button.
+
+- Backend: `/app/backend/routers/admin_bi.py` — `/admin/bi/stripe-metrics`,
+  `/admin/bi/inference-metrics`, `/admin/bi/summary`. All founder-gated.
+- Frontend dep: `recharts@3.10.1` added.
+- No hallucination: MRR is either a real Stripe number or explicit
+  "No data yet"; inference is real `ora_chat_usage` aggregate; budget mode
+  reuses the same tracker the /message router already enforces.
+- Regression: `/app/backend/tests/test_slice_a_bi_cockpit.py` (4 tests, all green).
+- Preview cleanup: 26 test rows in `cto_payments` purged.
+
+See `/app/memory/CHANGELOG.md` for full detail.
+
 ## Core requirements (frozen)
 
 - **Zero mocks** — Every commit/URL/telemetry point must be real

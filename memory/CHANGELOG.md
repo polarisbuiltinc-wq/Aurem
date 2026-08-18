@@ -1,5 +1,17 @@
 # AUREM CTO — Changelog (append-only)
 
+
+- **Slice A · BI Cockpit shipped preview-verified (2026-02-18)** — Live Business Intelligence added to `AdminFinancials.jsx` above the existing catalog cards. Zero hallucination:
+  - **New backend router** `/app/backend/routers/admin_bi.py` — 3 founder-gated endpoints under `/api/aurem-dev/admin/bi/*`:
+    - `GET /stripe-metrics` — live `stripe.Subscription.list(status="all")` with auto-paging. Returns MRR (sum of recurring USD unit_amount normalised to monthly across `active + past_due`), ARR (MRR × 12), active/trialing/past_due subs, new_30d, canceled_30d, ARPU. Fails soft when key missing (`status="missing_key"`) so the UI never silently paints $0.
+    - `GET /inference-metrics` — aggregates `ora_chat_usage` (existing collection) for today/month totals, 30-day daily timeseries, top-15 by-model and by-route breakdowns. Uses the shipped `cost_tracker.budget_status()` so daily/monthly `mode` (normal/warning/economy/spike_hard_stop) matches what the /message router actually enforces.
+    - `GET /summary` — atomic payload (both fetches run concurrently) + net-margin projection (`mrr − month_infer_pro_rated_to_end_of_month`).
+  - **Frontend** — added `recharts@3.10.1`. New `<BiCockpit>` section renders 5 Stripe cards + 4 inference cards + 30-day cost line-chart + cost-by-model bar-chart + `🧹 Reconcile Orphans` button (wires to existing `POST /admin/payments/reconcile`).
+  - **Preview cleanup**: 26 orphaned test rows in `cto_payments` (all `test@aurem.dev` / `test_iter179_*` / `test_preview_*`) purged before shipping so preview MRR endpoint has clean signal (was 1 paid row after purge, still is — no real preview transactions).
+  - **Preview-verified evidence**: curl → all 3 endpoints return real data. Frontend screenshot → all cards + charts render live values (`STRIPE · OK · LIVE` badge, `$0.0518` month infer matches DB aggregate exactly).
+  - **Regression**: `/app/backend/tests/test_slice_a_bi_cockpit.py` — 4 pytest cases (shape contract for each endpoint + anonymous access rejected). All green.
+  - Not yet shipped to prod — awaits founder verification of read-only prod DB snapshot (still-pending orphan count check before deploy) and manual PSI Mobile score paste.
+
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
 - **Iter 392 + 393 · PROD-VERIFIED via 4-check battery (2026-02-15)** — after the previous same-session queue-dedup absorbed calls 2+3, a fresh marker-comment commit to `frontend/vite.config.js` broke the dedup and forced a real new run. All 4 evidence checks green:
