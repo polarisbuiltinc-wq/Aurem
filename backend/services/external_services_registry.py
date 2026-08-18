@@ -91,10 +91,20 @@ REGISTRY: tuple[Service, ...] = (
         display_name="Stripe API",
         integration_id="stripe",
         # Codebase reads either STRIPE_API_KEY or STRIPE_SECRET_KEY (see
-        # _stripe_key() in routers/payments.py — preserves backwards-compat
-        # with older deploys). Treat the integration as "configured" iff
-        # EITHER is set to a real (non-placeholder) value.
+        # `stripe_key()` in services/stripe_client.py — preserves
+        # backwards-compat with older deploys). Treat the integration
+        # as "configured" iff EITHER is set to a real (non-placeholder)
+        # value. Env-keys stays populated so admins reading the raw
+        # registry still see what to set; the actual truth check is
+        # delegated to `custom_configured` below so the cockpit's
+        # `int_stripe` check agrees with `stripe_key()` — the same
+        # function the BI Cockpit uses to render its "STRIPE · OK · LIVE"
+        # badge. Without this, prod (which uses STRIPE_SECRET_KEY only)
+        # showed `stripe: not-set` on the cockpit page while the BI
+        # Cockpit on the same host said `STRIPE · OK · LIVE`, and the
+        # founder had no way to tell which was right.
         env_keys=("STRIPE_API_KEY",),
+        custom_configured=lambda: _is_stripe_key_present(),
         probe_url="https://api.stripe.com/v1/",
     ),
     Service(
@@ -155,6 +165,24 @@ REGISTRY: tuple[Service, ...] = (
         ),
     ),
 )
+
+
+def _is_stripe_key_present() -> bool:
+    """Single source of truth for "is Stripe configured?" — mirrors the
+    `stripe_key()` helper in services/stripe_client.py so the cockpit
+    `int_stripe` check agrees with what the BI Cockpit and the
+    payments router actually see. Accepts EITHER `STRIPE_API_KEY` or
+    `STRIPE_SECRET_KEY` (both are honoured by the payments code for
+    backwards-compat), and filters out the Emergent sandbox placeholder
+    `sk_test_emergent...` so preview environments correctly report
+    "not configured" instead of falsely-green."""
+    try:
+        from services.stripe_client import stripe_key
+        return bool(stripe_key())
+    except Exception:                                            # noqa: BLE001
+        return False
+
+
 
 
 def _is_github_app_configured() -> bool:

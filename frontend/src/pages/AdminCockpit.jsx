@@ -18,6 +18,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
+import LiveBusinessIntelligence from "../components/LiveBusinessIntelligence";
 
 const C = {
   bg:     "#0a0a0a",
@@ -307,6 +308,13 @@ function EnvBadge({ env, dbHost }) {
 function BusinessPulse() {
   const [d, setD] = useState(null);
   const [p, setP] = useState(null);
+  // 2026-02-18 — Also pull /admin/financials so TOTAL USERS card can
+  // show the tier breakdown as a sub-line. This resolves the "cockpit
+  // says 33 total, financials says 31 free" confusion — same DB, but
+  // one measures the whole `dev_users` collection (correct total) and
+  // the other measures only the `tier=='free'` bucket. Showing both
+  // in one place removes the false-discrepancy signal.
+  const [tiers, setTiers] = useState(null);
   const [err, setErr] = useState(null);
   useEffect(() => {
     // Feb 2026 · prod-hang fix — bound each fetch with a per-request
@@ -319,18 +327,24 @@ function BusinessPulse() {
     api.get("/admin/pulse", { timeout: 12000 })
        .then(r => setP(r.data))
        .catch(e => setErr(prev => prev || `pulse: ${e?.message || "failed"}`));
+    api.get("/admin/financials", { timeout: 12000 })
+       .then(r => setTiers(r.data?.users || null))
+       .catch(() => { /* soft-fail — the tier sub-line just won't render */ });
   }, []);
   const users = d?.total_users || p?.total_users || 0;
   const dau   = d?.dau || d?.dau_today || 0;
   const rev   = d?.revenue_30d || d?.mrr || 0;
   const ghPct = p?.github_connect_pct;
   const paidNew = p?.paid_new_30d;
+  const tierSub = tiers
+    ? `${tiers.free || 0} free · ${(tiers.starter || 0) + (tiers.pro || 0) + (tiers.team || 0)} paid`
+    : null;
   return (
     <div data-testid="cockpit-business-pulse"
          style={{ display: "grid",
                   gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))",
                   gap: 10, marginTop: 14 }}>
-      <MetricCard label="TOTAL USERS" value={users.toLocaleString()} />
+      <MetricCard label="TOTAL USERS" value={users.toLocaleString()} sub={tierSub} />
       <MetricCard label="DAU (today)" value={dau.toLocaleString()} />
       <MetricCard label="REVENUE 30d" value={`$${Number(rev).toLocaleString()}`} />
       {ghPct != null && (
@@ -481,6 +495,12 @@ export default function AdminCockpit() {
             slow status/all can't block the business surfaces below. */}
         <ModeBoard />
         <BusinessPulse />
+
+        {/* 2026-02-18 — Live Business Intelligence merged in from the
+            legacy /admin/financials page. Single source of truth so the
+            cockpit and the (former) financials page can no longer
+            disagree on MRR / active-subs / Stripe status. */}
+        <LiveBusinessIntelligence />
       </div>
     </div>
   );

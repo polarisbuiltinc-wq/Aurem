@@ -1,6 +1,28 @@
 # AUREM CTO — Changelog (append-only)
 
 
+- **Chat UX #1-#3 + Admin Cockpit merge shipped preview-verified (2026-02-18)** — three chat-UX polish fixes + full BI merge into `/admin/cockpit`. Zero prod deploys yet; all preview-only.
+  - **#1 · LongCat empty-tool-call fix**
+    - Frontend: `RenderedMessage.jsx` placeholder rewritten from "internal tool call with no visible reply" (internal jargon) → `"ORA didn't have a text reply for that — mind rephrasing?"`.
+    - Backend: `_call_longcat` (`services/llm/openrouter_providers.py`) now uses new `_strip_tool_call_xml_len()` helper mirroring the frontend sanitizer. When LongCat returns pure `<longcat_tool_call>…</…>` XML with no prose, we flip `LONGCAT_LIVE=False` and fall through to GLM-5.2 in-flight — same graceful branch as the pre-existing empty-content case.
+    - Regression: `tests/test_longcat_tool_call_only_fallback.py` (8/8 green) + `iter388m.bug9.test.jsx` updated (6/6 green).
+  - **#2 · `[Working on project: …]` chip refactor**
+    - `ChatPanel.jsx`: removed the legacy `[Working on project: …]` prompt preamble that was leaking into persisted user bubbles. Backend already receives `project_id` in the `streamChat` payload and resolves brain context itself.
+    - New `<div data-testid="active-project-chip">` above the composer showing `📌 Scope: {name} · {owner}/{repo}@{branch}` with tooltip. Hidden in home mode.
+    - Frontend sanitizer's `[Working on project: …]` strip retained belt-and-suspenders for legacy stored messages.
+  - **#3 · Swift / LOOP OFF tooltips**
+    - New `<HoverTip>` component (`components/HoverTip.jsx`) — zero-dep CSS-only rich tooltip with 80ms delay, replaces browser-native `title=""`.
+    - `ModeSelector` (Swift/Pro/Maxx) now wraps each pill in `<HoverTip>` with detailed trade-off copy per mode.
+    - `LoopModeToggle` (loop on/off + locked variant) wrapped in `<HoverTip>` with pipeline explanation.
+  - **#4 · Deferred** — Tier 1 exploration only; architecture report delivered but implementation deferred at founder's request (Admin merge took priority).
+  - **Admin Cockpit + Financials MERGE**
+    - Root cause of Stripe discrepancy: `int_stripe` health check read only `STRIPE_API_KEY` env, while `stripe_key()` accepts BOTH `STRIPE_API_KEY` and `STRIPE_SECRET_KEY` and filters the `sk_test_emergent…` placeholder. Prod uses `STRIPE_SECRET_KEY` → cockpit said `stripe: not-set` while BI card said `STRIPE · OK · LIVE`. Fix: registry `stripe` entry now delegates to `_is_stripe_key_present()` → `stripe_client.stripe_key()`. Single source of truth. Regression: `tests/test_admin_merge_stripe_registry.py` (3 pass, 1 legit skip).
+    - Root cause of user-count discrepancy: cockpit shows `total_users` (all `dev_users`), financials shows `free_users` (`tier=="free"` bucket). Same DB, different label. Fix: cockpit `BusinessPulse` TOTAL USERS card now shows a sub-line "{free} free · {paid} paid" — same source, explicit breakdown, no more mystery gap.
+    - BI panel extracted into `components/LiveBusinessIntelligence.jsx` and mounted inside `AdminCockpit.jsx` after BusinessPulse. Owns its own data fetch + reconcile handler.
+    - `AdminFinancials.jsx` stripped of its BI copy (~280 LOC removed). Now renders only the P&L catalog editor + tier margins + cost-per-task tables. Blue notice at top: "Live BI now lives in the Cockpit — one dashboard, one source of truth" with `[Open Cockpit →]` CTA button.
+    - Preview-verified via screenshot: cockpit renders 788 total users with sub-line "787 free · 0 paid", `STRIPE · OK · LIVE` badge, MRR "No data yet · Stripe subscriptions" (honest — 0 subs), full BI charts + Reconcile button; financials shows blue notice + editor + no duplicate BI.
+
+
 - **Slice A · BI Cockpit shipped preview-verified (2026-02-18)** — Live Business Intelligence added to `AdminFinancials.jsx` above the existing catalog cards. Zero hallucination:
   - **New backend router** `/app/backend/routers/admin_bi.py` — 3 founder-gated endpoints under `/api/aurem-dev/admin/bi/*`:
     - `GET /stripe-metrics` — live `stripe.Subscription.list(status="all")` with auto-paging. Returns MRR (sum of recurring USD unit_amount normalised to monthly across `active + past_due`), ARR (MRR × 12), active/trialing/past_due subs, new_30d, canceled_30d, ARPU. Fails soft when key missing (`status="missing_key"`) so the UI never silently paints $0.
