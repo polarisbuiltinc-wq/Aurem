@@ -128,6 +128,18 @@ _REDIS_LAST_ERROR: str | None = None  # last connection-attempt error, for
 _REDIS_LAST_ATTEMPT_TS: float | None = None
 _REDIS_HOST_REDACTED: str | None = None  # "host:port" only, no user:pass
 
+# 2026-08-19 · production incident — Upstash hit its plan's request quota
+# ("max requests limit exceeded"). Iter 388-noise (above) throttled the
+# WARNING *logging* for this exact scenario, but `_ensure_redis()` itself
+# had no cooldown: every single incoming request re-attempted a fresh
+# TLS connect + PING + SCRIPT LOAD handshake to Upstash, got rejected
+# again, and paid that round-trip on the request's critical path — under
+# concurrent load this is a reconnect storm that can starve/timeout the
+# ASGI pipeline (observed as "RuntimeError: No response returned" on
+# unrelated endpoints, not just rate-limited ones). Skip reconnect
+# attempts for this long after a failure.
+_REDIS_RETRY_COOLDOWN_S = 30.0
+
 # Iter 388-noise · rate_limiter warning throttle.  When Redis is
 # sustained-unhealthy (e.g. Upstash monthly quota exhausted with the
 # same "max requests limit exceeded" ResponseError on every attempt),
@@ -176,6 +188,11 @@ async def _ensure_redis():
         return None
     if _REDIS_CLIENT is not None and _REDIS_BACKEND_ACTIVE:
         return _REDIS_CLIENT
+    # Cooldown gate — don't hammer a Redis that just rejected us
+    # (quota exhaustion, sustained outage) on every single request.
+    if (_REDIS_LAST_ATTEMPT_TS is not None and _REDIS_LAST_ERROR is not None
+            and (time.time() - _REDIS_LAST_ATTEMPT_TS) < _REDIS_RETRY_COOLDOWN_S):
+        return None
     _REDIS_LAST_ATTEMPT_TS = time.time()
     _REDIS_HOST_REDACTED = _redact_redis_url(url)
     try:

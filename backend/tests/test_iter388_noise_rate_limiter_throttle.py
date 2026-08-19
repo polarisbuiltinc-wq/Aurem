@@ -30,6 +30,8 @@ async def test_new_error_logs_immediately(monkeypatch, caplog):
     monkeypatch.setattr(rl, "_REDIS_BACKEND_ACTIVE", False)
     monkeypatch.setattr(rl, "_REDIS_WARN_LAST_SIG", None)
     monkeypatch.setattr(rl, "_REDIS_WARN_LAST_MINUTE", 0)
+    monkeypatch.setattr(rl, "_REDIS_LAST_ATTEMPT_TS", None)
+    monkeypatch.setattr(rl, "_REDIS_LAST_ERROR", None)
     monkeypatch.setenv("REDIS_URL", "redis://fake:6379")
 
     async def _fail_ping(self):
@@ -72,6 +74,7 @@ async def test_repeated_same_error_within_minute_suppressed(monkeypatch, caplog)
 
     with caplog.at_level(logging.WARNING, logger="services.rate_limiter"):
         for _ in range(5):
+            monkeypatch.setattr(rl, "_REDIS_LAST_ATTEMPT_TS", None)
             await rl._ensure_redis()
 
     warnings = [r for r in caplog.records if r.levelname == "WARNING"]
@@ -104,9 +107,11 @@ async def test_minute_rollover_logs_with_suppression_tally(monkeypatch, caplog):
     monkeypatch.setattr(time, "time", lambda: 1_800_000_000.0)
     with caplog.at_level(logging.WARNING, logger="services.rate_limiter"):
         for _ in range(3):
+            monkeypatch.setattr(rl, "_REDIS_LAST_ATTEMPT_TS", None)
             await rl._ensure_redis()
         # Advance minute bucket → 1 more warn (with tally=2).
         monkeypatch.setattr(time, "time", lambda: 1_800_000_060.0)
+        monkeypatch.setattr(rl, "_REDIS_LAST_ATTEMPT_TS", None)
         await rl._ensure_redis()
 
     warnings = [r for r in caplog.records if r.levelname == "WARNING"]
@@ -143,6 +148,7 @@ async def test_different_error_signature_bypasses_throttle(monkeypatch, caplog):
 
     with caplog.at_level(logging.WARNING, logger="services.rate_limiter"):
         for _ in range(4):
+            monkeypatch.setattr(rl, "_REDIS_LAST_ATTEMPT_TS", None)
             await rl._ensure_redis()
 
     warnings = [r for r in caplog.records if r.levelname == "WARNING"]
