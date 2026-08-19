@@ -4,6 +4,55 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## Latest ship — Regression Coverage: 8/8 patterns now automated (2026-08-19)
+
+Closed the "5 have no automated test yet" gap flagged in the codebase
+audit. New `backend/tests/test_recurring_patterns_batch2.py` adds real
+behavioral tests for patterns 3, 5, 6, and the two `.gitignore` policy
+entries (previously `test_ref=None`):
+- Pattern 3 (Mode D boilerplate) — locks `DIAGNOSIS_SYSTEM` prompt
+  wording (natural-language signals accepted, bail-out is last resort).
+- Pattern 5 (multi-file 1-of-N) — guards against a future hard
+  per-task file-count cap being introduced (root cause was
+  verified-false; this just prevents it from becoming true).
+- Pattern 6 (stale browser cache) — real HTTP test of
+  `POST /admin/cache/purge` (401 unauthenticated, 200 + structured
+  report for admin).
+- Policy patterns 7+8 (`.env`/`.gitignore` hybrid) — asserts the exact
+  gitignore lines/ordering that keep `backend/.env` ignored and
+  `frontend/.env` committed.
+`scripts/seed_regression_patterns.py` updated with the new `test_ref`s,
+re-seeded, and `scripts/verify_regression_patterns.py` re-run:
+**8/8 verified patterns pass, 0 with no automated test.** Full
+regression sweep (registry + iter67 + batch2, 15 tests) green.
+
+## Latest ship — Security Audit Close-Out + Password Strength Meter (2026-08-19)
+
+**Security Audit Close-Out** (`/app/memory/CODEBASE_AUDIT.md` §7.4, new):
+SEC-001 (leaked founder credentials) broken into 5 explicitly tracked
+sub-parts so "preview-verified" is never misread as "fully fixed":
+1. Working-tree redaction — ✅ DONE (verified).
+2. Self-service change-password capability — ✅ DONE, browser-verified
+   this session (see previous entry above).
+3. Production founder password rotation — ⏳ PENDING founder (script
+   ready, founder running it themselves after Emergent Support
+   confirms the official production-script path).
+4. Git-history scrub (`git-filter-repo`) — ⏳ PENDING founder decision,
+   destructive, not started.
+5. Final re-audit — ⏳ blocked on #3 and #4.
+Also closed out: G4/G15/G18 CI-wiring gap **parked** (founder decision,
+not urgent); G20's "41 open incidents" resolved — 40 were stale
+`_Test_Dedup_*` fixture rows (deleted with founder approval), only 1
+real incident remains (Tavily rate-limit, tracked separately).
+
+**Password Strength Meter**: new `frontend/src/components/
+PasswordStrengthMeter.jsx` (client-side heuristic: length + case-mix +
+digit + symbol → 0-4 score, red/amber/green bar + label). Wired into
+`ChangePasswordCard.jsx` and `ResetPassword.jsx`'s new-password fields.
+Self-tested via screenshot: "abc" → "Too weak", "Str0ng!Pass#2026" →
+"Strong", live-updates on keystroke. Client-side only — server length
+policy remains the enforced source of truth.
+
 ## Latest ship — Self-service password reset/change, browser-verified + bug fixed (2026-08-19)
 
 **Frontend now browser-verified** (was preview-verified backend-only before

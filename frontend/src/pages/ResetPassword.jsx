@@ -10,6 +10,7 @@ import { KeyRound } from "lucide-react";
 import AuthShell from "../components/AuthShell";
 import usePageMeta from "../lib/usePageMeta";
 import { api } from "../lib/api";
+import PasswordStrengthMeter from "../components/PasswordStrengthMeter";
 
 export default function ResetPassword() {
   usePageMeta({
@@ -90,6 +91,7 @@ export default function ResetPassword() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
+                <PasswordStrengthMeter password={password} />
               </label>
               <label>
                 <span className="label-mini">Confirm new password</span>

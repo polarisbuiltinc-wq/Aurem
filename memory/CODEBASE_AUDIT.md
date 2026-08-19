@@ -397,6 +397,28 @@ duplicated in full here to avoid this document ballooning, but every
 finding above SEC-001/SEC-002 in severity was reviewed and none else
 were rated launch-blocking.
 
+### 7.4 — SEC-001 close-out status (updated 2026-08-19, later session)
+
+Being explicit about exactly what is and is not actually resolved,
+since "preview-verified" has repeatedly been misread as "fixed" on
+this project before (see Iter 388-aa). Five separate sub-parts, tracked
+separately — **do not collapse into a single "done":**
+
+| Sub-part | Status | Evidence / next step |
+|---|---|---|
+| 1. Working-tree redaction (debug scripts deleted, `qa_run/env.sh` + test-report JSON redacted, 5 pytest files switched to env-vars) | ✅ **DONE** | Verified same session — 3 passed/14 skipped on the fixed test files, no plaintext credential match on a follow-up grep of the current working tree. |
+| 2. Self-service change-password capability (so routine rotation stops needing a manual DB script) | ✅ **DONE, browser-verified** | `/auth/forgot-password`, `/auth/reset-password`, `/auth/change-password` + `ChangePasswordCard` — backend 9/9, then full Playwright pass this session (found + fixed a real wrong-password redirect bug in `api.js`'s 401 interceptor, retested 3/3). This is a **new capability**, not a substitute for #3 below — it does not rotate the *already-leaked* founder credential by itself. |
+| 3. Production founder password rotation (the actual fix for the leak) | ⏳ **PENDING — founder action** | `backend/scripts/rotate_password.py` written (dry-run by default, `--confirm` flag, bcrypt hash, invalidates outstanding reset tokens, never logs the plaintext). **Not run against production by the agent** — founder is running it themselves once Emergent Support confirms the official way to execute a one-off script against the production Mongo instance. Agent has no production DB access and will not accept a pasted production connection string (founder's explicit instruction). |
+| 4. Git history scrub (25+ historical commits still contain the leaked value even after working-tree cleanup) | ⏳ **PENDING — founder decision, not started** | Deleting/editing files in the working tree (#1) does **not** remove them from old commits. A `git-filter-repo` rewrite would work but is destructive (rewrites history, affects any existing remote/"Save to GitHub" state) — the agent will not run this without explicit founder sign-off on the exact scope (which commits, which files, whether to force-push). No timeline commitment made; still open. |
+| 5. Final security re-audit | ⏳ **PENDING — blocked on #3 and #4** | A second `security_audit_agent` pass to confirm SEC-001 is fully closed (not just working-tree-clean) should only run **after** the production password is rotated and a history-scrub decision has been made and (if chosen) executed. Running it now would just re-report the same "PENDING" items above. |
+
+**Bottom line**: SEC-001 is **not closed**. Items 1-2 are real, tested
+completions. Items 3-5 require founder-side action (production access,
+a destructive-op sign-off, and a supported script-execution path from
+Emergent Support respectively) that the agent cannot do on its own —
+this document will not claim "security audit done" until 3, 4, and 5
+are all cleared.
+
 ---
 
 
@@ -447,22 +469,25 @@ there wouldn't be caught by CI.
 
 - ~~Part 1 (code/deps/data layer)~~ — **done, §1-4**.
 - ~~Part 2 (feature inventory)~~ — **done, §5**.
-- ~~Part 3 (security + test coverage)~~ — **done, §7-8**.
+- ~~Part 3 (security + test coverage)~~ — **done, §7-8; close-out status §7.4 (2026-08-19)**.
 - **Founder decision needed, not yet actioned**:
-  1. Rotate the founder production password (SEC-001) — cannot be done
-     by the agent.
+  1. Rotate the founder production password (SEC-001, §7.4 item 3) —
+     script ready (`scripts/rotate_password.py`), founder running it
+     themselves once Emergent Support confirms the official
+     production-script execution path.
   2. Decide on git-history scrub for the leaked credentials via
-     `git-filter-repo` — destructive, needs explicit sign-off.
+     `git-filter-repo` (SEC-001, §7.4 item 4) — destructive, needs
+     explicit sign-off. Not started.
   3. CI-wiring gap (G4/G15/G18 scripts not actually invoked by CI
-     despite their own docstrings claiming so) — founder asked whether
-     this should be a separate follow-up task or folded into a low
-     priority backlog item; recommendation: **separate, small,
-     low-risk follow-up** (just 3-4 lines added to `ci.yml`/
-     `predeploy_gate.sh` per script) — worth doing soon since it's
-     cheap and closes a real "claimed vs actual" gap, but not urgent
-     like SEC-001.
-  4. G20's 41 open incidents — founder already flagged for a manual
-     triage pass later, no action taken here.
+     despite their own docstrings claiming so) — **founder decision:
+     parked, not urgent** (2026-08-19). Stays in backlog, no ETA.
+  4. ~~G20's 41 open incidents~~ — **resolved 2026-08-19**: audited and
+     found 40 of 41 were stale `_Test_Dedup_*` test-fixture rows from
+     dedup-test runs, never cleaned up (0 recurrence, clearly
+     simulated). Deleted with founder approval. **Only 1 real open
+     incident remains**: Tavily Search rate-limit/credits-exhausted
+     (432), already tracked in backlog P1, founder deciding on top-up
+     separately.
   5. `backups_admin.py` (G11) has no persisted automated test — cheap
      to add, flagged not fixed.
 

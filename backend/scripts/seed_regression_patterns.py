@@ -63,7 +63,8 @@ PATTERNS = [
                     "natural-language symptoms didn't count as signal.",
         fix_locations=["backend/services/mode_d_debugger.py::DIAGNOSIS_SYSTEM"],
         status="fixed",
-        test_ref=None,  # no dedicated regression test found for this one
+        test_ref="tests/test_recurring_patterns_batch2.py::"
+                 "test_pattern3_diagnosis_prompt_accepts_natural_language_signal",
     ),
     dict(
         pattern_id="pattern_4_wrong_mode_classification",
@@ -91,7 +92,8 @@ PATTERNS = [
                     "from the LLM's own self-limiting, not a code guard.",
         fix_locations=[],
         status="deferred",  # needs prompt engineering, not a code fix
-        test_ref=None,
+        test_ref="tests/test_recurring_patterns_batch2.py::"
+                 "test_pattern5_no_hard_multi_file_cap_in_orchestrator",
     ),
     dict(
         pattern_id="pattern_6_stale_browser_cache",
@@ -104,7 +106,8 @@ PATTERNS = [
                     "user.",
         fix_locations=["frontend/src/pages/AdminOverview.jsx"],
         status="fixed",
-        test_ref=None,  # UI button existence — no behavioral test written
+        test_ref="tests/test_recurring_patterns_batch2.py::"
+                 "test_pattern6_cache_purge_returns_structured_report",
     ),
     dict(
         pattern_id="policy_env_gitignore_dont_reblock",
@@ -117,7 +120,8 @@ PATTERNS = [
                     "risked leaking secrets via `git add .`.",
         fix_locations=[".gitignore"],
         status="policy",
-        test_ref=None,
+        test_ref="tests/test_recurring_patterns_batch2.py::"
+                 "test_pattern7_8_gitignore_env_hybrid_policy_locked",
     ),
     dict(
         pattern_id="policy_env_gitignore_hybrid_final",
@@ -133,7 +137,8 @@ PATTERNS = [
                     "gitignored, sourced from the deploy dashboard instead.",
         fix_locations=[".gitignore"],
         status="policy",
-        test_ref=None,
+        test_ref="tests/test_recurring_patterns_batch2.py::"
+                 "test_pattern7_8_gitignore_env_hybrid_policy_locked",
     ),
 ]
 

@@ -7,6 +7,7 @@
 import React, { useState } from "react";
 import { KeyRound } from "lucide-react";
 import { api } from "../lib/api";
+import PasswordStrengthMeter from "./PasswordStrengthMeter";
 
 export default function ChangePasswordCard() {
   const [current, setCurrent] = useState("");
@@ -63,6 +64,7 @@ export default function ChangePasswordCard() {
             className="input" type="password" required minLength={6}
             value={next} onChange={(e) => setNext(e.target.value)}
           />
+          <PasswordStrengthMeter password={next} />
         </label>
         <label>
           <span className="label-mini">Confirm new password</span>
