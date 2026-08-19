@@ -438,7 +438,10 @@ async def confirm_loop(loop_id: str, body: ConfirmBody,
     if engine is None:
         raise HTTPException(404, "Loop not found or already finished")
     if engine.user_id != user["user_id"]:
-        raise HTTPException(403, "Not your loop")
+        # SEC-004 fix (2026-08-19): uniform 404 for both "doesn't exist"
+        # and "exists but isn't yours" — a 403 here would let a caller
+        # enumerate valid loop IDs belonging to other users.
+        raise HTTPException(404, "Loop not found")
     await engine.confirm(body.approved, body.feedback or "")
     return {
         "loop_id": loop_id,
@@ -463,7 +466,10 @@ async def confirm_ship_endpoint(loop_id: str, body: ConfirmBody,
     if engine is None:
         raise HTTPException(404, "Loop not found or already finished")
     if engine.user_id != user["user_id"]:
-        raise HTTPException(403, "Not your loop")
+        # SEC-004 fix (2026-08-19): uniform 404 for both "doesn't exist"
+        # and "exists but isn't yours" — a 403 here would let a caller
+        # enumerate valid loop IDs belonging to other users.
+        raise HTTPException(404, "Loop not found")
     # Iter 212m-177 — P0-1 idempotency: if this loop already committed,
     # return the existing commit instead of 409/no-op (double-click or
     # split-brain second worker).
@@ -544,7 +550,7 @@ async def pause_response(loop_id: str, body: PauseResponseBody,
                 # Ownership check first — never leak a terminal state
                 # to a non-owner.
                 if _duser and _duser != user["user_id"]:
-                    raise HTTPException(403, "Not your loop")
+                    raise HTTPException(404, "Loop not found")
                 raise HTTPException(
                     409,
                     {"error": "loop_terminal",
@@ -557,7 +563,10 @@ async def pause_response(loop_id: str, body: PauseResponseBody,
                 )
         raise HTTPException(404, "Loop not found")
     if engine.user_id != user["user_id"]:
-        raise HTTPException(403, "Not your loop")
+        # SEC-004 fix (2026-08-19): uniform 404 for both "doesn't exist"
+        # and "exists but isn't yours" — a 403 here would let a caller
+        # enumerate valid loop IDs belonging to other users.
+        raise HTTPException(404, "Loop not found")
     # Feb 2026 · Terminal-state retry guard — founder-directed. Once
     # a loop is in a terminal state (FAILED / COMPLETED / ABORTED),
     # pause_response(retry|skip) must NOT resurrect it. Specifically
@@ -727,7 +736,10 @@ async def submit_files(loop_id: str, body: SubmitFilesBody,
     if engine is None:
         raise HTTPException(404, "Loop not found")
     if engine.user_id != user["user_id"]:
-        raise HTTPException(403, "Not your loop")
+        # SEC-004 fix (2026-08-19): uniform 404 for both "doesn't exist"
+        # and "exists but isn't yours" — a 403 here would let a caller
+        # enumerate valid loop IDs belonging to other users.
+        raise HTTPException(404, "Loop not found")
     await engine.submit_files(body.files)
     return {
         "loop_id":   loop_id,
@@ -746,7 +758,7 @@ async def loop_status(loop_id: str,
     if not doc:
         raise HTTPException(404, "Loop not found")
     if doc.get("user_id") != user["user_id"]:
-        raise HTTPException(403, "Not your loop")
+        raise HTTPException(404, "Loop not found")
     return doc
 
 
@@ -760,7 +772,7 @@ async def loop_stream(loop_id: str,
     user = await current_dev(authorization)
     engine = eng.lookup(loop_id)
     if engine is not None and engine.user_id != user["user_id"]:
-        raise HTTPException(403, "Not your loop")
+        raise HTTPException(404, "Loop not found")
     if engine is None:
         # Iter 212m-177 — P1-7: the loop may be running on ANOTHER
         # worker (multi-worker PROD). Don't 404 — fall back to replaying
@@ -770,7 +782,7 @@ async def loop_stream(loop_id: str,
         if not _doc:
             raise HTTPException(404, "Loop not found")
         if _doc.get("user_id") != user["user_id"]:
-            raise HTTPException(403, "Not your loop")
+            raise HTTPException(404, "Loop not found")
 
     _TERMINAL = {"completed", "failed", "aborted"}
     # See module-level STREAM_MAX_S (Iter 282, Release It! Governor).
@@ -1006,7 +1018,10 @@ async def cancel_loop(loop_id: str,
                         "terminal_event_written": True}
         raise HTTPException(404, "Loop not found")
     if engine.user_id != user["user_id"]:
-        raise HTTPException(403, "Not your loop")
+        # SEC-004 fix (2026-08-19): uniform 404 for both "doesn't exist"
+        # and "exists but isn't yours" — a 403 here would let a caller
+        # enumerate valid loop IDs belonging to other users.
+        raise HTTPException(404, "Loop not found")
     await engine.cancel()
     # Iter 279 — belt-and-suspenders lock + state force-release.
     # `engine.cancel()` above ALREADY does `_persist_session(ABORTED)`

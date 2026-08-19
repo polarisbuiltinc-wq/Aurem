@@ -28,6 +28,26 @@ from typing import Optional
 from cto_services.db import get_db
 from .repo_context import _fetch_file as _gh_fetch_file
 
+# SEC-005 fix (2026-08-19) — a permissive path check (only blocking a
+# leading `/` and `..`) let a filename containing shell metacharacters
+# reach `orchestrator.py`'s post-edit build hook, which ran it inside
+# `asyncio.create_subprocess_shell(...)` — a confirmed CRITICAL OS
+# command-injection path. Reject any path outside this safe charset
+# BEFORE the write (and the hook re-checks it independently too, since
+# the hook's fix — argv-based subprocess, no shell — is the real lock;
+# this is the deny-early defense-in-depth layer).
+_UNSAFE_PATH_CHARS = re.compile(r"[^A-Za-z0-9_.\-/ ]")
+
+
+def _is_safe_repo_path(path: str) -> bool:
+    """True iff `path` contains only a conservative filename charset
+    (letters, digits, space, dot, dash, underscore, `/`) — no shell
+    metacharacters (`$`, backtick, `;`, `|`, `&`, parens, quotes,
+    newlines, etc.) can ever reach a subprocess call downstream."""
+    if not path or not isinstance(path, str):
+        return False
+    return not _UNSAFE_PATH_CHARS.search(path)
+
 # ─── Iter 212m-152 — Mandatory syntax gate for write_repo_file ─────
 # Runs `python -m py_compile` for .py, `node --check` for .js/.jsx,
 # and `npx tsc --noEmit` for .ts/.tsx.  Each in a fresh tempfile so
@@ -706,6 +726,12 @@ async def write_repo_file(ctx: dict, args: dict) -> dict:
         return {"ok": False, "error": "Missing required arg `path`."}
     if path.startswith("/") or ".." in path.split("/"):
         return {"ok": False, "error": "Invalid path — no absolute paths or traversal."}
+    if not _is_safe_repo_path(path):
+        return {"ok": False, "error": (
+            "Invalid path — filenames may only contain letters, digits, "
+            "spaces, dots, dashes, underscores, and `/` as a path "
+            "separator. No shell/special characters."
+        )}
     if not isinstance(content, str):
         return {"ok": False, "error": "Arg `content` must be a string (full file body)."}
     if len(content) > 200_000:

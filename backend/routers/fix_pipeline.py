@@ -730,7 +730,7 @@ async def stream_fix(job_id: str,
         job = fjm._JOBS.get(job_id) or {}                 # noqa: SLF001
         if job.get("user_id") and job["user_id"] != user["user_id"] \
                 and not user.get("is_admin"):
-            raise HTTPException(403, "Not your fix job")
+            raise HTTPException(404, "Job not found")
 
     async def _event_stream():
         async for ev in fjm.subscribe(job_id, db=db):
@@ -756,7 +756,7 @@ async def get_job_summary(job_id: str,
     job = fjm._JOBS.get(job_id) or {}                         # noqa: SLF001
     if job.get("user_id") and job["user_id"] != user["user_id"] \
             and not user.get("is_admin"):
-        raise HTTPException(403, "Not your fix job")
+        raise HTTPException(404, "Job not found")
     return {"ok": True, **s}
 
 

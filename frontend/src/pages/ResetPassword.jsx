@@ -103,6 +103,19 @@ export default function ResetPassword() {
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                 />
+                {confirm && password !== confirm && (
+                  <span
+                    data-testid="reset-password-mismatch"
+                    style={{
+                      fontSize: 11,
+                      color: "var(--danger, #ff6b6b)",
+                      marginTop: 6,
+                      display: "block",
+                    }}
+                  >
+                    Passwords do not match
+                  </span>
+                )}
               </label>
               {error && (
                 <div data-testid="reset-password-error" style={{

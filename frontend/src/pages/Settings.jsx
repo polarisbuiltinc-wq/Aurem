@@ -25,6 +25,7 @@ import ReferralShare from "../components/ReferralShare";
 import TrustLevelCard from "../components/TrustLevelCard";
 import DangerZone from "../components/DangerZone";
 import ChangePasswordCard from "../components/ChangePasswordCard";
+import ShipWallOptInCard from "../components/ShipWallOptInCard";
 
 const TABS = [
   { id: "profile",      label: "Profile",       icon: User },
@@ -373,6 +374,10 @@ export default function Settings() {
             <TrackSwitcher currentTrack={me?.track || "developer"} onSwitched={(t) => setMe((m) => m ? { ...m, track: t } : m)} />
 
             {me?.has_password && <ChangePasswordCard />}
+            <ShipWallOptInCard
+              me={me}
+              onChange={(v) => setMe((m) => m ? { ...m, wall_opt_in: v } : m)}
+            />
             <TrustLevelCard />
             <ReferralShare />
             <DangerZone email={me?.email} />

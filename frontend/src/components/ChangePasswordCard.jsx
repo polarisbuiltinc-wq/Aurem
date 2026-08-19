@@ -79,6 +79,19 @@ export default function ChangePasswordCard() {
             autoComplete="new-password"
             value={confirm} onChange={(e) => setConfirm(e.target.value)}
           />
+          {confirm && next !== confirm && (
+            <span
+              data-testid="change-password-mismatch"
+              style={{
+                fontSize: 11,
+                color: "var(--danger, #ff6b6b)",
+                marginTop: 6,
+                display: "block",
+              }}
+            >
+              Passwords do not match
+            </span>
+          )}
         </label>
         {error && (
           <div data-testid="change-password-error" style={{

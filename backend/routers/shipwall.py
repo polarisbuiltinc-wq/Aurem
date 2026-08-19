@@ -108,7 +108,10 @@ async def ship_wall_feed(limit: int = 50) -> dict:
     ships = []
     async for doc in cursor:
         user = doc.get("user_doc") or {}
-        if user.get("wall_opt_out"):
+        # SEC-003 fix (2026-08-19): flipped from opt-OUT to opt-IN —
+        # founder decision. A ship only appears on the public wall if
+        # the user has explicitly opted in.
+        if not user.get("wall_opt_in"):
             continue
         ships.append(_public_ship(doc, user))
 
@@ -136,7 +139,7 @@ async def developer_wall(handle: str) -> dict:
         {"$or": [{"github_login": handle}, {"user_id": handle}]},
         {"_id": 0, "password": 0, "github_token": 0, "github_oauth_token": 0},
     )
-    if not user or user.get("wall_opt_out"):
+    if not user or not user.get("wall_opt_in"):
         raise HTTPException(404, "Developer not found or profile is private")
 
     tasks = await db.cto_tasks.find(
@@ -182,10 +185,10 @@ async def ship_card(task_id: str) -> dict:
 
     user = await db.dev_users.find_one(
         {"user_id": task["user_id"]},
-        {"_id": 0, "name": 1, "github_login": 1, "avatar_url": 1, "wall_opt_out": 1},
+        {"_id": 0, "name": 1, "github_login": 1, "avatar_url": 1, "wall_opt_in": 1},
     ) or {}
 
-    if user.get("wall_opt_out"):
+    if not user.get("wall_opt_in"):
         raise HTTPException(404, "Developer profile is private")
 
     ship = _public_ship(task, user)
@@ -287,27 +290,28 @@ async def wall_stats() -> dict:
     }
 
 
-# ── Opt out ───────────────────────────────────────────────────────────────────
+# ── Opt out / opt in ───────────────────────────────────────────────────────────
 
 @router.post("/opt-out")
 async def wall_opt_out(authorization: str = Header(None)) -> dict:
-    """Developer hides all their ships from the public wall."""
+    """Developer hides all their ships from the public wall (also the
+    default state now — SEC-003 fix, 2026-08-19: wall is opt-IN)."""
     me = await current_dev(authorization)
     db = require_db()
     await db.dev_users.update_one(
         {"user_id": me["user_id"]},
-        {"$set": {"wall_opt_out": True}},
+        {"$unset": {"wall_opt_in": ""}},
     )
     return {"ok": True, "message": "Your ships are now hidden from the public wall."}
 
 
 @router.post("/opt-in")
 async def wall_opt_in(authorization: str = Header(None)) -> dict:
-    """Developer makes their ships public again."""
+    """Developer explicitly makes their ships public on the wall."""
     me = await current_dev(authorization)
     db = require_db()
     await db.dev_users.update_one(
         {"user_id": me["user_id"]},
-        {"$unset": {"wall_opt_out": ""}},
+        {"$set": {"wall_opt_in": True}},
     )
     return {"ok": True, "message": "Your ships are now public on the wall."}

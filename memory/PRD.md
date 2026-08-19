@@ -4,6 +4,180 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## Latest investigation — OpenRouter/LLM idle-cost leak: ROOT CAUSE FOUND, no fix applied yet (2026-08-19)
+
+Founder asked to investigate before fixing. Investigated via preview
+Mongo (`council_health_probes`, `ora_chat_usage`, `inference_costs`)
++ source read of every background `while True`/cron task. **Confirmed
+real, ongoing, unconditional LLM calls with zero user attribution —
+this is not imagined.** No fix applied yet, per founder's explicit
+instruction to report root cause first.
+
+**Root cause #1 (primary, highest production risk)**:
+`periodic_longcat_reprobe()` (`services/llm/_probes.py:228-267`) hits
+the REAL OpenRouter `/chat/completions` endpoint (not a lightweight
+ping) every 900s when healthy — **but drops to every 60s forever with
+no ceiling** if the LongCat model is ever "degraded" (invalid slug/
+5xx/network error). `LONGCAT_ENABLED=true` in this env's `.env`. If
+this gets stuck degraded in production for hours/days, that's 1440+
+real OpenRouter calls/day, unconditionally, with no cost ceiling or
+alert — architecturally the single biggest idle-cost risk found.
+Currently healthy in preview (confirmed via 5878 `council_health_probes`
+docs, latest entries `live:True, http_code:200`).
+
+**Root cause #2 (confirmed continuous, real dollars, zero visibility)**:
+`integration_health_cron` → `_probe_emergent_llm()`
+(`services/integration_health.py:755-793`) makes a real Claude Haiku
+completion via the Emergent LLM key every `INTEGRATION_HEALTH_INTERVAL_SEC`
+(default 600s = 10 min) — **enabled by default**
+(`ENABLE_INTEGRATION_HEALTH_CRON` defaults to "1"), forever, 24/7,
+regardless of any user session. 144 calls/day, unconditional.
+
+**Root cause #3 (confirmed minor, real, restart-triggered)**: at every
+backend boot, a standalone one-off `_probe_longcat()` task AND the
+periodic reprobe loop's un-delayed first iteration BOTH call
+`probe_longcat_availability()` within milliseconds of each other
+(confirmed via near-duplicate timestamps 36ms apart in
+`council_health_probes`) — 2x cost per restart. Minor in stable
+production (restarts are rare), more noticeable during active dev
+sessions with frequent hot-reloads.
+
+**Bounded, NOT a leak**: `ora_canary_cron` (`ORA_CANARY_ENABLED=1`)
+fires ~7 real chat completions once/day at 02:30 UTC — intentional
+QA cost, correctly logged with `user_id:"canary"` in `ora_chat_usage`.
+
+**Correction to founder's own mental model**: the `inference_costs`
+collection referenced as "built for the BI Cockpit" is **completely
+empty and unwired** — grep confirms zero code anywhere writes to it.
+The REAL cost-tracking collection is `ora_chat_usage`
+(`services/ora_chat/cost_tracker.py`, 236 docs in preview, real
+per-user attribution). **Critically: neither root cause #1 nor #2
+writes to `ora_chat_usage` either** — both bypass the metering wrapper
+entirely by calling `httpx`/`call_openrouter_model`/`LlmChat` directly
+instead of going through `cost_tracker.log_call()`. So today these
+background costs are **100% invisible** in any BI/cost view — this is
+itself a gap, independent of whether the calls should keep running.
+
+**Not yet fixed — awaiting founder decision on**: (a) cap/kill-switch
+on the LongCat fast-retry loop, (b) whether `integration_health_cron`'s
+LLM probe should exist at all vs. a cheaper non-LLM check, (c)
+dedup the boot-time double-probe, (d) route any surviving background
+LLM call through `cost_tracker.log_call()` so it's visible, (e) the
+requested new guard (G22-style) alerting on token spend with zero
+active sessions in that window.
+
+## Latest ship — 🔴→✅ SEC-005 + SEC-006 FIXED, exploit-tested + live isolation test 20/20 (2026-08-19)
+
+Founder-approved fix for the CRITICAL command-injection finding
+(SEC-005) plus its realistic delivery path (SEC-006), together, same
+session. Full detail in `CODEBASE_AUDIT.md` §7.6.
+
+- **SEC-005**: `orchestrator.py`'s post-edit build hook no longer
+  builds/runs a shell string — argv-only `create_subprocess_exec`,
+  plus a new shared `_is_safe_repo_path()` charset gate enforced both
+  at `write_repo_file`'s entry and inside the hook itself. Proved the
+  fix, not just described it: crafted 5 real malicious filenames
+  (`$()`, `;`, backtick, pipe, `&&`), confirmed all rejected and no
+  command ever executed (proof-file check). Confirmed normal `.py`
+  files still work. 33 regression tests green.
+- **SEC-006**: added a standing anti-injection directive to the
+  system prompt + reinforced both TOOL RESULTS transcript delimiters
+  — repo/web content is now explicitly framed as untrusted data, not
+  instructions.
+- **Live 2-account isolation exploit test** (separate founder ask):
+  20/20 PASSED via `testing_agent` — 16 real cross-tenant attack
+  attempts against chat/project/loop/fix-pipeline IDs, all correctly
+  denied, no data leak. New suite: `test_isolation_exploit.py`.
+
+**⚠️ PREVIEW ONLY — founder must redeploy** for this fix to reach
+`auremcto.com`. App was live/public before this fix shipped, so this
+is not resolved in production until redeployed.
+
+## Latest ship — SEC-003 + SEC-004 fixed (founder-approved) (2026-08-19)
+
+- **SEC-003**: Ship Wall flipped from opt-out to opt-in. New Settings
+  toggle (`ShipWallOptInCard.jsx`) since no UI existed before. Curl +
+  screenshot verified.
+- **SEC-004**: uniform 404 on loop/fix-job ownership checks (7
+  occurrences across `loop.py`/`fix_pipeline.py`), no more 403 leak.
+- 3 hardening notes from §7.5/§7.6 logged for later reference, not
+  urgent, not touched.
+- **⚠️ SEC-005 (CRITICAL, command injection, DO NOT LAUNCH verdict,
+  live in production) remains UNFIXED — not addressed in this round,
+  re-flagged for explicit founder decision.**
+
+## Latest ship — 🔴 FULL SECURITY AUDIT: CRITICAL finding, DO NOT LAUNCH verdict (2026-08-19)
+
+Founder-requested full OWASP Top 10:2025-aligned audit via
+`security_audit_agent`, 12 categories, report-only (no fixes applied).
+Full detail in `CODEBASE_AUDIT.md` §7.6.
+
+**🔴 SEC-005 — CRITICAL — OS command injection in ORA's post-edit
+build hook.** After ORA writes any `.py` file, `orchestrator.py`
+builds a shell command by string-formatting the raw file path into it
+and runs it via `asyncio.create_subprocess_shell()`. The path filter
+only blocks a leading `/` and `..`, NOT shell metacharacters
+(`$()`, `;`, backtick). If ORA is ever steered into writing a file
+whose NAME contains a shell command-substitution pattern, that command
+executes on the shared production server — full env var access
+(every customer's GitHub PAT, the vault master key, Stripe keys, Mongo
+creds). App is **already live in production**, making this urgent,
+not theoretical. Verdict: FAIL — DO NOT LAUNCH (audit agent's own
+launch-guidance field).
+- SEC-006 (MEDIUM): no structural boundary between user instructions
+  and repo/web content ORA reads — realistic delivery mechanism for
+  SEC-005 via indirect prompt injection (a malicious README/comment).
+- SEC-007 (MEDIUM): chat-path AI-generated commits only get
+  regex-secret-scan + syntax check, not Loop mode's fuller review.
+- SEC-008 (LOW): `litellm` sourced from Emergent-hosted asset URL, not
+  PyPI (hash-pinned, so tamper-detectable, but provenance concern).
+
+**Confirmed CLEAR**: Stripe webhook signature verification (fails
+closed), no billing mass-assignment, bcrypt cost-12 hashing, login
+brute-force lockout (5/15min), server-side logout revocation, CORS
+scoping, SSRF guard on URL fetcher. Category 1 (IDOR) not re-audited
+— see §7.5.
+
+Founder said no fix without explicit go-ahead per finding — asked for
+prioritization before touching `orchestrator.py`.
+
+## Latest ship — IDOR / Access-Control follow-up audit: CONDITIONAL PASS (2026-08-19)
+
+Founder-requested `security_audit_agent` follow-up covering IDOR +
+deeper access-control (ownership on write/delete, mass assignment,
+error-message enumeration, JWT/role trust, and — highest priority —
+chat-session/GitHub-repo isolation). **Report only, no fixes applied**
+per founder's explicit instruction. Full findings in
+`CODEBASE_AUDIT.md` §7.5.
+
+**Verdict: CONDITIONAL PASS.** No confirmed critical/high IDOR.
+Highest-priority ask (can one customer reach another customer's chat
+history or GitHub repo/credentials via ID manipulation) — **clear**:
+consistent per-user ownership filters, encrypted+stripped GitHub
+tokens, UUID session IDs. Two lower-severity findings:
+- **SEC-003 (MEDIUM)**: Ship Wall (`shipwall.py`) publishes every
+  user's repo name + AI task summary to anonymous visitors by
+  default (opt-out, not opt-in) — founder decision needed on intent.
+- **SEC-004 (LOW)**: loop/fix-job routes leak ID-existence via
+  403-vs-404 (low real risk, IDs are random UUID/hex).
+Plus 3 P3 hardening notes (fail-open guards). Coverage gap: no live
+two-account cross-user HTTP exploit testing was run (outside the
+audit's read-only mandate) — findings are source-confirmed only.
+
+## Latest ship — Password confirm-match check + Advisor panel collision check (2026-08-19)
+
+Added the same live "Passwords do not match" indicator Signup already
+had to `ResetPassword.jsx` (`reset-password-mismatch`) and
+`ChangePasswordCard.jsx` (`change-password-mismatch`) confirm fields —
+screenshot-verified on ResetPassword.
+
+**Composer-aware Advisor panel checked, no fix needed**: verified via
+screenshot (1366px, both panels open simultaneously) that the
+*expanded* `AskAdvisorReal` panel is a flex sibling column, not a
+floating/absolute element — it structurally cannot overlap the main
+chat composer (they sit side by side, panel pushes the chat column
+narrower). Only the *collapsed* tab needed the earlier fix.
+
 ## Latest ship — Bug fix: floating Help/Advisor buttons overlapping chat send button (2026-08-19)
 
 **Confirmed and reproduced**: on mobile (390px), `GlobalHelpFAB.jsx`'s
