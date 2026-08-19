@@ -2063,8 +2063,8 @@ async def chat_stream(
                         # except when primary IS Groq (no self-rescue).
                         if not (glm_text or "").strip() and _adv_llm != "groq-llama-3.3-70b":
                             try:
-                                activity["label"] = "groq rescue…"
-                                _step("⚙️ Switching to Groq rescue…")
+                                activity["label"] = "trying backup model…"
+                                _step("⚙️ Switching to backup model…")
                                 glm_text = await _call_groq(
                                     messages=[{"role": "user", "content": body.prompt}],
                                     system=ora_system,
@@ -2086,8 +2086,8 @@ async def chat_stream(
                             "deepseek-chat", "deepseek-direct",
                         ):
                             try:
-                                activity["label"] = "deepseek rescue…"
-                                _step("⚙️ Switching to DeepSeek rescue…")
+                                activity["label"] = "trying backup model…"
+                                _step("⚙️ Switching to backup model…")
                                 glm_text = await _call_deepseek(
                                     messages=[{"role": "user", "content": body.prompt}],
                                     system=ora_system,
@@ -2763,7 +2763,7 @@ async def chat_stream(
                         f"⏱️ Model API was slow to respond — waited "
                         f"{int(HARD_TIMEOUT_S)}s and only got "
                         f"{tool_count} tool call{'s' if tool_count != 1 else ''} "
-                        f"through. This usually means OpenRouter/DeepSeek "
+                        f"through. This usually means the model API "
                         f"cold-started or a network blip — NOT that I was "
                         f"stuck in a loop. Please retry the same prompt.\n\n"
                         f"{summary}"

@@ -2049,10 +2049,7 @@ async def chat_with_tools(
         # mute "thinking…" for minutes.
         if activity_hook:
             try:
-                activity_hook(
-                    f"calling {'Claude' if use_code_model else 'DeepSeek'}"
-                    f" (iter {iters}/{max_iters})…"
-                )
+                activity_hook(f"working on it (iter {iters}/{max_iters})…")
             except Exception:
                 pass
         meta = await call_llm_with_meta(

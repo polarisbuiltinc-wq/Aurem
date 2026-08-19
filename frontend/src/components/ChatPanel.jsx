@@ -2180,7 +2180,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       onToken: (tok) => {
         bumpActivity();
         // Iter 212m-19 — rough live token count for the floating card
-        // footer ("glm-5.2 · 1.2k tokens"). Counts WORDS as a proxy
+        // footer ("ORA · 1.2k tokens"). Counts WORDS as a proxy
         // since the backend doesn't emit a token count per chunk —
         // good enough for the visible "X.Xk tokens" display.
         setLiveStepCard((cur) => {

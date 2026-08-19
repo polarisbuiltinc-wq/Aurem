@@ -32,6 +32,7 @@ import MermaidBlock from "./MermaidBlock";       // Iter 212m-61 /diagram
 import PatRequiredCTA from "./PatRequiredCTA";
 import SystemSignalBanner from "./SystemSignalBanner";
 import StepCards from "./StepCards";   // Iter 212m-19 — live step cards
+import { brandProvider } from "../lib/providerLabel";
 
 // ---- Helpers (only used here) ----------------------------------------------
 
@@ -1054,7 +1055,7 @@ export default function MessageBubble({
                 <span>
                   via {m.council ? `Council ${m.council}` : ""}
                   {m.council && m.provider ? " · " : ""}
-                  {m.provider ? m.provider : ""}
+                  {m.provider ? brandProvider(m.provider) : ""}
                 </span>
               )}
             </div>

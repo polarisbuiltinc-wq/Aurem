@@ -12,6 +12,17 @@ answer questions, propose fixes, apply them via GitHub commits/PRs, and
 run scan+fix pipelines (health, security, quality). Zero-mock — every fix
 is a real GitHub commit with a verified SHA.
 
+## Latest ship — GLM leak audit + fix (2026-08-19)
+
+**Preview-verified**. Founder flagged "GLM 5.2 visible in chat" — full
+scan found 6 user-facing leaks (see `/app/memory/CHANGELOG.md` for the
+exact locations + fixes). Root fix: any surface that displays "which
+model answered" now runs the raw provider string through
+`frontend/src/lib/providerLabel.js::brandProvider()`, which collapses
+EVERY raw slug (glm-5.2, deepseek-v3-rescue, claude-sonnet-4.5,
+longcat, groq-…, z-ai/glm-5.2, future models too) down to "ORA" — so a
+future backend model swap can never leak a new name into the UI again.
+
 ## Latest ship — Chat UX #4 Tier 1 · Step-trail persistence (2026-08-19)
 
 **Preview-verified** (DB unit tests + HTTP contract test + 3x hard-reload

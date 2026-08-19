@@ -373,7 +373,7 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
                    borderBottom: "1px solid rgba(255,255,255,0.04)",
                  }}>
               {economyMode
-                ? "Budget mode active — using economy model (GLM-5.2). Full routing resumes tomorrow."
+                ? "Budget mode active — using the economy model. Full routing resumes tomorrow."
                 : "~70% of today's ORA budget used."}
             </div>
           )}

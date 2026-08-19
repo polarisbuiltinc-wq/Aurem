@@ -936,7 +936,7 @@ function Terminal() {
     {c:"line", txt:"→ writing diff: components/BookingCTA.tsx"},
     {c:"warn", txt:"⚠ vanguard scan: 0 critical, 1 low"},
     {c:"ok",   txt:"✓ tests passed (12/12)"},
-    {c:"blue", txt:"→ sibling review (GLM-5.2): no hallucinated paths"},
+    {c:"blue", txt:"→ sibling review (second model): no hallucinated paths"},
     {c:"line", txt:"→ held-out verifier: checking diff vs frozen plan…"},
     {c:"ok",   txt:"✓ verifier: PASS — matches original plan"},
     {c:"ok",   txt:"✓ committed a3f9c21 to main"},

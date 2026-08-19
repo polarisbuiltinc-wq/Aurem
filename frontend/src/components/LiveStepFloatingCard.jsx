@@ -16,7 +16,7 @@
  *   │  › 📖 Reading repo…                             │  ← step log
  *   │  › ✍️ Writing files…                            │
  *   ├─────────────────────────────────────────────────┤
- *   │  glm-5.2  ·  4.5k tokens                         │  ← footer
+ *   │  ORA  ·  4.5k tokens                             │  ← footer
  *   └─────────────────────────────────────────────────┘
  *
  * Behaviour:
@@ -26,6 +26,7 @@
  *   - Closes immediately if the user dismisses the message thread
  */
 import React, { useEffect, useState } from "react";
+import { brandProvider } from "../lib/providerLabel";
 
 const PHASES = [
   { id: "thinking",   label: "🤔 Thinking" },
@@ -195,7 +196,7 @@ export default function LiveStepFloatingCard({ steps, provider, tokens, onClose 
             color: "rgba(255,255,255,0.5)",
           }}
         >
-          <span data-testid="live-step-model">{provider || "—"}</span>
+          <span data-testid="live-step-model">{brandProvider(provider) || "—"}</span>
           {typeof tokens === "number" && tokens > 0 && (
             <span data-testid="live-step-tokens">
               {tokens >= 1000
