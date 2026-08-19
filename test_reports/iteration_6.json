@@ -41,7 +41,7 @@
     "backend": "100% (21/21 pytest, including 6 new public-URL E2E)",
     "frontend": "100% after Login/Signup fix (3/3 redirect flows verified: anon→login?next, founder→/admin, default→/dashboard)"
   },
-  "test_credentials": "test@aurem.dev / testpass123 (free; happens to be is_admin=true in this env via ADMIN_EMAIL); teji.ss1986@gmail.com / FounderOwn123! (auto-promoted founder; deleted by tester after run)",
+  "test_credentials": "test@aurem.dev / testpass123 (free; happens to be is_admin=true in this env via ADMIN_EMAIL); teji.ss1986@gmail.com / [REDACTED-2026-08-19] (auto-promoted founder; deleted by tester after run)",
   "seed_data_creation": "Created founder dev_users row for E2E, deleted after run. Created/deleted t_pub_founder_* and t_pub_regress_* cto_tasks rows; all cleaned up.",
   "retest_needed": false,
   "main_agent_can_self_test": true,

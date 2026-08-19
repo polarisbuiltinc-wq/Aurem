@@ -52,7 +52,10 @@ def test_prod_e2e_suite_has_teardown():
 
 
 def test_cleanup_endpoint_admin_gated():
-    src = (BACKEND / "routers" / "admin.py").read_text()
+    # 2026-02-11 Phase 2 split moved this endpoint out of admin.py into
+    # admin_analytics.py (routers/admin_analytics.py:67) — updated
+    # 2026-08-19 to point at the real current location.
+    src = (BACKEND / "routers" / "admin_analytics.py").read_text()
     m = re.search(r"async def cleanup_e2e_sessions.*?(?=\n@router)", src, re.S)
     assert m, "cleanup_e2e_sessions endpoint missing"
     assert "_require_admin" in m.group(0)

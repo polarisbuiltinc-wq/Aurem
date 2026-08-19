@@ -320,6 +320,12 @@ export default function AdminQADashboard() {
 
       {/* Iter 363 · Guard 20 — automated postmortem / incident log */}
       <IncidentLogSection />
+
+      {/* 2026-08 — Fabrication learning loop: recurring patterns */}
+      <FabricationPatternsSection />
+
+      {/* 2026-08-19 — Regression pattern registry (RECURRING_ISSUES.md fold-in) */}
+      <RegressionPatternsSection />
     </div>
   );
 }
@@ -564,6 +570,153 @@ function IncidentLogSection() {
               )}
             </div>
           ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+
+// 2026-08 — Fabrication learning loop. Shows recurring per-project
+// per-route CitationGuard / ORA-grounding fabrication patterns from
+// `/admin/qa/fabrication-patterns`. `caution_active` (count >= 3 in
+// 30d) mirrors exactly the runtime threshold used to inject the
+// caution — this view never claims a caution is live when it isn't.
+function FabricationPatternsSection() {
+  const [data, setData] = useState(null);
+
+  const load = () => {
+    const tok = getToken();
+    axios.get(`${API}/api/aurem-dev/admin/qa/fabrication-patterns`,
+      { headers: { Authorization: `Bearer ${tok || ""}` }, timeout: 20000 })
+      .then((r) => setData(r.data))
+      .catch((e) => setData({ error: e?.response?.data?.detail || e.message }));
+  };
+  useEffect(load, []);
+
+  const fmtAgo = (ts) => {
+    if (!ts) return "—";
+    return new Date(ts * 1000).toLocaleString();
+  };
+
+  return (
+    <div style={{ maxWidth: 1100, marginTop: 20 }}>
+      <Card testid="admin-qa-fabrication-patterns"
+            title="Fabrication Learning Loop"
+            sub={data?.patterns
+              ? `${data.recurring_count} recurring (≥3 in ${data.since_days}d) · ${data.patterns.length} total signatures`
+              : "CitationGuard + ORA-grounding fabrication patterns, last 30d"}>
+        {data?.error && (
+          <div data-testid="fabrication-patterns-error" style={{ fontSize: 12, color: "#f87171" }}>
+            {data.error}
+          </div>
+        )}
+        {data && !data.error && data.patterns.length === 0 && (
+          <div data-testid="fabrication-patterns-empty" style={{ fontSize: 12, color: "#888" }}>
+            No fabrication incidents logged in the last {data.since_days} days.
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {(data?.patterns || []).map((p, i) => (
+            <div key={i} data-testid={`fabrication-pattern-row-${i}`}
+              style={{ padding: "10px 12px", borderRadius: 6,
+                       border: "1px solid rgba(148,163,184,0.15)",
+                       background: "rgba(148,163,184,0.04)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px",
+                               borderRadius: 4, fontFamily: "'JetBrains Mono', monospace",
+                               color: p.caution_active ? "#f87171" : "#94a3b8",
+                               background: p.caution_active
+                                 ? "rgba(239,68,68,0.12)" : "rgba(148,163,184,0.08)" }}>
+                  {p.caution_active ? "CAUTION LIVE" : `${p.count}× seen`}
+                </span>
+                <span style={{ fontSize: 10, color: "#64748b",
+                               fontFamily: "'JetBrains Mono', monospace" }}>
+                  {p.source} · project={p.project_id} · route={p.route}
+                </span>
+                <span style={{ marginLeft: "auto", fontSize: 10, color: "#64748b" }}>
+                  last {fmtAgo(p.last_at)}
+                </span>
+              </div>
+              <div style={{ fontSize: 11.5, color: "#94a3b8", lineHeight: 1.5 }}>
+                {(p.sample_paths || []).join(", ") || "(no paths captured)"}
+              </div>
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
+                corrected {p.corrected}/{p.count}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+
+// 2026-08-19 — Regression pattern registry. Replaces the markdown-only
+// RECURRING_ISSUES.md approach — shows each known dev-bug pattern,
+// whether it has a REAL test (not grep-lock), and that test's last
+// LIVE result (written by scripts/verify_regression_patterns.py — this
+// card only reads, never runs pytest inline).
+function RegressionPatternsSection() {
+  const [data, setData] = useState(null);
+
+  const load = () => {
+    const tok = getToken();
+    axios.get(`${API}/api/aurem-dev/admin/qa/regression-patterns`,
+      { headers: { Authorization: `Bearer ${tok || ""}` }, timeout: 20000 })
+      .then((r) => setData(r.data))
+      .catch((e) => setData({ error: e?.response?.data?.detail || e.message }));
+  };
+  useEffect(load, []);
+
+  const fmtAgo = (ts) => (ts ? new Date(ts * 1000).toLocaleString() : "never run");
+
+  const statusOf = (p) => {
+    if (!p.test_ref) return { label: "NO AUTOMATED TEST", color: "#94a3b8", bg: "rgba(148,163,184,0.08)" };
+    if (p.last_verified_at == null) return { label: "NOT YET VERIFIED", color: "#eab308", bg: "rgba(234,179,8,0.10)" };
+    return p.last_verified_passed
+      ? { label: "VERIFIED PASSING", color: "#4ade80", bg: "rgba(74,222,128,0.10)" }
+      : { label: "REGRESSED — FAILING", color: "#f87171", bg: "rgba(239,68,68,0.12)" };
+  };
+
+  return (
+    <div style={{ maxWidth: 1100, marginTop: 20 }}>
+      <Card testid="admin-qa-regression-patterns"
+            title="Recurring Bug Pattern Registry"
+            sub={data?.patterns
+              ? `${data.with_real_test}/${data.total} have a real behavioral test · source of truth: ${data.doc_ref}`
+              : "Known dev-bug patterns — real test status, not grep-lock"}>
+        {data?.error && (
+          <div data-testid="regression-patterns-error" style={{ fontSize: 12, color: "#f87171" }}>
+            {data.error}
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {(data?.patterns || []).map((p, i) => {
+            const s = statusOf(p);
+            return (
+              <div key={i} data-testid={`regression-pattern-row-${i}`}
+                style={{ padding: "10px 12px", borderRadius: 6,
+                         border: "1px solid rgba(148,163,184,0.15)",
+                         background: "rgba(148,163,184,0.04)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px",
+                                 borderRadius: 4, fontFamily: "'JetBrains Mono', monospace",
+                                 color: s.color, background: s.bg }}>
+                    {s.label}
+                  </span>
+                  <span style={{ fontSize: 12, color: "#cbd5e1" }}>{p.title}</span>
+                  <span style={{ marginLeft: "auto", fontSize: 10, color: "#64748b" }}>
+                    {fmtAgo(p.last_verified_at)}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>
+                  {p.pattern_id} · status={p.status} · {p.test_ref || "no test_ref"}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </Card>
     </div>

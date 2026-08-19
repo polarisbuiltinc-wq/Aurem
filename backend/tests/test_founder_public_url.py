@@ -11,8 +11,15 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://launch-pad-237.preview.emergentagent.com").rstrip("/")
 API = f"{BASE}/api/aurem-dev"
+# 2026-08-19 SECURITY FIX — the real founder's real production PASSWORD
+# was hardcoded here and committed to git (found during a security
+# audit). The email must stay the real founder address (it's what
+# FOUNDER_EMAILS allowlist-promotes to tier=founder — that's what this
+# test actually verifies), but the password is now test-fixture-only:
+# this test signs up FRESH each run (`_reset()` deletes the row first),
+# so it never needs — and must never reuse — the real password.
 FOUNDER_EMAIL = "teji.ss1986@gmail.com"
-FOUNDER_PASSWORD = "FounderOwn123!"
+FOUNDER_PASSWORD = os.environ.get("TEST_FOUNDER_FIXTURE_PASSWORD", "TestFixtureOnly2026!")
 
 
 async def _db():

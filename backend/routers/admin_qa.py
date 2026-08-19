@@ -460,6 +460,54 @@ async def guard20_incidents(status: str = "all",
     }
 
 
+# 2026-08 — Fabrication learning loop. Admin visibility into
+# recurring per-project/per-route CitationGuard + ORA-grounding
+# fabrication patterns. `caution_active` mirrors the exact threshold
+# (>=3 in 30d) the runtime injection uses so this view never claims
+# a caution is live when it isn't.
+@router.get("/fabrication-patterns")
+async def fabrication_patterns(since_days: int = 30,
+                               authorization: Optional[str] = Header(None)):
+    """Recurring fabrication incident groups (source+project+route+
+    signature) in the trailing `since_days` days, most-frequent
+    first."""
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services.ora_fix_learning import get_recurring_fabrication_patterns
+    db = get_db()
+    patterns = await get_recurring_fabrication_patterns(
+        db, since_days=since_days, min_count=1, limit=50,
+    )
+    return {
+        "generated_at": time.time(),
+        "since_days":   since_days,
+        "patterns":     patterns,
+        "recurring_count": sum(1 for p in patterns if p["caution_active"]),
+    }
+
+
+# 2026-08-19 — Regression pattern registry. Replaces the markdown-only
+# RECURRING_ISSUES.md approach with the same structured-collection +
+# admin-visibility pattern as the fabrication-learning loop above.
+# Reads PERSISTED verification results (written by
+# scripts/verify_regression_patterns.py, same convention as G1/G15/G18)
+# — never runs pytest inline inside this request.
+@router.get("/regression-patterns")
+async def regression_patterns(authorization: Optional[str] = Header(None)):
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services.ora_fix_learning import list_regression_patterns
+    db = get_db()
+    patterns = await list_regression_patterns(db)
+    return {
+        "generated_at": time.time(),
+        "patterns": patterns,
+        "with_real_test": sum(1 for p in patterns if p.get("test_ref")),
+        "total": len(patterns),
+        "doc_ref": "/app/memory/RECURRING_ISSUES.md",
+    }
+
+
 
 # ── Iter 366 — Wave 1 + Wave 2 catch-up QA endpoints ──────────────
 

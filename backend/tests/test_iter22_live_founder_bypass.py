@@ -2,7 +2,7 @@
 Iter 22 — Live HTTP regression on PREVIEW for iter 212m-110 founder bypass.
 
 Tests:
-  1. Founder login (try Singh1986$ first, fall back to FounderOwn123!)
+  1. Founder login (test@aurem.dev auto-promoted to founder tier on preview)
   2. /codebase-health/scan with categories=['bug_hunt'] hit 12x rapidly
      → founder must NEVER get 429 rate_limited.
   3. /codebase-health/fix with founder → tokens_charged must be 0.
@@ -24,9 +24,6 @@ BASE_URL = "https://launch-pad-237.preview.emergentagent.com"
 # covered by the unit test test_fix_route_still_charges_non_founder (PASSED).
 FOUNDER_EMAIL = "test@aurem.dev"
 FOUNDER_PASSWORDS = ["AuremTest2026!"]
-# Optional secondary attempt against the real founder email (will skip if 401)
-SECONDARY_FOUNDER_EMAIL = "teji.ss1986@gmail.com"
-SECONDARY_FOUNDER_PASSWORDS = ["Singh1986$", "FounderOwn123!"]
 
 
 def _login(email: str, password: str) -> str | None:

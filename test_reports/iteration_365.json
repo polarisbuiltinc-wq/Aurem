@@ -1,0 +1,49 @@
+{
+  "summary": "Frontend-only browser verification of self-service password reset/change feature (forgot-password on Login, /reset-password page, ChangePasswordCard in Settings). 4 of 5 test scenarios pass. One real bug found: submitting WRONG current password in ChangePasswordCard causes a spurious redirect to /login instead of showing the inline error (the axios 401 interceptor's auth-endpoint allow-list is missing '/auth/change-password'). Happy path (correct password) works, restore-to-original works, /reset-password without token shows a proper message, forgot-password mini-flow shows the generic 'done' state, and regression smoke login → dashboard still works.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "ChangePasswordCard (via api.js 401 interceptor)",
+        "issue": "Submitting WRONG current password causes the axios interceptor in frontend/src/lib/api.js to fire 'aurem:session-expired' and redirect the user to /login, instead of surfacing the inline change-password-error banner. The interceptor's isAuthEndpoint allow-list (lines ~74-80) only exempts /auth/login, /auth/signup, /auth/verify, /auth/resend-verification, /auth/login/2fa-verify, /auth/google — it does NOT exempt /auth/change-password (nor /auth/forgot-password or /auth/reset-password), so a 401 from wrong-current-password is treated as a mid-session token revocation and boots the still-logged-in user out. Reproduced deterministically: on Settings, wrong current pw → page navigates to /login within ~2s and inline error is never visible. The ChangePasswordCard.jsx component itself does set the error state correctly (setError(e?.response?.data?.detail) on catch); the redirect happens because the interceptor dispatches the event before/alongside the component-level catch.",
+        "selector": "[data-testid=change-password-submit]",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/screenshots/login_page.png",
+    "/app/test_reports/screenshots/forgot_done.png",
+    "/app/test_reports/screenshots/reset_no_token.png",
+    "/app/test_reports/screenshots/settings.png",
+    "/app/test_reports/screenshots/change_success.png"
+  ],
+  "verified_scenarios": [
+    "PASS · /login Forgot password? toggles form, submitting valid email shows generic 'If that email exists, a reset link has been sent. Check your inbox.' done state (data-testid=login-forgot-password-done) — no user-existence leak.",
+    "PASS · /reset-password with no token shows friendly 'This link is missing its reset token. Request a new one from the sign-in page.' with sign-in link. No crash.",
+    "PASS · After email/password login as test@aurem.dev, GET /auth/me returns has_password: true, and ChangePasswordCard renders in Settings with all data-testids (settings-change-password, change-password-current/new/confirm/submit).",
+    "PASS · ChangePasswordCard happy path: submitting correct current password (AuremTest2026!) with new password shows 'Password updated.' success banner (data-testid=change-password-success). Confirmed by API: old pw returns 401, new pw returns 200.",
+    "PASS · Password restored back to AuremTest2026! via same UI. Final login with AuremTest2026! returns 200 (verified via /api/aurem-dev/auth/login). Test credential in /app/memory/test_credentials.md remains valid.",
+    "PASS · Regression smoke: test@aurem.dev / AuremTest2026! still logs in end-to-end and lands on /dashboard.",
+    "FAIL · ChangePasswordCard with WRONG current password: instead of showing inline change-password-error, the app redirects the logged-in user to /login (see UI bug above)."
+  ],
+  "action_items": [
+    "Fix frontend/src/lib/api.js line ~74-80: add '/auth/change-password' (and defensively '/auth/forgot-password', '/auth/reset-password') to the isAuthEndpoint allow-list so a 401 from these password-flow endpoints is treated as 'inline credential/token error' rather than 'session expired → redirect to /login'.",
+    "Optional: also skip the session-expired dispatch when the failing request is same-session self-service auth mgmt (change-password, mfa-*, etc.)."
+  ],
+  "critical_code_review_comments": [
+    "frontend/src/lib/api.js 401 interceptor: the allow-list of 'inline-error' auth endpoints is enumerated by hand and is missing every new self-service endpoint added in this iteration (change-password, forgot-password, reset-password). Consider inverting the check to an allow-list of paths that SHOULD trigger session-expired (e.g. any /api/aurem-dev/* except /auth/*), so future new auth endpoints default to the safe behavior.",
+    "ChangePasswordCard.jsx line 27: minLength check is `next.length < 6` — server-side policy may enforce a longer minimum. Keep client/server rules in sync in one place if possible.",
+    "backend/routers/auth.py: not re-tested here (per request), but confirmed via UI that /auth/change-password correctly returns 401 on wrong current pw and 200 on success; /auth/forgot-password returns generic success; /auth/login rejects the old password after change."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not tested per request)", "frontend": "83% (5 of 6 scenarios pass; 1 HIGH bug on wrong-password flow)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! — verified still valid at end of test (restored via UI).",
+  "seed_data_creation": "None. Temp password NewTempPass2026! was set then reverted; account state is unchanged from start of test.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Preview URL is https://launch-pad-237.preview.emergentagent.com. Auth routes live under /api/aurem-dev/auth/* (NOT /api/auth/*). Cookie banner ('Accept all') overlaps the login card and must be dismissed first. ChangePasswordCard data-testids: settings-change-password, change-password-current, change-password-new, change-password-confirm, change-password-submit, change-password-error, change-password-success. When re-testing the wrong-password fix, do NOT rely on page.locator being valid after clicking submit — the current buggy behavior navigates away, so use a short wait and then assert page.url === /settings AND change-password-error is visible.",
+  "rca of the issue": "RCA · Wrong-password redirect on ChangePasswordCard: axios response interceptor in frontend/src/lib/api.js (lines 71-91) treats any 401 that (a) has a token in localStorage and (b) is NOT on a hard-coded auth-endpoint allow-list as a mid-session token revocation, and dispatches window event 'aurem:session-expired' which the app-shell listens for and navigates to /login. The allow-list omits '/auth/change-password'. So when the user submits an incorrect current password: backend returns 401 → interceptor fires session-expired → app redirects to /login → user is logged out and never sees the inline error. Reproduction: login as test@aurem.dev, open /settings, scroll to Change password, enter wrong current pw + any valid new pw twice, click Update password → within ~2s page navigates to /login. Mitigation: add '/auth/change-password' (and '/auth/forgot-password', '/auth/reset-password' for defense in depth) to the isAuthEndpoint allow-list in api.js. One-line fix."
+}

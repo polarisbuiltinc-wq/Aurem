@@ -77,7 +77,10 @@ api.interceptors.response.use((response) => {
         || url.includes("/auth/verify")
         || url.includes("/auth/resend-verification")
         || url.includes("/auth/login/2fa-verify")
-        || url.includes("/auth/google");
+        || url.includes("/auth/google")
+        || url.includes("/auth/change-password")
+        || url.includes("/auth/forgot-password")
+        || url.includes("/auth/reset-password");
       if (hadToken && !isAuthEndpoint) {
         window.dispatchEvent(new CustomEvent("aurem:session-expired", {
           detail: {

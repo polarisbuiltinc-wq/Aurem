@@ -153,6 +153,41 @@ def _trim_tool_results(transcript: str) -> tuple[str, int]:
     return "".join(pieces), trimmed_count
 
 
+# RECURRING_ISSUES.md Pattern #2 — extracted to a pure, directly-testable
+# function (2026-08-19). The original grep-lock test only checked that
+# certain strings existed anywhere in chat.py, which passed even when the
+# two message branches were swapped (proven during a security/codebase
+# audit). A real behavioral test can now call this function directly.
+def build_timeout_message(
+    tool_count: int, hard_timeout_s: float, summary: str,
+) -> tuple[str, bool]:
+    """Returns (content, slow_api) for the hard-timeout wrap-up message.
+
+    Distinguishes a slow model API (few tool calls made — the budget was
+    spent waiting on first-byte, not looping) from a genuine tool-loop
+    that legitimately ran out of budget. Telling the user "I cut myself
+    off" for the former is misleading and erodes trust.
+    """
+    slow_api = tool_count < 3
+    if slow_api:
+        content = (
+            f"⏱️ Model API was slow to respond — waited "
+            f"{int(hard_timeout_s)}s and only got "
+            f"{tool_count} tool call{'s' if tool_count != 1 else ''} "
+            f"through. This usually means the model API "
+            f"cold-started or a network blip — NOT that I was "
+            f"stuck in a loop. Please retry the same prompt.\n\n"
+            f"{summary}"
+        )
+    else:
+        content = (
+            f"⏱️ I cut myself off at {int(hard_timeout_s)}s to avoid "
+            f"a runaway tool-loop.\n\n{summary}"
+        )
+    return content, slow_api
+
+
+
 def _synthesise_max_iters_summary(prompt: str, invocations: list[dict]) -> str:
     """Fallback closing message when the orchestrator hits its iter
     or per-turn time budget.
@@ -1780,6 +1815,26 @@ async def chat_with_tools(
                     )
         except Exception as _pex:
             logger.debug("user patterns inject skipped: %r", _pex)
+
+        # 2026-08 — Fabrication-caution injection (learning loop).
+        # If CitationGuard fired 3+ times on this exact project+route
+        # in the trailing 30 days, inject a compact caution so the
+        # model double-checks paths before citing them this turn.
+        # Silent — never surfaced to the user. Fail-open on any error.
+        try:
+            from services.ora_fix_learning import recall_fabrication_caution
+            if _db_up is not None:
+                _fab_caution = await asyncio.wait_for(
+                    recall_fabrication_caution(
+                        _db_up, source="customer_chat",
+                        project_id=project_id, route="chat_stream",
+                    ),
+                    timeout=1.0,
+                )
+                if _fab_caution:
+                    extra = extra.rstrip() + "\n\n" + _fab_caution + "\n"
+        except Exception as _fabex:
+            logger.debug("fabrication caution inject skipped: %r", _fabex)
 
     # Iter 212m — Language Context Injection.
     # Pull file paths from the prompt + accumulated extra context, and

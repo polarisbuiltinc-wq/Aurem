@@ -57,6 +57,13 @@ fi
 echo "── Post-lane: regenerate backend/qa_manifest.json (Iter 351) ──"
 (cd backend && python scripts/gen_qa_manifest.py)
 
+echo "── Lane 8: regression pattern registry re-verify (2026-08-19 · non-blocking) ──"
+# Actually re-runs each known recurring-bug pattern's real test and
+# persists the live result — see /app/memory/RECURRING_ISSUES.md and
+# services/ora_fix_learning.py's regression-pattern functions.
+(cd backend && python scripts/verify_regression_patterns.py) || \
+    echo "⚠️  Lane 8 flagged a regressed pattern — see output above BEFORE dispatching deploy."
+
 echo "══════════ GATE PASSED — safe to deploy ══════════"
 echo "⚠️  REMINDER (Iter 356): deploy ke BAAD founder se 'Save to GitHub' click"
 echo "    karwana mat bhoolna — warna polarisbuiltinc-wq/auremdev outdated rahega."

@@ -66,7 +66,7 @@
   ],
   "updated_files": [],
   "success_rate": { "backend": "n/a (frontend-only run)", "frontend": "100% (5/5 visual+functional checks)" },
-  "test_credentials": "Founder: teji.ss1986@gmail.com / FounderOwn123! (from /app/memory/test_credentials.md)",
+  "test_credentials": "Founder: teji.ss1986@gmail.com / [REDACTED-2026-08-19] (from /app/memory/test_credentials.md)",
   "seed_data_creation": "Temporarily set advisor_prompt='TEST_advisor: respond in 3 lines max.', advisor_llm='claude-sonnet-4.5', advisor_prompt_enabled=true. Reverted to defaults (empty prompt, glm-5.2, enabled=false) at end of run.",
   "retest_needed": false,
   "main_agent_can_self_test": true,

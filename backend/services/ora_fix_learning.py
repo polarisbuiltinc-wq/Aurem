@@ -308,6 +308,17 @@ async def ensure_indexes(db) -> None:
             [("project_id", 1), ("created_at", -1)],
             name="ix_osl_project_ts",
         )
+        await db.ora_fabrication_incidents.create_index(
+            [("source", 1), ("project_id", 1), ("route", 1), ("created_at", -1)],
+            name="ix_fab_source_project_route_ts",
+        )
+        await db.ora_fabrication_incidents.create_index(
+            [("signature", 1), ("created_at", -1)],
+            name="ix_fab_signature_ts",
+        )
+        await db.ora_regression_patterns.create_index(
+            [("pattern_id", 1)], unique=True, name="ix_regpat_id",
+        )
     except Exception as e:                                    # noqa: BLE001
         logger.warning("ora_fix_learning ensure_indexes failed: %r", e)
 
@@ -477,3 +488,244 @@ def format_recall_block(recalled: list[dict]) -> str:
         "current file may be structurally different."
     )
     return "\n".join(lines) + "\n\n"
+
+
+# ─── Fabrication-learning loop (chat CitationGuard / ORA grounding) ──
+#
+# Scope, approved by founder:
+#   • per-project + per-route ONLY — no cross-project basename
+#     matching, no cross-user learning. Protects customer data
+#     boundaries.
+#   • Caution is injected into the next turn's prompt only after the
+#     SAME (source, project_id, route) signature recurs 3+ times in
+#     the trailing 30 days. Below that, we just log — no injection.
+#
+# This is a SEPARATE collection/pipeline from `ora_fix_learning`
+# above (which learns from scan+fix outcomes, not chat fabrication).
+# It never reuses `ora_council_retriever`, which is intentionally
+# success-only and must stay that way.
+
+_FAB_MAX_PATHS_STORED = 12
+_FAB_PROMPT_TRUNC = 400
+
+
+def _fabrication_signature(unverified_paths: list[str]) -> str:
+    """Normalize the set of fabricated paths into a stable signature
+    so repeats of the SAME hallucination on the SAME project+route
+    count toward the same recurring pattern."""
+    items = sorted(set((p or "").strip().lower() for p in (unverified_paths or []) if p))
+    return "|".join(items)[:300] or "unknown"
+
+
+async def record_fabrication_incident(
+    db,
+    *,
+    source: str,               # "customer_chat" | "admin_ora_chat"
+    project_id: Optional[str],
+    route: str,
+    user_prompt: str,
+    unverified_paths: list[str],
+    corrected: bool = False,
+    user_id: Optional[str] = None,
+) -> None:
+    """Persist one fabrication incident. Best-effort: never raises,
+    never blocks the chat response that called it."""
+    if db is None or not unverified_paths:
+        return
+    try:
+        paths = list(unverified_paths)[:_FAB_MAX_PATHS_STORED]
+        row: dict[str, Any] = {
+            "incident_id":  f"fab_{uuid.uuid4().hex[:12]}",
+            "source":       source,
+            "project_id":   (project_id or "home"),
+            "route":        route or "unknown",
+            "user_id":      user_id,
+            "user_prompt":  (user_prompt or "")[:_FAB_PROMPT_TRUNC],
+            "unverified_paths": paths,
+            "signature":    _fabrication_signature(paths),
+            "corrected":    bool(corrected),
+            "created_at":   time.time(),
+        }
+        await db.ora_fabrication_incidents.insert_one(row)
+    except Exception as e:                                    # noqa: BLE001
+        logger.warning("record_fabrication_incident dropped sample: %r", e)
+
+
+async def recall_fabrication_caution(
+    db,
+    *,
+    source: str,
+    project_id: Optional[str],
+    route: str,
+    since_days: int = 30,
+    min_count: int = 3,
+) -> str:
+    """Return a compact system-prompt caution string when this exact
+    (source, project_id, route) bucket has hit >= `min_count`
+    fabrication incidents in the trailing `since_days` days.
+
+    Returns "" when below threshold, db is None, or on any error —
+    fail-open so a learning-loop hiccup can never break a chat turn.
+    """
+    if db is None:
+        return ""
+    try:
+        since = time.time() - (since_days * 86400)
+        pid = (project_id or "home")
+        cur = (
+            db.ora_fabrication_incidents
+            .find(
+                {"source": source, "project_id": pid, "route": route or "unknown",
+                 "created_at": {"$gte": since}},
+                {"_id": 0, "unverified_paths": 1, "created_at": 1},
+            )
+            .sort("created_at", -1)
+            .limit(50)
+        )
+        rows = [doc async for doc in cur]
+        if len(rows) < min_count:
+            return ""
+        sample_paths: list[str] = []
+        for row in rows[:5]:
+            for p in (row.get("unverified_paths") or []):
+                if p not in sample_paths:
+                    sample_paths.append(p)
+        sample = ", ".join(sample_paths[:5]) or "file paths"
+        return (
+            "── LEARNED CAUTION (fabrication history) ──\n"
+            f"In the last {since_days} days, {len(rows)} prior replies on "
+            "this project cited file paths that turned out fabricated "
+            f"(e.g. {sample}). Before citing ANY file path this turn, you "
+            "MUST call a read/search tool to verify it actually exists — "
+            "do not answer from memory alone.\n"
+        )
+    except Exception as e:                                    # noqa: BLE001
+        logger.warning("recall_fabrication_caution failed: %r", e)
+        return ""
+
+
+async def get_recurring_fabrication_patterns(
+    db,
+    *,
+    since_days: int = 30,
+    min_count: int = 1,
+    limit: int = 50,
+) -> list[dict]:
+    """Admin-facing aggregation: recurring (source, project_id, route,
+    signature) groups within the trailing window, most-recent first.
+    Used by the /admin/qa/fabrication-patterns endpoint."""
+    if db is None:
+        return []
+    try:
+        since = time.time() - (since_days * 86400)
+        pipeline: list[dict] = [
+            {"$match": {"created_at": {"$gte": since}}},
+            {"$group": {
+                "_id": {"source": "$source", "project_id": "$project_id",
+                          "route": "$route", "signature": "$signature"},
+                "count":       {"$sum": 1},
+                "corrected":   {"$sum": {"$cond": ["$corrected", 1, 0]}},
+                "last_at":     {"$max": "$created_at"},
+                "sample_paths": {"$last": "$unverified_paths"},
+                "sample_prompt": {"$last": "$user_prompt"},
+            }},
+            {"$match": {"count": {"$gte": int(min_count)}}},
+            {"$sort":  {"count": -1, "last_at": -1}},
+            {"$limit": int(limit)},
+        ]
+        cur = db.ora_fabrication_incidents.aggregate(pipeline)
+        out = []
+        async for doc in cur:
+            key = doc["_id"]
+            out.append({
+                "source":         key.get("source"),
+                "project_id":     key.get("project_id"),
+                "route":          key.get("route"),
+                "signature":      key.get("signature"),
+                "count":          doc.get("count") or 0,
+                "corrected":      doc.get("corrected") or 0,
+                "last_at":        doc.get("last_at"),
+                "sample_paths":   doc.get("sample_paths") or [],
+                "sample_prompt":  doc.get("sample_prompt") or "",
+                "caution_active": (doc.get("count") or 0) >= 3,
+            })
+        return out
+    except Exception as e:                                    # noqa: BLE001
+        logger.warning("get_recurring_fabrication_patterns failed: %r", e)
+        return []
+
+
+# ─── Regression pattern registry (dev-bug "never recur" system) ─────
+#
+# 2026-08-19 — Founder asked whether AUREM's own "prevent fixed bugs
+# from recurring" mechanism actually works. It turned out to be a
+# manually-curated markdown file (/app/memory/RECURRING_ISSUES.md)
+# plus, for one batch of patterns, a "regression lock" test that was
+# PROVEN FAKE (grep for literal strings, not real behavior — swapping
+# the two branches of a fixed bug still passed 3/3).
+#
+# This registry replaces the markdown-only approach with the SAME
+# structured-collection + admin-visibility pattern already built for
+# the fabrication-learning loop above, instead of maintaining two
+# separate ad-hoc mechanisms. It does NOT try to be a fully automatic
+# gate — it's a queryable, honest ledger: each known pattern records
+# whether it has a REAL test, and that test's last live result.
+_REGRESSION_COLL = "ora_regression_patterns"
+
+
+async def seed_regression_pattern(
+    db,
+    *,
+    pattern_id: str,
+    title: str,
+    symptom: str,
+    root_cause: str,
+    fix_locations: list[str],
+    status: str,                  # "fixed" | "deferred" | "policy"
+    test_ref: Optional[str] = None,  # "tests/foo.py::test_bar" or None
+    doc_ref: str = "/app/memory/RECURRING_ISSUES.md",
+) -> None:
+    """Idempotent upsert — safe to re-run the seed script any time."""
+    if db is None:
+        return
+    await db[_REGRESSION_COLL].update_one(
+        {"pattern_id": pattern_id},
+        {"$set": {
+            "pattern_id": pattern_id, "title": title, "symptom": symptom,
+            "root_cause": root_cause, "fix_locations": fix_locations,
+            "status": status, "test_ref": test_ref, "doc_ref": doc_ref,
+        }, "$setOnInsert": {"created_at": time.time()}},
+        upsert=True,
+    )
+
+
+async def record_pattern_verification(
+    db, *, pattern_id: str, passed: bool, detail: str = "",
+) -> None:
+    """Called after actually RUNNING a pattern's `test_ref` (not just
+    checking it exists). Updates last_verified_at/passed on the
+    pattern doc so the admin view never claims a stale green."""
+    if db is None:
+        return
+    try:
+        await db[_REGRESSION_COLL].update_one(
+            {"pattern_id": pattern_id},
+            {"$set": {
+                "last_verified_at": time.time(),
+                "last_verified_passed": bool(passed),
+                "last_verified_detail": (detail or "")[:500],
+            }},
+        )
+    except Exception as e:                                    # noqa: BLE001
+        logger.warning("record_pattern_verification failed: %r", e)
+
+
+async def list_regression_patterns(db) -> list[dict]:
+    if db is None:
+        return []
+    try:
+        cur = db[_REGRESSION_COLL].find({}, {"_id": 0}).sort("pattern_id", 1)
+        return [doc async for doc in cur]
+    except Exception as e:                                    # noqa: BLE001
+        logger.warning("list_regression_patterns failed: %r", e)
+        return []

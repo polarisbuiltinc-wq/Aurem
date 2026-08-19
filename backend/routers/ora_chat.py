@@ -401,6 +401,23 @@ async def send_message(body: MessageBody,
         await _codebase_context(body.content, labels)
     system_prompt = assemble_system_prompt(hr_text, user_tz=user_tz,
                                             codebase_tree=cb_block)
+    # 2026-08 — Fabrication-caution injection (learning loop). Same
+    # pattern as customer chat (services/orchestrator.py): if this
+    # exact route hit 3+ real fabrication incidents in the trailing
+    # 30 days, inject a compact caution. Silent, fail-open.
+    try:
+        from services.ora_fix_learning import recall_fabrication_caution
+        from cto_services.db import get_db as _get_db_fab_inj
+        _db_fab_inj = _get_db_fab_inj()
+        if _db_fab_inj is not None:
+            _fab_caution = await recall_fabrication_caution(
+                _db_fab_inj, source="admin_ora_chat",
+                project_id="admin", route=cfg["route"],
+            )
+            if _fab_caution:
+                system_prompt = system_prompt + "\n\n" + _fab_caution
+    except Exception as _fabinj_err:
+        logger.debug("fabrication caution inject skipped: %r", _fabinj_err)
     llm_messages = [{"role": "system", "content": system_prompt}] + llm_messages
 
     async def event_stream():
@@ -589,6 +606,25 @@ async def send_message(body: MessageBody,
         _caveat_tail = ora_grounding.caveat_block_for(_uncaveated) if _uncaveated else ""
         if _caveat_tail:
             final_text = final_text + _caveat_tail
+
+        # 2026-08 — Fabrication learning loop. Log every real
+        # grounding-fabrication event (fire-and-forget) so recurring
+        # per-route patterns can surface a caution on future turns.
+        if (grounding or {}).get("fabricated"):
+            try:
+                from services.ora_fix_learning import record_fabrication_incident
+                from cto_services.db import get_db as _get_db_fab_rec
+                _db_fab_rec = _get_db_fab_rec()
+                asyncio.create_task(record_fabrication_incident(
+                    _db_fab_rec, source="admin_ora_chat",
+                    project_id="admin", route=chosen["route"],
+                    user_prompt=body.content,
+                    unverified_paths=grounding["fabricated"],
+                    corrected=bool(review_regen_cleared),
+                    user_id=user["user_id"],
+                ))
+            except Exception as _fabrec_err:
+                logger.warning("fabrication incident record skipped: %r", _fabrec_err)
 
         if buffered:
             for i in range(0, len(final_text), _DELTA_CHUNK_LEN):

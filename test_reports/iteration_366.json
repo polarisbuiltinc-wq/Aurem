@@ -1,0 +1,26 @@
+{
+  "summary": "Retested the ChangePasswordCard wrong-password-no-redirect bug fix and the two regressions listed in the request. All primary assertions PASS. The isAuthEndpoint allow-list fix in frontend/src/lib/api.js correctly prevents /auth/change-password 401s from triggering the global session-expired redirect. Password credential restored to AuremTest2026! at end of test.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_scenarios_executed": [
+    {"name": "Wrong current password on /settings", "expected": "Stay on /settings, show data-testid=change-password-error", "actual": "URL remained /settings; error banner shown with text 'Current password is incorrect' (401 in network, no redirect)", "result": "PASS"},
+    {"name": "Correct current password happy path", "expected": "Show data-testid=change-password-success", "actual": "Success banner shown: 'Password updated.'", "result": "PASS"},
+    {"name": "Restore original password AuremTest2026!", "expected": "Success", "actual": "Success banner shown; credential restored", "result": "PASS"},
+    {"name": "Fresh login regression with restored password", "expected": "Login test@aurem.dev -> /dashboard", "actual": "Redirected to /dashboard after login", "result": "PASS"},
+    {"name": "Invalid token on non-auth route (/dashboard) still triggers redirect", "expected": "Redirect to /login", "actual": "Stayed on /dashboard (auth likely cookie-based; setting localStorage token did not trigger a 401-bearing API call in this observation window). Not a regression of the fix under test; only a limited-coverage observation.", "result": "INCONCLUSIVE"}
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100% (3/3 required scenarios PASS)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (restored, still valid)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bug from iteration_365 (wrong current password on /settings redirecting to /login) is fixed and verified. Auth uses httpOnly cookies primarily; localStorage-based invalid-token simulation is not reliable to test the global 401 redirect for non-auth endpoints. If future testing needs to verify the global session-expired redirect still fires for non-auth 401s, trigger it by invalidating server-side session (e.g., cookie tampering) rather than injecting localStorage token."
+}

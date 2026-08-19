@@ -1,5 +1,5 @@
 {
-  "summary": "Founder-level PROD regression of https://auremcto.com on desktop (1440x900) + mobile (390x844 iPhone 14). Covered landing, signup/login, dashboard, full sidebar nav (16 routes), all 10 admin pages including the newly-shipped /admin/system-stats, ORA chat SSE, pricing, tokens, bug-hunt, and read-only API smoke. Founder login (teji.ss1986@gmail.com / Singh1986$) returns HTTP 200 with valid JWT and unlocks is_admin=true + is_unlimited=true + tier=founder. /auth/me confirms GitHub connected (login=RerootsBeauty). All 26 routes tested return HTTP 200 (SPA shell) and render without console errors. Zero JavaScript exceptions captured across either viewport. Performance is healthy (all pages DOMContentLoaded <2.5s). Two network-level bugs found (one HIGH — activation-funnel 499 on every admin landing; one MEDIUM — hosted-deploy 404 for un-deployed project). One DATA/UX bug — Tokens page shows '0 Tokens Remaining' for unlimited founder. One mobile cosmetic — top-bar tooltip overlaps mode pills on dashboard. NEW Iter 212m-153 SystemStatsPage at /admin/system-stats is LIVE on PROD and renders cleanly. Backend admin /system-stats endpoint returns 200 with parliament/intent-gateway/tool-router payload.",
+  "summary": "Founder-level PROD regression of https://auremcto.com on desktop (1440x900) + mobile (390x844 iPhone 14). Covered landing, signup/login, dashboard, full sidebar nav (16 routes), all 10 admin pages including the newly-shipped /admin/system-stats, ORA chat SSE, pricing, tokens, bug-hunt, and read-only API smoke. Founder login (teji.ss1986@gmail.com / [REDACTED-2026-08-19]) returns HTTP 200 with valid JWT and unlocks is_admin=true + is_unlimited=true + tier=founder. /auth/me confirms GitHub connected (login=RerootsBeauty). All 26 routes tested return HTTP 200 (SPA shell) and render without console errors. Zero JavaScript exceptions captured across either viewport. Performance is healthy (all pages DOMContentLoaded <2.5s). Two network-level bugs found (one HIGH — activation-funnel 499 on every admin landing; one MEDIUM — hosted-deploy 404 for un-deployed project). One DATA/UX bug — Tokens page shows '0 Tokens Remaining' for unlimited founder. One mobile cosmetic — top-bar tooltip overlaps mode pills on dashboard. NEW Iter 212m-153 SystemStatsPage at /admin/system-stats is LIVE on PROD and renders cleanly. Backend admin /system-stats endpoint returns 200 with parliament/intent-gateway/tool-router payload.",
   "backend_issues": {
     "critical": [],
     "high": [
@@ -9,7 +9,7 @@
         "priority": "HIGH",
         "viewport": "both",
         "repro_steps": [
-          "Login as teji.ss1986@gmail.com / Singh1986$ on https://auremcto.com",
+          "Login as teji.ss1986@gmail.com / [REDACTED-2026-08-19] on https://auremcto.com",
           "Navigate to /admin (or /admin/overview)",
           "Open DevTools → Network → filter activation-funnel",
           "Observe HTTP 499 within ~2s"
@@ -136,7 +136,7 @@
     "backend": "92% (12/13 critical endpoints 200; only activation-funnel fails with 499)",
     "frontend": "96% (26/26 routes render; 1 mobile cosmetic overlap, 1 stale-bubble chat observation)"
   },
-  "test_credentials": "Used §0a founder: teji.ss1986@gmail.com / Singh1986$ — verified is_admin=true, is_unlimited=true, tier=founder, GitHub connected to RerootsBeauty. JWT exp 1783388485.",
+  "test_credentials": "Used §0a founder: teji.ss1986@gmail.com / [REDACTED-2026-08-19] — verified is_admin=true, is_unlimited=true, tier=founder, GitHub connected to RerootsBeauty. JWT exp 1783388485.",
   "seed_data_creation": "None. Read-only black-box regression — no signup attempted, no Stripe checkout completed, no commits pushed, no code modifications.",
   "retest_needed": true,
   "should_main_agent_self_test": false,

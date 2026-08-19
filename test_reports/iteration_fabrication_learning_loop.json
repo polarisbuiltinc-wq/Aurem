@@ -1,0 +1,25 @@
+{
+  "summary": "Verified Fabrication Failure Learning Loop feature end-to-end. Backend: all 14 tests in test_fabrication_learning_loop.py pass; 37 regression tests across test_citation_guard_persist_ordering.py, test_anti_fabrication_regen_admin.py, test_iter212m137_ora_fix_recall.py, test_iter212m129_ora_fix_learning.py all pass. Admin endpoint /api/aurem-dev/admin/qa/fabrication-patterns returns 401 without auth and 401 with malformed token. With a valid founder JWT it returns HTTP 200 with the exact expected shape {generated_at, since_days, patterns, recurring_count}. Frontend: logged in as test@aurem.dev, navigated to /admin/qa — the new FabricationPatternsSection card renders with data-testid=admin-qa-fabrication-patterns (count=1), and one existing pattern row (data-testid=fabrication-pattern-row-0) was present. 'Fabrication Learning Loop' heading text found. No console errors, no runtime crash of the page.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_fabrication_learning_loop.py",
+    "/app/backend/tests/test_citation_guard_persist_ordering.py",
+    "/app/backend/tests/test_anti_fabrication_regen_admin.py",
+    "/app/backend/tests/test_iter212m137_ora_fix_recall.py",
+    "/app/backend/tests/test_iter212m129_ora_fix_learning.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Two tests in test_fabrication_learning_loop.py (test_signature_is_stable_regardless_of_order_and_case, test_fabrication_patterns_endpoint_requires_admin) are decorated with @pytest.mark.asyncio but are sync — either drop the marker or make them async. Non-blocking pytest warning only.",
+    "Pydantic V1-style @validator usages in routers/chat.py (lines 266, 270) — deprecated in Pydantic V2, should migrate to @field_validator. Pre-existing, not introduced by this feature."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Preview: test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. The unit-test file cleans up its own rows via _test_run:true teardown fixture. One live pattern row already existed in ora_fabrication_incidents from prior activity (recurring_count=0, one pattern row surfaced in admin card).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Fabrication Learning Loop is verified green end-to-end at the preview URL. Admin card renders at /admin/qa below the Incident Log section. No cross-project matching (per spec). Caution injection is silent/backend-only — no user-visible chat UI to test. The live chat-stream integration path (chat.py record_fabrication_incident on guard_out['retried']==True) was NOT re-triggered via a live streaming call in this pass because the unit-test file already covers the record/recall/aggregation contract against real MongoDB and shape verification via API is green; if a future pass wants to end-to-end trigger it, follow the mock pattern in tests/test_citation_guard_persist_ordering.py (mock chat_with_tools + services.llm.call_llm to force a fabricated-path draft) and then poll the ora_fabrication_incidents collection.",
+  "rca of the issue": "N/A — no bug found."
+}

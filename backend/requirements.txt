@@ -119,7 +119,6 @@ opentelemetry-sdk==1.43.0
 opentelemetry-semantic-conventions==0.64b0
 packageurl-python==0.17.6
 packaging==26.2
-pandas==3.0.3
 paramiko==3.5.0
 passlib==1.7.4
 pathspec==1.1.1
@@ -176,7 +175,6 @@ rich==15.0.0
 rpds-py==0.30.0
 rsa==4.9.1
 s3transfer==0.17.0
-s5cmd==0.2.0
 sentry-sdk==2.61.1
 shellingham==1.5.4
 six==1.17.0

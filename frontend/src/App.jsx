@@ -37,6 +37,7 @@ import Landing from "./pages/Landing";
 // the first-paint entry chunk. Lazy-load them so the entry stays under
 // the 350KB code-splitting target (they render behind Suspense).
 const Both              = lazy(() => import("./pages/Both"));
+const ResetPassword     = lazy(() => import("./pages/ResetPassword"));
 const LoopLiveFeedDemo  = lazy(() => import("./pages/LoopLiveFeedDemo"));
 const ShippedRowHarness = lazy(() => import("./pages/ShippedRowHarness"));
 const VisualFixtures    = lazy(() => import("./pages/VisualFixtures"));
@@ -345,6 +346,7 @@ export default function App() {
           <Route path="/demo"            element={<Demo />} />
           <Route path="/login"           element={<Login />} />
           <Route path="/signup"          element={<Signup />} />
+          <Route path="/reset-password"  element={<ResetPassword />} />
           <Route path="/verify"          element={<Verify />} />
           <Route path="/support"         element={<Support />} />
           <Route path="/support/thread/:ticketId" element={<SupportThread />} />

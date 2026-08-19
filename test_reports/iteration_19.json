@@ -63,7 +63,7 @@
     "backend": "1 probe 404 (/aurem-dev/health), all other reachable endpoints succeeded — ~95%",
     "frontend": "Auth + composer placeholder + theme cycle + mode pills + loop pill + avatar dropdown + mobile + leak-sanitizer all PASS. Topbar auto-hide + prompt-mode send + wizard backdrop FAIL. ~70%."
   },
-  "test_credentials": "qa-prod@aurem.dev / qq*U71r#ZQ*fnB1BqRIKBQLt (production, /app/memory/test_credentials.md §0)",
+  "test_credentials": "qa-prod@aurem.dev / [REDACTED-2026-08-19] (production, /app/memory/test_credentials.md §0)",
   "seed_data_creation": "None. Used existing qa-prod row (0 projects).",
   "retest_needed": true,
   "main_agent_can_self_test": false,

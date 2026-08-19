@@ -22,14 +22,19 @@ BASE_URL = os.environ.get(
     "https://launch-pad-237.preview.emergentagent.com",
 ).rstrip("/")
 
-FOUNDER_EMAIL = "teji.ss1986@gmail.com"
-FOUNDER_PASS = "FounderOwn123!"
+# 2026-08-19 SECURITY FIX — real founder credentials were hardcoded
+# here and committed to git (found during security audit). Now read
+# from env vars; fixture skips cleanly if not set locally.
+FOUNDER_EMAIL = os.environ.get("PROD_FOUNDER_EMAIL", "")
+FOUNDER_PASS = os.environ.get("PROD_FOUNDER_PASSWORD", "")
 
 
 # ─────────────────────────── fixtures ───────────────────────────
 @pytest.fixture(scope="module")
 def auth_session():
     """Single-step founder login → returns authed session + user_id."""
+    if not FOUNDER_EMAIL or not FOUNDER_PASS:
+        pytest.skip("PROD_FOUNDER_EMAIL/PROD_FOUNDER_PASSWORD not set")
     s = requests.Session()
     r = s.post(
         f"{BASE_URL}/api/aurem-dev/auth/login",

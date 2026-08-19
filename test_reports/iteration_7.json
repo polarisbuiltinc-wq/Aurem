@@ -34,7 +34,7 @@
     "backend": "99% (300/303 pytest; 1 refactor regression fixed by tester; 2 pre-existing env-state failures unrelated to this iter)",
     "frontend": "100% (signup OAuth btn + redirect, login OAuth btn + email login, chat send → streaming → user/assistant bubbles → hover action row → thumbs-up toast, /wall purple-free)"
   },
-  "test_credentials": "test@aurem.dev / testpass123 worked. teji.ss1986@gmail.com / FounderOwn123! login timed-out on /dashboard wait in this run (account may have been cleaned up by prior iter teardown) — fallback to test user covered the chat flow.",
+  "test_credentials": "test@aurem.dev / testpass123 worked. teji.ss1986@gmail.com / [REDACTED-2026-08-19] login timed-out on /dashboard wait in this run (account may have been cleaned up by prior iter teardown) — fallback to test user covered the chat flow.",
   "seed_data_creation": "None. One UI chat turn created on test@aurem.dev session (cosmetic, not seeded data).",
   "retest_needed": false,
   "main_agent_can_self_test": true,

@@ -12,6 +12,42 @@ answer questions, propose fixes, apply them via GitHub commits/PRs, and
 run scan+fix pipelines (health, security, quality). Zero-mock — every fix
 is a real GitHub commit with a verified SHA.
 
+## Latest ship — Fabrication Failure Learning Loop (2026-08-19)
+
+**Preview-verified (testing_agent: 14/14 new tests + 37 regression tests
+green; admin API + dashboard card verified live).** Founder-approved scope:
+per-project + per-route only (no cross-project matching), caution injected
+only after 3+ incidents in trailing 30 days.
+
+1. `services/ora_fix_learning.py` — new `ora_fabrication_incidents`
+   collection + `record_fabrication_incident()`, `recall_fabrication_caution()`,
+   `get_recurring_fabrication_patterns()`. Fail-open, never blocks a chat turn.
+2. Customer chat (`routers/chat.py`): logs an incident every time
+   `CitationGuard` retries (fire-and-forget). Orchestrator
+   (`services/orchestrator.py`) injects a silent caution into the system
+   prompt for real (non-home) projects when the same project+route hit
+   3+ incidents in 30 days.
+3. Admin ORA chat (`routers/ora_chat.py`): same caution injection before
+   the system prompt is built (bucketed as project_id="admin", route=
+   model route), and logs an incident whenever `ora_grounding` flags
+   `fabricated` content (post regen/review).
+4. Admin visibility: `GET /admin/qa/fabrication-patterns` (admin-gated)
+   + a new "Fabrication Learning Loop" card on the existing `/admin/qa`
+   dashboard (no redesign) — shows recurring signatures, count, corrected
+   ratio, `caution_active` (mirrors the live >=3/30d threshold).
+5. Tests: `backend/tests/test_fabrication_learning_loop.py` (14 tests,
+   run against real local MongoDB — record/recall/threshold/project+route
+   isolation/30-day window/admin endpoint auth+shape).
+
+**NOT yet true**: no production telemetry/measured reduction in repeat
+fabrications — this ships the observability + injection mechanism only.
+Production needs a redeploy before this is live for real users.
+
+**Next up**: Diff View Upgrade, or a full codebase audit report the
+founder separately requested (code inventory, feature inventory, dead
+collections/deps, security exposure sweep, test coverage %) — see
+`/app/memory/CHANGELOG.md` for the audit scope and time-estimate note.
+
 ## Latest ship — Customer Chat Regen, real bugs found + fixed (2026-08-19)
 
 **Preview-verified.** All 3 priority items from this session done:

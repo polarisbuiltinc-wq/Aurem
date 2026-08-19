@@ -49,6 +49,12 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       allowedHosts: true,
       hmr: { clientPort: 443, protocol: 'wss' },
+      // 2026-08-19 — container's system-wide inotify watch budget was
+      // exhausted (shared with code-server's own watchers), causing
+      // Vite's FSWatcher to throw ENOSPC and serve stale/broken
+      // optimize-deps chunks (routes hung forever on the Suspense
+      // loading fallback). Polling avoids inotify entirely.
+      watch: { usePolling: true, interval: 300 },
       proxy: {
         '/api': {
           target: apiTarget,

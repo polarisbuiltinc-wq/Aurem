@@ -32,7 +32,7 @@
     "backend": "100% (26/26 regression + 8/8 runnable live E2E; 1 skipped due to env, not code)",
     "frontend": "100% (all 9 expected testids present, save round-trips, all three warnings + dim state verified)"
   },
-  "test_credentials": "Founder teji.ss1986@gmail.com / FounderOwn123! works on PREVIEW. JWT field is 'token' (not 'access_token') on /auth/login response.",
+  "test_credentials": "Founder teji.ss1986@gmail.com / [REDACTED-2026-08-19] works on PREVIEW. JWT field is 'token' (not 'access_token') on /auth/login response.",
   "seed_data_creation": "None. After tests, house_rules MongoDB doc reset to {prompt:'', all toggles false} — verified via GET. Subsequent runs see clean OFF state.",
   "retest_needed": false,
   "main_agent_can_self_test": true,

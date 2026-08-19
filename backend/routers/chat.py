@@ -2757,22 +2757,14 @@ async def chat_stream(
                 # the model API (cold start / OpenRouter queue / network),
                 # NOT looping. Telling the user "I cut myself off" in
                 # that case is misleading and erodes trust.
+                # 2026-08-19 — extracted to orchestrator.build_timeout_message
+                # so this decision is directly unit-testable (the old
+                # grep-lock test couldn't catch a swapped branch).
                 tool_count = len(partial_invocations)
-                if tool_count < 3:
-                    content = (
-                        f"⏱️ Model API was slow to respond — waited "
-                        f"{int(HARD_TIMEOUT_S)}s and only got "
-                        f"{tool_count} tool call{'s' if tool_count != 1 else ''} "
-                        f"through. This usually means the model API "
-                        f"cold-started or a network blip — NOT that I was "
-                        f"stuck in a loop. Please retry the same prompt.\n\n"
-                        f"{summary}"
-                    )
-                else:
-                    content = (
-                        f"⏱️ I cut myself off at {int(HARD_TIMEOUT_S)}s to avoid "
-                        f"a runaway tool-loop.\n\n{summary}"
-                    )
+                from services.orchestrator import build_timeout_message
+                content, _slow_api = build_timeout_message(
+                    tool_count, HARD_TIMEOUT_S, summary,
+                )
                 # Stream as a normal assistant turn (meta → tokens → done)
                 # so the bubble renders properly instead of going red.
                 meta_payload = {
@@ -2784,7 +2776,7 @@ async def chat_stream(
                     "thinking_s": round(_t.monotonic() - t_start, 1),
                     "tool_calls_run": len(partial_invocations),
                     "timed_out": True,
-                    "slow_api": tool_count < 3,
+                    "slow_api": _slow_api,
                 }
                 yield f"data: {json.dumps(meta_payload)}\n\n"
                 CHUNK = 16
@@ -3122,6 +3114,22 @@ async def chat_stream(
                 # so the frontend overwrites the (hallucinated) draft.
                 content = guard_out["text"]
                 yield f"data: {json.dumps({'token': content, 'reset': True})}\n\n"
+
+                # 2026-08 — Fabrication learning loop. Log every real
+                # CitationGuard trigger (fire-and-forget, never blocks
+                # the response) so recurring per-project patterns can
+                # surface a caution on future turns.
+                try:
+                    from services.ora_fix_learning import record_fabrication_incident
+                    _db_fab = get_db()
+                    asyncio.create_task(record_fabrication_incident(
+                        _db_fab, source="customer_chat",
+                        project_id=body.project_id, route="chat_stream",
+                        user_prompt=body.prompt, unverified_paths=guard_unverified,
+                        corrected=True, user_id=user_id,
+                    ))
+                except Exception as _fabrec_err:
+                    logger.warning("fabrication incident record skipped: %r", _fabrec_err)
         except Exception as _guard_err:
             logger.warning("citation_guard skipped: %r", _guard_err)
 

@@ -40,7 +40,7 @@
     "/app/test_reports/screenshots/prod_20features/*.png (new evidence)"
   ],
   "success_rate": {"backend": "100% (all probed prod endpoints returned expected shape)", "frontend": "100% (login, chat, graph, advisor, mode routing all functional)"},
-  "test_credentials": "PRODUCTION founder: teji.ss1986@gmail.com / Singh1986$ (from /app/memory/test_credentials.md). JWT bearer stored in localStorage.aurem_token — is_admin:true, tier:founder, unlimited tokens.",
+  "test_credentials": "PRODUCTION founder: teji.ss1986@gmail.com / [REDACTED-2026-08-19] (from /app/memory/test_credentials.md). JWT bearer stored in localStorage.aurem_token — is_admin:true, tier:founder, unlimited tokens.",
   "seed_data_creation": "None — non-destructive readonly probe on live production account.",
   "retest_needed": false,
   "should_main_agent_self_test": false,

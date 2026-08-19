@@ -56,7 +56,7 @@
     "backend": "100% — 0 4xx/5xx during full session; /api/aurem-dev/auth/me returns 200 with correct founder claims; iter-19's /aurem-dev/health 404 probe is FIXED",
     "frontend": "~90% — Auth, prompt-mode send, loop toggle, theme cycle, sidebar, avatar, NewUserWizard guard, stale-chat-restore, no leak markers, no console errors all PASS. The single remaining P0 is topbar auto-hide (root-caused: chat-messages container is not scrollable, so the hide handler never fires)."
   },
-  "test_credentials": "FOUNDER teji.ss1986@gmail.com / Singh1986$ — confirmed working on prod via /auth/me HTTP 200; user_id=bee5a199d2bc4c49b42140fe8af80434; tier=founder; is_admin=true; is_unlimited=true; 2 connected repos.",
+  "test_credentials": "FOUNDER teji.ss1986@gmail.com / [REDACTED-2026-08-19] — confirmed working on prod via /auth/me HTTP 200; user_id=bee5a199d2bc4c49b42140fe8af80434; tier=founder; is_admin=true; is_unlimited=true; 2 connected repos.",
   "seed_data_creation": "Sent 2 chat messages ('hi' and 'reply with exactly: hello world') during testing. ORA replied. These persist in /chat/history for this account. No destructive operations performed.",
   "retest_needed": true,
   "main_agent_can_self_test": false,

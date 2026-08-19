@@ -23,14 +23,20 @@ import pytest
 import requests
 
 BASE_URL = "https://auremcto.com"
-FOUNDER_EMAIL = "teji.ss1986@gmail.com"
-FOUNDER_PWD = "Singh1986$"
+# 2026-08-19 SECURITY FIX — real founder production credentials were
+# hardcoded here and committed to git (found during security audit).
+# Now read from env vars; test skips cleanly if not set locally.
+FOUNDER_EMAIL = os.environ.get("PROD_FOUNDER_EMAIL", "")
+FOUNDER_PWD = os.environ.get("PROD_FOUNDER_PASSWORD", "")
 
 # ---- shared session / token cache ----
 _session_state: dict = {}
 
 
 def _login() -> dict:
+    if not FOUNDER_EMAIL or not FOUNDER_PWD:
+        pytest.skip("PROD_FOUNDER_EMAIL/PROD_FOUNDER_PASSWORD not set — "
+                    "skipping live-production founder e2e")
     if "token" in _session_state:
         return _session_state
     r = requests.post(

@@ -46,6 +46,24 @@ export default function Login() {
   const [mfaState, setMfaState] = useState(null);
   const [mfaCode,  setMfaCode]  = useState("");
   const [useBackup, setUseBackup] = useState(false);
+  // 2026-08-19 — self-service forgot-password toggle.
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [forgotDone, setForgotDone] = useState(false);
+
+  async function submitForgot(e) {
+    e.preventDefault();
+    setForgotBusy(true);
+    setError(null);
+    try {
+      await api.post("/auth/forgot-password", { email: email.trim() });
+      setForgotDone(true);
+    } catch (e) {
+      setError(e?.response?.data?.detail || "Could not send reset link. Try again.");
+    } finally {
+      setForgotBusy(false);
+    }
+  }
 
   async function submit(e) {
     e.preventDefault();
@@ -295,7 +313,7 @@ export default function Login() {
             <span>OR EMAIL</span>
             <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
           </div>
-          <form onSubmit={submit} style={{ display: mfaState ? "none" : "grid", gap: 16 }}>
+          <form onSubmit={submit} style={{ display: mfaState || forgotMode ? "none" : "grid", gap: 16 }}>
             <label>
               <span className="label-mini">Email</span>
               <input
@@ -322,6 +340,19 @@ export default function Login() {
               />
             </label>
 
+            <button
+              type="button"
+              data-testid="login-forgot-password-link"
+              onClick={() => { setForgotMode(true); setError(null); setForgotDone(false); }}
+              style={{
+                background: "transparent", border: "none", padding: 0,
+                color: "var(--accent-2)", cursor: "pointer",
+                fontSize: 12, textAlign: "right", justifySelf: "end",
+              }}
+            >
+              Forgot password?
+            </button>
+
             {error && (
               <div data-testid="login-error" style={{
                 fontSize: 12, color: "var(--danger)",
@@ -343,6 +374,72 @@ export default function Login() {
               <LogIn size={15} /> {busy ? "Signing in…" : "Sign in"}
             </button>
           </form>
+
+          {/* 2026-08-19 — forgot-password mini-flow, same card. */}
+          {forgotMode && !mfaState && (
+            <form
+              data-testid="login-forgot-password-form"
+              onSubmit={submitForgot}
+              style={{ display: "grid", gap: 16 }}
+            >
+              {forgotDone ? (
+                <div data-testid="login-forgot-password-done" style={{
+                  fontSize: 13, color: "var(--text-dim)",
+                  padding: "10px 12px", borderRadius: 4,
+                  background: "rgba(109,212,161,0.06)",
+                  border: "1px solid rgba(109,212,161,0.25)",
+                }}>
+                  If that email exists, a reset link has been sent. Check your inbox.
+                </div>
+              ) : (
+                <>
+                  <label>
+                    <span className="label-mini">Email</span>
+                    <input
+                      data-testid="login-forgot-password-email"
+                      className="input"
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@company.com"
+                    />
+                  </label>
+                  {error && (
+                    <div data-testid="login-forgot-password-error" style={{
+                      fontSize: 12, color: "var(--danger)",
+                      border: "1px solid rgba(255,107,107,0.25)",
+                      background: "rgba(255,107,107,0.06)",
+                      padding: "10px 12px", borderRadius: 4,
+                    }}>
+                      {error}
+                    </div>
+                  )}
+                  <button
+                    type="submit"
+                    data-testid="login-forgot-password-submit"
+                    className="btn-primary"
+                    disabled={forgotBusy}
+                    style={{ justifyContent: "center" }}
+                  >
+                    {forgotBusy ? "Sending…" : "Send reset link"}
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                data-testid="login-forgot-password-cancel"
+                onClick={() => { setForgotMode(false); setForgotDone(false); setError(null); }}
+                style={{
+                  background: "transparent", border: "none",
+                  color: "var(--text-faint)", cursor: "pointer",
+                  padding: 0, fontSize: 11, justifySelf: "start",
+                }}
+              >
+                ← Back to sign in
+              </button>
+            </form>
+          )}
 
           {/* Iter 212m-20 — second leg of admin 2FA login. Shown only
               after the password step returned `mfa_required:true`. */}

@@ -62,7 +62,7 @@
     "backend": "API surface 7/8 endpoints PASS via direct curl (1 expected 403 Founder-only); browser session saw 4 transient Cloudflare 520s that resolved on retry — call it 90%.",
     "frontend": "Sidebar nav 4/5 PASS (Health Scanner, Bug Hunt, Vanguard click is dead, Loop click is dead, Codebase Graph dead-ends due to 403). Topbar 0/3 PASS (mode pills + theme + avatar all blocked by wizard overlay). Login form PASS; GitHub OAuth button FAIL. Overall ~45%."
   },
-  "test_credentials": "qa-prod@aurem.dev / qq*U71r#ZQ*fnB1BqRIKBQLt (production, /app/memory/test_credentials.md §0)",
+  "test_credentials": "qa-prod@aurem.dev / [REDACTED-2026-08-19] (production, /app/memory/test_credentials.md §0)",
   "seed_data_creation": "None.",
   "retest_needed": true,
   "main_agent_can_self_test": false,

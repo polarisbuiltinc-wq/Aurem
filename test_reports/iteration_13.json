@@ -23,7 +23,7 @@
     "/app/backend/tests/test_iter212m23_e2e_url_tool_real_fix.py (NEW — 5 E2E tests, all passing)"
   ],
   "success_rate": {"backend": "100% (20/20 targeted tests)", "frontend": "n/a — skipped per request"},
-  "test_credentials": "Founder login teji.ss1986@gmail.com / FounderOwn123! works against PREVIEW backend (single-step, no 2FA). Token returned as 'access_token', user_id under user.id (=72986b01e66d4beda9251e62751c1392 in this run).",
+  "test_credentials": "Founder login teji.ss1986@gmail.com / [REDACTED-2026-08-19] works against PREVIEW backend (single-step, no 2FA). Token returned as 'access_token', user_id under user.id (=72986b01e66d4beda9251e62751c1392 in this run).",
   "seed_data_creation": "None — used ad-hoc chat session IDs.",
   "retest_needed": false,
   "main_agent_can_self_test": true,

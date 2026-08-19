@@ -24,6 +24,7 @@ import OraWrapped from "../components/OraWrapped";
 import ReferralShare from "../components/ReferralShare";
 import TrustLevelCard from "../components/TrustLevelCard";
 import DangerZone from "../components/DangerZone";
+import ChangePasswordCard from "../components/ChangePasswordCard";
 
 const TABS = [
   { id: "profile",      label: "Profile",       icon: User },
@@ -371,6 +372,7 @@ export default function Settings() {
             {/* Iter 212m-235 — Switch between Personal and Developer Track.  */}
             <TrackSwitcher currentTrack={me?.track || "developer"} onSwitched={(t) => setMe((m) => m ? { ...m, track: t } : m)} />
 
+            {me?.has_password && <ChangePasswordCard />}
             <TrustLevelCard />
             <ReferralShare />
             <DangerZone email={me?.email} />

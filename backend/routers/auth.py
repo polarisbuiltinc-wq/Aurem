@@ -4,7 +4,9 @@ Developer signup, login, token endpoints.
 """
 # arch: allow-http — Google + GitHub OAuth token endpoints (iter 212m-225)
 from __future__ import annotations
+import asyncio
 import re
+import secrets
 import time
 import uuid
 import os
@@ -184,6 +186,20 @@ class SignupBody(BaseModel):
 class LoginBody(BaseModel):
     email: str
     password: str
+
+
+class ForgotPasswordBody(BaseModel):
+    email: str
+
+
+class ResetPasswordBody(BaseModel):
+    token: str
+    new_password: str
+
+
+class ChangePasswordBody(BaseModel):
+    current_password: str
+    new_password: str
 
 
 class TwoFAVerifyBody(BaseModel):
@@ -550,14 +566,107 @@ async def login_2fa_verify(body: TwoFAVerifyBody) -> dict:
     return _issue_session(user, is_admin, is_founder)
 
 
+# ── 2026-08-19 SECURITY FOLLOW-UP — self-service password reset ────────
+# Built after a security audit found a real founder password hardcoded
+# in test files (no self-service rotation existed anywhere in the app).
+# Same rate-limit/lockout conventions as /auth/login above.
+_FORGOT_PW_RATE_PER_MIN = int(os.getenv("FORGOT_PW_RATE_PER_MIN", "3"))
+_RESET_TOKEN_TTL_S = 3600
+
+
+@router.post("/forgot-password")
+async def forgot_password(body: ForgotPasswordBody, request: Request) -> dict:
+    """Always returns the same generic response regardless of whether
+    the email exists — avoids account-enumeration. Rate-limited per IP
+    so it can't be used to spam an inbox or probe emails."""
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "Database not connected")
+    client_ip = client_ip_from_request(request)
+    if not await check_rate_limit_async(f"forgot-pw-ip:{client_ip}", _FORGOT_PW_RATE_PER_MIN):
+        raise HTTPException(429, "Too many reset requests. Try again in a minute.")
+    email = body.email.strip().lower()
+    user = await db.dev_users.find_one(_email_ci(email), {"_id": 0, "user_id": 1, "email": 1, "password": 1})
+    generic = {"ok": True, "message": "If that email exists, a reset link has been sent."}
+    if not user or not user.get("password"):
+        # No account, or an OAuth-only account with no password to reset.
+        return generic
+    token = secrets.token_urlsafe(32)
+    await db.password_reset_tokens.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {
+            "token": token, "email": user["email"],
+            "expires_at": time.time() + _RESET_TOKEN_TTL_S,
+            "used": False, "created_at": time.time(),
+        }},
+        upsert=True,
+    )
+    try:
+        from services.password_reset_email import send_reset_email
+        asyncio.create_task(send_reset_email(user["email"], token))
+    except Exception as e:                                    # noqa: BLE001
+        logger.warning("send_reset_email dispatch failed: %r", e)
+    return generic
+
+
+@router.post("/reset-password")
+async def reset_password(body: ResetPasswordBody) -> dict:
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "Database not connected")
+    if len(body.new_password) < 6:
+        raise HTTPException(400, "New password must be at least 6 characters")
+    row = await db.password_reset_tokens.find_one({"token": body.token})
+    if not row or row.get("used") or row.get("expires_at", 0) < time.time():
+        raise HTTPException(400, "Invalid or expired reset link. Request a new one.")
+    hashed = bcrypt.hashpw(body.new_password.encode(), bcrypt.gensalt()).decode()
+    await db.dev_users.update_one(
+        {"user_id": row["user_id"]}, {"$set": {"password": hashed}},
+    )
+    await db.password_reset_tokens.update_one(
+        {"_id": row["_id"]}, {"$set": {"used": True}},
+    )
+    return {"ok": True}
+
+
+@router.post("/change-password")
+async def change_password(
+    body: ChangePasswordBody, authorization: Optional[str] = Header(None),
+) -> dict:
+    payload = await current_dev(authorization)
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "Database not connected")
+    if len(body.new_password) < 6:
+        raise HTTPException(400, "New password must be at least 6 characters")
+    user = await db.dev_users.find_one(
+        {"user_id": payload["user_id"]}, {"_id": 0, "password": 1},
+    )
+    if not user or not user.get("password"):
+        raise HTTPException(
+            400,
+            "This account signs in via GitHub/Google and has no password to change.",
+        )
+    if not bcrypt.checkpw(body.current_password.encode(), user["password"].encode()):
+        raise HTTPException(401, "Current password is incorrect")
+    hashed = bcrypt.hashpw(body.new_password.encode(), bcrypt.gensalt()).decode()
+    await db.dev_users.update_one(
+        {"user_id": payload["user_id"]}, {"$set": {"password": hashed}},
+    )
+    return {"ok": True}
+
+
 @router.get("/me")
 async def me(authorization: Optional[str] = Header(None)) -> dict:
     payload = await current_dev(authorization)
     db = get_db()
     user = None
     if db is not None:
+        # 2026-08-19 — fetch `password` too so we can compute the
+        # boolean `has_password` flag below (Change Password card needs
+        # it), then strip the hash before it ever leaves this function.
         user = await db.dev_users.find_one(
-            {"user_id": payload["user_id"]}, {"_id": 0, "password": 0}
+            {"user_id": payload["user_id"]}, {"_id": 0}
         )
     # Iter 212m-30 — coerce datetime fields to ISO strings so the JSON
     # serialiser doesn't reject the response. `created_at` is read by
@@ -568,11 +677,12 @@ async def me(authorization: Optional[str] = Header(None)) -> dict:
         ts = user.get("created_at")
         if isinstance(ts, datetime):
             user["created_at"] = ts.isoformat()
+        user["has_password"] = bool(user.get("password"))
         # Iter 337 — SECURITY: never ship auth secrets to the client.
         # Found live on prod: /auth/me returned the TOTP `mfa_secret`,
         # hashed `mfa_backup_codes` and the raw GitHub `access_token`.
         # The frontend uses none of them (grep-verified).
-        for _secret_field in ("mfa_secret", "mfa_backup_codes"):
+        for _secret_field in ("mfa_secret", "mfa_backup_codes", "password"):
             user.pop(_secret_field, None)
         gh = user.get("github")
         if isinstance(gh, dict):

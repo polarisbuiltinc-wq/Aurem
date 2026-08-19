@@ -62,7 +62,7 @@
     "backend": "~70% — auth, projects/list, auth/me all 200 in session 2; chat/stream returns a reply but content shows LLM lacks repo context (semantic failure, not HTTP failure). codebase-health 404 persists. 520 burst in session 1.",
     "frontend": "~55% — auth, repo-select-in-session, prompt-mode send click, loop toggle, plan card render all PASS. Sanitizer leaks, F12 confirm-gate absent, topbar auto-hide still broken, breadcrumb hydration broken on reload, 520-HTML rendered as raw assistant bubble. All four iter-212m-109 fixes appear absent."
   },
-  "test_credentials": "FOUNDER teji.ss1986@gmail.com / Singh1986$ — confirmed working, user_id=bee5a199d2bc4c49b42140fe8af80434, project_id (polaris)=p_55aa60c68d, REDACTED_GITHUB_TOKEN_FRAGMENT oauth token visible in /auth/me.",
+  "test_credentials": "FOUNDER teji.ss1986@gmail.com / [REDACTED-2026-08-19] — confirmed working, user_id=bee5a199d2bc4c49b42140fe8af80434, project_id (polaris)=p_55aa60c68d, REDACTED_GITHUB_TOKEN_FRAGMENT oauth token visible in /auth/me.",
   "seed_data_creation": "Sent 2 new chat messages this session: 'list 3 files from this repo by name only' (prompt mode) and 'show me the first 10 lines of README.md from this repo' (prompt mode) and 'add a comment # ORA loop test at the top of README.md' (LOOP mode — PLAN phase only, did NOT click Approve so no commit was made). Plus the session 1 chat-flood from F12 badge auto-fire (~6 'F12 errors captured ...' messages). No GitHub commit produced.",
   "retest_needed": true,
   "should_main_agent_self_test": false,

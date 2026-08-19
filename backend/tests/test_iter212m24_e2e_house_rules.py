@@ -21,9 +21,15 @@ BASE = os.environ.get(
 API = f"{BASE}/api/aurem-dev"
 
 FOUNDER_EMAIL = "teji.ss1986@gmail.com"
-FOUNDER_PASSWORD = "FounderOwn123!"
+# 2026-08-19 SECURITY FIX — the real founder + a real QA-prod account
+# password were hardcoded here and committed to git (found during a
+# security audit). Both now read from env vars; the fixture skips
+# cleanly if not set locally (matches this repo's own security policy
+# in /app/memory/test_credentials.md: never persist the real prod
+# founder password in a file).
+FOUNDER_PASSWORD = os.environ.get("PREVIEW_FOUNDER_PASSWORD", "")
 QA_USER_EMAIL = "qa-prod@aurem.dev"
-QA_USER_PASSWORD = "qq*U71r#ZQ*fnB1BqRIKBQLt"
+QA_USER_PASSWORD = os.environ.get("QA_PROD_PASSWORD", "")
 
 HR_URL = f"{API}/admin/house-rules"
 MARKER = "[HOUSE-RULE-OK]"
@@ -43,6 +49,8 @@ def _login(email: str, password: str) -> Optional[str]:
 
 @pytest.fixture(scope="session")
 def founder_token():
+    if not FOUNDER_PASSWORD:
+        pytest.skip("PREVIEW_FOUNDER_PASSWORD not set")
     tok = _login(FOUNDER_EMAIL, FOUNDER_PASSWORD)
     if not tok:
         pytest.skip("Founder login failed")
