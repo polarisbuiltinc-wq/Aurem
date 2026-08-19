@@ -12,6 +12,15 @@ answer questions, propose fixes, apply them via GitHub commits/PRs, and
 run scan+fix pipelines (health, security, quality). Zero-mock — every fix
 is a real GitHub commit with a verified SHA.
 
+## Latest ship — Anti-Fabrication Regen, admin tool (2026-08-19)
+
+**Preview-verified**. Founder-approved plan: admin tool first, then
+customer-facing chat.py as fast-follow (do NOT let it slip). See
+`/app/memory/CHANGELOG.md` for the full correction/finding — the
+original "not started" status given to the founder was WRONG; a
+dormant, disabled implementation already existed and just needed two
+small fixes + a flag flip.
+
 ## Latest ship — GLM leak audit + fix (2026-08-19)
 
 **Preview-verified**. Founder flagged "GLM 5.2 visible in chat" — full

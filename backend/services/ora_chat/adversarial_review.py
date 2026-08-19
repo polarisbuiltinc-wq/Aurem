@@ -60,9 +60,18 @@ REVIEWER_SYSTEM = (
 
 def trigger_reason(labels: Optional[list],
                    grounding: Optional[dict]) -> Optional[str]:
-    """Which turns get reviewed. Everything else stays single-pass."""
+    """Which turns get reviewed. Everything else stays single-pass.
+
+    2026-08-19 (Anti-Fabrication Regen, admin tool) — a HARD fabricated
+    file path (provably doesn't exist in the repo) used to only get a
+    review pass if `unverified` (soft) claims were ALSO present in the
+    same reply. A reply with ONLY a fabricated path and no unverified
+    ones slipped through with zero regen attempt on the deep-research
+    path. `fabricated` now triggers review on its own."""
     if "HIGH_STAKES" in (labels or []):
         return "high_stakes_label"
+    if grounding and grounding.get("fabricated"):
+        return "grounding_fabricated"
     if grounding and grounding.get("unverified"):
         return "grounding_unverified"
     return None
