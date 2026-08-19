@@ -4,6 +4,29 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## Latest ship — Signup password toggle + strength-meter consolidation (2026-08-19)
+
+Extended the show/hide toggle to `Signup.jsx`'s two password fields
+(`signup-password`, `signup-password-confirm` via shared
+`PasswordInput.jsx`). Screenshot-verified: eye toggle on both fields,
+mask↔plain-text works.
+
+**Consolidated the duplicate strength meter**: `PasswordStrengthMeter.jsx`
+now delegates its scoring to `lib/passwordStrength.js::scorePassword`
+(the richer, pre-existing implementation — common-password block-list,
+sequence/repeat detection, 0-4 score) instead of its own simpler
+length/char-class heuristic. Signup's inline strength-bar JSX block
+removed in favor of `<PasswordStrengthMeter password={form.password} />`
+— single scoring source of truth now used everywhere (Signup, Login
+n/a, ChangePasswordCard, ResetPassword). Signup's submit-gate
+validation (`MIN_ACCEPTABLE_SCORE` check) untouched — still imports
+directly from `lib/passwordStrength.js`, unaffected by the UI
+consolidation. Old `signup-password-strength`/`data-strength-score`
+testids removed (confirmed unreferenced by any test file before
+removal); new shared testids (`password-strength-meter`,
+`password-strength-label`) apply. Screenshot-verified "Strong" label
+renders correctly with the richer scorer.
+
 ## Latest ship — Show/hide password toggle (2026-08-19)
 
 New shared `frontend/src/components/PasswordInput.jsx` (eye/eye-off

@@ -11,6 +11,8 @@ import { trackSignup, metaCompleteRegistration } from "../lib/analytics";
 import RobotGuide, { RobotGuideKeyframes, escapeHtml } from "../components/RobotGuide";
 import GoogleIcon from "../components/GoogleIcon";
 import { scorePassword, MIN_ACCEPTABLE_SCORE } from "../lib/passwordStrength";
+import PasswordInput from "../components/PasswordInput";
+import PasswordStrengthMeter from "../components/PasswordStrengthMeter";
 
 export default function Signup() {
   usePageMeta({
@@ -242,60 +244,24 @@ export default function Signup() {
 
             <label>
               <span className="label-mini">Password (min 8 chars, 2+ character types)</span>
-              <input
-                data-testid="signup-password"
-                className="input"
-                type="password"
+              <PasswordInput
+                testId="signup-password"
                 required
                 minLength={6}
+                autoComplete="new-password"
                 value={form.password}
                 onChange={(e) => u("password", e.target.value)}
               />
-              {form.password && (() => {
-                const s = scorePassword(form.password);
-                return (
-                  <div
-                    data-testid="signup-password-strength"
-                    data-strength-score={s.score}
-                    style={{ marginTop: 6 }}
-                  >
-                    <div style={{
-                      display: "flex", gap: 3, height: 4,
-                      borderRadius: 2, overflow: "hidden",
-                    }}>
-                      {[0, 1, 2, 3].map((i) => (
-                        <div key={i} style={{
-                          flex: 1,
-                          background: i < s.score
-                            ? s.color
-                            : "rgba(255,255,255,0.08)",
-                          transition: "background 120ms ease",
-                        }} />
-                      ))}
-                    </div>
-                    {s.label && (
-                      <span style={{
-                        fontSize: 11,
-                        color: s.ok ? "var(--text-faint)" : s.color,
-                        marginTop: 4,
-                        display: "block",
-                      }}>
-                        {s.label}
-                      </span>
-                    )}
-                  </div>
-                );
-              })()}
+              <PasswordStrengthMeter password={form.password} />
             </label>
 
             <label>
               <span className="label-mini">Confirm password</span>
-              <input
-                data-testid="signup-password-confirm"
-                className="input"
-                type="password"
+              <PasswordInput
+                testId="signup-password-confirm"
                 required
                 minLength={6}
+                autoComplete="new-password"
                 value={form.password_confirm}
                 onChange={(e) => u("password_confirm", e.target.value)}
                 placeholder="Re-enter password"

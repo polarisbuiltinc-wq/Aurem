@@ -1,52 +1,37 @@
 /**
- * PasswordStrengthMeter.jsx — 2026-08-19
- * Shared live strength indicator for Change/Reset password forms.
- * Client-side heuristic only — server-side length/policy rules are
- * the source of truth; this is a UX nudge, not validation.
+ * PasswordStrengthMeter.jsx — 2026-08-19 (consolidated from Signup.jsx's
+ * original inline meter, 2026-08-19 later same-day pass)
+ * Shared live strength indicator for Signup/Change/Reset password
+ * forms. Scoring lives in `lib/passwordStrength.js` (length + char-class
+ * diversity + common-password/sequence/repeat block-list) — single
+ * source of truth, also used by Signup.jsx for submit-gate validation.
  */
 import React from "react";
-
-export function scorePassword(pw) {
-  if (!pw) return 0;
-  let score = 0;
-  if (pw.length >= 8) score++;
-  if (pw.length >= 12) score++;
-  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
-  if (/\d/.test(pw)) score++;
-  if (/[^A-Za-z0-9]/.test(pw)) score++;
-  return Math.min(score, 4);
-}
-
-const LEVELS = [
-  { label: "Too weak", color: "var(--danger, #ff6b6b)" },
-  { label: "Weak", color: "var(--danger, #ff6b6b)" },
-  { label: "Fair", color: "var(--warn, #ffc560)" },
-  { label: "Good", color: "var(--warn, #ffc560)" },
-  { label: "Strong", color: "var(--ok, #6dd4a1)" },
-];
+import { scorePassword } from "../lib/passwordStrength";
 
 export default function PasswordStrengthMeter({ password }) {
   if (!password) return null;
-  const score = scorePassword(password);
-  const level = LEVELS[score];
+  const s = scorePassword(password);
   return (
-    <div data-testid="password-strength-meter" style={{ display: "grid", gap: 4, marginTop: -4 }}>
-      <div style={{ display: "flex", gap: 4 }}>
+    <div data-testid="password-strength-meter" style={{ display: "grid", gap: 4, marginTop: 6 }}>
+      <div style={{ display: "flex", gap: 3, height: 4, borderRadius: 2, overflow: "hidden" }}>
         {[0, 1, 2, 3].map((i) => (
           <div
             key={i}
             data-testid={`password-strength-bar-${i}`}
             style={{
-              height: 4, flex: 1, borderRadius: 2,
-              background: i < score ? level.color : "var(--border)",
-              transition: "background 160ms ease",
+              flex: 1,
+              background: i < s.score ? s.color : "rgba(255,255,255,0.08)",
+              transition: "background 120ms ease",
             }}
           />
         ))}
       </div>
-      <span data-testid="password-strength-label" style={{ fontSize: 11, color: level.color }}>
-        {level.label}
-      </span>
+      {s.label && (
+        <span data-testid="password-strength-label" style={{ fontSize: 11, color: s.ok ? "var(--text-dim)" : s.color }}>
+          {s.label}
+        </span>
+      )}
     </div>
   );
 }
