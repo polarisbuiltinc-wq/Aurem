@@ -11,6 +11,11 @@ Schema (`cto_support` collection — same one the admin Support panel reads):
 Endpoints:
   · POST /support/tickets        — logged-in ticket create (subject optional)
   · POST /support/tickets/token  — public, HMAC-token-verified from email links
+  · POST /support/tickets/public — public, no-login, no-token — 2026-08-19
+    fix: the footer "Support" link on Landing had no token, so
+    anonymous/pre-signup visitors landed on a permanently-disabled
+    form. This is a genuine name+email+message path, rate-limited
+    per-IP since it takes zero identity verification.
   · GET  /support/tickets        — list my tickets (logged in)
   · GET  /support/tickets/{id}   — one of my tickets (logged in)
 
@@ -20,19 +25,26 @@ admin routes are reused from routers/admin_support.py).
 from __future__ import annotations
 
 import logging
+import re
 import time
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 
 from cto_services.auth import current_dev
 from cto_services.db import require_db
 from services.first50_campaign import support_token
+from services.rate_limiter import check_rate_limit_async, client_ip_from_request
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/support", tags=["Support"])
+
+_EMAIL_RX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# Same 5/min-per-IP ceiling the promo waitlist endpoint uses for public,
+# unauthenticated form submits — generous for humans, blocks scripted abuse.
+PUBLIC_TICKET_RATE_PER_IP_MIN = 5
 
 
 # Sources we accept. Kept as a soft allow-list so unknown values still
@@ -151,6 +163,54 @@ async def create_ticket_by_token(payload: CreateTicketByToken) -> dict:
         user_id=dev.get("user_id") or f"unauth-{email}",
         user_email=email,
         name=dev.get("name"),
+        body=payload.body,
+        source=_normalize_source(payload.source),
+    )
+    return {"ok": True, "ticket_id": ticket_id}
+
+
+class CreateTicketPublic(BaseModel):
+    name: Optional[str] = None
+    email: str
+    body: str
+    source: Optional[str] = "landing"
+
+
+@router.post("/tickets/public")
+async def create_ticket_public(payload: CreateTicketPublic, request: Request) -> dict:
+    """Fully public, no-login, no-token ticket create.
+
+    2026-08-19 fix: before this, the ONLY unauthenticated path was
+    `/tickets/token`, which requires a signed HMAC token that only
+    exists inside campaign emails. A pre-signup visitor clicking the
+    site's own footer "Support" link had no way to reach us at all —
+    this endpoint is that path. Since it takes zero identity proof,
+    it's per-IP rate-limited like the promo waitlist endpoint.
+    """
+    email = (payload.email or "").strip().lower()
+    if not email or not _EMAIL_RX.match(email) or len(email) > 254:
+        raise HTTPException(400, "Please enter a valid email address.")
+    if not (payload.body or "").strip():
+        raise HTTPException(400, "message body is required")
+
+    client_ip = client_ip_from_request(request)
+    if not await check_rate_limit_async(
+        f"support-public-ip:{client_ip}", PUBLIC_TICKET_RATE_PER_IP_MIN,
+    ):
+        raise HTTPException(429, "Too many messages from this network. Try again in a minute.")
+
+    db = require_db()
+    # Best-effort match to an existing account so admin sees continuity
+    # if this visitor later signs up / already has one under this email.
+    dev = await db.dev_users.find_one(
+        {"email": email},
+        {"_id": 0, "user_id": 1, "name": 1},
+    ) or {}
+    ticket_id = await _insert_ticket(
+        db,
+        user_id=dev.get("user_id") or f"unauth-{email}",
+        user_email=email,
+        name=(payload.name or dev.get("name") or "").strip()[:120] or None,
         body=payload.body,
         source=_normalize_source(payload.source),
     )

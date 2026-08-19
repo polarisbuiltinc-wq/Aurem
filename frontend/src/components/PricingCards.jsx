@@ -408,7 +408,15 @@ export default function PricingCards({ currentTier = "free", compact = false }) 
 
             <button
               data-testid={`pricing-cta-${t.id}`}
-              disabled={isCurrent || !t.paid || busy === t.id}
+              // 2026-08-19 fix: this used to be `isCurrent || !t.paid || ...`,
+              // which disabled the button whenever it's your current plan —
+              // INCLUDING the current-PAID-plan case, where the label reads
+              // "Manage billing" and the click should open the real Stripe
+              // portal (openPortal() below). Only the current-FREE-plan case
+              // (nothing to manage) should stay disabled. Matches the
+              // `cursor`/`opacity` styling below, which already had this
+              // right — only the `disabled` attribute was wrong.
+              disabled={(isCurrent && !t.paid) || busy === t.id}
               onClick={() => {
                 if (isCurrent && t.paid) openPortal();
                 else if (t.paid) upgrade(t.id);

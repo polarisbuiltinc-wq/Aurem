@@ -4,6 +4,69 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## Latest ship — Cancel-billing + anonymous-support bugs FIXED, tested in preview (2026-08-19)
+
+Founder approved priority: fix #1 (billing button) + #2 (support form) now, report with evidence; #3 (per-user $ cap) scope-only.
+
+**Fix #1 — "Manage billing" disabled-button bug** (`frontend/src/
+components/PricingCards.jsx`): `disabled={isCurrent || !t.paid || busy
+=== t.id}` → `disabled={(isCurrent && !t.paid) || busy === t.id}`. Now
+matches the cursor/opacity styling that was already correct. **Live
+evidence**: created a real non-founder test user, set tier=pro, logged
+in via browser — button showed "Manage billing", NOT disabled,
+clicking it fired `POST /payments/portal` and backend logs show a real
+`GET https://api.stripe.com/v1/subscriptions/<id>` call (404 only
+because the test used a fake subscription ID — the full pipeline
+fired, which was impossible before the fix). ⚠️ Note: this preview's
+`STRIPE_API_KEY` is a **live** key, not test-mode — be careful with
+future checkout-flow screenshots (one harmless abandoned real checkout
+session was created during testing, no card entered, no charge).
+Test data cleaned up after.
+
+**Fix #2 — anonymous/pre-signup support form**: added
+`POST /support/tickets/public` (`routers/support.py`) — genuine
+no-login, no-token path (name optional, email + body required),
+5/min-per-IP rate limited like the promo waitlist endpoint, writes to
+the same `cto_support`/`cto_support_messages` the admin panel reads.
+Rewrote `pages/Support.jsx` to show an always-usable form: token
+present → old locked-email flow unchanged; no token → editable
+name+email fields, posts to the new endpoint. Removed the old
+permanently-disabled state. **Live evidence**: browser screenshot flow
+(no login) — filled form, submitted, got the success confirmation
+screen; ticket confirmed written to `cto_support` with correct
+`user_email`; rate limit confirmed tripping at the 6th request/min.
+
+**Tests**: `backend/tests/test_2026_08_19_public_support_ticket.py`
+(5 new), `frontend/src/components/__tests__/
+PricingCards.manageBilling.test.js` (2 new) — all green, plus full
+re-run of `test_iter388u_support_reply_ux.py` +
+`test_deploy_2026_08_19_health_probe_and_exceptiongroup.py` +
+`test_deploy_hardening_middleware_no_response.py` +
+`test_iter386_global_rate_limit.py` (36 total) — zero regressions.
+
+**Fix #3 (flagged, NOT built) — per-user $ cost cap, scope estimate**:
+- **Blocking dependency**: cannot build a $ cap before $ cost exists
+  for the customer chat path (confirmed 0% coverage — see cost-gap
+  finding above). Founder already agreed this cost-tracking wiring is
+  the real P0, sequenced before the cap itself.
+- **Once cost tracking exists**, the cap itself is comparatively
+  small: (a) a `monthly_cost_usd` aggregate per user (mirrors the
+  existing `assert_has_task_budget` pattern in `services/usage.py`),
+  (b) a per-tier $ ceiling config (e.g. free=$0.50, starter=$3,
+  pro=$8, team=$20 — needs founder pricing input, not a guess), (c) a
+  check alongside the existing task-count check in `chat.py`'s message
+  entrypoint, (d) admin visibility/alerting when a user approaches the
+  ceiling (reuse `BI Cockpit` patterns). **Estimate: medium**, roughly
+  on the same order as the G22 idle-spend-guard work already shipped,
+  once cost-tracking wiring (the real P0) is done first — this piece
+  alone is not the hard part.
+
+Founder's confirmed sequence going forward: (1) #1/#2 shipped this
+turn ✅, (2) cost-tracking wiring into main chat path — next, real P0,
+(3) DB monthly restore drill — approved, quick effort, after that.
+External uptime monitor — founder handling directly (UptimeRobot/
+BetterStack), no code needed.
+
 ## Latest ship — Founder-level 10-point readiness audit + DeepSeek/cost-gap report delivered (2026-08-19)
 
 Report-only, zero code changes (per founder's explicit "report first" instruction). Deploy fix from the entry below is still awaiting founder's live-evidence confirmation — do not mark it prod-verified until that's pasted.

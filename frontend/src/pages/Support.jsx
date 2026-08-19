@@ -1,20 +1,19 @@
 /**
  * pages/Support.jsx — Public support-message page.
  *
- * Landing page for the "Need help?" link inside every campaign email
- * (Stage 0/3/7) and other transactional emails. Identity is verified
- * via a signed HMAC token in the URL (?t=…&e=…&src=…) so the user
- * doesn't need to log in to file a ticket.
+ * Two entry paths:
+ *   1. Token link inside campaign emails (?t=…&e=…&src=…) — identity
+ *      pre-verified via signed HMAC, email locked, posts to
+ *      /support/tickets/token.
+ *   2. 2026-08-19 fix: anyone else (e.g. the plain footer "Support"
+ *      link on Landing, or a pre-signup visitor with no email link at
+ *      all) — a normal name+email+message form, posts to the new
+ *      public endpoint /support/tickets/public. Before this fix the
+ *      page was permanently disabled without a token, so the site's
+ *      own footer link led to a form nobody could actually submit.
  *
- * Flow:
- *   1. Parse ?t (token), ?e (email), ?src (source label) from URL
- *   2. Show a subject-less textarea + submit button
- *   3. POST /support/tickets/token with those exact fields
- *   4. Backend verifies HMAC(support:<email>) == t, writes to
- *      cto_support (same collection admin Support panel reads)
- *
- * If the token is invalid/expired the user still sees the form; the
- * backend rejects with 403 and we show a friendly error.
+ * Backend verifies the HMAC for path 1, rate-limits path 2 by IP;
+ * both write to the same `cto_support` collection the admin panel reads.
  */
 import React, { useState, useMemo } from "react";
 import { useLocation, Link } from "react-router-dom";
@@ -34,30 +33,44 @@ const PAL = {
   okBorder:  "rgba(234, 179, 8, 0.28)",
 };
 
+const EMAIL_RX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
 export default function Support() {
   const loc = useLocation();
   const params = useMemo(() => new URLSearchParams(loc.search), [loc.search]);
   const token  = params.get("t")   || "";
   const email  = params.get("e")   || "";
-  const source = params.get("src") || "email_other";
+  const source = params.get("src") || "landing";
 
   const [body, setBody] = useState("");
+  const [name, setName] = useState("");
+  const [emailInput, setEmailInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState(null); // "ok" | "err" | null
   const [err, setErr] = useState("");
   const [ticketId, setTicketId] = useState("");
 
   const hasToken = !!(token && email);
+  const effectiveEmail = hasToken ? email : emailInput.trim().toLowerCase();
+  const emailValid = hasToken || EMAIL_RX.test(effectiveEmail);
+  const canSubmit = !!body.trim() && emailValid && !busy;
 
   async function submit(e) {
     e.preventDefault();
-    if (!body.trim() || busy) return;
+    if (!canSubmit) return;
     setBusy(true);
     setErr("");
     try {
-      const r = await axios.post(`${API_BASE}/support/tickets/token`, {
-        t: token, e: email, source, body,
-      }, { timeout: 15000 });
+      const r = hasToken
+        ? await axios.post(`${API_BASE}/support/tickets/token`, {
+            t: token, e: email, source, body,
+          }, { timeout: 15000 })
+        : await axios.post(`${API_BASE}/support/tickets/public`, {
+            name: name.trim() || undefined,
+            email: effectiveEmail,
+            source,
+            body,
+          }, { timeout: 15000 });
       setTicketId(r.data?.ticket_id || "");
       setStatus("ok");
     } catch (ex) {
@@ -114,7 +127,7 @@ export default function Support() {
             </div>
             <div style={{ fontSize: 13, color: PAL.muted, lineHeight: 1.5 }}>
               Thanks — I read every one. You'll hear back at{" "}
-              <b style={{ color: PAL.text }}>{email}</b>.
+              <b style={{ color: PAL.text }}>{effectiveEmail}</b>.
               {ticketId && (
                 <div style={{ marginTop: 6, fontSize: 11,
                               fontFamily: "monospace" }}>
@@ -126,24 +139,47 @@ export default function Support() {
         ) : (
           <form onSubmit={submit}>
             {!hasToken && (
-              <div style={{
-                background: PAL.errBg, border: `1px solid ${PAL.errBorder}`,
-                padding: "10px 12px", borderRadius: 8, fontSize: 12,
-                color: "#f87171", marginBottom: 16,
-              }}>
-                This link is missing its identity token — please open the
-                link from your original email, or use the in-app help
-                button once you're signed in.
-              </div>
+              <>
+                <input
+                  data-testid="support-page-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Your name (optional)"
+                  style={{
+                    width: "100%", boxSizing: "border-box",
+                    background: "#0b0b0b", color: PAL.text,
+                    border: `1px solid ${PAL.border}`,
+                    borderRadius: 8, padding: 12,
+                    fontSize: 14, fontFamily: "inherit",
+                    outline: "none", marginBottom: 10,
+                  }}
+                />
+                <input
+                  data-testid="support-page-email"
+                  type="email"
+                  required
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  placeholder="Your email — so I can reply"
+                  style={{
+                    width: "100%", boxSizing: "border-box",
+                    background: "#0b0b0b", color: PAL.text,
+                    border: `1px solid ${PAL.border}`,
+                    borderRadius: 8, padding: 12,
+                    fontSize: 14, fontFamily: "inherit",
+                    outline: "none", marginBottom: 16,
+                  }}
+                />
+              </>
             )}
             <textarea
               data-testid="support-page-body"
-              autoFocus
+              autoFocus={hasToken}
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="What do you need help with?"
               rows={7}
-              disabled={!hasToken || busy}
               style={{
                 width: "100%", boxSizing: "border-box",
                 background: "#0b0b0b", color: PAL.text,
@@ -162,15 +198,14 @@ export default function Support() {
             <button
               type="submit"
               data-testid="support-page-submit"
-              disabled={!hasToken || !body.trim() || busy}
+              disabled={!canSubmit}
               style={{
                 marginTop: 16, width: "100%",
                 background: PAL.accent, color: "#000",
                 border: "none", borderRadius: 8,
                 padding: "12px 24px", fontSize: 14, fontWeight: 600,
-                cursor: (!hasToken || !body.trim() || busy)
-                  ? "not-allowed" : "pointer",
-                opacity: (!hasToken || !body.trim() || busy) ? 0.5 : 1,
+                cursor: !canSubmit ? "not-allowed" : "pointer",
+                opacity: !canSubmit ? 0.5 : 1,
               }}>
               {busy ? "Sending…" : "Send message"}
             </button>
