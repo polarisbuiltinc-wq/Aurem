@@ -4,6 +4,14 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## Latest ship — Deploy fix round 2 (health-probe short-circuit) + user-confirmed PRODUCTION LIVE (2026-08-19)
+
+**User-confirmed LIVE in production** (real evidence pasted, not assumed): `GET /api/health` on auremcto.com → `{"ok":true,"env":"production","built_at":"2026-08-19T23:22:21","db":true,"uptime_s":371.94,"dead":[]}`. This confirms round-1 of the deploy fix (health-path skip-list + `BaseExceptionGroup` catch) AND SEC-005/SEC-006 are live in production — highest evidence tier available.
+
+**Round 2 (preview-only, NOT yet deployed)**: founder's pasted deploy logs from the round-1-deployed build still showed the underlying Starlette `BaseHTTPMiddleware` client-disconnect race firing on `GET /health` (caught gracefully by round 1's except clause now, no crash — but still noisy error-log entries). Root cause: this is a known Starlette architectural race (client disconnects mid-`call_next()`, e.g. a tight K8s probe timeout) that no amount of except-clause tuning inside the middleware can prevent, since it happens inside Starlette's own `call_next()` dispatch. Fix: `/health`, `/healthz`, `/ping` (all three literally `return {"ok": True}`, zero DB/async work — see `healthz_root()`) now short-circuit BEFORE calling `call_next()` at all, answered inline by the middleware itself. `/api/health` (does real work — commit_sha, integration checks) deliberately NOT short-circuited, still relies on round-1's exception catch as its safety net. Verified: sequential + 50-concurrent `curl /health` all 200, backend logs clean, `_HEALTH_PROBE_EXACT_PATHS` unit-testable via existing `_global_rl_should_skip`-adjacent test file.
+
+Founder needs to redeploy again to get round 2 live — told explicitly, not claimed as live.
+
 ## Latest ship — Cost-tracking wiring into main chat path SHIPPED (P0), tested live (2026-08-19)
 
 Founder-approved P0, done before R2/Stripe follow-ups (both currently blocked on founder-side credential generation — see below).

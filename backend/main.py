@@ -2030,8 +2030,32 @@ def _global_rl_should_skip(request) -> bool:
 _GLOBAL_RL_PER_MIN = int(os.getenv("GLOBAL_RATE_LIMIT_PER_MIN", "300"))
 
 
+# Trivial, side-effect-free, ultra-hot paths hit directly by the K8s
+# pod-level liveness/readiness probe (see healthz_root() — literally
+# `return {"ok": True}`, zero DB/async work). Kept as an exact-match
+# set (not the broader `_GLOBAL_RL_SKIP_PREFIXES`) because we only
+# want to bypass `call_next()` entirely for paths we can 100%
+# replicate inline — never for `/api/health` (does real work:
+# commit_sha, integration checks) or anything else.
+_HEALTH_PROBE_EXACT_PATHS = frozenset({"/health", "/healthz", "/ping"})
+
+
 @app.middleware("http")
 async def _global_rate_limit_guard(request, call_next):
+    # 2026-08-19 deploy-log fix, round 2: the round-1 fix (catching
+    # BaseExceptionGroup below) stops the crash from propagating, but
+    # the deploy logs still showed the *same* anyio.EndOfStream /
+    # "RuntimeError: No response returned" firing repeatedly on
+    # `GET /health` — a Starlette BaseHTTPMiddleware architectural
+    # race (client disconnects mid-response, e.g. a tight K8s probe
+    # timeout) that no amount of except-clause tuning inside
+    # call_next() can prevent, because the race lives in Starlette's
+    # own dispatch of call_next(), not in our code. The only real fix
+    # is to never enter call_next() at all for these exact paths —
+    # they're static enough (`{"ok": True}`) to answer inline.
+    if request.url.path in _HEALTH_PROBE_EXACT_PATHS and request.method != "OPTIONS":
+        return JSONResponse({"ok": True})
+
     if _global_rl_should_skip(request):
         # Even the skip path must respect the middleware contract of
         # ALWAYS returning a response — Starlette's BaseHTTPMiddleware
