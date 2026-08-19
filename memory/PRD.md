@@ -4,6 +4,28 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## Latest ship — Show/hide password toggle (2026-08-19)
+
+New shared `frontend/src/components/PasswordInput.jsx` (eye/eye-off
+icon toggle, `lucide-react`) — wired into Login (`login-password`),
+`ChangePasswordCard` (current/new/confirm), and `ResetPassword`
+(new/confirm) so every password field in the self-service auth flow
+behaves identically. Screenshot-verified: masked → click eye → plain
+text visible, icon flips eye→eye-off. `Signup.jsx` intentionally left
+untouched (out of requested scope; has its own pre-existing strength
+meter via `lib/passwordStrength.js` — a separate, older implementation
+from `PasswordStrengthMeter.jsx`, not consolidated in this pass).
+
+**Founder confirmed production password rotated** via the self-service
+Forgot Password flow (built earlier this session) — old leaked
+passwords now dead/inactive. SEC-001 item 3 (§7.4 in
+`CODEBASE_AUDIT.md`) can be marked ✅ once founder confirms; items 4
+(git-history scrub) and 5 (final re-audit) still open, founder
+following up with Emergent Support (support@emergent.sh) on both the
+production-script question and the `git-filter-repo` vs Save-to-GitHub/
+Rollback interaction question — support confirmed no official
+documented path for either yet.
+
 ## Latest ship — Regression Coverage: 8/8 patterns now automated (2026-08-19)
 
 Closed the "5 have no automated test yet" gap flagged in the codebase

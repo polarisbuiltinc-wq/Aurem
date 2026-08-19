@@ -9,6 +9,7 @@ import AuthShell from "../components/AuthShell";
 import usePageMeta from "../lib/usePageMeta";
 import { api, setToken, setUser } from "../lib/api";
 import RobotGuide, { RobotGuideKeyframes, escapeHtml } from "../components/RobotGuide";
+import PasswordInput from "../components/PasswordInput";
 
 export default function Login() {
   usePageMeta({
@@ -329,12 +330,11 @@ export default function Login() {
 
             <label>
               <span className="label-mini">Password</span>
-              <input
-                data-testid="login-password"
-                className="input"
-                type="password"
+              <PasswordInput
+                testId="login-password"
                 required
                 minLength={6}
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />

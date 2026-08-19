@@ -11,6 +11,7 @@ import AuthShell from "../components/AuthShell";
 import usePageMeta from "../lib/usePageMeta";
 import { api } from "../lib/api";
 import PasswordStrengthMeter from "../components/PasswordStrengthMeter";
+import PasswordInput from "../components/PasswordInput";
 
 export default function ResetPassword() {
   usePageMeta({
@@ -82,12 +83,11 @@ export default function ResetPassword() {
             <form onSubmit={submit} style={{ display: "grid", gap: 16 }}>
               <label>
                 <span className="label-mini">New password</span>
-                <input
-                  data-testid="reset-password-input"
-                  className="input"
-                  type="password"
+                <PasswordInput
+                  testId="reset-password-input"
                   required
                   minLength={6}
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
@@ -95,12 +95,11 @@ export default function ResetPassword() {
               </label>
               <label>
                 <span className="label-mini">Confirm new password</span>
-                <input
-                  data-testid="reset-password-confirm-input"
-                  className="input"
-                  type="password"
+                <PasswordInput
+                  testId="reset-password-confirm-input"
                   required
                   minLength={6}
+                  autoComplete="new-password"
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                 />

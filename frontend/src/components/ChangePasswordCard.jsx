@@ -8,6 +8,7 @@ import React, { useState } from "react";
 import { KeyRound } from "lucide-react";
 import { api } from "../lib/api";
 import PasswordStrengthMeter from "./PasswordStrengthMeter";
+import PasswordInput from "./PasswordInput";
 
 export default function ChangePasswordCard() {
   const [current, setCurrent] = useState("");
@@ -51,26 +52,31 @@ export default function ChangePasswordCard() {
       <form onSubmit={submit} style={{ display: "grid", gap: 12 }}>
         <label>
           <span className="label-mini">Current password</span>
-          <input
-            data-testid="change-password-current"
-            className="input" type="password" required
+          <PasswordInput
+            testId="change-password-current"
+            required
+            autoComplete="current-password"
             value={current} onChange={(e) => setCurrent(e.target.value)}
           />
         </label>
         <label>
           <span className="label-mini">New password</span>
-          <input
-            data-testid="change-password-new"
-            className="input" type="password" required minLength={6}
+          <PasswordInput
+            testId="change-password-new"
+            required
+            minLength={6}
+            autoComplete="new-password"
             value={next} onChange={(e) => setNext(e.target.value)}
           />
           <PasswordStrengthMeter password={next} />
         </label>
         <label>
           <span className="label-mini">Confirm new password</span>
-          <input
-            data-testid="change-password-confirm"
-            className="input" type="password" required minLength={6}
+          <PasswordInput
+            testId="change-password-confirm"
+            required
+            minLength={6}
+            autoComplete="new-password"
             value={confirm} onChange={(e) => setConfirm(e.target.value)}
           />
         </label>
