@@ -4,6 +4,84 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## Latest ship — Founder-level 10-point readiness audit + DeepSeek/cost-gap report delivered (2026-08-19)
+
+Report-only, zero code changes (per founder's explicit "report first" instruction). Deploy fix from the entry below is still awaiting founder's live-evidence confirmation — do not mark it prod-verified until that's pasted.
+
+**DeepSeek/OpenRouter follow-up (delivered this turn)**:
+- Clarified the "3 vs 5 X-Title" question: same finding, expanded. The
+  3 the founder saw on the OpenRouter dashboard are the 3 highest-
+  volume titles (`"AUREM"`, `"AUREM ORA Chat"`, `"AUREM - upload/
+  convert (image)"`); source-level grep during the DeepSeek
+  investigation found 2 more low-volume variants (`"Aurem - Graph
+  Diagram"`, `"Aurem Advisor"`) that likely don't generate enough
+  tokens to rank in the dashboard's visible "Top Apps" view.
+- **Cost-undercounting quantified with real preview data** (not just
+  qualitative): `chat_sessions` has 2,739 total turns across 917
+  sessions; `ora_chat_usage` has 241 rows total, and a
+  `route`/`user_id` breakdown proves **100% of those 241 rows are
+  admin-ORA-chat / system-health-check / QA-canary traffic — ZERO
+  are customer-facing `/chat/send` or `/chat/stream` turns.** So it's
+  not "undercounted", it's "not counted at all" for the primary
+  product surface. Total tracked spend in this preview sample:
+  $0.124, entirely non-customer.
+
+**Founder 10-point readiness audit** — full findings delivered to
+founder in chat (not fully duplicated here to avoid PRD bloat; see
+chat transcript same date). Summary of anything NOT already ✅:
+- G9 external uptime monitor: ❌ MISSING (confirmed, no
+  UptimeRobot/BetterStack config anywhere) — quick fix, but requires
+  founder to create an external account (~15 min, zero code).
+- DB restore: ⚠️ PARTIAL — real restore code exists
+  (`services/db_restore.py`) and was preview E2E verified (121/122
+  collection parity) per `FUTURE_BUILDS_LEDGER.md` item #5, but no
+  recurring automated restore-test/drill exists (`CODEBASE_AUDIT.md`
+  G11 note) and no production restore has ever been evidenced.
+- Self-serve cancel: ⚠️ PARTIAL/BROKEN — real bug found in
+  `frontend/src/components/PricingCards.jsx` line ~411: the "Manage
+  billing" button's `disabled={isCurrent || !t.paid || ...}` disables
+  itself whenever `isCurrent` is true, INCLUDING the current-paid-tier
+  case it exists to serve. `POST /payments/portal` (real Stripe
+  billing-portal session) is correct on the backend; the button that
+  should call it is inert. Quick fix (one-line condition change) —
+  logged here so it doesn't get lost.
+- Support channel for logged-out/pre-signup visitors: ❌ effectively
+  MISSING — `pages/Support.jsx`'s form is `disabled` without a
+  signed `?t=&e=` token (normally only present in campaign emails);
+  the plain footer link on Landing has no token, so a first-time
+  visitor clicking the site's own "Support" link lands on an inert
+  form. `GlobalHelpFAB` only shows to logged-in users on non-marketing
+  routes.
+- Per-user $ cost cap: ❌ MISSING (confirmed) — only a flat monthly
+  task-COUNT cap exists (`services/usage.py`), no $-based ceiling, and
+  combined with the chat.py cost-gap above there's currently no way
+  to even detect a single user generating outsized inference cost.
+- Pricing: confirmed live via screenshot + code — Free $0 / Starter
+  $9 / Pro $19 ("Most Popular") / Team $49, all 4 tiers match
+  `subscription_tiers.py` and `PricingCards.jsx` exactly, no drift.
+- Signup→paid conversion: ✅ real, `GET /admin/insights/
+  activation-funnel` (`routers/admin.py`) computes signup → GitHub
+  connect → project added → message sent → shipped → paid, filtered
+  for test accounts, rendered in `AdminOverview.jsx`'s `FunnelCard`.
+  Visitor→signup (top-of-funnel) is tracked via Google Ads
+  gtag + Meta Pixel (both live in `index.html`) but those numbers live
+  in Google Ads/Meta Ads Manager, not inside our own admin panel —
+  ⚠️ PARTIAL, not unified.
+- ToS/Privacy: ✅ real content, not stubs — `/terms`, `/privacy` plus
+  7 more policy docs (refund, cookie, security, DPA, subprocessors,
+  AUP, status) in `frontend/public/policies/`, 700-1050 words each.
+- DB backups: ✅ real, automated nightly cron → Cloudflare R2, 30-day
+  retention (`services/db_backup.py`), confirmed live in this
+  session's own boot logs.
+
+Founder approved next: (1) deliver this report [done], (2)
+consolidate the 5 OpenRouter X-Title values to 1 canonical name —
+next up, (3) wire `cost_tracker.log_call()` into the main chat path
+for real cost visibility — flagged high priority once deploy is
+confirmed stable, (4) fix the Manage-billing disabled-button bug — not
+yet approved/scheduled, awaiting founder go-ahead since this session's
+mandate has been report-only so far.
+
 ## Latest ship — Deploy-log crash FIXED + deployment_agent PASS, awaiting founder redeploy (2026-08-19)
 
 Founder pasted real prod deploy logs (K8s/Nginx upstream timeout on
