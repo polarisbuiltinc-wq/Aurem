@@ -1227,6 +1227,11 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
             watchdog: t.watchdog,
             feedback: t.feedback,
             shipped_task_id: t.shipped_task_id,
+            // Chat UX #4 (Tier 1) — hydrate the persisted "📖 Reading
+            // repo… ✍️ Writing files…" step trail so it survives a
+            // page refresh instead of vanishing (MessageBubble already
+            // renders `m.steps` via <StepCards/> when non-empty).
+            steps: Array.isArray(t.steps) && t.steps.length > 0 ? t.steps : undefined,
           })));
           // Iter 212m-44 — the user has prior turns in this session
           // (reloaded mid-conversation), so the chrome (top tabs +

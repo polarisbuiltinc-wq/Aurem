@@ -12,6 +12,16 @@ answer questions, propose fixes, apply them via GitHub commits/PRs, and
 run scan+fix pipelines (health, security, quality). Zero-mock — every fix
 is a real GitHub commit with a verified SHA.
 
+## Latest ship — Chat UX #4 Tier 1 · Step-trail persistence (2026-08-19)
+
+**Preview-verified** (DB unit tests + HTTP contract test + 3x hard-reload
+browser check). Prod-verification pending founder deploy.
+
+Fixes the "Reading/Diff sequence disappears on refresh" gap: the
+`📖 Reading repo… ✍️ Writing files…` step cards now persist to Mongo
+on the assistant turn and hydrate back on page reload. See
+`/app/memory/CHANGELOG.md` for full detail.
+
 ## Latest ship — Slice A · BI Cockpit (2026-02-18)
 
 **Preview-verified**, prod-verification pending founder run.

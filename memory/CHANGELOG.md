@@ -34,6 +34,12 @@
   - **Regression**: `/app/backend/tests/test_slice_a_bi_cockpit.py` — 4 pytest cases (shape contract for each endpoint + anonymous access rejected). All green.
   - Not yet shipped to prod — awaits founder verification of read-only prod DB snapshot (still-pending orphan count check before deploy) and manual PSI Mobile score paste.
 
+- **Chat UX #4 (Tier 1) — Reading/Diff step-trail persistence, preview-verified (2026-08-19)** — the live "📖 Reading repo… ✍️ Writing files… 🚀 Committing…" step-trail only ever lived in frontend in-memory state; a page refresh called `GET /chat/history` (which never returned a `steps` field) so the trail silently vanished, leaving only the final text bubble.
+  - Backend: `routers/chat.py` `_persist_turn()` gained an optional `steps` kwarg (capped at the last 40). The main SSE loop now accumulates every `{type:"step"}` frame into `collected_steps` and passes it to both `_persist_turn` call sites (timeout-guard branch + normal completion). `GET /chat/history` needed no change — it already returns the raw turn dict.
+  - Frontend: `ChatPanel.jsx` history-hydration mapper now carries `t.steps` onto each historical message. `MessageBubble.jsx` gained a second `<StepCards/>` render site (guarded by `!m.streaming`) so historical/hydrated messages with `m.steps` render the same step cards the live turn showed, all flipped to ✅.
+  - Regression: `tests/test_chatux4_step_persistence.py` (2/2) + testing-agent-added `tests/test_chatux4_history_steps_api.py` (HTTP round-trip). Full browser verification: seeded 3-step turn survived 3 consecutive hard reloads.
+  - Not yet prod-verified — founder is separately setting up Cloudflare R2 for the asset-migration Pass A leak fix; this ships whenever founder deploys next.
+
 See `/app/memory/DEPLOY_VERIFICATION_CHECKLIST.md` for the mandatory deploy protocol.
 
 - **Iter 392 + 393 · PROD-VERIFIED via 4-check battery (2026-02-15)** — after the previous same-session queue-dedup absorbed calls 2+3, a fresh marker-comment commit to `frontend/vite.config.js` broke the dedup and forced a real new run. All 4 evidence checks green:

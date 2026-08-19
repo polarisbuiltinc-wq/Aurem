@@ -560,12 +560,19 @@ async def _persist_turn(user_id: str, session_id: str, user_prompt: str,
                         assistant_reply: str, provider: str,
                         watchdog: Optional[dict] = None,
                         project_id: Optional[str] = None,
-                        shipped_task_id: Optional[str] = None) -> None:
+                        shipped_task_id: Optional[str] = None,
+                        steps: Optional[list] = None) -> None:
     """Append user+assistant turns to db.chat_sessions, capped at 40 turns.
     Tags the session with the project it belongs to (None == Home/global).
     Iter 51 — when `shipped_task_id` is set (e.g. Mode D→C auto-handoff),
     it's pinned on the assistant turn so a refresh keeps the live progress
-    card rendered (same contract as /chat/turn/shipped)."""
+    card rendered (same contract as /chat/turn/shipped).
+    Chat UX #4 (Tier 1) — when `steps` is a non-empty list of the SSE
+    {type:"step"} frames emitted during this turn, pin it on the
+    assistant turn too so GET /chat/history returns it verbatim and a
+    page refresh keeps the "📖 Reading repo… ✍️ Writing files…" progress
+    trail visible instead of it vanishing (it previously lived only in
+    the in-memory `messages` state)."""
     db = get_db()
     if db is None or not session_id:
         return
@@ -579,6 +586,9 @@ async def _persist_turn(user_id: str, session_id: str, user_prompt: str,
         assistant_turn["watchdog"] = watchdog
     if shipped_task_id:
         assistant_turn["shipped_task_id"] = shipped_task_id
+    if steps:
+        # Cap so a runaway tool-loop can't bloat the session doc.
+        assistant_turn["steps"] = steps[-40:]
     set_on_insert = {
         "session_id": session_id,
         "user_id": user_id,
@@ -2705,6 +2715,11 @@ async def chat_stream(
         )
 
         result = None
+        # Chat UX #4 (Tier 1) — accumulate every {type:"step"} frame this
+        # turn emits so it can be persisted with the assistant turn below
+        # and survive a page refresh (see StepCards.jsx / MessageBubble.jsx
+        # `m.steps` hydration).
+        collected_steps: list = []
         deadline_at = _t.monotonic() + HARD_TIMEOUT_S
         while True:
             try:
@@ -2782,6 +2797,7 @@ async def chat_stream(
                         user_id, body.session_id or "",
                         body.prompt, content, "aurem-timeout-guard",
                         project_id=body.project_id,
+                        steps=collected_steps,
                     )
                 except Exception:
                     logger.exception("timeout persist_turn failed")
@@ -2813,6 +2829,12 @@ async def chat_stream(
                 # "📖 Reading repo…", "✍️ Writing files…", "🚀 Committing…",
                 # "✅ Done"). Streamed verbatim — frontend renders these
                 # in the live progress strip.
+                # Chat UX #4 (Tier 1) — also stash it so we can persist
+                # the full sequence once the turn finishes.
+                collected_steps.append({
+                    "text": ev.get("text", ""),
+                    "done": bool(ev.get("done", False)),
+                })
                 yield (
                     "data: " + json.dumps({
                         "type": "step",
@@ -2937,7 +2959,8 @@ async def chat_stream(
         await _persist_turn(user_id, body.session_id or "",
                             body.prompt, content, provider, watchdog=watchdog,
                             project_id=body.project_id,
-                            shipped_task_id=handoff_task_id)
+                            shipped_task_id=handoff_task_id,
+                            steps=collected_steps)
 
         # Iter 212m-154 — non-blocking quality scoring.  Fire-and-forget
         # AFTER the user has seen their reply.  Writes to quality_scores

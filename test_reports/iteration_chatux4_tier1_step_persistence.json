@@ -1,0 +1,29 @@
+{
+  "summary": "Chat UX #4 Tier 1 step-trail persistence fix VERIFIED across all layers: DB, HTTP API, and full-browser reload. Backend `_persist_turn(steps=...)` writes the SSE step frames onto the assistant turn doc (unit test: cap-at-40 + omit-when-None). GET /api/aurem-dev/chat/history returns the `steps` array verbatim on the assistant turn (new HTTP integration test). Frontend ChatPanel hydrates `t.steps` onto message.steps and MessageBubble renders <StepCards/> for non-streaming historical messages. Live browser test: seeded a session in Mongo with a 3-step assistant turn, logged in as test@aurem.dev, pinned localStorage to that session, and confirmed `[data-testid=step-cards]` + 3 x `[data-testid=step-card-N]` render with the exact seeded text (Reading repo… / Writing files… / Committing changes…) after 3 consecutive HARD reloads. Before the fix these would have vanished.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_chatux4_step_persistence.py",
+    "/app/backend/tests/test_chatux4_history_steps_api.py",
+    "/app/test_reports/pytest/pytest_ux4.xml",
+    "/app/test_reports/screenshots/ux4_after_load.png",
+    "/app/test_reports/screenshots/ux4_persist_3reloads.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routers/chat.py `_persist_turn` correctly conditional-writes `steps` only when non-empty — backwards compatible with turns created by /chat/send (non-streaming) and legacy docs (frontend guard `Array.isArray(t.steps) && t.steps.length > 0` remains correct).",
+    "40-step cap in `_persist_turn` prevents unbounded Mongo doc growth on very long tool-heavy turns — good defensive default.",
+    "ChatPanel hydration mapper uses `undefined` (not `[]`) so MessageBubble's `Array.isArray(m.steps) && m.steps.length > 0` guard correctly hides the block on turns that had no steps — no phantom empty step-card box on casual turns.",
+    "MessageBubble now has TWO StepCards render sites (live streaming ~L826 and historical ~L721). Guard `!m.streaming` on the new one prevents double-render during a live turn. Verified: only one <StepCards/> per assistant bubble in the DOM."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_chatux4_history_steps_api.py (NEW — HTTP contract test for GET /chat/history steps round-trip)"
+  ],
+  "success_rate": {"backend": "100% (3/3 pytest, incl. new HTTP test)", "frontend": "100% (step-cards render on 3/3 hard reloads)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview) — worked as expected. user_id=test_admin_001.",
+  "seed_data_creation": "Seeded 1 chat_sessions doc (session_id TEST_ux4_da8f08b0bf3f, user_id test_admin_001) with a 3-item steps array on the assistant turn. Cleaned up post-test (delete_many on ^TEST_ux4_ prefix — 1 doc removed).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Fix is confirmed shipped and working end-to-end. The Playwright approach that works reliably: (1) login, (2) discover active project via localStorage.aurem_active_project, (3) set BOTH aurem_session_home AND aurem_session_proj_{pid} to the target session before every reload — otherwise Shell.jsx auto-reroutes to the project's most-recent session on reload and the target session is not opened. This was NOT a product bug, just a test harness quirk. The seeded session had project_id:null but the app landed on the connected project by default; pinning the proj-scoped key overrides that.",
+  "rca of the issue": "Not applicable — this iteration was a proactive fix (persist SSE step frames to Mongo on the assistant turn dict so they hydrate back via GET /chat/history + the new MessageBubble render block). Pre-fix behavior: <StepCards/> only rendered inside the live-streaming branch, so on refresh the frontend called /chat/history → mapped turns → StepCards had no `m.steps` to iterate → cards silently disappeared, leaving only the final text bubble. The fix is minimal (backend adds an optional kwarg, frontend adds one conditional block and hydrates one field) and idempotent (no schema migration, no impact on turns saved before the change since the field is simply absent)."
+}
