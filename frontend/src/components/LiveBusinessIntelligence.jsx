@@ -183,7 +183,7 @@ export default function LiveBusinessIntelligence() {
           }}>Live Business Intelligence</h2>
           <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 4 }}>
             Real Stripe · real inference cost from{" "}
-            <code>ora_chat_usage</code> · Slice A
+            <code>ora_chat_usage</code> + <code>customer_chat_cost</code> · Slice A
             <span style={{
               marginLeft: 10, padding: "2px 8px",
               background: "var(--panel)",
@@ -267,19 +267,19 @@ export default function LiveBusinessIntelligence() {
         display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
         gap: 12, marginBottom: 18,
       }}>
-        <MetricCard testid="bi-infer-today" label="Infer today"
+        <MetricCard testid="bi-infer-today" label="Infer today (combined)"
           value={`$${Number(i.today_usd || 0).toFixed(4)}`}
           tone="neutral"
-          sub={`cap $${budget.day_cap_usd || 0} · ${budget.day_used_pct || 0}%`} />
-        <MetricCard testid="bi-infer-month" label="Infer month-to-date"
+          sub={`admin tool $${Number(i.admin_tool_today_usd || 0).toFixed(4)} · customer chat $${Number(i.customer_chat_today_usd || 0).toFixed(4)}`} />
+        <MetricCard testid="bi-infer-month" label="Infer month-to-date (combined)"
           value={`$${monthInfer.toFixed(4)}`}
           tone="neutral"
-          sub={`cap $${budget.month_cap_usd || 0} · ${budget.month_used_pct || 0}%`} />
-        <MetricCard testid="bi-budget-mode" label="Budget mode"
+          sub={`admin tool $${Number(i.admin_tool_month_usd || 0).toFixed(4)} · customer chat $${Number(i.customer_chat_month_usd || 0).toFixed(4)}`} />
+        <MetricCard testid="bi-budget-mode" label="Admin-tool budget mode"
           value={(budget.mode || "unknown").replace("_", " ")}
           tone={budgetTone}
-          sub={budget.mode === "normal" ? "healthy" :
-               budget.mode === "warning" ? "70%+ of daily cap" :
+          sub={budget.mode === "normal" ? "healthy (admin-tool cap only)" :
+               budget.mode === "warning" ? "70%+ of daily cap (admin-tool)" :
                budget.mode === "economy" ? "forced GLM-5.2 route" :
                budget.mode === "spike_hard_stop" ? "chat blocked" : ""} />
         <MetricCard testid="bi-net-margin" label="Net margin (proj.)"

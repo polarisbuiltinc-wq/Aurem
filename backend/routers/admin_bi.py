@@ -209,106 +209,153 @@ async def _fetch_stripe_metrics() -> dict:
     }
 
 
-# ─── Inference metrics from ora_chat_usage ─────────────────────────
+# ─── Inference metrics from ora_chat_usage + customer_chat_cost ────
 async def _fetch_inference_metrics() -> dict:
-    """30-day inference cost snapshot + budget mode."""
+    """30-day inference cost snapshot + budget mode.
+
+    2026-08-19 fix: this used to read `ora_chat_usage` ONLY, which is
+    admin-ORA-tool-only (see services/ora_chat/cost_tracker.py) — real
+    customer `/chat/send` and `/chat/stream` traffic was 0% covered
+    (confirmed via preview audit: 0 of 2,739 real turns had a cost
+    row). `customer_chat_cost` (services/customer_cost_tracker.py) now
+    covers that path with a char-count token ESTIMATE (not exact
+    provider-reported usage — flagged per-row as `estimation_method`).
+    `today_usd`/`month_usd`/`by_model`/`by_route`/`daily_series_30d`
+    below are now the COMBINED real total; `admin_tool_*_usd` keeps the
+    admin-ORA-only figure the personal $30/day guard is scoped to
+    (see `budget` below — deliberately UNCHANGED, still admin-tool-only,
+    so that guard's real email alerts stay correctly scoped)."""
     db = require_db()
     from services.ora_chat import cost_tracker as _ct
 
     now = time.time()
     cutoff_30d = now - (30 * 86_400)
 
-    # Today + month totals (already have helpers for these).
-    today_usd = await _ct.current_day_spend_usd(now)
-    month_usd = await _ct.current_month_spend_usd(now)
+    # Admin-ORA-tool-only figures — unchanged, backs the personal
+    # $30/day budget guard (services/ora_chat/cost_tracker.py).
+    admin_today_usd = await _ct.current_day_spend_usd(now)
+    admin_month_usd = await _ct.current_month_spend_usd(now)
     budget = await _ct.budget_status()
 
-    # 30-day daily timeseries.
-    daily = []
+    # Real customer chat cost — new collection, see module docstring.
+    cust_today_usd = 0.0
+    cust_month_usd = 0.0
     try:
-        pipe = [
-            {"$match": {"ts": {"$gte": cutoff_30d}}},
-            {"$group": {
-                "_id":    "$ts_day",
-                "cost":   {"$sum": "$cost_usd"},
-                "calls":  {"$sum": 1},
-                "tokens": {"$sum": {"$add": ["$input_tokens", "$output_tokens"]}},
-            }},
-            {"$sort": {"_id": 1}},
-        ]
-        async for row in db.ora_chat_usage.aggregate(pipe):
-            daily.append({
-                "day":    row.get("_id"),
-                "cost":   round(float(row.get("cost") or 0), 6),
-                "calls":  int(row.get("calls") or 0),
-                "tokens": int(row.get("tokens") or 0),
-            })
+        cust_today_usd = await _sum_cost(db.customer_chat_cost, _ct._current_day_key(now), "ts_day")
+        cust_month_usd = await _sum_cost(db.customer_chat_cost, _ct._current_month_key(now), "ts_month")
     except Exception as e:
-        logger.warning("bi.inference-metrics: daily aggregate failed: %r", e)
+        logger.warning("bi.inference-metrics: customer cost sum failed: %r", e)
 
-    # By-model (last 30 days).
-    by_model = []
-    try:
-        pipe = [
-            {"$match": {"ts": {"$gte": cutoff_30d}}},
-            {"$group": {
-                "_id":    "$model",
-                "cost":   {"$sum": "$cost_usd"},
-                "calls":  {"$sum": 1},
-                "tokens": {"$sum": {"$add": ["$input_tokens", "$output_tokens"]}},
-            }},
-            {"$sort": {"cost": -1}},
-            {"$limit": 15},
-        ]
-        async for row in db.ora_chat_usage.aggregate(pipe):
-            by_model.append({
-                "model":  row.get("_id") or "unknown",
-                "cost":   round(float(row.get("cost") or 0), 6),
-                "calls":  int(row.get("calls") or 0),
-                "tokens": int(row.get("tokens") or 0),
-            })
-    except Exception as e:
-        logger.warning("bi.inference-metrics: by-model aggregate failed: %r", e)
+    today_usd = admin_today_usd + cust_today_usd
+    month_usd = admin_month_usd + cust_month_usd
 
-    # By-route (last 30 days).
-    by_route = []
-    try:
-        pipe = [
-            {"$match": {"ts": {"$gte": cutoff_30d}}},
-            {"$group": {
-                "_id":    "$route",
-                "cost":   {"$sum": "$cost_usd"},
-                "calls":  {"$sum": 1},
-            }},
-            {"$sort": {"cost": -1}},
-            {"$limit": 15},
-        ]
-        async for row in db.ora_chat_usage.aggregate(pipe):
-            by_route.append({
-                "route": row.get("_id") or "unknown",
-                "cost":  round(float(row.get("cost") or 0), 6),
-                "calls": int(row.get("calls") or 0),
-            })
-    except Exception as e:
-        logger.warning("bi.inference-metrics: by-route aggregate failed: %r", e)
+    # 30-day daily timeseries — merged across both collections.
+    daily_map: dict = {}
+    for coll in (db.ora_chat_usage, db.customer_chat_cost):
+        try:
+            pipe = [
+                {"$match": {"ts": {"$gte": cutoff_30d}}},
+                {"$group": {
+                    "_id":    "$ts_day",
+                    "cost":   {"$sum": "$cost_usd"},
+                    "calls":  {"$sum": 1},
+                    "tokens": {"$sum": {"$add": ["$input_tokens", "$output_tokens"]}},
+                }},
+            ]
+            async for row in coll.aggregate(pipe):
+                d = daily_map.setdefault(row.get("_id"), {"day": row.get("_id"), "cost": 0.0, "calls": 0, "tokens": 0})
+                d["cost"]   += float(row.get("cost") or 0)
+                d["calls"]  += int(row.get("calls") or 0)
+                d["tokens"] += int(row.get("tokens") or 0)
+        except Exception as e:
+            logger.warning("bi.inference-metrics: daily aggregate failed: %r", e)
+    daily = sorted(
+        [{**d, "cost": round(d["cost"], 6)} for d in daily_map.values()],
+        key=lambda d: d["day"] or "",
+    )
+
+    # By-model (last 30 days) — merged.
+    model_map: dict = {}
+    for coll in (db.ora_chat_usage, db.customer_chat_cost):
+        try:
+            pipe = [
+                {"$match": {"ts": {"$gte": cutoff_30d}}},
+                {"$group": {
+                    "_id":    "$model",
+                    "cost":   {"$sum": "$cost_usd"},
+                    "calls":  {"$sum": 1},
+                    "tokens": {"$sum": {"$add": ["$input_tokens", "$output_tokens"]}},
+                }},
+            ]
+            async for row in coll.aggregate(pipe):
+                key = row.get("_id") or "unknown"
+                m = model_map.setdefault(key, {"model": key, "cost": 0.0, "calls": 0, "tokens": 0})
+                m["cost"]   += float(row.get("cost") or 0)
+                m["calls"]  += int(row.get("calls") or 0)
+                m["tokens"] += int(row.get("tokens") or 0)
+        except Exception as e:
+            logger.warning("bi.inference-metrics: by-model aggregate failed: %r", e)
+    by_model = sorted(
+        [{**m, "cost": round(m["cost"], 6)} for m in model_map.values()],
+        key=lambda m: -m["cost"],
+    )[:15]
+
+    # By-route (last 30 days) — merged.
+    route_map: dict = {}
+    for coll in (db.ora_chat_usage, db.customer_chat_cost):
+        try:
+            pipe = [
+                {"$match": {"ts": {"$gte": cutoff_30d}}},
+                {"$group": {"_id": "$route", "cost": {"$sum": "$cost_usd"}, "calls": {"$sum": 1}}},
+            ]
+            async for row in coll.aggregate(pipe):
+                key = row.get("_id") or "unknown"
+                r = route_map.setdefault(key, {"route": key, "cost": 0.0, "calls": 0})
+                r["cost"]  += float(row.get("cost") or 0)
+                r["calls"] += int(row.get("calls") or 0)
+        except Exception as e:
+            logger.warning("bi.inference-metrics: by-route aggregate failed: %r", e)
+    by_route = sorted(
+        [{**r, "cost": round(r["cost"], 6)} for r in route_map.values()],
+        key=lambda r: -r["cost"],
+    )[:15]
 
     return {
-        "today_usd":        round(today_usd, 6),
-        "month_usd":        round(month_usd, 6),
+        "today_usd":              round(today_usd, 6),
+        "month_usd":              round(month_usd, 6),
+        "admin_tool_today_usd":   round(admin_today_usd, 6),
+        "admin_tool_month_usd":   round(admin_month_usd, 6),
+        "customer_chat_today_usd": round(cust_today_usd, 6),
+        "customer_chat_month_usd": round(cust_month_usd, 6),
         "budget":           budget,
         "daily_series_30d": daily,
         "by_model":         by_model,
         "by_route":         by_route,
         "generated_at":     datetime.now(timezone.utc).isoformat(),
         "_note": (
-            "Aggregated from `ora_chat_usage` — every LLM call routed "
-            "through the OpenRouter/DeepSeek/GLM/Claude gateway writes "
-            "a row here with token counts + computed cost. Budget "
-            "modes: normal < 70% of daily soft cap; warning ≥ 70%; "
-            "economy ≥ 100% (forces GLM-5.2 route); spike_hard_stop "
-            "≥ daily spike cap (blocks new chats)."
+            "today_usd/month_usd = REAL COMBINED cost: admin ORA-tool "
+            "usage (`ora_chat_usage`, exact) + customer chat "
+            "(`customer_chat_cost`, char-count ESTIMATE — see "
+            "services/customer_cost_tracker.py, no exact provider "
+            "token usage is threaded through yet). `budget` below is "
+            "scoped to admin-tool-only spend (unaffected by customer "
+            "volume) and is what the $30/day personal guard enforces. "
+            "Budget modes: normal < 70% of daily soft cap; warning "
+            "≥ 70%; economy ≥ 100% (forces GLM-5.2 route); "
+            "spike_hard_stop ≥ daily spike cap (blocks new chats)."
         ),
     }
+
+async def _sum_cost(collection, key_value: str, key_field: str) -> float:
+    pipe = [
+        {"$match": {key_field: key_value}},
+        {"$group": {"_id": None, "total": {"$sum": "$cost_usd"}}},
+    ]
+    total = 0.0
+    async for row in collection.aggregate(pipe):
+        total = float(row.get("total") or 0.0)
+    return total
+
 
 
 # ─── Endpoints ─────────────────────────────────────────────────────

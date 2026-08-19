@@ -852,6 +852,19 @@ async def chat_send(
             _maybe_set_title(user["user_id"], body.session_id, body.prompt)
         )
     tokens_remaining = await _deduct_tokens(user["user_id"], content)
+    # 2026-08-19 P0 fix — this was the main customer chat path with
+    # ZERO cost tracking anywhere (confirmed: 0 of 2,739 real turns in
+    # a preview audit had a cost row). Best-effort, never blocks reply.
+    try:
+        from services.customer_cost_tracker import log_customer_chat_cost
+        await log_customer_chat_cost(
+            user_id=user["user_id"], session_id=body.session_id or "",
+            project_id=body.project_id, route="chat_send",
+            provider=provider, prompt_text=body.prompt,
+            system_text=extra_sys or "", output_text=content,
+        )
+    except Exception as e:
+        logger.warning("customer chat cost log skipped (chat_send): %r", e)
     # Iter 365 · Phase 3 — funnel event: first_chat_sent (idempotent
     # via one-shot flag on dev_users). Best-effort, non-blocking.
     try:
@@ -3049,6 +3062,18 @@ async def chat_stream(
                 _maybe_set_title(user_id, body.session_id, body.prompt)
             )
         tokens_remaining = await _deduct_tokens(user_id, content)
+        # 2026-08-19 P0 fix — same cost-logging gap as /chat/send.
+        try:
+            from services.customer_cost_tracker import log_customer_chat_cost
+            await log_customer_chat_cost(
+                user_id=user_id, session_id=body.session_id or "",
+                project_id=body.project_id, route="chat_stream",
+                provider=(result.get("provider") if isinstance(result, dict) else "") or "",
+                prompt_text=body.prompt,
+                system_text=_sys_for_advisor or "", output_text=content,
+            )
+        except Exception as e:
+            logger.warning("customer chat cost log skipped (chat_stream): %r", e)
 
         # ─── Iter 209: Core verification foundation ──────────────────
         # CitationGuard runs as a HARD blocker on the final draft. If

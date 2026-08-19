@@ -4,6 +4,59 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## Latest ship — Cost-tracking wiring into main chat path SHIPPED (P0), tested live (2026-08-19)
+
+Founder-approved P0, done before R2/Stripe follow-ups (both currently blocked on founder-side credential generation — see below).
+
+**New**: `services/customer_cost_tracker.py` — logs every `/chat/send`
+and `/chat/stream` turn's cost to a **separate** collection
+(`customer_chat_cost`), deliberately NOT reusing `ora_chat_usage`
+(which backs the founder's personal $30/day admin-tool budget guard —
+mixing customer volume into it would have corrupted that guard's real
+email alerts). Cost = char-count token ESTIMATE (~4 chars/token,
+same heuristic `chat.py::_deduct_tokens` already used for the token
+wallet) × the real pricing table, since `chat_with_tools()` doesn't
+thread exact provider-reported token usage back up today (flagged
+per-row via `estimation_method: "char_count_v1"` — stated honestly,
+not claimed as exact).
+
+**Wired into** both `routers/chat.py` call sites (`/chat/send`,
+`/chat/stream`), best-effort/never blocks a reply on failure.
+
+**`routers/admin_bi.py`** `_fetch_inference_metrics()` now merges
+`ora_chat_usage` (admin-tool) + `customer_chat_cost` (customer) for
+`today_usd`/`month_usd`/`by_model`/`by_route`/`daily_series_30d` — the
+TRUE combined total. `budget` (the $30/day guard) stays scoped to
+admin-tool-only, unaffected. This also silently fixed the "net
+margin" calc in `/admin/bi/summary` (`net_margin_usd = mrr -
+projected_month_infer`), which had been using the admin-tool-only
+figure and therefore overstating margin this whole time.
+`LiveBusinessIntelligence.jsx` updated to show the admin-tool vs
+customer-chat breakdown, not just a merged number.
+
+**Live-verified, not just unit tests**: logged in as test@aurem.dev,
+sent a real `/chat/send` message, confirmed a real row landed in
+`customer_chat_cost` (provider "glm-5.2" → correctly classified to
+model "z-ai/glm-5.2", 149 input / 4 output tokens, $0.000047), then
+confirmed `/admin/bi/summary` correctly reported
+`today_usd = admin_tool_today_usd + customer_chat_today_usd`
+($0.005539 = $0.005492 + $0.000047). Caught and fixed one real bug
+during this verification: `_sum_cost` helper was referenced before
+being defined in the file (NameError, silently caught by the
+try/except and logged as a warning) — fixed, re-verified after.
+
+**Tests**: `tests/test_2026_08_19_customer_cost_tracker.py` (13 new:
+token estimation, provider→model classifier incl. compound labels
+like "glm-5.2+claude-review", DB-failure never raises, no-db returns
+0), full re-run of `test_slice_a_bi_cockpit.py` + 3 other admin_bi/
+chat-adjacent suites (74 total) — zero regressions. One pre-existing,
+unrelated failure confirmed via git-stash baseline (`test_iter212m163
+...circuit_breaker_source`, stale `services/llm.py` path reference).
+
+**Per-tier $ cost cap (Fix #3)**: still NOT built — founder is
+thinking about the per-tier $ ceiling numbers before this starts, per
+their own instruction. Cost data now exists to build it on top of.
+
 ## Latest ship — Cancel-billing + anonymous-support bugs FIXED, tested in preview (2026-08-19)
 
 Founder approved priority: fix #1 (billing button) + #2 (support form) now, report with evidence; #3 (per-user $ cap) scope-only.
