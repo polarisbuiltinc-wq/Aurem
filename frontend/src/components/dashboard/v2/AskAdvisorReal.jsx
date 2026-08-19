@@ -271,11 +271,15 @@ export default function AskAdvisorReal({ collapsed = false, onCollapse, projectI
       "transition-[width] duration-200 ease-in-out",
       collapsed ? "w-0" : "w-[300px]",
     )}>
-      {/* Collapsed-state vertical "ADVISOR" tab */}
+      {/* Collapsed-state vertical "ADVISOR" tab.
+          Vertically centered (not bottom-anchored) so it never sits
+          in the same row as the chat composer's send button at any
+          viewport width — bottom-anchoring previously put it at
+          roughly the same height as the composer toolbar. */}
       <button onClick={() => onCollapse?.(false)} aria-label="Open Advisor panel"
         data-testid="ds2-advisor-open"
         className={cn(
-          "absolute bottom-6 z-30 flex h-[96px] w-[26px] flex-col items-center justify-center gap-1.5 rounded-l-lg border border-r-0 border-border bg-card px-1.5 py-3 shadow-lg transition-all duration-200 ease-in-out hover:bg-secondary",
+          "absolute top-1/2 -translate-y-1/2 z-30 flex h-[96px] w-[26px] flex-col items-center justify-center gap-1.5 rounded-l-lg border border-r-0 border-border bg-card px-1.5 py-3 shadow-lg transition-all duration-200 ease-in-out hover:bg-secondary",
           collapsed ? "-left-7 opacity-100 pointer-events-auto"
                     : "left-0 opacity-0 pointer-events-none",
         )}>

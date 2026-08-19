@@ -13,7 +13,6 @@
 import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { SupportButton } from "./SupportPopup";
-
 // Paths where the FAB stays hidden — marketing, auth, admin (admin has
 // its own inbox and doesn't need to file tickets to itself), and pages
 // that already have their own support surface.
@@ -35,6 +34,35 @@ export default function GlobalHelpFAB() {
   const [loggedIn, setLoggedIn] = useState(
     () => !!localStorage.getItem("aurem_token"),
   );
+  // Bug fix (2026-08-19): the FAB used a fixed bottom:20/right:20,
+  // which sat directly on top of the chat composer's send button
+  // (data-testid="chat-send") whenever a composer was on screen —
+  // confirmed overlapping on mobile viewports. Instead of guessing a
+  // pixel offset per breakpoint, measure the actual composer element
+  // (if present on this page) and always clear its top edge by 12px.
+  const [bottomOffset, setBottomOffset] = useState(20);
+
+  useEffect(() => {
+    let raf;
+    const measure = () => {
+      const composer = document.querySelector('[data-testid="composer-card"]');
+      if (composer) {
+        const rect = composer.getBoundingClientRect();
+        const clearance = Math.max(20, window.innerHeight - rect.top + 12);
+        setBottomOffset(clearance);
+      } else {
+        setBottomOffset(20);
+      }
+    };
+    measure();
+    const interval = setInterval(measure, 400);
+    window.addEventListener("resize", measure);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("resize", measure);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [pathname]);
 
   // Cheap re-check on route change (token can be set by login flow
   // without a page reload). Also listen for storage events so a
@@ -62,9 +90,10 @@ export default function GlobalHelpFAB() {
       data-testid="global-help-fab"
       style={{
         position: "fixed",
-        bottom: 20,
+        bottom: bottomOffset,
         right: 20,
         zIndex: 9990,
+        transition: "bottom 120ms ease",
       }}>
       <SupportButton
         source={source}

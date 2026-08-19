@@ -4,6 +4,38 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## Latest ship — Bug fix: floating Help/Advisor buttons overlapping chat send button (2026-08-19)
+
+**Confirmed and reproduced**: on mobile (390px), `GlobalHelpFAB.jsx`'s
+"Need help?" bubble (`position: fixed; bottom: 20; right: 20`) sat
+directly on top of the chat composer's send button
+(bounding-box measured: FAB x263-370/y782-824 vs send x369/y782 —
+literal overlap). On desktop at narrower widths (1024-1366px) the
+"Ask Advisor" collapsed tab (`AskAdvisorReal.jsx`, bottom-anchored at
+`bottom-6`) and the FAB both sat in the same vertical band as the
+composer, visually crowding the send button.
+
+**Root cause**: both floating elements used a fixed `bottom` offset
+that assumed nothing else occupied that screen band — they had no
+awareness of the chat composer's actual position/height, which varies
+by content (banners, multi-line input, toolbar wrapping).
+
+**Fix**:
+1. `GlobalHelpFAB.jsx` — now measures the on-screen
+   `[data-testid="composer-card"]` element's bounding rect (polled
+   every 400ms + on resize) and sets its own `bottom` offset to always
+   clear the composer's top edge by 12px, on any route/viewport where
+   a composer is present. Falls back to `bottom: 20` on pages without
+   a composer.
+2. `AskAdvisorReal.jsx`'s collapsed "ADVISOR" tab — changed from
+   `bottom-6` (near the composer's height band) to vertically centered
+   (`top-1/2 -translate-y-1/2`), so it's nowhere near the composer row
+   at any screen height.
+
+Screenshot-verified at 390×844 (mobile), 1024×768, and 1366×768: FAB
+and Advisor tab now sit well above the composer with clear vertical
+gaps at all three widths; send button fully visible/clickable in all.
+
 ## Latest ship — Signup password toggle + strength-meter consolidation (2026-08-19)
 
 Extended the show/hide toggle to `Signup.jsx`'s two password fields
