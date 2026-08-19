@@ -646,6 +646,15 @@ there wouldn't be caught by CI.
      separately.
   5. `backups_admin.py` (G11) has no persisted automated test — cheap
      to add, flagged not fixed.
+  6. G22 idle-spend guard is live — but 2 seeded actor ceilings
+     (`system:health_check`, `canary`) are estimates based on this
+     session's live-measured per-call cost, not a full month of real
+     production data. Founder may want to tune ceilings after seeing
+     a real month of `ora_chat_usage` data. Also, `test_council_reprobe_*`
+     tests reference a pre-Phase-2-split `/admin/council/reprobe`
+     endpoint that no longer exists in `routers/admin.py` — confirmed
+     pre-existing (fails identically on unmodified code via
+     `git stash`), unrelated to the cost-leak fix, not touched.
 
 This closes the founder's originally-requested 7-section audit
 (Code Inventory, Feature Inventory, Dependencies, Data Layer,

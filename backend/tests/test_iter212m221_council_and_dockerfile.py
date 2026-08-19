@@ -100,17 +100,22 @@ def test_council_reprobe_is_throttled():
 
 
 @pytest.mark.asyncio
-async def test_probe_treats_429_as_live_not_degraded():
-    """Iter 212m-221 — a rate-limit response from OpenRouter (429)
-    means the model IS live, we're just throttled.  Council A must
-    stay `LIVE`, not flip to `DEGRADED` for the next 15 min."""
+async def test_probe_catalog_error_is_treated_as_unavailable():
+    """Cost-leak fix (2026-08-19): the probe no longer sends a real
+    completion (so there's no "429 = throttled-but-alive" completions
+    signal to special-case anymore) — it does a free GET on
+    OpenRouter's /models catalog. A non-200 on THAT endpoint (rate
+    limited, 5xx, etc.) is unrelated to the LongCat model's own
+    completions-endpoint availability, so it's treated as
+    inconclusive-unavailable (fail-safe to the GLM fallback) rather
+    than assumed-still-live."""
     import httpx
     import services.llm as llm_mod
 
     class _Resp:
         def __init__(self, sc):
             self.status_code = sc
-            self.text = ""
+            self.text = "rate limited"
         def json(self):
             return {"error": {"message": "rate limited"}}
 
@@ -119,7 +124,7 @@ async def test_probe_treats_429_as_live_not_degraded():
             return self
         async def __aexit__(self, *a):
             pass
-        async def post(self, *a, **kw):
+        async def get(self, *a, **kw):
             return _Resp(429)
 
     # Force the LongCat path.
@@ -134,13 +139,12 @@ async def test_probe_treats_429_as_live_not_degraded():
         httpx.AsyncClient       = lambda **kw: _Client()
 
         result = await llm_mod.probe_longcat_availability()
-        assert result is True, (
-            "429 must be treated as `live=True` — the model is "
-            "reachable, we're just throttled."
+        assert result is False, (
+            "a non-200 on the free /models catalog check must fail "
+            "safe to `live=False` (GLM fallback), not assume liveness."
         )
-        assert llm_mod.LONGCAT_LIVE is True
+        assert llm_mod.LONGCAT_LIVE is False
         assert llm_mod._LONGCAT_LAST_PROBE["http_code"] == 429
-        assert "rate_limited" in (llm_mod._LONGCAT_LAST_PROBE.get("error") or "")
     finally:
         llm_mod.LONGCAT_ENABLED = orig_enabled
         llm_mod.LONGCAT_LIVE    = orig_live

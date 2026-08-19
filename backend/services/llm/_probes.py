@@ -71,6 +71,7 @@ def _deepseek_model() -> str:
 
 # ═══ Constants used by the probes ═══════════════════════════════
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 
 
 def _openrouter_key() -> str:
@@ -163,19 +164,22 @@ async def probe_longcat_availability() -> bool:
                        error="openrouter_api_key_missing")
         return False
     try:
+        # Cost-leak fix (2026-08-19): this used to send a real
+        # `POST /chat/completions` (1 real customer-facing model call,
+        # every 15 min forever — or every 60s when degraded, with no
+        # ceiling) purely to check the model is reachable. Switched to
+        # `GET /models` — OpenRouter's model catalog — which costs
+        # ZERO tokens and is a metadata read, not a completion. It
+        # still answers the exact question this probe needs ("is
+        # `model_slug` currently offered by OpenRouter"), just without
+        # spending real money to find out. NOT swapped to a different
+        # ("cheap") model — that would test the wrong thing entirely,
+        # since the whole point is verifying THIS specific
+        # customer-facing model, not some unrelated model's uptime.
         async with httpx.AsyncClient(timeout=5.0) as c:
-            r = await c.post(
-                OPENROUTER_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type":  "application/json",
-                },
-                json={
-                    "model":       model_slug,
-                    "messages":    [{"role": "user", "content": "ping"}],
-                    "max_tokens":  1,
-                    "temperature": 0,
-                },
+            r = await c.get(
+                OPENROUTER_MODELS_URL,
+                headers={"Authorization": f"Bearer {api_key}"},
             )
     except Exception as e:
         LONGCAT_LIVE = False
@@ -187,36 +191,35 @@ async def probe_longcat_availability() -> bool:
         await _persist(live=False, http_code=None, error=f"network_error: {e!r}"[:200])
         return False
     if r.status_code == 200:
-        LONGCAT_LIVE = True
-        logger.info("✅ LongCat probe OK — Council A primary = %s", model_slug)
-        _snapshot(live=True, http_code=200, error=None)
-        await _persist(live=True, http_code=200, error=None)
-        return True
-    # Iter 212m-221 — 429 rate-limit is NOT unavailability. The model
-    # is alive on OpenRouter, we just hit the throttle. Keep the flag
-    # green so Council A doesn't spend the next 15 min running on the
-    # GLM-5.2 fallback (and showing "degraded" in the founder Advisor
-    # brief) just because a health-check burnt a token quota tick.
-    if r.status_code == 429:
-        LONGCAT_LIVE = True
-        logger.info(
-            "LongCat probe rate-limited (429) — model reachable, "
-            "keeping Council A on %s. Reprobe in 15 min.", model_slug,
+        try:
+            listed_ids = {m.get("id") for m in r.json().get("data", [])}
+        except Exception:
+            listed_ids = set()
+        if model_slug in listed_ids:
+            LONGCAT_LIVE = True
+            logger.info("✅ LongCat probe OK — Council A primary = %s", model_slug)
+            _snapshot(live=True, http_code=200, error=None)
+            await _persist(live=True, http_code=200, error=None)
+            return True
+        LONGCAT_LIVE = False
+        logger.warning(
+            "LongCat unavailable — %s not in OpenRouter's current model "
+            "catalog. Council A on GLM-5.2 fallback until the next probe.",
+            model_slug,
         )
-        _snapshot(live=True, http_code=429, error="rate_limited_but_reachable")
-        await _persist(live=True, http_code=429, error="rate_limited_but_reachable")
-        return True
-    # 400 invalid-model / 404 no-endpoints / 5xx upstream → treat as unavailable
-    try:
-        err_msg = (r.json().get("error") or {}).get("message") or r.text[:120]
-    except Exception:
-        err_msg = r.text[:120]
+        _snapshot(live=False, http_code=200, error="model_not_in_catalog")
+        await _persist(live=False, http_code=200, error="model_not_in_catalog")
+        return False
+    # non-200 on the catalog endpoint itself (rare — auth/5xx) → treat
+    # as inconclusive-unavailable, same as the old 400/404/5xx branch.
+    err_msg = r.text[:120]
     LONGCAT_LIVE = False
     logger.warning(
-        "LongCat unavailable (HTTP %s: %s) — Council A on GLM-5.2 fallback "
-        "until the next probe. Re-probe runs every 15 min in the "
-        "background; a supervisor restart triggers an immediate re-probe. "
-        "Live status is exposed at /api/aurem-dev/admin/council/health.",
+        "LongCat unavailable (catalog check HTTP %s: %s) — Council A on "
+        "GLM-5.2 fallback until the next probe. Re-probe runs every 15 "
+        "min in the background; a supervisor restart triggers an "
+        "immediate re-probe. Live status is exposed at "
+        "/api/aurem-dev/admin/council/health.",
         r.status_code, err_msg,
     )
     _snapshot(live=False, http_code=r.status_code, error=str(err_msg)[:200])
@@ -239,12 +242,24 @@ async def periodic_longcat_reprobe(interval_seconds: int = 900) -> None:
     badge for 14 more minutes. A successful probe returns to the
     slow 15 min cadence.
 
+    Cost-leak fix (2026-08-19) — the probe itself is now a free
+    `/models` catalog read (see `probe_longcat_availability`), so the
+    60s fast-retry no longer burns tokens. Still capped at 20
+    consecutive fast retries (~20 min) before falling back to a slower
+    5-min "stuck degraded" cadence + opening an incident — an
+    indefinite 60s loop is unnecessary API load even at zero token
+    cost, and a LongCat outage lasting >20 min is itself worth
+    surfacing rather than polling silently forever.
+
     Runs quietly: only logs on a state transition (live ↔ degraded).
     """
     FAST_INTERVAL_S = 60
+    STUCK_INTERVAL_S = 300
+    MAX_FAST_RETRIES = 20
     if not LONGCAT_ENABLED:
         return
     model_slug = _longcat_model_slug()
+    consecutive_degraded = 0
     while True:
         previous = LONGCAT_LIVE
         try:
@@ -259,8 +274,28 @@ async def periodic_longcat_reprobe(interval_seconds: int = 900) -> None:
                 "LIVE" if current else "DEGRADED",
                 model_slug,
             )
-        # Fast retry when degraded; slow cadence when healthy.
-        sleep_for = FAST_INTERVAL_S if not current else interval_seconds
+        if current:
+            consecutive_degraded = 0
+            sleep_for = interval_seconds
+        else:
+            consecutive_degraded += 1
+            if consecutive_degraded == MAX_FAST_RETRIES:
+                try:
+                    from cto_services.db import get_db as _get_db
+                    from services.incident_log import open_incident
+                    await open_incident(
+                        _get_db(), guard="longcat_availability",
+                        title="LongCat stuck degraded >20 min",
+                        detail=f"model={model_slug} — {MAX_FAST_RETRIES} "
+                               f"consecutive fast reprobes all failed. "
+                               f"Slowing to a {STUCK_INTERVAL_S}s cadence.",
+                        source_key="longcat_stuck_degraded",
+                        severity="warning",
+                    )
+                except Exception as e:  # best-effort
+                    logger.debug("longcat stuck-degraded incident failed: %r", e)
+            sleep_for = (FAST_INTERVAL_S if consecutive_degraded < MAX_FAST_RETRIES
+                        else STUCK_INTERVAL_S)
         try:
             await asyncio.sleep(sleep_for)
         except asyncio.CancelledError:

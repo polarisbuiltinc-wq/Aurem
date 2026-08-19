@@ -4,6 +4,121 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## Latest ship — Deploy-log crash FIXED + deployment_agent PASS, awaiting founder redeploy (2026-08-19)
+
+Founder pasted real prod deploy logs (K8s/Nginx upstream timeout on
+`/health`, Upstash Redis quota-exhaustion fallback, and a Starlette
+`RuntimeError: No response returned` / `anyio.EndOfStream` crash in
+`main.py`'s `_global_rate_limit_guard`). Root cause found from first
+principles by reading the actual middleware, not guessed. Code-only
+fix per founder's explicit instruction (no Docker changes).
+
+**Root cause #1**: `_GLOBAL_RL_SKIP_PREFIXES` only exempted
+`/api/health*`. The K8s pod-level probe hits prefix-less `/health`,
+`/healthz`, `/ping` (`healthz_root()`) — those went through the
+Redis-backed `check_rate_limit_async` on every single probe. With
+Upstash's quota exhausted, that added latency to every probe →
+matches the observed upstream timeout exactly.
+**Fix**: added `/health`, `/healthz`, `/ping` to the skip list.
+
+**Root cause #2**: both `call_next()` try/excepts in
+`_global_rate_limit_guard` only caught `except Exception`. A client
+disconnect mid-request (K8s probe / Nginx) can make anyio's internal
+task group raise a `BaseExceptionGroup` wrapping a bare
+`asyncio.CancelledError` — which does NOT subclass `Exception`, so it
+skipped the handler and surfaced as the unhandled "RuntimeError: No
+response returned" seen in the logs.
+**Fix**: widened both to `except (Exception, BaseExceptionGroup) as _e:`.
+
+**Deliberately NOT touched**: Mongo/Atlas config — logs showed zero
+DB-layer errors. Upstash Redis quota itself — founder is resetting/
+upgrading that directly on Upstash's dashboard (not a code fix).
+
+**Verified in preview**:
+- Skip-predicate unit-tested directly: `/health`, `/healthz`, `/ping`
+  all return `True` from `_global_rl_should_skip`.
+- 50 concurrent `curl /health` requests → all `200`, 1.3s total, no
+  429/500/timeout.
+- New `tests/test_deploy_2026_08_19_health_probe_and_exceptiongroup.py`
+  (9 tests) — including a direct call to the real
+  `_global_rate_limit_guard` coroutine with a `call_next` stub that
+  raises a `BaseExceptionGroup`, asserting it still returns a clean
+  `JSONResponse(500)` on BOTH the skip-path and main-path branches.
+  All green, plus updated the pre-existing
+  `test_deploy_hardening_middleware_no_response.py` assertion to match
+  the widened except clause.
+- Full targeted regression sweep (`-k "rate_limit or health or
+  middleware or deploy"`, 288 tests): 11 failures/errors, all
+  git-stash-confirmed **pre-existing** on unmodified code (stale
+  baseline issues unrelated to this fix — admin password-leak tests,
+  GitHub App dispatch fixture issues, a PRD.md header-pointer doc
+  test, etc.). Zero regressions introduced.
+- `deployment_agent` full readiness scan: **PASS, no blockers**. CORS,
+  ports, supervisor config, secrets, auth redirects, destructive-DB
+  startup all clean.
+
+**⚠️ NOT YET LIVE — founder must redeploy** for this fix to reach
+`auremcto.com`. Do not claim production-fixed until founder confirms
+a successful redeploy + a real post-deploy check (e.g. prod `/health`
+responds fast under load, no recurrence of the RuntimeError in prod
+logs).
+
+**Parked per founder's explicit instruction**: G22 cost-work final
+answer (exact health-check model + savings estimate) — stays paused
+until this deploy is confirmed fixed and stable. Also parked mid-flight:
+a founder-requested 3-step report (DeepSeek V3→V4 Flash upgrade
+recommendation, duplicate "AUREM" OpenRouter app-attribution root
+cause, and internal cost-tracking coverage gap) — investigation is
+DONE (see below), just not yet delivered because founder pivoted to
+the deploy fix first. Deliver this report next turn if founder doesn't
+ask for something else first.
+
+### Parked findings ready to report (investigated, not yet delivered, NO code changes made)
+
+1. **DeepSeek V3 vs V4 Flash**: confirmed primary model string is
+   `deepseek/deepseek-chat` (V3) via `LLM_MODEL` env
+   (`backend/.env:11`) and `CEO_RESCUE_MODEL`/`ora_chat/router.py`
+   defaults — all V3. The DIRECT-API fallback
+   (`_DEEPSEEK_DIRECT_MODEL`, `openrouter_providers.py:317`) already
+   defaults to `"deepseek-v4-flash"` (rarely hit — direct-API is only
+   a 2nd-hop fallback). Web-verified: V4 Flash is ~40-45% cheaper
+   ($0.077-0.09/M in vs V3's $0.14/M in) AND far higher quality on
+   coding (SWE-bench Verified ~74-79% vs V3's 42%). `_DEEPSEEK_HOSTS`
+   provider allow-list (`deepseek, streamlake, deepinfra, novita`) is
+   confirmed present in `deepseek/deepseek-v4-flash`'s OpenRouter
+   provider pool too, so no provider-routing changes needed beyond the
+   model string + `cost_tracker.py`'s pricing table entry. Recommend
+   switching — cheaper AND better for the exact coding use case.
+2. **3 duplicate "AUREM" OpenRouter app entries**: only ONE
+   `OPENROUTER_API_KEY` exists/is used anywhere in the codebase — NOT
+   multiple keys. Root cause is inconsistent `X-Title` header values
+   across call sites (OpenRouter's "Top Apps" attributes by
+   Referer+Title, not by key): `"AUREM"` (openrouter_providers.py/
+   openrouter_client.py), `"AUREM ORA Chat"` (ora_chat/providers.py),
+   `"AUREM - upload/convert (image)"` (upload.py), plus 2 more
+   lower-volume variants (`"Aurem - Graph Diagram"`,
+   `"Aurem Advisor"`). Also inconsistent `HTTP-Referer`: some send
+   `APP_URL` env (currently `"https://aurem.dev"` in this preview's
+   `.env` — looks like a stale pre-rebrand value), others hardcode
+   `"https://auremcto.com"`. Accidental fragmentation, not intentional
+   multi-key design — needs consolidating to one canonical title+referer.
+3. **Cost-tracking coverage gap (bigger finding than expected)**:
+   grep-confirmed `routers/chat.py` and `services/orchestrator.py` —
+   the customer-facing single-agent chat path, the highest-volume
+   traffic — NEVER call `cost_tracker.log_call()` and never touch
+   `ora_chat_usage`. Only 4 partial, non-overlapping cost surfaces
+   exist: `ora_chat_usage` (admin ORA chat + system health-check +
+   conditional loop-token-ledger + adversarial-review),
+   `maxx_cost_log` (only "maxx mode" dual-agent chat_send calls),
+   `cto_tasks.tokens_used` (Loop quota counting, not $ cost). Regular
+   single-agent customer chat — the bulk of real usage — has **zero**
+   cost logging anywhere. So the BI Cockpit's inference-cost number
+   is near-certainly a large undercount of the real OpenRouter bill;
+   this alone likely explains most of any gap vs the $25.83/month
+   OpenRouter-dashboard figure, independent of any duplicate-app
+   confusion. Could not directly reconcile the exact prod $25.83
+   figure — no production DB/OpenRouter-dashboard access from here.
+
 ## Latest investigation — OpenRouter/LLM idle-cost leak: ROOT CAUSE FOUND, no fix applied yet (2026-08-19)
 
 Founder asked to investigate before fixing. Investigated via preview
@@ -65,6 +180,96 @@ dedup the boot-time double-probe, (d) route any surviving background
 LLM call through `cost_tracker.log_call()` so it's visible, (e) the
 requested new guard (G22-style) alerting on token spend with zero
 active sessions in that window.
+
+## Latest ship — Cost-leak fully fixed: LongCat probe now $0, health-check switched to gpt-5.4-mini, G22 guard live (2026-08-19)
+
+Founder-approved fix for all 3 root causes found in the investigation
+above, plus cost-tracking visibility + the G22 guard. All live-tested
+against the real preview OpenRouter key/Emergent LLM key, not just
+code-reviewed.
+
+- **Root cause #1 (LongCat probe)**: switched from a real
+  `POST /chat/completions` to a free `GET /models` catalog check —
+  **zero tokens, $0 per call, forever**, at any frequency. Did **NOT**
+  swap the model being tested (that would've meant checking a
+  DIFFERENT model's uptime while blindly trusting the real
+  customer-facing LongCat model — a correctness regression, not a
+  cost fix). Live-verified: `probe_longcat_availability()` returned
+  `True`, `http_code:200`, real OpenRouter response, confirming the
+  model is genuinely live — with zero cost. Also capped the
+  degraded-state fast-retry at 20 consecutive tries (~20 min) before
+  backing off to a slower cadence + opening an incident, so a stuck
+  outage doesn't hammer OpenRouter's API indefinitely even though it's
+  now free.
+- **Root cause #2 (integration_health_cron's LLM probe)**: switched
+  from Claude Haiku 4.5 to **`gpt-5.4-mini`** (cheapest model reachable
+  via the Emergent LLM key) — **founder's model question, answered
+  directly below**. Applies always (idle or active), per instruction —
+  this check never was idle-gated to begin with, it already ran on a
+  fixed 10-min cadence regardless of user activity. Hit a real bug
+  during live verification: gpt-5.4-mini rejects `temperature=0.0`
+  (GPT-5 family only supports temperature=1) — fixed, then
+  live-verified via `POST /admin/integrations/refresh`: real 200,
+  `"gpt-5.4-mini responded"`, cost **$0.000016/call** logged.
+- **Root cause #3 (boot double-probe)**: removed the redundant
+  standalone one-off probe task in `main.py` — the periodic loop's own
+  first iteration already probes immediately, so it was pure
+  duplication on every restart.
+- **Cost-tracking visibility**: the LongCat fix eliminates its cost
+  entirely (nothing to log). The integration-health probe is now
+  logged via `cost_tracker.log_call()` under `user_id:"system:health_check"`
+  — confirmed present in `ora_chat_usage` live.
+- **G22 guard (new, standing safety net)**: `services/g22_idle_spend_guard.py`
+  — hourly check: if `ora_chat_usage` shows LLM spend during a window
+  with **zero real (non-system) user activity**, and that spend is
+  from an unreviewed background actor OR exceeds a known actor's tiny
+  ceiling, opens an incident via the same G1-G21 `incident_log`
+  mechanism already wired to the admin dashboard. 5 new tests
+  (`test_g22_idle_spend_guard.py`) using real Mongo docs, all passing —
+  covers: no-activity, known-actor-under-ceiling (not flagged),
+  unknown-actor-any-spend (flagged), known-actor-over-ceiling
+  (flagged), real-user-present (suppresses alert).
+- Fixed 2 pre-existing unit tests that mocked the old completions-based
+  LongCat mechanism (now correctly test the `/models` catalog path).
+  2 other test failures found during this work
+  (`test_council_reprobe_*`) are **pre-existing and unrelated** —
+  confirmed via `git stash` that they fail identically on unmodified
+  code (stale references to a `/admin/council/reprobe` endpoint that
+  moved to `admin_ops_config.py` during an earlier Phase 2 split, same
+  root cause as the `test_iter356` stale-test issue found in the
+  original audit). Not fixed — out of scope for this task, logged here
+  for the record.
+- 68 relevant regression tests green (module boundary, pre-launch,
+  session5 LLM split/hygiene, council/dockerfile, G22, ECC features).
+
+**Model answer for the founder's question**: switched to
+**`gpt-5.4-mini`**. The LongCat probe's model was deliberately NOT
+switched (see above — it would have broken the check's actual
+purpose). Real customer-facing coding/chat model (LongCat/GLM/DeepSeek
+via OpenRouter) is completely unchanged.
+
+**Savings estimate** (order-of-magnitude — no production OpenRouter
+billing-dashboard access, so this is a calculation from real per-call
+pricing/cost figures found in this session, not a verified production
+total):
+- LongCat probe: was a real completion on `anthropic/claude-sonnet-4.5`
+  ($3/$15 per M tokens) → now $0. At the OLD healthy cadence (96
+  calls/day) that alone was already a small daily cost; at the
+  degraded 60s cadence (up to 1440 calls/day) it could have been
+  materially larger — now $0 either way, at any frequency.
+- Integration-health probe: was Claude Haiku 4.5 ($1/$5 per M tokens),
+  now gpt-5.4-mini ($0.75/$4.50 per M tokens) — **confirmed live cost
+  $0.000016/call** (~15 input + 1 output token). At the fixed 144
+  calls/day cadence: **≈$0.0023/day → ≈$0.07/month** for this probe
+  specifically (previously similar order of magnitude on the pricier
+  model — the real win here is visibility + a cheaper unit cost, not
+  a dramatic dollar swing, since token count per call was already
+  tiny).
+- The dollar amounts here were always small per-call — the real
+  "leak" risk was #1's uncapped 60s fast-retry loop having no ceiling
+  if LongCat ever got stuck degraded for an extended period, which is
+  now fully eliminated (both by the ceiling AND by making the check
+  free regardless of frequency).
 
 ## Latest ship — 🔴→✅ SEC-005 + SEC-006 FIXED, exploit-tested + live isolation test 20/20 (2026-08-19)
 

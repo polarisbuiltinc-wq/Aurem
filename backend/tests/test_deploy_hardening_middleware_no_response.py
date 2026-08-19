@@ -29,8 +29,12 @@ assumes.
 def test_global_rate_limit_guard_call_next_is_wrapped():
     src = open("/app/backend/main.py").read()
 
-    # Skip path must be wrapped.
-    assert "except Exception as _e:" in src
+    # Skip path must be wrapped. 2026-08-19: widened to also catch
+    # BaseExceptionGroup (bare `except Exception` missed anyio task
+    # groups formed from a client-disconnect CancelledError, which is
+    # the exact "RuntimeError: No response returned" seen in the
+    # 2026-08-19 deploy logs).
+    assert "except (Exception, BaseExceptionGroup) as _e:" in src
     # Rate-limit call itself must be defensively wrapped so a
     # future refactor can't accidentally re-introduce the crash.
     assert "check_rate_limit_async(f\"global-ip:{ip}\", _GLOBAL_RL_PER_MIN)" in src

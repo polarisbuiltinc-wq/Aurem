@@ -36,6 +36,7 @@ _COST_PER_M_TOKENS: dict[str, tuple[float, float]] = {
     "perplexity/llama-3.1-sonar-large-128k-online":              (1.00,  1.00),
     "z-ai/glm-5.2":                                              (0.30,  0.60),
     "anthropic/claude-sonnet-4.5":                               (3.00, 15.00),
+    "gpt-5.4-mini":                                               (0.75,  4.50),
 }
 _DEFAULT_COST = (1.0, 3.0)   # unknown model → conservative estimate
 

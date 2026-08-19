@@ -169,15 +169,21 @@ def test_probe_longcat_keeps_live_true_on_200(monkeypatch):
     # Pretend the flag was already flipped False by a previous boot.
     llm.LONGCAT_LIVE = False
 
+    # Cost-leak fix (2026-08-19): the probe now does a free GET on
+    # OpenRouter's /models catalog instead of a real completion — it's
+    # "live" if the primary model slug is listed in the catalog.
     class _Resp:
-        def __init__(self): self.status_code = 200; self.text = ""
-        def json(self): return {}
+        def __init__(self):
+            self.status_code = 200
+            self.text = ""
+        def json(self):
+            return {"data": [{"id": "anthropic/claude-sonnet-4.5"}]}
 
     class _Client:
         def __init__(self, *a, **kw): pass
         async def __aenter__(self): return self
         async def __aexit__(self, *a): return False
-        async def post(self, *a, **kw): return _Resp()
+        async def get(self, *a, **kw): return _Resp()
 
     monkeypatch.setattr(llm.httpx, "AsyncClient", _Client)
     result = asyncio.run(llm.probe_longcat_availability())

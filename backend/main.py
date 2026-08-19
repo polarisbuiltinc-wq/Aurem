@@ -423,6 +423,19 @@ async def lifespan(app: FastAPI):
         long_lived=True,
     )
 
+    # 2026-08-19 · G22 — idle-window LLM spend guard. Founder-requested
+    # standing safety net after the LongCat/integration-health cost-leak
+    # investigation: alerts if LLM spend is logged during an hour with
+    # zero real user activity, above the known/reviewed background
+    # actors' tiny ceiling. See services/g22_idle_spend_guard.py.
+    from services.g22_idle_spend_guard import schedule_idle_spend_guard
+    app.state.idle_spend_guard_task = _supervise(
+        schedule_idle_spend_guard(lambda: app.state.db),
+        name="idle_spend_guard",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
+    )
+
     # Iter 309 · Phase 0.1 — Merged housekeeping loop.
     # Previously two independent `while True` background tasks:
     #   • _resume_stale_loops (rescues orphaned EXECUTING/VERIFYING/…)
@@ -1232,15 +1245,15 @@ async def lifespan(app: FastAPI):
     # straight to the GLM-5.2 fallback. When LongCat is published
     # upstream, the periodic re-probe (Iter 212m-192) flips the flag
     # back True within 15 min without a supervisor restart.
+    #
+    # SEC-cost-leak fix (2026-08-19) — this used to ALSO fire a
+    # standalone one-off `_probe_longcat()` task here, in addition to
+    # `periodic_longcat_reprobe()`'s own un-delayed first iteration a
+    # few lines below — every boot was double-probing within
+    # milliseconds (confirmed via near-duplicate `council_health_probes`
+    # timestamps). Removed; the periodic loop's first iteration below
+    # already probes immediately on start, so this was pure duplication.
     if os.getenv("LONGCAT_ENABLED", "false").lower() == "true":
-        async def _probe_longcat():
-            try:
-                from services.llm import probe_longcat_availability
-                await probe_longcat_availability()
-            except Exception as _e:
-                logger.warning("LongCat probe failed: %r", _e)
-        _asyncio.create_task(_probe_longcat())
-
         # Iter 212m-192 — Periodic Council A re-probe. Without this a
         # LongCat outage that resolves upstream stays masked until the
         # next supervisor restart. Every 15 min we re-probe and flip
@@ -1984,6 +1997,16 @@ _GLOBAL_RL_SKIP_PREFIXES = (
     "/api/chat/stream",
     "/api/loop/",           # loop SSE paths (/loop/{id}/stream, /events)
     "/api/aurem-dev/loop/",  # namespace-prefixed variant
+    # 2026-08-19 deploy-log fix: prefix-less K8s pod-level probes
+    # (`/health`, `/healthz`, `/ping` — see main.py's healthz_root())
+    # were NOT covered by "/api/health" above, so every pod liveness/
+    # readiness probe was going through the Redis-backed rate limiter.
+    # When Upstash's quota was exhausted this added real latency to
+    # every probe, which is the confirmed root cause of the K8s/Nginx
+    # upstream timeout on /health seen in the deploy logs.
+    "/health",
+    "/healthz",
+    "/ping",
 )
 
 
@@ -2017,7 +2040,17 @@ async def _global_rate_limit_guard(request, call_next):
         # if call_next propagates an unhandled exception.
         try:
             return await call_next(request)
-        except Exception as _e:
+        # 2026-08-19 deploy-log fix: `except Exception` alone MISSES the
+        # real "RuntimeError: No response returned" failure mode. When a
+        # client (K8s probe / Nginx) disconnects early, anyio's internal
+        # task group used by Starlette's BaseHTTPMiddleware can raise a
+        # `BaseExceptionGroup` (e.g. wrapping `anyio.EndOfStream` +
+        # `asyncio.CancelledError`) — and `BaseExceptionGroup` does NOT
+        # subclass `Exception` when any member is a bare `BaseException`
+        # (CancelledError), so it silently skipped this handler and
+        # propagated up as an unhandled ASGI error. Catching
+        # `BaseExceptionGroup` explicitly here closes that gap.
+        except (Exception, BaseExceptionGroup) as _e:
             logger.error(
                 "rate_limit_guard: downstream raised on skip path %s %s — %r",
                 request.method, request.url.path, _e,
@@ -2082,7 +2115,10 @@ async def _global_rate_limit_guard(request, call_next):
     # the response stream. So we catch here defensively.
     try:
         return await call_next(request)
-    except Exception as _e:                                        # noqa: BLE001
+    # 2026-08-19 deploy-log fix: widened to also catch BaseExceptionGroup
+    # (see matching comment on the skip-path branch above for the exact
+    # anyio/CancelledError mechanics this closes).
+    except (Exception, BaseExceptionGroup) as _e:                    # noqa: BLE001
         logger.error(
             "rate_limit_guard: downstream raised on %s %s — %r",
             request.method, request.url.path, _e,

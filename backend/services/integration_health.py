@@ -753,42 +753,69 @@ async def _probe_mongodb() -> dict:
 
 
 async def _probe_emergent_llm() -> dict:
+    """Confirms the EMERGENT_LLM_KEY credential is valid and funded.
+
+    Cost-leak fix (2026-08-19): this ran unconditionally every
+    `INTEGRATION_HEALTH_INTERVAL_SEC` (default 10 min), 24/7, via
+    Claude Haiku 4.5 — a real, billed completion with zero user
+    attribution and zero visibility in `ora_chat_usage` (bypassed the
+    metering wrapper entirely). Founder decision: this check only
+    needs to prove the KEY is alive/funded, not validate any specific
+    customer-facing model (ORA's real chat/coding path uses
+    GLM/LongCat/DeepSeek via OpenRouter, not this key) — so it's safe
+    to run on the cheapest available model, always (idle or active),
+    unlike the LongCat probe which HAD to keep testing its exact
+    model. Switched to `gpt-5.4-mini` (cheapest per-token option
+    reachable via this key). Now logged through `cost_tracker.log_call`
+    under a `system:health_check` user_id so it's visible in the BI
+    cockpit instead of invisible spend.
+    """
     key = _safe_env("EMERGENT_LLM_KEY")
     if not key:
-        return _result("emergent_llm", "Emergent LLM (Claude)", "missing",
+        return _result("emergent_llm", "Emergent LLM Key", "missing",
                        summary="EMERGENT_LLM_KEY not configured",
                        fix_hint="Profile → Universal Key in Emergent dashboard")
+    model_name = "gpt-5.4-mini"
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         import uuid as _uuid
         chat = (
             LlmChat(api_key=key, session_id=f"healthcheck-{_uuid.uuid4().hex[:8]}",
                     system_message="Reply with exactly the word: OK")
-            .with_model("anthropic", "claude-haiku-4-5")
-            .with_params(max_tokens=10, temperature=0.0)
+            .with_model("openai", model_name)
+            .with_params(max_tokens=10)  # gpt-5.4-mini only supports temperature=1 (default)
         )
         resp = await chat.send_message(UserMessage(text="ping"))
         text = (resp or "").strip()
+        try:
+            from services.ora_chat.cost_tracker import log_call as _log_call
+            await _log_call(
+                user_id="system:health_check", session_id="integration_health_cron",
+                route="admin_health_probe", model=model_name, temperature=1.0,
+                input_tokens=15, output_tokens=max(len(text.split()), 1),
+            )
+        except Exception as _e:  # best-effort, never blocks the probe result
+            logger.debug("emergent_llm probe cost-log failed: %r", _e)
         if "OK" in text.upper() or len(text) > 0:
-            return _result("emergent_llm", "Emergent LLM (Claude)", "ok",
-                           summary=f"Live • Claude responded ({len(text)} chars)",
+            return _result("emergent_llm", "Emergent LLM Key", "ok",
+                           summary=f"Live • {model_name} responded ({len(text)} chars)",
                            detail=f"reply: {text[:80]!r}")
-        return _result("emergent_llm", "Emergent LLM (Claude)", "warn",
-                       summary="Empty reply from Claude",
+        return _result("emergent_llm", "Emergent LLM Key", "warn",
+                       summary="Empty reply",
                        detail=f"got: {text!r}")
     except Exception as e:
         msg = str(e)
         if "budget" in msg.lower() or "quota" in msg.lower() or "402" in msg:
-            return _result("emergent_llm", "Emergent LLM (Claude)", "warn",
+            return _result("emergent_llm", "Emergent LLM Key", "warn",
                            summary="Budget exhausted",
                            detail=msg[:300],
                            fix_hint="Profile → Universal Key → Add Balance in Emergent dashboard")
         if "401" in msg or "invalid" in msg.lower():
-            return _result("emergent_llm", "Emergent LLM (Claude)", "broken",
+            return _result("emergent_llm", "Emergent LLM Key", "broken",
                            summary="Key rejected",
                            detail=msg[:300],
                            fix_hint="Rotate EMERGENT_LLM_KEY from Emergent profile")
-        return _result("emergent_llm", "Emergent LLM (Claude)", "broken",
+        return _result("emergent_llm", "Emergent LLM Key", "broken",
                        summary=f"LLM error: {type(e).__name__}",
                        detail=msg[:300])
 
@@ -839,7 +866,7 @@ async def _probe_openrouter() -> dict:
 _PROBES: list[tuple[str, str, Callable[[], Awaitable[dict]]]] = [
     ("stripe",        "Stripe",                _probe_stripe),
     ("github_oauth",  "GitHub OAuth",          _probe_github_oauth),
-    ("emergent_llm",  "Emergent LLM (Claude)", _probe_emergent_llm),
+    ("emergent_llm",  "Emergent LLM Key", _probe_emergent_llm),
     ("openrouter",    "OpenRouter (DeepSeek)", _probe_openrouter),
     ("e2b",           "E2B Sandbox",           _probe_e2b),
     ("tavily",        "Tavily Search",         _probe_tavily),
