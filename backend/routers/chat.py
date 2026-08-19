@@ -2956,12 +2956,6 @@ async def chat_stream(
             yield f"data: {json.dumps({'watchdog': watchdog})}\n\n"
             provider = (provider or "deepseek") + "+emergent-watchdog"
 
-        await _persist_turn(user_id, body.session_id or "",
-                            body.prompt, content, provider, watchdog=watchdog,
-                            project_id=body.project_id,
-                            shipped_task_id=handoff_task_id,
-                            steps=collected_steps)
-
         # Iter 212m-154 — non-blocking quality scoring.  Fire-and-forget
         # AFTER the user has seen their reply.  Writes to quality_scores
         # collection and raises drift alerts when avg drops sharply.
@@ -3092,13 +3086,23 @@ async def chat_stream(
                 # Lightweight retry: ask the same provider for a rewrite
                 # with the injection appended as a system note. Falls
                 # back to returning the original draft if the call fails.
+                #
+                # 2026-08-19 · Customer Chat Regen fix — this called
+                # `services.orchestrator.respond_text`, a function that
+                # has NEVER existed anywhere in the codebase. Every real
+                # retry silently hit the `except Exception: return
+                # content` fallback below and returned the ORIGINAL
+                # (fabricated) draft unchanged — the guard's `retried`
+                # flag went True, a no-op "reset" frame fired, but the
+                # customer never actually got a corrected answer.
+                # `call_llm()` (services/llm) is the real, existing
+                # plain single-turn completion used elsewhere in this
+                # file (see `_call_groq`/`_call_deepseek` rescue chain).
                 try:
-                    from services.orchestrator import respond_text  # type: ignore
-                    return await respond_text(
-                        messages=(original_messages or [])
-                                  + [{"role": "system",
-                                      "content": additional_context}],
-                        instruction=instruction,
+                    from services.llm import call_llm  # type: ignore
+                    return await call_llm(
+                        messages=original_messages or [],
+                        system=f"{instruction or ''}\n\n{additional_context or ''}".strip(),
                     )
                 except Exception:
                     return content
@@ -3120,6 +3124,19 @@ async def chat_stream(
                 yield f"data: {json.dumps({'token': content, 'reset': True})}\n\n"
         except Exception as _guard_err:
             logger.warning("citation_guard skipped: %r", _guard_err)
+
+        # 2026-08-19 · Customer Chat Regen — `_persist_turn` used to run
+        # BEFORE the CitationGuard block above, so a fabricated file path
+        # that got auto-corrected still landed in Mongo verbatim. The
+        # live viewer saw the fix (via the `reset: True` token frame
+        # above); a page refresh (GET /chat/history) showed the
+        # ORIGINAL, uncorrected draft. Persisting `content` here
+        # (post-guard) closes that gap.
+        await _persist_turn(user_id, body.session_id or "",
+                            body.prompt, content, provider, watchdog=watchdog,
+                            project_id=body.project_id,
+                            shipped_task_id=handoff_task_id,
+                            steps=collected_steps)
 
         # Fire-and-forget audit row — never block the response.
         try:

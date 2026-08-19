@@ -12,7 +12,22 @@ answer questions, propose fixes, apply them via GitHub commits/PRs, and
 run scan+fix pipelines (health, security, quality). Zero-mock — every fix
 is a real GitHub commit with a verified SHA.
 
-## Latest ship — Anti-Fabrication Regen, admin tool (2026-08-19)
+## Latest ship — Customer Chat Regen, real bugs found + fixed (2026-08-19)
+
+**Preview-verified.** All 3 priority items from this session done:
+1. G21 real finding fixed (unused editable package pin removed).
+2. Customer Chat Regen — found the guard already existed (`CitationGuard`,
+   Iter 209) but was silently broken in TWO ways: a phantom function
+   import (`respond_text` never existed) made every correction attempt
+   a no-op, and `_persist_turn` ran before the guard so even a working
+   correction wouldn't have survived a page refresh. Both fixed.
+3. Diff View Upgrade — next up.
+
+See `/app/memory/CHANGELOG.md` for full detail + the honest correction
+log (2 prior status claims to the founder were wrong and got fixed
+publicly in the changelog, not swept under the rug).
+
+
 
 **Preview-verified**. Founder-approved plan: admin tool first, then
 customer-facing chat.py as fast-follow (do NOT let it slip). See

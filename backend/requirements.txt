@@ -117,8 +117,6 @@ opentelemetry-exporter-otlp-proto-http==1.43.0
 opentelemetry-proto==1.43.0
 opentelemetry-sdk==1.43.0
 opentelemetry-semantic-conventions==0.64b0
-# Editable Git install with no remote (ora-grounding==0.1.0)
--e /app/_extract
 packageurl-python==0.17.6
 packaging==26.2
 pandas==3.0.3
