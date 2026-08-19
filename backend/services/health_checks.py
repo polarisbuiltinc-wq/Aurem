@@ -73,7 +73,12 @@ async def _check_g7_payment_recon() -> dict:
     last_run = summary.get("last_run")
     if not last_run:
         return result_gray("no recon runs yet — Stripe may not be configured")
-    drift = summary.get("drift_events") or summary.get("drift") or 0
+    # 2026-08-19 · guards-audit fix — get_recon_summary() has always
+    # returned the count under "findings" (see get_recon_summary()
+    # below); this adapter was reading "drift_events"/"drift", which
+    # never existed, so it silently read 0 forever regardless of the
+    # real finding count.
+    drift = summary.get("findings") or 0
     if drift and int(drift) > 0:
         return result_red(f"{drift} drift events detected on last recon")
     return result_green(f"recon clean · last run {last_run}")
@@ -201,9 +206,17 @@ async def _check_g12_rollback() -> dict:
     if db is None:
         return result_gray("database unavailable")
     st = await rollback_status(db) or {}
-    if st.get("last_drill_at"):
-        return result_green(f"last rollback drill: {st.get('last_drill_at')}")
-    return result_gray("no rollback drill executed yet")
+    # 2026-08-19 · guards-audit fix — rollback_status() has always
+    # returned the last attempt under "last_rollback" (a dict); this
+    # adapter was reading "last_drill_at", a key that has never
+    # existed, so it could never go green regardless of real drills.
+    last = st.get("last_rollback")
+    if not last:
+        return result_gray("no rollback drill executed yet")
+    if last.get("error") or last.get("status") == "failed":
+        return result_red(f"last rollback FAILED: {last.get('error') or 'unknown error'}")
+    when = last.get("completed_at") or last.get("started_at")
+    return result_green(f"last rollback {last.get('status')} · {when}")
 
 
 async def _check_g13_cost() -> dict:
@@ -322,19 +335,28 @@ async def _check_g20_incidents() -> dict:
 
 
 async def _check_g21_security_scan() -> dict:
-    from cto_services.db import get_db
-    db = get_db()
-    if db is None:
-        return result_gray("database unavailable")
-    last = await db.vanguard_findings.find_one(
-        {"scanner": "trufflehog"}, sort=[("created_at", -1)]
-    )
-    if not last:
-        return result_gray("no trufflehog scan ingested yet")
-    verified = int(last.get("verified") or 0)
-    if verified > 0:
-        return result_red(f"{verified} verified secret(s) — rotate immediately")
-    return result_green(f"trufflehog clean · last scan {last.get('created_at')}")
+    """2026-08-19 · guards-audit fix — this used to query
+    `db.vanguard_findings` for a `scanner:"trufflehog"` doc — a
+    collection nothing writes to (the real trufflehog CI ingest table
+    is `vanguard_ci_findings`, and it's scoped to CUSTOMER repos, not
+    AUREM's own — unrelated to G21 entirely). G21's real, working
+    signal is the live static scan already exposed at
+    /admin/qa/guard21-security-scan — call the same function here."""
+    try:
+        import asyncio
+        from scripts.g21_security_scan import run_scan
+        # `run_scan()` walks every backend .py file synchronously —
+        # same "don't block the event loop" concern as G18/CI-drift
+        # above. Off-loop via to_thread.
+        result = await asyncio.to_thread(run_scan)
+    except Exception as e:
+        return result_gray(f"g21 scan failed to run: {e}")
+    if result.get("pass"):
+        unpinned = result["supply_chain"]["unpinned_count"]
+        return result_green(f"clean · 0 misconfig findings, {unpinned} unpinned deps")
+    findings = result["misconfig"]["finding_count"]
+    unpinned = result["supply_chain"]["unpinned_count"]
+    return result_red(f"{findings} misconfig finding(s), {unpinned} unpinned dep(s)")
 
 
 async def _check_g16_auth_hardening() -> dict:

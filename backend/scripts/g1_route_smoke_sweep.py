@@ -116,11 +116,40 @@ async def sweep(base_url: str) -> dict:
     }
 
 
+async def _persist_result(result: dict) -> None:
+    """2026-08-19 · G21-audit fix — the docstring always claimed this
+    persists to `synthetic_checks` but the write was never actually
+    implemented, so `/admin/qa` + the health-checks aggregator could
+    never show anything but gray. Best-effort: a scan that ran fine
+    but failed to write to Mongo should still exit with the real
+    pass/fail code (CI cares about the exit code, not the DB write)."""
+    mongo_url = os.environ.get("MONGO_URL")
+    db_name = os.environ.get("DB_NAME")
+    if not mongo_url or not db_name:
+        print("[g1] MONGO_URL/DB_NAME not set — skipping result persistence")
+        return
+    try:
+        from motor.motor_asyncio import AsyncIOMotorClient
+        client = AsyncIOMotorClient(mongo_url)
+        await client[db_name].synthetic_checks.insert_one({
+            "kind":         "g1_route_sweep",
+            "finished_at":  datetime.now(timezone.utc),
+            "base_url":     result["base_url"],
+            "total":        result["total"],
+            "failed":       result["failed"],
+            "results":      result["results"],
+        })
+        client.close()
+    except Exception as e:
+        print(f"[g1] WARN persistence failed: {e}")
+
+
 async def main_async(base_url: str, out_json: str | None) -> int:
     result = await sweep(base_url)
     if out_json:
         with open(out_json, "w") as fh:
             json.dump(result, fh, indent=2)
+    await _persist_result(result)
     print(f"[g1] {result['failed']} failure(s) / {result['total']} routes.")
     for r in result["results"]:
         mark = "✅" if r["ok"] else "❌"

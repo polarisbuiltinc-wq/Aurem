@@ -188,3 +188,40 @@ async def get_recon_summary(db) -> dict:
         }
     except Exception as e:
         return {"available": False, "error": str(e)[:200]}
+
+
+_RECON_INTERVAL_S = 3600  # hourly, matches the module docstring's promise
+
+
+async def schedule_payment_reconciliation(db_getter) -> None:
+    """2026-08-19 · guards-audit fix — `run_reconciliation()` was fully
+    built (and STRIPE_API_KEY has been set the whole time) but was
+    NEVER actually called anywhere, so G7 sat gray forever. Same
+    scheduler shape as `schedule_integration_health_cron` — kicked off
+    from main.py startup, sleeps `_RECON_INTERVAL_S` between runs.
+    `db_getter` is a zero-arg callable (e.g. `lambda: app.state.db`)
+    so this always reads the live db handle, not one captured at
+    startup before Mongo connects."""
+    import asyncio
+    await asyncio.sleep(120)  # let the app finish booting first
+    while True:
+        try:
+            db = db_getter()
+            if db is not None:
+                summary = await run_reconciliation(db)
+                if summary.get("ok"):
+                    logger.info(
+                        "[G7] reconciliation ok — %d PI, %d sub checked, "
+                        "%d finding(s)",
+                        summary.get("checked_pi", 0),
+                        summary.get("checked_sub", 0),
+                        summary.get("finding_count", 0),
+                    )
+                else:
+                    logger.info("[G7] reconciliation skipped: %s",
+                                summary.get("reason"))
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:                                # noqa: BLE001
+            logger.warning("[G7] reconciliation tick failed: %r", e)
+        await asyncio.sleep(_RECON_INTERVAL_S)

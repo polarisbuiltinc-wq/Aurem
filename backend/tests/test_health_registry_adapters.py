@@ -96,7 +96,7 @@ async def test_g7_gray_when_last_run_is_null(monkeypatch):
     monkeypatch.setattr("cto_services.db.get_db", lambda: object())
 
     async def _fake_summary(db):
-        return {"last_run": None, "drift_events": 0}
+        return {"last_run": None, "findings": 0}
     monkeypatch.setattr(
         "services.payment_reconciliation.get_recon_summary", _fake_summary
     )
@@ -111,7 +111,7 @@ async def test_g7_green_when_clean(monkeypatch):
     monkeypatch.setattr("cto_services.db.get_db", lambda: object())
 
     async def _fake_summary(db):
-        return {"last_run": "2026-02-01T00:00:00Z", "drift_events": 0}
+        return {"last_run": "2026-02-01T00:00:00Z", "findings": 0}
     monkeypatch.setattr(
         "services.payment_reconciliation.get_recon_summary", _fake_summary
     )
@@ -125,7 +125,7 @@ async def test_g7_red_when_drift_detected(monkeypatch):
     monkeypatch.setattr("cto_services.db.get_db", lambda: object())
 
     async def _fake_summary(db):
-        return {"last_run": "2026-02-01T00:00:00Z", "drift_events": 4}
+        return {"last_run": "2026-02-01T00:00:00Z", "findings": 4}
     monkeypatch.setattr(
         "services.payment_reconciliation.get_recon_summary", _fake_summary
     )
@@ -133,6 +133,91 @@ async def test_g7_red_when_drift_detected(monkeypatch):
     res = await health_checks._check_g7_payment_recon()
     _shape_ok(res, "red")
     assert "4" in res["detail"]
+
+
+# ─────────────────────────────────────────────────────────────
+# G12 · Rollback — 2026-08-19 guards-audit fix. Adapter used to read
+# `last_drill_at`, a key rollback_status() never writes (real shape
+# has `last_rollback`). Structurally could never leave gray/red.
+# ─────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_g12_gray_when_no_drill_yet(monkeypatch):
+    monkeypatch.setattr("cto_services.db.get_db", lambda: object())
+
+    async def _fake_status(db):
+        return {"available": True, "last_rollback": None}
+    monkeypatch.setattr(
+        "services.rollback_manager.rollback_status", _fake_status
+    )
+    res = await health_checks._check_g12_rollback()
+    _shape_ok(res, "gray")
+    assert "no rollback drill" in res["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_g12_green_when_last_drill_succeeded(monkeypatch):
+    monkeypatch.setattr("cto_services.db.get_db", lambda: object())
+
+    async def _fake_status(db):
+        return {"available": True, "last_rollback": {
+            "loop_id": "l1", "status": "queued",
+            "started_at": 123.0, "completed_at": 124.0, "error": None,
+        }}
+    monkeypatch.setattr(
+        "services.rollback_manager.rollback_status", _fake_status
+    )
+    res = await health_checks._check_g12_rollback()
+    _shape_ok(res, "green")
+
+
+@pytest.mark.asyncio
+async def test_g12_red_when_last_drill_failed(monkeypatch):
+    monkeypatch.setattr("cto_services.db.get_db", lambda: object())
+
+    async def _fake_status(db):
+        return {"available": True, "last_rollback": {
+            "loop_id": "l1", "status": "failed",
+            "started_at": 123.0, "completed_at": 124.0,
+            "error": "401 Unauthorized",
+        }}
+    monkeypatch.setattr(
+        "services.rollback_manager.rollback_status", _fake_status
+    )
+    res = await health_checks._check_g12_rollback()
+    _shape_ok(res, "red")
+    assert "401" in res["detail"]
+
+
+# ─────────────────────────────────────────────────────────────
+# G21 · Security Scan — 2026-08-19 guards-audit fix. Adapter used to
+# query `db.vanguard_findings` (scanner:"trufflehog") — a collection
+# nothing ever writes (the real ingest table is `vanguard_ci_findings`,
+# scoped to CUSTOMER repos — unrelated to G21). Now calls the same
+# live `run_scan()` the working /admin/qa endpoint already uses.
+# ─────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_g21_green_when_scan_passes(monkeypatch):
+    monkeypatch.setattr(
+        "scripts.g21_security_scan.run_scan",
+        lambda: {"supply_chain": {"unpinned_count": 0, "yarn_lock_present": True},
+                 "misconfig": {"findings": [], "finding_count": 0},
+                 "pass": True},
+    )
+    res = await health_checks._check_g21_security_scan()
+    _shape_ok(res, "green")
+
+
+@pytest.mark.asyncio
+async def test_g21_red_when_scan_fails(monkeypatch):
+    monkeypatch.setattr(
+        "scripts.g21_security_scan.run_scan",
+        lambda: {"supply_chain": {"unpinned_count": 1, "yarn_lock_present": True},
+                 "misconfig": {"findings": [], "finding_count": 0},
+                 "pass": False},
+    )
+    res = await health_checks._check_g21_security_scan()
+    _shape_ok(res, "red")
+    assert "1 unpinned" in res["detail"]
 
 
 # ─────────────────────────────────────────────────────────────

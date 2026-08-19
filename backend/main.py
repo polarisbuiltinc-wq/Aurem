@@ -411,6 +411,18 @@ async def lifespan(app: FastAPI):
         long_lived=True,
     )
 
+    # 2026-08-19 · G7 guards-audit fix — `run_reconciliation()` existed
+    # since it was written but was never actually scheduled anywhere,
+    # so the Stripe-vs-local payment guard sat gray forever. Wired in
+    # now — hourly tick, same _supervise pattern as its siblings above.
+    from services.payment_reconciliation import schedule_payment_reconciliation
+    app.state.payment_reconciliation_task = _supervise(
+        schedule_payment_reconciliation(lambda: app.state.db),
+        name="payment_reconciliation",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
+    )
+
     # Iter 309 · Phase 0.1 — Merged housekeeping loop.
     # Previously two independent `while True` background tasks:
     #   • _resume_stale_loops (rescues orphaned EXECUTING/VERIFYING/…)

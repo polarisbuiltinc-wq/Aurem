@@ -22,7 +22,7 @@ import json
 import os
 import subprocess
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -170,6 +170,31 @@ def _is_allowlisted(finding: dict, allowlist: list[dict]) -> tuple[bool, str]:
     return False, ""
 
 
+def _persist_result(findings: list[dict], hard_fails: list[dict]) -> None:
+    """2026-08-19 · guards-audit fix — this scan ran fine but never
+    wrote its result anywhere, so `/admin/qa` + the health-checks
+    aggregator could never show anything but gray. Best-effort: sync
+    pymongo (no asyncio plumbing needed for a one-shot CI script)."""
+    mongo_url = os.environ.get("MONGO_URL")
+    db_name = os.environ.get("DB_NAME")
+    if not mongo_url or not db_name:
+        print("[g15] MONGO_URL/DB_NAME not set — skipping result persistence")
+        return
+    try:
+        from pymongo import MongoClient
+        client = MongoClient(mongo_url, serverSelectionTimeoutMS=5000)
+        client[db_name].synthetic_checks.insert_one({
+            "kind":          "g15_dep_scan",
+            "finished_at":   datetime.now(timezone.utc),
+            "total_findings": len(findings),
+            "high_critical": len(hard_fails),
+            "findings":      findings[:100],
+        })
+        client.close()
+    except Exception as e:
+        print(f"[g15] WARN persistence failed: {e}")
+
+
 def main() -> int:
     allowlist = _load_allowlist()
 
@@ -198,6 +223,8 @@ def main() -> int:
         hard_fails.append(f)
         print(f"[g15] ❌ [{f.get('source')}] {f['package']}::{f['id']} "
               f"{f['severity']} (fix: {f.get('fix')})  {note}")
+
+    _persist_result(findings, hard_fails)
 
     if hard_fails:
         print(f"[g15] Build fails: {len(hard_fails)} HIGH/CRITICAL "
