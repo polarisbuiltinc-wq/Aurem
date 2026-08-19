@@ -4,6 +4,41 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## Latest ship — Self-service password reset/change, browser-verified + bug fixed (2026-08-19)
+
+**Frontend now browser-verified** (was preview-verified backend-only before
+this session). Forgot-password mini-flow on `/login`, standalone
+`/reset-password` page, and `ChangePasswordCard` on `/settings` (gated by
+`me.has_password`) — all confirmed working via `testing_agent` Playwright run.
+
+**Real bug found + fixed**: submitting the WRONG current password on
+`ChangePasswordCard` caused a spurious redirect to `/login` instead of
+showing the inline error. Root cause: `frontend/src/lib/api.js`'s 401
+interceptor `isAuthEndpoint` allow-list didn't exempt `/auth/change-password`
+(nor `/auth/forgot-password` / `/auth/reset-password`), so any 401 from these
+was treated as mid-session token revocation → global session-expired
+redirect. Fix: added the 3 paths to the allow-list. Retested 3/3 pass —
+wrong password now shows inline error and stays on `/settings`; happy path
+and regression login still work.
+
+Backend endpoints (`/auth/forgot-password`, `/auth/reset-password`,
+`/auth/change-password`) were already agent-tested (9/9) in a prior session.
+Rotation script (`backend/scripts/rotate_password.py`) exists for the
+founder to run against production themselves once Emergent Support confirms
+the official one-off script execution path (founder following up separately,
+refuses to share prod Mongo string with agent).
+
+**Incident-log hygiene cleanup**: audited the "41 open incidents" flag from
+the codebase audit — 40 of 41 were stale `_Test_Dedup_*` fixture rows never
+cleaned up after dedup-test runs (0 recurrence, simulated). Deleted (50 rows
+total incl. resolved dupes). **Only 1 real open incident remains**: Tavily
+Search rate-limit/credits-exhausted (432), already known P1 in backlog,
+blocked on founder's top-up decision — not touched, founder will action
+separately.
+
+**Parked per founder decision**: CI wiring gap (G4/G15/G18 claimed CI-wired
+but only G21 actually is) — deferred, not urgent, still tracked in backlog.
+
 ## Product mission
 
 AUREM CTO is a full-stack AI product where founders can bring GitHub repos
