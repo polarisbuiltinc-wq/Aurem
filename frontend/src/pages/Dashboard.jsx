@@ -190,6 +190,19 @@ function DashboardV2Body() {
   // every login / refresh; opens only when clicked.
   const [advisorCollapsed, setAdvisorCollapsed] = useState(true);
 
+  // 2026-08-20 — bug fix: OraGuideMascot's "Open Advisor" button
+  // dispatches `aurem:ora-open` expecting FloatingORAButton to pick
+  // it up, but FloatingORAButton is only mounted in Shell.jsx when
+  // `!chromeless` — the dashboard route runs chromeless and uses its
+  // own AskAdvisorReal panel instead, so the event previously had no
+  // listener here and the button did nothing. Expand the real panel
+  // on this event too.
+  useEffect(() => {
+    const onOraOpen = () => setAdvisorCollapsed(false);
+    window.addEventListener("aurem:ora-open", onOraOpen);
+    return () => window.removeEventListener("aurem:ora-open", onOraOpen);
+  }, []);
+
   // Iter 212m-124 — Left-edge reveal trigger.  Per founder spec:
   // once the sidebar fully hides (chatActive=true), the ONLY way to
   // bring it back without explicit pinning is to move the cursor
@@ -662,6 +675,18 @@ function DashboardV2Body() {
       {showWizard && <NewUserWizard onComplete={onWizardComplete} />}
       {/* Iter 212m-200 — Connect-Repo interactive tour overlay. */}
       {tourOpen && <ConnectRepoTour onClose={() => setTourOpen(false)} />}
+
+      {/* 2026-08-20 — bug fix: this modal was imported but never
+          rendered, so clicking Preview on a project with no
+          preview_url set `showLiveSiteModal=true` and nothing ever
+          appeared (dead click — tab highlighted, no content). */}
+      {showLiveSiteModal && (
+        <AddLiveSiteModal
+          projectName={activeProject?.name}
+          onSave={handleSaveLiveSite}
+          onCancel={() => setShowLiveSiteModal(false)}
+        />
+      )}
 
       {/* Iter 212m-86 BUG 5 — Ship via CTO confirmation modal.
           Mounted once; opens on `aurem:open-ship-modal` event. */}

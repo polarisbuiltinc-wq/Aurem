@@ -2994,3 +2994,61 @@ wizard.
 
 **Not yet deployed** — add to the redeploy checklist above (item 8).
 
+---
+
+## Founder bug bundle: Open Advisor dead button, Preview dead-click, Advisor English (2026-08-20)
+
+Founder ran a non-admin QA pass and reported 4 things; 2 were real bugs
+(fixed below), 2 were confirmed working-as-designed (no action):
+
+**FIXED — "Open Advisor" button did nothing** (inside the ORA Guide
+mascot's general help menu). Root cause: it dispatches
+`window.dispatchEvent(new Event("aurem:ora-open"))`, which only
+`FloatingORAButton.jsx` listens for — but that component is mounted
+from `Shell.jsx` only `{token && !chromeless}`, and `/dashboard` runs
+chromeless with its own `AskAdvisorReal` panel (state:
+`advisorCollapsed` in `Dashboard.jsx`) that never listened for this
+event. Fix: added a listener in `Dashboard.jsx` that calls
+`setAdvisorCollapsed(false)` on `aurem:ora-open`. Screenshot-verified:
+clicking mascot → "Open Advisor" → real panel with "I'm ORA" /
+Advisor tab expands correctly.
+
+**FIXED — Preview tab dead-click** (tab highlighted, nothing loaded).
+Root cause: `AddLiveSiteModal` was imported in `Dashboard.jsx` but
+**never rendered** — `setShowLiveSiteModal(true)` fired on any project
+with no `preview_url` set, updating state that had no JSX consumer.
+Fix: rendered `<AddLiveSiteModal>` conditionally on `showLiveSiteModal`
+next to the other modals. Screenshot-verified: clicking Preview on a
+project with no live-site URL now shows the "Add your live site"
+modal correctly.
+
+**FIXED — Advisor didn't default to English.** Founder's account
+Advisor screenshot showed Hinglish replies ("yeh data abhi available
+nahi hai"). Added `R7. ALWAYS REPLY IN ENGLISH` to `ORA_PANEL_TONE` in
+`backend/routers/chat.py` — this constant is always appended to the
+final advisor system prompt regardless of any admin-configured custom
+prompt, so it applies to every user/every model in the cascade.
+
+**Confirmed NOT bugs (no action taken)**:
+- Loop mode "LOOP · SOON" lock for non-admin — deliberate, tied to a
+  past retry-storm incident during hardening. Founder did not ask to
+  unlock it in this round.
+- Sidebar "Analytics" admin-gate — intentional; non-admins already get
+  their own usage via Advisor's "Token breakdown".
+- Mascot "not responding to clicks" — was a screenshot-tool DPI/coord
+  mismatch in QA's testing, not a real bug.
+
+**Open, not yet investigated**: cold-start/council-recall chat
+mismatch reportedly still reproducing on a non-admin test account.
+Production build at the time (`ad2e034485eb`, built 21:07 UTC) was
+deployed AFTER the original cold-start fix commit, so the fix should
+be live — if it's still reproducing, it needs a fresh root-cause pass,
+not an assumed-fixed close.
+
+**Verified**: manual screenshot smoke test (both fixes confirmed live
+in preview: Advisor panel opens from mascot, Add-live-site modal
+renders). Small, isolated, low-risk changes — testing_agent not
+invoked for this round.
+
+**Not yet deployed** — add to the redeploy checklist above (item 9).
+
