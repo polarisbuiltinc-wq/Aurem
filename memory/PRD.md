@@ -42,7 +42,15 @@ this is the master-reference summary. Source docs referenced:
 - GitHub Actions token wired (`GITHUB_ACTIONS_TOKEN`/`GITHUB_REPO=polarisbuiltinc-wq/auremdev` set) — blocked only on founder adding the repo to the fine-grained token's access list on GitHub's side
 - Cleanup: 51 confirmed-test Stripe customers deleted (live account), 858 preview test `dev_users` wiped, 2 `cto_payments` test fixture rows deleted — zero real customer/revenue data touched
 
-### Confirmed NOT a bug this session
+### Retention-promises pass #2 (2026-08-20, same day, founder-requested follow-up)
+Checked every remaining row in Privacy Policy §8 (not just `login_attempts`):
+- **Account data** (deletion + 30d) → ✅ already correct: `POST /auth/delete-me` hard-deletes across 15 collections immediately (exceeds the promise), and any trace left in nightly R2 backups rolls off within the existing 30-day backup-retention window — no code change needed.
+- **Task history** (12 months) → ❌ found real gap: `loop_sessions` TTL was 30 days, not 365. Fixed live via `collMod` (no data loss) + corrected `scripts/init_prod_collections.py` source so fresh environments start right.
+- **GitHub tokens** (until disconnect) → event-driven, not TTL-based; not re-audited this pass.
+- **Payment records** (7 years, legal minimum) → ✅ correctly has no premature-deletion TTL.
+- **Error logs** (90 days) → ❌ found two real gaps, both fixed: `loop_errors` had zero TTL (added on `timestamp`, 90d); `frontend_errors` had zero TTL AND its only timestamp field (`last_seen`) is stored as an ISO **string**, which Mongo TTL silently ignores — added a real BSON-Date twin field `last_seen_at`, TTL'd that instead (`routers/admin_public.py`).
+All 4 fixes verified live via direct index inspection + a clean re-run of `init_prod_collections()`; 6 targeted tests still pass, `/api/health` green.
+
 - "Michael L. Lawson — Pro tier" question → `promo_first50.py`'s intentional, capped (50 spots), auto-expiring 30-day promo — not a payment bypass. Zero real Stripe revenue exists to date (75 customers, 0 charges/subscriptions ever, all traced to test/QA/founder-dogfood activity).
 
 

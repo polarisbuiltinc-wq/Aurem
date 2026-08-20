@@ -51,6 +51,7 @@ async def report_error(body: ErrorReport, request: Request) -> dict:
         "$inc": {"count": 1},
         "$set": {
             "last_seen":  now.isoformat(),
+            "last_seen_at": now,
             "stack":      stack,
             "type":       body.type or "console_error",
             "user_agent": (request.headers.get("user-agent") or "")[:500],

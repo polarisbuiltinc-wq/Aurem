@@ -254,9 +254,15 @@ _BOOTSTRAP_SPEC: list[tuple[str, list[tuple[list, dict]]]] = [
     #
     # Every one of these grows monotonically with production traffic
     # and had NO TTL prior to this iter. Retention tiers:
-    #   • runtime-only    (7 d):  loop_events, loop_locks, loop_failures
-    #   • audit trail     (30 d): loop_sessions
-    #   • analytics feed  (90 d): loop_verification_log, loop_run_log
+    #   • runtime-only    (7 d):   loop_events, loop_locks, loop_failures
+    #   • task history    (365 d): loop_sessions — Privacy Policy §8
+    #     ("Task history: 12 months rolling"). Was wrongly 30d until
+    #     2026-08-20's retention-promises audit found the mismatch —
+    #     live index fixed via collMod (no data loss), this source
+    #     value corrected to match so fresh environments start right.
+    #   • analytics feed  (90 d):  loop_verification_log, loop_run_log
+    #   • error logs      (90 d):  loop_errors, frontend_errors —
+    #     Privacy Policy §8 ("Error logs: 90 days"), added 2026-08-20.
     #
     # Uses `created_at` (or `updated_at` where the collection tracks
     # the last event more meaningfully) with `expireAfterSeconds` >0,
@@ -279,7 +285,7 @@ _BOOTSTRAP_SPEC: list[tuple[str, list[tuple[list, dict]]]] = [
         ([("loop_id", 1)], {"unique": True, "sparse": True}),
         ([("user_id", 1), ("updated_at", -1)], {}),
         ([("project_id", 1), ("state", 1)], {}),
-        ([("updated_at", 1)], {"expireAfterSeconds": 30 * 24 * 3600}),
+        ([("updated_at", 1)], {"expireAfterSeconds": 365 * 24 * 3600}),
     ]),
     ("loop_verification_log", [
         ([("loop_id", 1), ("created_at", -1)], {}),
@@ -290,6 +296,12 @@ _BOOTSTRAP_SPEC: list[tuple[str, list[tuple[list, dict]]]] = [
         ([("loop_id", 1)], {"unique": True, "sparse": True}),
         ([("user_id", 1), ("created_at", -1)], {}),
         ([("created_at", 1)], {"expireAfterSeconds": 90 * 24 * 3600}),
+    ]),
+    ("loop_errors", [
+        ([("timestamp", 1)], {"expireAfterSeconds": 90 * 24 * 3600}),
+    ]),
+    ("frontend_errors", [
+        ([("last_seen_at", 1)], {"expireAfterSeconds": 90 * 24 * 3600}),
     ]),
 ]
 
