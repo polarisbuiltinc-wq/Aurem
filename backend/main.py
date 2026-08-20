@@ -1046,6 +1046,23 @@ async def lifespan(app: FastAPI):
         except Exception as _e:
             logger.warning(f"oauth TTL indexes failed: {_e}")
 
+        # 2026-08-20 — Privacy Policy §8 promises "IP logs: 30 days"
+        # retention, but login_attempts (routers/auth.py
+        # _record_login_failure — keyed `_id: "ip:{client_ip}"`,
+        # `last_failed_at` bumped on every failed attempt) had no TTL
+        # at all. Rows written before this ship simply lack the field
+        # and won't expire — safe fallback, no historical rows lost.
+        try:
+            await app.state.db.login_attempts.create_index(
+                "last_failed_at",
+                expireAfterSeconds=30 * 24 * 60 * 60,
+                background=True,
+                name="last_failed_at_ttl_30d",
+            )
+            logger.info("🔒 login_attempts TTL index ensured (30d, Privacy Policy §8)")
+        except Exception as _e:
+            logger.warning(f"login_attempts TTL index failed: {_e}")
+
         # Iter 212m-28 — TTL index on repo_context_timings so the
         # per-turn instrumentation never grows unbounded. 7 days is
         # enough for week-over-week regression checks.

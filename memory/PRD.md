@@ -4,6 +4,48 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## Engineering-Discipline Audit — 12 categories, all checkpoints complete (2026-08-20)
+
+Founder-requested honest status check across Software Engineering,
+Reliability, Security, DevOps/Infra, Data Engineering, QA/Testing,
+Performance, Cost/FinOps, AI/ML, UX/Frontend, Growth, Compliance —
+every claim checked against real code/config/data, not memory.
+Full narrative detail lives in the chat transcript of this date;
+this is the master-reference summary. Source docs referenced:
+`CODEBASE_AUDIT.md`, `GUARDS_CHARTER.md`, `FOUNDER_STATUS_REPORT.md`,
+`G6_DEDUP_SCOPE_2026-08-20.md`.
+
+**Legend**: ✅ exists & working · ⚠️ partial/gap · ❌ missing
+
+| # | Category | Status | One-line finding |
+|---|---|---|---|
+| 1 | Software Engineering | ⚠️ | Clean router/service split; no ADRs; 2 response-envelope styles coexist (`{"ok":...}` vs `HTTPException`); `ChatPanel.jsx`(5,134L)/`chat.py`(3,782L) oversized |
+| 2 | Reliability | ⚠️ | Guards wired (G10/17/19/20/22); no external uptime monitor (G9, founder-owned); single-pod SPOF; 1 restore test ever, no recurring drill; no uptime target existed |
+| 3 | Security | ⚠️ | SEC-005/006 LIVE in prod; SEC-002/003/004 preview-fixed; **SEC-007+008 closed this session**; SEC-001 (git history) still open, blocked on Emergent Support; never an external pentest |
+| 4 | DevOps/Infra | ⚠️ | Docker✅, 8 real CI workflows exist but never triggered (G8) — **token wired this session, blocked on founder adding repo to token's access list**; manual single-pod deploy, no zero-downtime |
+| 5 | Data Engineering | ⚠️ | ~130 collections inventoried, no field-level schema; no ETL (not needed at this scale); G6 dedup — **found already partially shipped (charter was stale), extended +3 collections this session** |
+| 6 | QA/Testing | ⚠️ | 5,158 tests, 86% routers have ≥1 test file; **promo_first50.py gap closed this session (9 new tests)**; `backups_admin.py` still untested; zero load/stress testing ever; no real line-coverage % (proxy only) |
+| 7 | Performance | ⚠️ | Real Lighthouse run: Perf 41 (preview dev-mode, not representative) / A11y 100 / BP 79 / SEO 61. Real prod-relevant issues: 11.8s LCP, ~550KB tracking scripts — **parked by founder for a dedicated future pass** |
+| 8 | Cost/FinOps | ❌/⚠️ | No consolidated real monthly cost (no dashboard access); customer cost tracking exists but is a char-count estimate; G22 budget-guard confirmed working; no per-tier $ cap yet |
+| 9 | AI/ML | ✅/⚠️ | Multi-provider council routing confirmed live; CitationGuard covers customer chat not just admin; cheapest-viable-model claim not freshly re-verified against current pricing |
+| 10 | UX/Frontend | ⚠️ | A11y 100/100 (measured); responsive only browser-resize tested, never real devices; no design system (inline styles, light Tailwind) |
+| 11 | Growth | ⚠️ | Real activation funnel + d7/d30 retention metric exist; ad-tracking (gtag/Meta) not joined to internal funnel — **founder parked this as backlog, not urgent** |
+| 12 | Compliance/Legal | ⚠️ | 10 real policy docs incl. GDPR/CCPA/DPDP subprocessor mapping, real cookie banner, real self-service delete endpoint; Privacy Policy promises a retention table — **`login_attempts` 30-day TTL gap found AND fixed this session**; other retention-table rows (task history 12mo, error logs 90d) not verified as enforced |
+
+### Fixed this session (2026-08-20), all verified
+- SEC-007 (chat-path scan widened to CRITICAL+HIGH), SEC-008 (litellm off customer-assets → pinned PyPI `1.80.0`)
+- G15 dependency-CVE scan + G4 rendered-secret scan wired into `ci.yml`/`predeploy_gate.sh` (were built, never called)
+- Documented 99.0% uptime target (`GUARDS_CHARTER.md`)
+- G6 dedup indexes extended: `email_verifications.token`, `oauth_states.state`, `oauth_codes.code` (discovered G6 was already partially shipped — charter corrected)
+- `tests/test_promo_first50.py` — 9 new tests closing the zero-coverage gap on the revenue/access-controlling promo router (incl. the "never touch a real Stripe subscriber or founder" guarantee)
+- `login_attempts` 30-day TTL index added — closes a direct contradiction of the published Privacy Policy §8
+- GitHub Actions token wired (`GITHUB_ACTIONS_TOKEN`/`GITHUB_REPO=polarisbuiltinc-wq/auremdev` set) — blocked only on founder adding the repo to the fine-grained token's access list on GitHub's side
+- Cleanup: 51 confirmed-test Stripe customers deleted (live account), 858 preview test `dev_users` wiped, 2 `cto_payments` test fixture rows deleted — zero real customer/revenue data touched
+
+### Confirmed NOT a bug this session
+- "Michael L. Lawson — Pro tier" question → `promo_first50.py`'s intentional, capped (50 spots), auto-expiring 30-day promo — not a payment bypass. Zero real Stripe revenue exists to date (75 customers, 0 charges/subscriptions ever, all traced to test/QA/founder-dogfood activity).
+
+
 ## Latest ship — Deploy fix round 2 (health-probe short-circuit) + user-confirmed PRODUCTION LIVE (2026-08-19)
 
 **User-confirmed LIVE in production** (real evidence pasted, not assumed): `GET /api/health` on auremcto.com → `{"ok":true,"env":"production","built_at":"2026-08-19T23:22:21","db":true,"uptime_s":371.94,"dead":[]}`. This confirms round-1 of the deploy fix (health-path skip-list + `BaseExceptionGroup` catch) AND SEC-005/SEC-006 are live in production — highest evidence tier available.
