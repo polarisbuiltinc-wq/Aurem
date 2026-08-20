@@ -394,6 +394,79 @@ whole panel instead of switching views — founder has not been able to
 re-verify these are still reproducible; will need a fresh repro
 attempt or screenshot before fixing blind.
 
+## Round 5 — "new users can't add a project" investigation: real root cause found, NOT what founder suspected (2026-08-20)
+
+Founder saw 2 real signups (Luke West, Laurence Bellinger) with 0
+projects/tasks/sessions, "No activity recorded yet", and "Email
+unverified — promo not yet available". Hypothesis: unverified email
+silently blocks project creation.
+
+**Investigated and disproved that hypothesis**: traced `current_dev()`
+(`cto_services/auth.py`) and the `/projects/add` code path
+(`routers/cto_projects.py`) end-to-end — **no code anywhere checks
+`email_verified` before allowing project creation.** Nothing blocks
+these users from adding a project. Confirmed the same in the frontend
+(only `Admin.jsx` even references `email_verified`).
+
+**Found the REAL bug (2 bugs, actually) while tracing why the
+admin panel shows what it shows**, both in the GitHub OAuth signup
+path (`routers/github_oauth.py`) — and the signup page explicitly
+promotes "Continue with GitHub" as the *fastest* signup method, so
+this likely affects a large share of real Internshala/LinkedIn
+traffic, not an edge case:
+
+1. **`email_verified` was never set on GitHub or Google OAuth signup**
+   — the field was simply omitted (Mongo-missing → falsy), even
+   though the OAuth provider already verified the user's identity.
+   Worse: OAuth users never get sent our own verification email (by
+   design), so there was **no way for them to ever fix this status** —
+   permanently "unverified" with zero path forward. This directly
+   blocked them from the First-50 promo (`routers/promo_first50.py`
+   explicitly gates on `email_verified`) — a real, quantifiable growth
+   cost, exactly the founder's concern. **Fixed**: Google OAuth signups
+   now get `email_verified: True` unconditionally (Google/Emergent-
+   managed OAuth always returns a provider-verified email). GitHub
+   OAuth signups get `email_verified: bool(gh_email)` (True whenever
+   GitHub actually handed us a real email; False only for the
+   synthetic-noreply-email fallback case, where there's genuinely
+   nothing to verify).
+
+2. **GitHub OAuth signup/link telemetry was invisible to the admin
+   panel's Activity Log** — `routers/github_oauth.py` correctly emits
+   funnel events via `github_funnel.track_server_side()`, but those
+   write to a *separate* `github_funnel_events` collection that
+   `routers/admin_users.py`'s Activity Log merge never queried (it
+   only merged `funnel_events`, `cto_tasks`, `cto_token_grants`, etc).
+   So ANY user who signed up via GitHub OAuth would ALWAYS show "No
+   activity recorded yet", regardless of what they'd actually done —
+   this is almost certainly why both example users looked "silent".
+   **Fixed**: added a `github_funnel_events` merge into the Activity
+   Log timeline in `admin_users.py`. Verified end-to-end: seeded a
+   real GitHub-OAuth-style user + funnel event in preview Mongo, hit
+   `GET /admin/users/{id}`, confirmed the event now appears in
+   `activity_timeline`. Test data cleaned up.
+
+Verified no regression: reverted my 3 changed files via `git stash`
+and confirmed the SAME 10 test failures exist on the unmodified
+codebase (pre-existing, unrelated to this fix — they check a
+different router file, `admin.py`, for an older `$switch`-pipeline
+backfill feature). My changes introduce zero new failures.
+
+**Not done — needs founder decision, did NOT touch production data**:
+the fix above only applies to *new* signups going forward. Luke West,
+Laurence Bellinger, and any other existing Google/GitHub OAuth users
+created before this deploy still have the wrong `email_verified`
+value in the real database, and are still permanently excluded from
+the First-50 promo unless backfilled. I have no direct production DB
+access to fix this myself. Options for the founder: (a) I write a
+small, idempotent one-time backfill script
+(`dev_users` where `auth_provider in (google, github)` and
+`email_verified` isn't already `true` → set it `true`, skipping the
+GitHub synthetic-noreply-email case) for the founder to run once
+post-deploy, or (b) I build a one-click "Backfill OAuth
+email_verified" action in the admin panel instead. Not implemented
+yet pending founder's choice.
+
 ## Engineering-Discipline Audit — 12 categories, all checkpoints complete (2026-08-20)
 
 Founder-requested honest status check across Software Engineering,

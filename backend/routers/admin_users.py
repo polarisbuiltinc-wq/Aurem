@@ -283,6 +283,22 @@ async def get_user(user_id: str, authorization: Optional[str] = Header(None)):
             "at":       ts,
             "detail":   ev.get("metadata", {}),
         })
+    # 2026-08-20 — GitHub-OAuth signup/link milestones (oauth_redirect,
+    # callback_received, linked) were written to a SEPARATE collection
+    # (`github_funnel_events`, see routers/github_funnel.py) that this
+    # merge never queried — so any user who signed up via "Continue
+    # with GitHub" (promoted on the signup page as the fastest path)
+    # always showed "No activity recorded yet" here regardless of what
+    # they'd actually done, making this exact investigation misleading.
+    async for ev in db.github_funnel_events.find(
+        {"user_id": user_id}, {"_id": 0},
+    ).sort("ts", -1).limit(30):
+        timeline.append({
+            "kind":     "github_oauth",
+            "type":     ev.get("stage", ""),
+            "at":       ev.get("ts"),
+            "detail":   {"source": ev.get("source"), **(ev.get("meta") or {})},
+        })
     # Tasks (task run + status).
     for t in user["recent_tasks"]:
         ts = t.get("created_at")

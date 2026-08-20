@@ -400,6 +400,16 @@ async def google_session(body: GoogleSessionBody) -> dict:
             "is_admin":         is_admin,
             "is_unlimited":     is_admin,
             "created_at":       created_at,
+            # 2026-08-20 — CRITICAL fix: this field was simply never
+            # set here, so it defaulted to Mongo-missing/falsy and
+            # every Google-OAuth signup showed "email unverified"
+            # forever in the admin panel, with NO way to ever fix it
+            # (OAuth users never get sent our own verification email —
+            # by design, since Google already verified them). That
+            # wrongly blocked them from the First-50 promo too. Google
+            # (via Emergent's managed OAuth) always returns a
+            # provider-verified email — mark it verified here.
+            "email_verified":   True,
             "google": {
                 "name": name, "picture": picture,
                 "connected_at": created_at,

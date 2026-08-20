@@ -426,6 +426,17 @@ async def callback(
                 # Explicit float epoch matches the writes in
                 # /auth/signup and /auth/google/session.
                 "created_at":       time.time(),
+                # 2026-08-20 — same class of bug as the created_at fix
+                # above, just for `email_verified`: it was never set,
+                # so every GitHub-OAuth signup showed "email
+                # unverified" forever (no way to fix it — OAuth users
+                # never get our own verify email) and was silently
+                # excluded from the First-50 promo. GitHub only
+                # verifies when it actually hands us a real email
+                # (`gh_email`) — the synthetic noreply fallback below
+                # means GitHub hid it, so there's nothing to mark
+                # verified in that case.
+                "email_verified":   bool(gh_email),
                 "github": {
                     "id":           gh_id_num,        # iter 211 — immutable
                     "access_token": token,
