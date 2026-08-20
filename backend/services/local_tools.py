@@ -781,20 +781,25 @@ async def write_repo_file(ctx: dict, args: dict) -> dict:
             ),
         }
 
-    # Iter 212m-6 — pre-commit vanguard regex pass. Critical secrets
-    # block; everything else passes through. LLM/E2B layers are off
-    # this hot path (chat latency budget); the task-queue path keeps
-    # the full triple-layer verify.
+    # Iter 212m-6 — pre-commit vanguard regex pass. CRITICAL+HIGH
+    # secrets block; everything else passes through. LLM/E2B layers
+    # are off this hot path (chat latency budget); the task-queue
+    # path keeps the full triple-layer verify.
+    # SEC-007 (2026-08-20, founder-approved option c): widened from
+    # CRITICAL-only to CRITICAL+HIGH via has_critical_or_high — stays
+    # sync/fast (same regex-only scan, no added latency, no extra
+    # model call), just a wider block list than before.
     try:
-        from .vanguard_scanner import scan_file_blocks as _vg_scan, has_critical as _vg_crit
+        from .vanguard_scanner import scan_file_blocks as _vg_scan, has_critical_or_high as _vg_crit
         findings = _vg_scan({path: content})
         if _vg_crit(findings):
             critical = [
-                f for f in findings if f.get("severity") == "CRITICAL"
+                f for f in findings
+                if (f.get("severity") or "").upper() in ("CRITICAL", "HIGH")
             ]
             return {
                 "ok":       False,
-                "error":    "Vanguard blocked the commit — critical finding(s) in patch.",
+                "error":    "Vanguard blocked the commit — critical/high finding(s) in patch.",
                 "findings": [{
                     "rule":     c.get("name"),
                     "severity": c.get("severity"),

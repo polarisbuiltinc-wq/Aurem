@@ -14,6 +14,15 @@ Indexes shipped:
                        `("signup_completed", "first_chat_sent",
                          "first_loop_started", "first_task_shipped")`
                        — one row per lifetime "first" event per user.
+  - `email_verifications` : `token`  (2026-08-20, G6 scoped-pass 2 —
+                       single-use verification token had no DB backstop)
+  - `oauth_states`   : `state`       (2026-08-20, G6 scoped-pass 2 —
+                       OAuth 2.1/GitHub CSRF nonce had no DB backstop)
+  - `oauth_codes`    : `code`        (2026-08-20, G6 scoped-pass 2 —
+                       PKCE auth code had no DB backstop beyond its TTL)
+  See /app/memory/G6_DEDUP_SCOPE_2026-08-20.md — full ~130-collection
+  sweep is still a separate future pass, this only closed the 3 gaps
+  found in that pass.
 
 All best-effort — failure to install one index MUST NOT crash the
 lifespan (that would take the whole app down for a startup-time DB
@@ -94,6 +103,23 @@ async def ensure_dedup_indexes(db) -> List[dict]:
                   "first_loop_started", "first_task_shipped",
               ]}})
 
+    # 6) Email-verification token — single-use, previously only
+    # de-duped by app-level invalidation logic (services/verification_email.py).
+    await _mk("email_verifications", [("token", ASCENDING)],
+              "uniq_token", unique=True,
+              partial={"token": {"$exists": True, "$type": "string"}})
+
+    # 7) OAuth CSRF state nonce (github_app.py / github_oauth.py).
+    await _mk("oauth_states", [("state", ASCENDING)],
+              "uniq_state", unique=True,
+              partial={"state": {"$exists": True, "$type": "string"}})
+
+    # 8) OAuth 2.1 PKCE auth code — already TTL-purged via expires_at,
+    # this adds a uniqueness backstop during its live window.
+    await _mk("oauth_codes", [("code", ASCENDING)],
+              "uniq_code", unique=True,
+              partial={"code": {"$exists": True, "$type": "string"}})
+
     return results
 
 
@@ -114,6 +140,9 @@ async def get_dedup_index_report(db) -> dict:
         "dev_users":     ["uniq_email", "email_1"],
         "chat_sessions": ["uniq_user_session"],
         "funnel_events": ["uniq_first_event"],
+        "email_verifications": ["uniq_token"],
+        "oauth_states":  ["uniq_state"],
+        "oauth_codes":   ["uniq_code"],
     }
     present: dict[str, bool] = {}
     dup_counts: dict[str, int] = {}

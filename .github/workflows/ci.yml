@@ -298,38 +298,36 @@ jobs:
 
 
   security-scan:
-    name: Security — Dependency audit
+    # G15 (2026-08-20) — was raw pip-audit/yarn-audit with
+    # continue-on-error: true, so a fixable HIGH/CRITICAL finding
+    # never actually blocked anything. Replaced with the real
+    # scripts/g15_dependency_scan.py (allowlist-aware, expiry-checked,
+    # persists result to synthetic_checks) and the continue-on-error
+    # flag removed — this job now actually gates the build.
+    name: Security — Dependency audit (G15)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Python vulnerability scan
-        working-directory: backend
-        continue-on-error: true
-        run: |
-          pip install pip-audit --quiet
-          pip-audit -r requirements.txt --format json 2>/dev/null | \
-          python3 -c "
-          import json,sys
-          try:
-            data=json.load(sys.stdin)
-            vulns=[v for d in data.get('dependencies',[])
-                   for v in d.get('vulns',[])
-                   if v.get('fix_versions')]
-            if vulns:
-              print(f'⚠ {len(vulns)} fixable vulnerabilities')
-            else:
-              print('✅ No fixable vulnerabilities')
-          except: print('scan complete')
-          " || echo "pip-audit done"
+      - name: Set up Node 20 (for yarn audit)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
 
-      - name: Node vulnerability scan
+      - name: Install frontend deps (for yarn audit)
         working-directory: frontend
-        continue-on-error: true
-        run: |
-          yarn audit --level high 2>&1 | tail -10 || echo "yarn audit done"
+        run: yarn install --frozen-lockfile || yarn install
+
+      - name: Install pip-audit
+        run: pip install pip-audit --quiet
+
+      - name: Guard 15 — dependency CVE scan (blocking)
+        working-directory: backend
+        run: python scripts/g15_dependency_scan.py
 
 
   secret-scan:

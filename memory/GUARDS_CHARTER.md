@@ -39,7 +39,14 @@ Wave 3 (17-21): 18 → 17 → 21 → 19 → 20
   (require_admin_dep) + live non-founder 112-endpoint 403 sweep lock
   (Iter 358b, deployed with SEO/chip). Remaining: revoked-key/
   expired-token/auth-endpoint-rate-limiter tests.
-- Guards 1, 3-7, 9-15: NOT STARTED. **WAVE 3 COMPLETE (17,18,19,20,21).**
+- Guards 1, 3-5, 7, 9-15: NOT STARTED. **WAVE 3 COMPLETE (17,18,19,20,21).**
+- Guard 6: ⚠️ PARTIAL (2026-08-20) — `services/db_indexes.py` (Iter 366)
+  already covers `topup_alerts`, `incidents`, `dev_users`, `chat_sessions`,
+  `funnel_events`. This entry was stale (said NOT STARTED) — corrected.
+  Scoped pass 2 (2026-08-20) added `email_verifications.token`,
+  `oauth_states.state`, `oauth_codes.code`. Full ~130-collection sweep
+  still not done — that's the remaining gap. See
+  `/app/memory/G6_DEDUP_SCOPE_2026-08-20.md`.
 - Guard 20: ✅ SHIPPED (Iter 363, 2026-07-30, ships LAST per charter):
   services/incident_log.py = central postmortem funnel. open_incident
   (db, guard, title, detail, source_key, follow_up) — deduped by

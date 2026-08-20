@@ -87,7 +87,7 @@ langfuse==4.12.0
 librt==0.11.0
 license-expression==30.4.4
 limits==5.8.0
-litellm @ https://customer-assets.emergentagent.com/internal-asset/library/litellm-1.80.0-py3-none-any.whl#sha256=adf398c513273de9341f61822296c6b2145f7f2dc4a69daf3ac04829f5bde3f8
+litellm==1.80.0
 lxml==6.1.1
 magika==0.6.3
 mammoth==1.11.0

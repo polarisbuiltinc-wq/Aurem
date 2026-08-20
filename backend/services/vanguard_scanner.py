@@ -370,6 +370,18 @@ def has_critical(findings: Iterable[dict]) -> bool:
     return any(f.get("severity") == "CRITICAL" for f in findings)
 
 
+def has_critical_or_high(findings: Iterable[dict]) -> bool:
+    """SEC-007 (2026-08-20) — the chat/MCP write_repo_file hot path
+    used CRITICAL-only (has_critical) so it wouldn't get Loop mode's
+    fuller held-out-verifier review. Widening it to also block HIGH
+    keeps the same sync/fast regex-only scan (no added latency, no
+    extra model call) while closing the severity gap. Loop mode's own
+    gate is untouched — this is a separate function, not a change to
+    has_critical's existing callers."""
+    return any((f.get("severity") or "").upper() in ("CRITICAL", "HIGH")
+               for f in findings)
+
+
 # ─── Iter 212m-66 — Multi-round deep-scan engine ────────────────────────
 # Two-round scanner used by the /security-scan/run endpoint when the
 # caller opts in with `two_round: true`.  Round 1 runs the existing

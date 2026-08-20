@@ -64,6 +64,18 @@ echo "── Lane 8: regression pattern registry re-verify (2026-08-19 · non-bl
 (cd backend && python scripts/verify_regression_patterns.py) || \
     echo "⚠️  Lane 8 flagged a regressed pattern — see output above BEFORE dispatching deploy."
 
+echo "── Lane 9: Guard 15 — dependency CVE scan (2026-08-20) ──"
+(cd backend && python scripts/g15_dependency_scan.py)
+
+echo "── Lane 10: Guard 4 — rendered-page secret scanner vs LIVE prod (2026-08-20 · non-blocking) ──"
+# Scans the CURRENTLY-live site (default https://auremcto.com) for
+# leaked secret patterns before requesting the NEXT deploy. Non-
+# blocking: a finding here means something already leaked in the
+# current live build, not this pending change — surfaces it to the
+# founder rather than silently gating on a pre-existing state.
+python3 backend/scripts/g4_secret_scanner.py || \
+    echo "⚠️  Lane 10 flagged a secret leak on the CURRENTLY LIVE site — see output above BEFORE dispatching deploy."
+
 echo "══════════ GATE PASSED — safe to deploy ══════════"
 echo "⚠️  REMINDER (Iter 356): deploy ke BAAD founder se 'Save to GitHub' click"
 echo "    karwana mat bhoolna — warna polarisbuiltinc-wq/auremdev outdated rahega."
