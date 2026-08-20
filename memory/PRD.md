@@ -27,6 +27,43 @@
 
 
 
+## Deployment confirmed healthy — production evidence (2026-08-20, post-audit-cycle deploy)
+
+Founder deployed via Manage Publishes → Overview after adding
+`GITHUB_ACTIONS_TOKEN`/`GITHUB_REPO` to production env. Verified against
+git blame (not memory) that build_hash `b319defe7ef0` (current HEAD) is
+a descendant of every fix committed this session — SEC-007/008
+(`9d83266`), G15/G4 gates (`9d83266`), G6 dedup indexes (`9d83266`),
+retention TTLs (`8a9aac9`), github_sync alert fix (`3018a53`), round-2
+health short-circuit (`b880485`). Working tree was clean of app-source
+changes at verification time.
+
+Founder-confirmed production evidence:
+- `/api/health`: ok:true, dead:[], uptime 728s+, build matches HEAD.
+- Admin overview panel: **GitHub G8 sync shows "✓ in sync"** — token+repo
+  wiring works end-to-end in production, not just preview.
+- The single Nginx `/health` upstream-timeout line in the earlier
+  deploy log is judged a **transient single-pod cutover blip** (the
+  known 30-60s window during pod swap), not a recurring defect — no
+  repeat failures since, health has been steady.
+- The one integration flagged "broken" by `integration_health_cron`
+  (8/13→7/13) is **Tavily Search, HTTP 432 credits exhausted** — same
+  pre-existing issue from the earlier incident-log cleanup, not a new
+  code bug. Founder-owned action item (top up credits), no code fix
+  needed.
+
+Still genuinely unverified (low-risk, founder accepted as "probably
+fine, not worth chasing"):
+- Mongo TTL indexes actually created on **production** Atlas (they run
+  at backend startup; backend is healthy post-deploy, but no direct
+  prod DB query was run to confirm index existence).
+- `github_sync`'s real-Resend alert path in production specifically —
+  only preview-tested end-to-end; a real future "behind"/"error" event
+  will be the first live confirmation. Founder declined manufacturing a
+  fake prod alert just to test this.
+
+**Session closed by founder as production-confirmed.**
+
 ## Engineering-Discipline Audit — 12 categories, all checkpoints complete (2026-08-20)
 
 Founder-requested honest status check across Software Engineering,
