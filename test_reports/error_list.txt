@@ -1,0 +1,39 @@
+ERROR    services.process_recovery:process_recovery.py:109 [G19] RESTART LOOP DETECTED — 21 boots in 600s (sha=3af3d61). The process keeps dying; supervisor auto-restart is masking a hard crash. Investigate before it burns the pod.
+ERROR    main:main.py:529 [G19] boot recorded INSIDE a restart loop: {'recorded': True, 'boots_in_window': 21, 'loop_detected': True}
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task daily_digest completed silently — this is an unexpected termination for a cron
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task maxx_overage_billing completed silently — this is an unexpected termination for a cron
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task hallucination_classify completed silently — this is an unexpected termination for a cron
+ERROR    main:main.py:1765 middleware caught unhandled exception on GET /api/aurem-dev/github/oauth/connect
+ERROR    main:main.py:1765 middleware caught unhandled exception on GET /api/aurem-dev/github/oauth/connect
+ERROR    services.process_recovery:process_recovery.py:109 [G19] RESTART LOOP DETECTED — 9 boots in 600s (sha=3af3d61). The process keeps dying; supervisor auto-restart is masking a hard crash. Investigate before it burns the pod.
+ERROR    main:main.py:529 [G19] boot recorded INSIDE a restart loop: {'recorded': True, 'boots_in_window': 9, 'loop_detected': True}
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task daily_digest completed silently — this is an unexpected termination for a cron
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task hallucination_classify completed silently — this is an unexpected termination for a cron
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task maxx_overage_billing completed silently — this is an unexpected termination for a cron
+ERROR    services.process_recovery:process_recovery.py:109 [G19] RESTART LOOP DETECTED — 10 boots in 600s (sha=3af3d61). The process keeps dying; supervisor auto-restart is masking a hard crash. Investigate before it burns the pod.
+ERROR    main:main.py:529 [G19] boot recorded INSIDE a restart loop: {'recorded': True, 'boots_in_window': 10, 'loop_detected': True}
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task daily_digest completed silently — this is an unexpected termination for a cron
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task maxx_overage_billing completed silently — this is an unexpected termination for a cron
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task hallucination_classify completed silently — this is an unexpected termination for a cron
+ERROR    aurem-dev.finding_fix_applier:finding_fix_applier.py:86 fetch_file failed for O/R@main:src/app.py
+ERROR    services.loop_engine:loop_engine.py:216 loop_errors insert failed: AttributeError("'_DB' object has no attribute 'loop_errors'")
+ERROR    services.loop_rollback:loop_rollback.py:291 [loop-rollback l1] failed
+ERROR    services.loop_rollback:loop_rollback.py:291 [loop-rollback l2] failed
+ERROR    services.process_recovery:process_recovery.py:109 [G19] RESTART LOOP DETECTED — 23 boots in 600s (sha=3af3d61). The process keeps dying; supervisor auto-restart is masking a hard crash. Investigate before it burns the pod.
+ERROR    main:main.py:529 [G19] boot recorded INSIDE a restart loop: {'recorded': True, 'boots_in_window': 23, 'loop_detected': True}
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task daily_digest completed silently — this is an unexpected termination for a cron
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task hallucination_classify completed silently — this is an unexpected termination for a cron
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task maxx_overage_billing completed silently — this is an unexpected termination for a cron
+ERROR    services.process_recovery:process_recovery.py:109 [G19] RESTART LOOP DETECTED — 24 boots in 600s (sha=3af3d61). The process keeps dying; supervisor auto-restart is masking a hard crash. Investigate before it burns the pod.
+ERROR    asyncio:base_events.py:1785 Task was destroyed but it is pending!
+ERROR    main:main.py:529 [G19] boot recorded INSIDE a restart loop: {'recorded': True, 'boots_in_window': 24, 'loop_detected': True}
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task daily_digest completed silently — this is an unexpected termination for a cron
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task maxx_overage_billing completed silently — this is an unexpected termination for a cron
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task hallucination_classify completed silently — this is an unexpected termination for a cron
+ERROR    asyncio:base_events.py:1785 Task was destroyed but it is pending!
+ERROR    asyncio:base_events.py:1785 Task was destroyed but it is pending!
+ERROR    services.process_recovery:process_recovery.py:109 [G19] RESTART LOOP DETECTED — 23 boots in 600s (sha=3af3d61). The process keeps dying; supervisor auto-restart is masking a hard crash. Investigate before it burns the pod.
+ERROR    main:main.py:529 [G19] boot recorded INSIDE a restart loop: {'recorded': True, 'boots_in_window': 23, 'loop_detected': True}
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task daily_digest completed silently — this is an unexpected termination for a cron
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task hallucination_classify completed silently — this is an unexpected termination for a cron
+ERROR    services.supervised_tasks:supervised_tasks.py:141 [supervise] long-lived task maxx_overage_billing completed silently — this is an unexpected termination for a cron

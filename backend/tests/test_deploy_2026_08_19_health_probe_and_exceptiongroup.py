@@ -73,16 +73,45 @@ class TestExceptionGroupCaught:
         )
 
     def test_skip_path_catches_exceptiongroup_directly(self):
-        """Call the real `_global_rate_limit_guard` coroutine on a
-        skip-listed path (`/health`) with a `call_next` stub that
-        raises a BaseExceptionGroup — assert it returns a
-        JSONResponse(500), never lets the exception escape."""
+        """Round-2 (2026-08-19) superseded this contract for the three
+        exact pod-probe paths: they now short-circuit BEFORE ever
+        calling `call_next()` (see `_HEALTH_PROBE_EXACT_PATHS`), so a
+        `call_next` stub that raises is never even invoked — the
+        guard answers `{"ok": True}` inline instead. That's the
+        stronger fix (can't hit the anyio race if you never enter
+        call_next at all), so this test now asserts THAT, not the
+        old round-1 500-on-exception contract."""
         import asyncio
         from starlette.responses import JSONResponse
         import main as _main
 
         async def _run():
             req = _mock_request("/health")
+
+            async def _call_next(_req):
+                raise BaseExceptionGroup(
+                    "simulated anyio unwind", [asyncio.CancelledError()]
+                )
+
+            resp = await _main._global_rate_limit_guard(req, _call_next)
+            assert isinstance(resp, JSONResponse)
+            assert resp.status_code == 200
+            assert resp.body == b'{"ok":true}'
+
+        asyncio.run(_run())
+
+    def test_main_branch_still_honors_round1_exceptiongroup_contract(self, monkeypatch):
+        """A path that IS in the broader skip-prefix set but NOT in the
+        three exact pod-probe paths (e.g. `/api/health`, explicitly
+        excluded from the exact-match bypass per the comment in
+        main.py) still goes through call_next() and must still hit
+        the round-1 500-on-BaseExceptionGroup safety net."""
+        import asyncio
+        from starlette.responses import JSONResponse
+        import main as _main
+
+        async def _run():
+            req = _mock_request("/api/health")
 
             async def _call_next(_req):
                 raise BaseExceptionGroup(
