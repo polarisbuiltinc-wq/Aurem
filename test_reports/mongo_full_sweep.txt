@@ -1,0 +1,137 @@
+TOTAL_COLLECTIONS 136
+cto_vault_audit_log 11151 test_hits=10622 pct=95.3
+council_health_probes 5938 test_hits=0 pct=0.0
+deploy_events 4006 test_hits=54 pct=1.3
+process_boots 2667 test_hits=0 pct=0.0
+process_loop_trips 2305 test_hits=0 pct=0.0
+onboarding_emails 2144 test_hits=1307 pct=61.0
+funnel_events 1494 test_hits=2 pct=0.1
+ora_skill_usage 1392 test_hits=975 pct=70.0
+ora_audit 1346 test_hits=1295 pct=96.2
+quality_scores 1274 test_hits=1250 pct=98.1
+integration_health_history 1151 test_hits=0 pct=0.0
+chat_sessions 954 test_hits=902 pct=94.5
+dev_users 860 test_hits=502 pct=58.4
+ora_council_logs 699 test_hits=656 pct=93.8
+intent_classifications 683 test_hits=657 pct=96.2
+aurem_cto_vault_audit_log 452 test_hits=452 pct=100.0
+loop_errors 431 test_hits=113 pct=26.2
+loop_task_specs 404 test_hits=404 pct=100.0
+ora_fix_learning 395 test_hits=321 pct=81.3
+email_verifications 394 test_hits=223 pct=56.6
+loop_verification_log 325 test_hits=325 pct=100.0
+loop_outcomes 316 test_hits=316 pct=100.0
+health_notifications 292 test_hits=0 pct=0.0
+audit_log 280 test_hits=279 pct=99.6
+ora_chat_usage 259 test_hits=138 pct=53.3
+signup_abuse_log 252 test_hits=47 pct=18.7
+ora_chat_sessions 220 test_hits=158 pct=71.8
+warm_start_jobs 205 test_hits=205 pct=100.0
+loop_run_log 203 test_hits=188 pct=92.6
+oauth_codes 184 test_hits=1 pct=0.5
+fix_jobs 158 test_hits=84 pct=53.2
+backup_history 151 test_hits=0 pct=0.0
+frontend_errors 128 test_hits=16 pct=12.5
+ora_prompt_snapshots 112 test_hits=112 pct=100.0
+oauth_states 110 test_hits=2 pct=1.8
+mode_classifications 100 test_hits=0 pct=0.0
+api_keys 94 test_hits=3 pct=3.2
+ora_eval_runs 92 test_hits=0 pct=0.0
+user_seo_claims 86 test_hits=0 pct=0.0
+ora_chat_pin_attempts 78 test_hits=0 pct=0.0
+topup_alerts 61 test_hits=14 pct=23.0
+incidents 60 test_hits=10 pct=16.7
+repo_contexts 50 test_hits=42 pct=84.0
+ora_hallucination_log 48 test_hits=43 pct=89.6
+github_funnel_events 47 test_hits=3 pct=6.4
+founder_alert_sends 46 test_hits=0 pct=0.0
+loop_kill_switch_trips 44 test_hits=0 pct=0.0
+ora_review_log 42 test_hits=26 pct=61.9
+project_brains_v2 41 test_hits=41 pct=100.0
+repo_context_timings 41 test_hits=41 pct=100.0
+loop_events 40 test_hits=38 pct=95.0
+customer_chat_cost 33 test_hits=33 pct=100.0
+payment_reconciliation_log 33 test_hits=0 pct=0.0
+loop_sessions 29 test_hits=29 pct=100.0
+cto_open_findings 26 test_hits=26 pct=100.0
+health_check_state 25 test_hits=0 pct=0.0
+cto_projects 23 test_hits=23 pct=100.0
+loop_failures 22 test_hits=21 pct=95.5
+cto_token_grants 21 test_hits=21 pct=100.0
+loop_execution_log 21 test_hits=21 pct=100.0
+breaker_events 20 test_hits=14 pct=70.0
+ora_canary_runs 18 test_hits=0 pct=0.0
+promo_first50_waitlist 17 test_hits=0 pct=0.0
+vercel_tool_audit 16 test_hits=9 pct=56.2
+thinking_hints 14 test_hits=1 pct=7.1
+ora_breaker_snapshot 12 test_hits=1 pct=8.3
+cto_support_messages 10 test_hits=7 pct=70.0
+ora_image_events 10 test_hits=10 pct=100.0
+synthetic_checks 10 test_hits=0 pct=0.0
+loop_plans 9 test_hits=0 pct=0.0
+cto_maxx_usage 8 test_hits=3 pct=37.5
+ora_regression_patterns 8 test_hits=8 pct=100.0
+scaffold_drafts 8 test_hits=8 pct=100.0
+cto_tasks 7 test_hits=7 pct=100.0
+ora_fabrication_incidents 7 test_hits=7 pct=100.0
+feature_flags 6 test_hits=2 pct=33.3
+project_brains 6 test_hits=5 pct=83.3
+ora_chat_house_rules 5 test_hits=5 pct=100.0
+ora_learning_logs 4 test_hits=4 pct=100.0
+ora_patterns 4 test_hits=3 pct=75.0
+cto_support 3 test_hits=3 pct=100.0
+loop_intent_stats 3 test_hits=0 pct=0.0
+password_reset_tokens 3 test_hits=3 pct=100.0
+referral_clicks 3 test_hits=3 pct=100.0
+admin_audit 2 test_hits=2 pct=100.0
+cto_founder_suggestions 2 test_hits=2 pct=100.0
+cto_payments 2 test_hits=2 pct=100.0
+login_attempts 2 test_hits=0 pct=0.0
+loop_locks 2 test_hits=2 pct=100.0
+migration_history 2 test_hits=0 pct=0.0
+ora_reviewer_errors 2 test_hits=2 pct=100.0
+smoke_test_runs 2 test_hits=2 pct=100.0
+admin_settings 1 test_hits=1 pct=100.0
+analytics_persistent_cache 1 test_hits=0 pct=0.0
+app_config 1 test_hits=0 pct=0.0
+aurem_cto_unlock_requests 1 test_hits=1 pct=100.0
+billing_cron_runs 1 test_hits=0 pct=0.0
+correction_rule_settings 1 test_hits=1 pct=100.0
+cto_settings 1 test_hits=0 pct=0.0
+founder_offer 1 test_hits=0 pct=0.0
+house_rules 1 test_hits=0 pct=0.0
+integration_health 1 test_hits=1 pct=100.0
+ora_image_daily_spend 1 test_hits=0 pct=0.0
+ora_image_user_month 1 test_hits=1 pct=100.0
+parliament_log 1 test_hits=1 pct=100.0
+preview_sandboxes 1 test_hits=1 pct=100.0
+project_graphs 1 test_hits=1 pct=100.0
+project_plans 1 test_hits=0 pct=0.0
+promo_first50_state 1 test_hits=0 pct=0.0
+risk_routing_meta 1 test_hits=0 pct=0.0
+scaffold_generations 1 test_hits=1 pct=100.0
+scaffold_scan_overrides 1 test_hits=1 pct=100.0
+settings 1 test_hits=1 pct=100.0
+system_flags 1 test_hits=1 pct=100.0
+thinking_hints_config 1 test_hits=0 pct=0.0
+tool_notify_interest 1 test_hits=1 pct=100.0
+ui_settings 1 test_hits=1 pct=100.0
+vanguard_ci_findings 1 test_hits=0 pct=0.0
+aurem_cto_deploy_runs 0 empty
+correction_rules 0 empty
+cto_automations 0 empty
+cto_codebase_index 0 empty
+cto_notification_dismissals 0 empty
+fixed_findings 0 empty
+github_connections 0 empty
+github_installations 0 empty
+issues_cache 0 empty
+iter274_bg_probe 0 empty
+maxx_cost_log 0 empty
+ora_scan_learning 0 empty
+referrals 0 empty
+revoked_tokens 0 empty
+scan_fix_usage 0 empty
+smoke_test_kv 0 empty
+vanguard_audit 0 empty
+webhook_deliveries 0 empty
