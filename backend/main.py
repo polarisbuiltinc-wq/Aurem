@@ -2481,7 +2481,12 @@ def _resolve_built_at() -> str:
 
 
 # ── Health ──
+# 2026-08-20 — some LB/ingress health probes send HEAD instead of GET;
+# production logs showed real `HEAD /api/health` → 405 responses.
+# Starlette only auto-adds HEAD for GET routes in newer versions — add
+# it explicitly so neither probe style ever 405s.
 @app.get("/api/health")
+@app.head("/api/health")
 async def health():
     """Liveness + deploy-identity endpoint.
 

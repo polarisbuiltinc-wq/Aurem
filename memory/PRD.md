@@ -2801,6 +2801,51 @@ public branding bucket (needs founder's new R2 credentials).
 
 ---
 
+## Real deployment-health root cause found + fixed (2026-08-20)
+
+Founder pasted ANOTHER "deployment failing" log — again NOT a build/
+compile failure. This time the log contained real evidence:
+`nginx: upstream timed out (110) ... GET /health ... 127.0.0.1:8001`
+— intermittent health-probe timeouts through the nginx/K8s proxy,
+clustering exactly around `e2b.api.client_sync` sandbox-create/run/
+kill log lines and one real `HEAD /api/health → 405`.
+
+**Root cause**: `services/sandbox_runner.py`'s `run_python_check()` /
+`run_tests_in_sandbox()` were `async def` but called the fully
+SYNCHRONOUS `e2b_code_interpreter.Sandbox` client directly (no
+`asyncio.to_thread`/executor) — every sandbox create/run/kill
+round-trip (~1-2s+) blocked the ENTIRE FastAPI event loop, starving
+`/health` and every other concurrent request. This is the exact same
+bug class already fixed for Stripe in `services/integration_health.py`
+(iter 331 comment there literally documents the identical symptom —
+this one spot was missed).
+
+**Fixed**: moved the blocking e2b work into `_run_python_check_
+blocking()` / `_run_tests_in_sandbox_blocking()`, called via `await
+asyncio.to_thread(...)`. Also added `@app.head("/api/health")` (some
+probes send HEAD, was 405ing).
+
+**Verified**: ran a real e2b sandbox check (`print(2+2)`, real network
+round-trip to e2b.app, 0.8s) while hammering the live backend's
+`/api/health` every 300ms concurrently — latency stayed flat at
+16-31ms throughout, zero spikes/timeouts. `HEAD /api/health` → 200.
+Clean reboot, no regressions.
+
+**Not yet deployed** — this is the most likely real cause of the
+founder-reported "deployment failing" pattern (K8s readiness probe
+flapping during traffic bursts that trigger sandbox checks). Needs a
+redeploy + founder confirmation on production.
+
+---
+
+**Post-testing hardening**: applied testing_agent's code-review
+suggestion — both `run_python_check`/`run_tests_in_sandbox` now wrap
+`asyncio.to_thread(...)` in `asyncio.wait_for(..., timeout+10/15)` so
+a hung e2b call can never leak a worker thread indefinitely.
+Re-verified real sandbox call still works after the change.
+
+---
+
 ## Iter 389 — Meta Pixel conversion events (2026-02-15)
 
 Meta Pixel was loading `PageView` only (Iter 388-ag). This iter adds

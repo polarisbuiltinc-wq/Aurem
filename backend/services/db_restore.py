@@ -83,18 +83,33 @@ async def restore_to_scratch(
     scratch_db_name: Optional[str] = None,
     drop_scratch_after: bool = True,
 ) -> dict:
+    """
+    2026-08-20 correction: Emergent-managed MongoDB (prod Atlas) scopes
+    the app's DB user to ONLY its single assigned database — it cannot
+    CREATE OR TOUCH a second database (`aurem_scratch_restore_*`
+    below). `deployment_agent` caught this live: `OperationFailure:
+    not authorized ... code 13` on every drill, immediately followed
+    by `/health` upstream timeouts in the deploy logs.
+
+    Fix: restore into a set of PREFIXED COLLECTIONS inside the SAME
+    `DB_NAME` database the app is already authorized for — never a
+    second database. `scratch_db_name` (if passed) is now used as the
+    collection-name prefix, not a Mongo database name.
+    """
     started = dt.datetime.now(dt.timezone.utc)
     mongo_url = os.environ["MONGO_URL"]
     source_db = os.environ["DB_NAME"]
-    scratch_db = scratch_db_name or (
-        f"aurem_scratch_restore_{started.strftime('%Y%m%d_%H%M%S')}"
+    scratch_prefix = (
+        scratch_db_name or f"_restore_scratch_{started.strftime('%Y%m%d_%H%M%S')}_"
     )
-    tmp_path = f"/tmp/restore_{scratch_db}.gz"
+    if not scratch_prefix.endswith("_"):
+        scratch_prefix += "_"
+    tmp_path = f"/tmp/restore_{scratch_prefix.strip('_')}.gz"
 
     result: dict = {
         "ok":                 False,
         "r2_key":             r2_key,
-        "scratch_db":         scratch_db,
+        "scratch_db":         f"{source_db} (prefix={scratch_prefix}*)",
         "source_db":          source_db,
         "collection_counts":  {},
         "total_docs":         0,
@@ -104,6 +119,19 @@ async def restore_to_scratch(
         "format":             None,
         "error":              None,
     }
+
+    async def _drop_prefixed(sdb) -> None:
+        """Drop only OUR prefixed collections — never touches real data."""
+        try:
+            names = await sdb.list_collection_names()
+        except Exception:
+            return
+        for name in names:
+            if name.startswith(scratch_prefix):
+                try:
+                    await sdb.drop_collection(name)
+                except Exception:
+                    pass
 
     try:
         # 1. Download from R2.
@@ -120,12 +148,10 @@ async def restore_to_scratch(
         #    touch the live app's pool.
         motor_client = AsyncIOMotorClient(mongo_url)
         try:
-            sdb = motor_client[scratch_db]
-            # Ensure clean scratch — --drop equivalent.
-            try:
-                await motor_client.drop_database(scratch_db)
-            except Exception:
-                pass
+            sdb = motor_client[source_db]
+            # Ensure clean scratch — drop any leftovers from a prior
+            # failed run, scoped strictly to our prefix.
+            await _drop_prefixed(sdb)
 
             counts: dict[str, int] = {}
             with gzip.open(tmp_path, "rb") as gz:
@@ -157,13 +183,14 @@ async def restore_to_scratch(
                         result["error"] = f"bad collection header: {e!r}"
                         return result
                     coll_name = meta["collection"]
+                    scratch_coll_name = scratch_prefix + coll_name
                     expected = int(meta["doc_count"])
 
                     if expected == 0:
                         # Explicit create so empty collections still
                         # show up in list_collection_names().
                         try:
-                            await sdb.create_collection(coll_name)
+                            await sdb.create_collection(scratch_coll_name)
                         except Exception:
                             pass  # already exists (shouldn't after drop)
                         counts[coll_name] = 0
@@ -183,13 +210,13 @@ async def restore_to_scratch(
                         doc = bson.decode(raw)
                         batch.append(doc)
                         if len(batch) >= INSERT_BATCH:
-                            await sdb[coll_name].insert_many(
+                            await sdb[scratch_coll_name].insert_many(
                                 batch, ordered=False,
                             )
                             inserted += len(batch)
                             batch.clear()
                     if batch:
-                        await sdb[coll_name].insert_many(batch, ordered=False)
+                        await sdb[scratch_coll_name].insert_many(batch, ordered=False)
                         inserted += len(batch)
                     counts[coll_name] = inserted
 
@@ -200,8 +227,8 @@ async def restore_to_scratch(
 
             # 3. Cleanup scratch unless caller wants to inspect.
             if drop_scratch_after:
-                await motor_client.drop_database(scratch_db)
-                logger.info("dropped scratch DB %s", scratch_db)
+                await _drop_prefixed(sdb)
+                logger.info("dropped scratch collections (prefix=%s)", scratch_prefix)
         finally:
             motor_client.close()
 
@@ -226,7 +253,14 @@ async def source_collection_counts() -> dict:
     client = AsyncIOMotorClient(mongo_url)
     try:
         sdb = client[source_db]
-        names = sorted(await sdb.list_collection_names())
+        # Exclude our own restore-drill scratch collections (see
+        # restore_to_scratch's `_restore_scratch_*` prefix) so a
+        # mid-flight or leftover drill never gets counted as "real"
+        # live data in the diff.
+        names = sorted(
+            n for n in await sdb.list_collection_names()
+            if not n.startswith("_restore_scratch_")
+        )
         counts: dict[str, int] = {}
         for name in names:
             try:
