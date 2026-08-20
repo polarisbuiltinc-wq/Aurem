@@ -113,7 +113,19 @@ async def _compute(token: str, repo: str, build_sha: str, built_at: str) -> dict
 
 async def _sync_alert(db, data: dict) -> None:
     """Escalate/resolve via the EXISTING topup_alerts banner engine
-    (same collection + row shape as integration alerts). Best-effort."""
+    (same collection + row shape as integration alerts). Best-effort.
+
+    2026-08-20 — found while wiring the "error" branch: a topup_alerts
+    insert_one alone does NOT actually email anyone. `email_sent:
+    False` only ever flips to True via `topup_alerts.email_and_mark`,
+    which is only called from `daily_digest.py`'s OWN snapshot cycle
+    (integration_health.run_all_probes results) — github_sync was
+    never part of that snapshot, so the "behind/critical" banner had
+    the exact same silent-email gap the founder was worried about for
+    "error". Fixed both branches the same way: call
+    founder_alerts.send_founder_alert() directly — it's built exactly
+    for this ("can be called directly from any guard-critical path")
+    and has its own 6h dedup, independent of the banner row."""
     try:
         now = time.time()
         if data.get("status") == "behind" and data.get("critical"):
@@ -147,6 +159,38 @@ async def _sync_alert(db, data: dict) -> None:
                     "first_seen": now, "last_seen": now, "seen_count": 1,
                     "status": "active", "email_sent": False,
                 })
+            await _founder_email(db, "github_sync::behind", "GitHub repo outdated (Guard 8)",
+                                 summary, guard="G8")
+        elif data.get("status") == "error":
+            day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            key = f"github_sync::error::{day}"
+            summary = ("GitHub sync check is failing — Guard 8 is blind until "
+                       f"this is fixed. Error: {data.get('error', 'unknown')[:150]}")
+            existing = await db.topup_alerts.find_one({"alert_key": key}, {"_id": 1})
+            if existing:
+                await db.topup_alerts.update_one(
+                    {"alert_key": key},
+                    {"$set": {"last_seen": now, "status": "active",
+                              "summary": summary[:300]},
+                     "$inc": {"seen_count": 1}})
+            else:
+                await db.topup_alerts.insert_one({
+                    "alert_id": f"al_{uuid.uuid4().hex[:10]}",
+                    "alert_key": key,
+                    "integration_id": "github_sync",
+                    "integration_name": "GitHub sync (Guard 8)",
+                    "severity": "critical",
+                    "summary": summary[:300],
+                    "detail": data.get("error", "")[:500],
+                    "fix_hint": ("Check GITHUB_ACTIONS_TOKEN hasn't expired — "
+                                 "fine-grained PATs don't auto-renew. Generate a "
+                                 "new one and update backend/.env."),
+                    "day_key": day,
+                    "first_seen": now, "last_seen": now, "seen_count": 1,
+                    "status": "active", "email_sent": False,
+                })
+            await _founder_email(db, "github_sync::error", "GitHub sync check failing (Guard 8)",
+                                 summary, guard="G8")
         elif data.get("status") == "in_sync":
             await db.topup_alerts.update_many(
                 {"integration_id": "github_sync", "status": "active"},
@@ -154,6 +198,17 @@ async def _sync_alert(db, data: dict) -> None:
                           "resolved_by": "auto_github_sync"}})
     except Exception as e:
         logger.warning("github_sync alert upsert failed: %r", e)
+
+
+async def _founder_email(db, source_key: str, title: str, detail: str, *, guard: str) -> None:
+    """Best-effort direct email — never let a Resend hiccup break the
+    sync check itself."""
+    try:
+        from services.founder_alerts import send_founder_alert
+        await send_founder_alert(db, source_key=source_key, title=title,
+                                  detail=detail, level="critical", guard=guard)
+    except Exception as e:
+        logger.warning("github_sync founder_email failed: %r", e)
 
 
 async def get_github_sync(build_sha: str, built_at: str, db=None) -> dict:

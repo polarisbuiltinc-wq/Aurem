@@ -7,15 +7,23 @@
 - **GitHub Actions PAT expires Sep 18, 2026** — fine-grained tokens can't
   auto-renew. Founder must generate a new token and update
   `GITHUB_ACTIONS_TOKEN` in `backend/.env` before this date, or CI/CD +
-  the G8 CI-drift guard will stop working. **Confirmed this session: G8
-  does NOT detect or alert on an expired/invalid token** — `github_sync.py`'s
-  `_sync_alert()` has no handling for `status: "error"` (which is exactly
-  what an expired token produces), so it fails completely silently — no
-  banner, no email, just a buried `logger.warning` line. Nobody will know
-  it broke unless they check the QA panel manually. Fix proposed, not yet
-  built (see chat 2026-08-20) — add an `_sync_alert` branch for
-  `status == "error"` so an expired/invalid token raises the same
-  topup_alerts banner + founder email as any other integration failure.
+  the G8 CI-drift guard will stop working. **UPDATE 2026-08-20: fixed
+  the silent-failure gap** — `services/github_sync.py`'s `_sync_alert()`
+  previously had NO branch for `status: "error"` (exactly what an
+  expired token produces) and, worse, the pre-existing "behind/critical"
+  branch never actually emailed either (a `topup_alerts` insert alone
+  doesn't trigger Resend — that only happens via `daily_digest.py`'s own
+  snapshot cycle, which github_sync was never part of). Both branches
+  now call `founder_alerts.send_founder_alert()` directly. **Tested
+  end-to-end through the real `_sync_alert()` code path**: banner row
+  created, real Resend send confirmed (`delivered: true`, HTTP 200),
+  6h dedup confirmed (2nd call didn't re-send), `in_sync` still
+  auto-resolves the banner. So when this token expires, the founder
+  WILL now get an email, not silence.
+- **Standing practice going forward** (founder-directed 2026-08-20): any
+  new integration/credential we wire must have an alert branch for its
+  "error/invalid" state, not just success/known-failure — this exact
+  "only handled 2 of 3 states" gap is the kind of thing that recurs.
 
 
 
