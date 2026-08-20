@@ -1,0 +1,25 @@
+{
+  "summary": "Frontend-only verification of PAT (Personal Access Token) removal from NewUserWizard.jsx and AddProjectWizard.jsx. All PAT UI selectors are gone in both wizards; GitHub App flow is the only visible path. Existing PAT-connected projects in Projects.jsx sidebar remain untouched (23 rows with 'PAT'/'Update PAT' badges still render). AddProjectWizard end-to-end (installation-covered branch) confirmed: Step 2 header renders 'Connect via GitHub App', green installed banner appears, Next-2 enables, Step 3 shows correct 'Access to {repo} verified / Connected via GitHub App · @{login}' wording, and POST /cto/projects/add is called with installation_id and NO github_token field. Non-covered repo branch: Next-2 correctly disabled, App CTA visible, no PAT escape hatch. NewUserWizard freshly-seeded user lands on 'choosing' state with GitHub App CTA as primary, PAT selectors count=0, no PAT-related text anywhere. No console errors from removed state/imports.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AddProjectWizard.jsx cleanly removed pat/check state, PAT_RX regex, debounced /verify-pat useEffect, ShieldAlert/AlertCircle/ExternalLink imports, pillStyle helper. Only remaining imports are all used.",
+    "NewUserWizard.jsx cleanly removed pat/patGenClicked/patInputRef state, PAT auto-focus useEffect, PAT disclosure toggle, PAT sub-block, isPatErr branch. submitRepo() no longer sends github_token in payload — verified via network intercept.",
+    "Projects.jsx PatModal + per-row 'Update PAT' badge are correctly out of scope and still functional (23 existing PAT badges render).",
+    "Backend POST /cto/projects/verify-pat and github_token field on /cto/projects/add remain intact (untouched) as per founder's explicit instruction — hidden escape hatch preserved at API level."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100%"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview). Seeded fresh TEST_patremoval_* user via magic-login for NewUserWizard test.",
+  "seed_data_creation": "Temporary github_installations row (installation_id=99999901, user_id=test_admin_001, repo=test-org-pat-removal/demo-repo) for AddProjectWizard covered-repo test; fresh dev_users + magic_login_tokens for NewUserWizard test. All seed data + resulting cto_projects entry cleaned up post-test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "PAT removal from the two wizard UIs is fully verified. Backend PAT capability (POST /cto/projects/add github_token field, POST /cto/projects/verify-pat) intentionally untouched and still present. Projects.jsx PatModal + per-row 'Update PAT' badge left intact for existing PAT-connected projects and confirmed to still render. Fresh users signing up now only see the GitHub App path. No regressions detected.",
+  "rca of the issue": "N/A (this was a feature verification, not a bug fix)"
+}

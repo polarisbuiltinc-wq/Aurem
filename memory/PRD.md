@@ -2946,3 +2946,51 @@ redeploy:
 6. One-time DB dedupe migration guard (`db_indexes.py`)
 7. ORA Guide mascot bottom-offset fix (send button overlap)
 
+---
+
+## PAT removed from connect-repo UI (2026-08-20)
+
+Founder's exact ask + scoping (after seeing production screenshot of the
+single-repo-click bug): remove PAT entirely from the two "connect a NEW
+repo" flows — `NewUserWizard.jsx` (fresh onboarding) and
+`AddProjectWizard.jsx` (add-a-2nd-project). GitHub App is now the
+ONLY visible connect path in both.
+
+**Explicit scope boundaries the founder set**:
+1. Backend untouched — `POST /cto/projects/add` still accepts
+   `github_token`, `POST /cto/projects/verify-pat` still exists. This
+   IS the "hidden admin-only escape hatch" (no new admin UI built —
+   backend/API access is the escape hatch, satisfied by not touching it).
+2. Existing PAT-connected projects keep working exactly as before —
+   `pages/Projects.jsx`'s per-row "Update PAT" badge + `PatModal`
+   (for fixing/rotating an EXISTING project's token) and
+   `PatRequiredCTA.jsx` (in-chat 401 recovery) were deliberately
+   **left untouched** — those manage existing connections, not new
+   ones, and removing them would contradict "leave existing users
+   working as-is."
+
+**Removed from `NewUserWizard.jsx`**: PAT disclosure toggle, PAT input
++ "Generate PAT →" button + ready/paste banners, `isPatErr` special-
+case error message, `pat`/`patGenClicked`/`patInputRef` state, PAT
+auto-focus effect. `submitRepo()` no longer sends `github_token` at
+all outside the App-installation path (public-repo/no-token case
+unaffected).
+
+**Removed from `AddProjectWizard.jsx`**: PAT disclosure toggle,
+"Generate token for {repo}" link + instructions list + PAT input +
+verify pills, `PAT_RX`, debounced `/verify-pat` check effect,
+`pillStyle()` helper (now dead). Step 2's Next button is now
+`disabled={!installationForRepo}` — no way to reach Step 3 without
+GitHub App covering the repo. Step 3 summary card rewritten from
+PAT-scope wording to "Access to {repo} verified · Connected via
+GitHub App · @{login}". `handleSave()` always sends `installation_id`.
+
+**Verified**: `testing_agent` 100% pass, zero bugs
+(`/app/test_reports/iteration_pat_removal_2026_08_20.json`) — both
+wizards confirmed PAT-selector-free, App-only path enforced, existing
+23 PAT-badge project rows in Projects.jsx unaffected, no console
+errors, network-intercept-confirmed no `github_token` sent from either
+wizard.
+
+**Not yet deployed** — add to the redeploy checklist above (item 8).
+

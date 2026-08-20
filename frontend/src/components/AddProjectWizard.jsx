@@ -2,14 +2,15 @@
  * AddProjectWizard.jsx — Iter 212m-5 — 3-step "Add Project" flow.
  *
  *   Step 1  Repo identify  (free-form owner/repo or full URL)
- *   Step 2  App-install (recommended) OR generate token + paste (auto-verify)
+ *   Step 2  Install/select via the GitHub App
  *   Step 3  Confirm summary + project name → save → land in chat
  *
- * 2026-02-10 · Phase 4 — Dual-auth: App-first with PAT fallback.
- * The GitHub App install path is presented as the primary CTA at the
- * top of Step 2. Legacy PAT flow remains fully supported, hidden
- * behind a "Or use a Personal Access Token" disclosure toggle for
- * power users and private/legacy repos.
+ * 2026-08-20 — founder's call: GitHub App is now the ONLY visible way
+ * to connect a repo. The old PAT (Personal Access Token) fallback UI
+ * was removed entirely from this flow. The backend still accepts a
+ * github_token on /cto/projects/add (untouched, existing PAT-connected
+ * projects keep working) — there's just no way to reach it from here
+ * anymore.
  *
  * After successful save:
  *   - localStorage active project is set to the new project_id
@@ -19,15 +20,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Github,
-  ExternalLink,
   Check,
-  AlertCircle,
   Loader2,
   ArrowRight,
   ArrowLeft,
   X as XIcon,
   ShieldCheck,
-  ShieldAlert,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, API_BASE, getToken } from "../lib/api";
@@ -55,8 +53,6 @@ export function parseRepoInput(raw) {
   };
 }
 
-const PAT_RX = /^(ghp_|github_pat_)[A-Za-z0-9_]{20,}$/;
-
 // ── Component ─────────────────────────────────────────────────────────
 
 export default function AddProjectWizard({ onClose, onAdded }) {
@@ -67,25 +63,17 @@ export default function AddProjectWizard({ onClose, onAdded }) {
   const [repoInput, setRepoInput] = useState("");
   const repo = parseRepoInput(repoInput);
 
-  // Step-2 state
-  const [pat, setPat] = useState("");
-  const [check, setCheck] = useState({ status: "idle" });
-  // status: idle | loading | ok | error
-  //   ok    → { full_name, scopes, total_accessible_repos, warning, fine_grained }
-  //   error → { error, detail }
-
   // Step-3 state
   const [projectName, setProjectName] = useState("");
   const [saving, setSaving] = useState(false);
 
   // ─── 2026-02-10 · Phase 4 · GitHub App install (additive) ────────
   const [appInstalls, setAppInstalls]         = useState([]);
-  const [patDisclosureOpen, setPatDisclosureOpen] = useState(false);
   const appPopupRef = useRef(null);
 
   // The specific installation (if any) that covers the current `repo`.
   // Non-null → App-install branch is available for this repo; the
-  // Save button uses installation_id instead of PAT.
+  // Save button uses installation_id.
   const installationForRepo = React.useMemo(() => {
     if (!repo) return null;
     for (const inst of (appInstalls || [])) {
@@ -101,7 +89,7 @@ export default function AddProjectWizard({ onClose, onAdded }) {
     try {
       const r = await api.get("/github/app/installations");
       setAppInstalls(r.data?.installations || []);
-    } catch { /* silent — PAT path unaffected */ }
+    } catch { /* silent */ }
   }
   useEffect(() => { fetchAppInstallations(); }, []);
 
@@ -152,7 +140,7 @@ export default function AddProjectWizard({ onClose, onAdded }) {
             ? "Session expired during install — please try again."
             : d.err === "github_probe_failed"
               ? "GitHub couldn't verify the install. Try again."
-              : "Install did not complete — try again or use a PAT.",
+              : "Install did not complete — please try again.",
           kind: "warn",
         });
       }
@@ -168,76 +156,24 @@ export default function AddProjectWizard({ onClose, onAdded }) {
     }
   }, [step, repo, projectName]);
 
-  // ── Debounced PAT verification (step 2) ──────────────────────────
-  useEffect(() => {
-    if (step !== 2 || !pat.trim() || !repo) {
-      setCheck({ status: "idle" });
-      return;
-    }
-    if (!PAT_RX.test(pat.trim())) {
-      setCheck({
-        status: "error",
-        error:  "bad_format",
-        detail: "PAT should start with ghp_ or github_pat_ and be ≥ 20 chars.",
-      });
-      return;
-    }
-    const id = setTimeout(async () => {
-      setCheck({ status: "loading" });
-      try {
-        const r = await api.post("/cto/projects/verify-pat", {
-          repo: repo.full_name,
-          pat:  pat.trim(),
-        });
-        const d = r.data || {};
-        if (d.ok) {
-          setCheck({ status: "ok", ...d });
-        } else {
-          setCheck({
-            status: "error",
-            error:  d.error || "unknown",
-            detail: d.detail || "Verification failed.",
-          });
-        }
-      } catch (e) {
-        setCheck({
-          status: "error",
-          error:  "network_error",
-          detail: e?.response?.data?.detail || "Couldn't reach verifier.",
-        });
-      }
-    }, 700);
-    return () => clearTimeout(id);
-  }, [step, pat, repo]);
-
   // ── Step-3 save ──────────────────────────────────────────────────
   async function handleSave() {
-    // 2026-02-10 · Phase 4 — dual-auth save.
-    //   * If an App installation covers this repo → send installation_id
-    //     (skip PAT verify entirely; backend gate verifies via App JWT).
-    //   * Otherwise → legacy PAT path (existing behavior byte-for-byte).
-    const useAppPath = !!installationForRepo;
-
     if (!repo || !projectName.trim()) {
       toast({ message: "Fill in the project name.", kind: "warn" });
       return;
     }
-    if (!useAppPath && (!pat.trim() || check.status !== "ok")) {
-      toast({ message: "Paste and verify a PAT, or install the App above.", kind: "warn" });
+    if (!installationForRepo) {
+      toast({ message: "Install the GitHub App and grant access to this repo above first.", kind: "warn" });
       return;
     }
     setSaving(true);
     try {
       const payload = {
-        name:       projectName.trim(),
-        github_url: repo.url,
-        branch:     "main",
+        name:            projectName.trim(),
+        github_url:      repo.url,
+        branch:          "main",
+        installation_id: installationForRepo.installation_id,
       };
-      if (useAppPath) {
-        payload.installation_id = installationForRepo.installation_id;
-      } else {
-        payload.github_token = pat.trim();
-      }
       const r = await api.post("/cto/projects/add", payload);
       const newProjectId = r.data?.project?.project_id || r.data?.project_id;
       // Iter 389 — Meta Pixel Lead. Fires only after backend confirms
@@ -303,7 +239,7 @@ export default function AddProjectWizard({ onClose, onAdded }) {
             </div>
             <h3 style={{ margin: 0, fontSize: 19, color: "var(--text)" }}>
               {step === 1 && "Which GitHub repo?"}
-              {step === 2 && "Generate & paste your token"}
+              {step === 2 && "Connect via GitHub App"}
               {step === 3 && "Confirm and start"}
             </h3>
           </div>
@@ -417,7 +353,7 @@ export default function AddProjectWizard({ onClose, onAdded }) {
           </div>
         )}
 
-        {/* ──────────────── Step 2 — App-first + PAT fallback ──────────────── */}
+        {/* ──────────────── Step 2 — Connect via GitHub App ──────────────── */}
         {step === 2 && repo && (
           <div data-testid="wizard-step-2">
             {/* 2026-02-10 · Phase 4 · GitHub App primary CTA ─────── */}
@@ -503,128 +439,6 @@ export default function AddProjectWizard({ onClose, onAdded }) {
               </div>
             )}
 
-            {/* PAT disclosure — always available for private/legacy repos */}
-            {!installationForRepo && !patDisclosureOpen && (
-              <button
-                type="button"
-                data-testid="add-wizard-pat-disclosure-toggle"
-                onClick={() => setPatDisclosureOpen(true)}
-                style={{
-                  background: "transparent", border: "none",
-                  color: "var(--text-faint)", fontSize: 12,
-                  padding: "4px 0", cursor: "pointer",
-                  textDecoration: "underline dotted",
-                  textUnderlineOffset: 3, marginBottom: 8,
-                }}>
-                ▸ Or paste a Personal Access Token instead
-              </button>
-            )}
-
-            {/* Legacy PAT block — rendered only when the App path isn't
-                available OR the user explicitly toggled the disclosure. */}
-            {!installationForRepo && patDisclosureOpen && (
-            <>
-            <p style={{
-              fontSize: 13, color: "var(--text-dim)",
-              margin: "0 0 14px", lineHeight: 1.6,
-            }}>
-              Generate a token <strong style={{ color: "var(--text)" }}>scoped
-              just to this repo</strong>, then paste it below. We&apos;ll
-              verify access before saving.
-            </p>
-
-            <a
-              href={
-                "https://github.com/settings/personal-access-tokens/new" +
-                "?description=" + encodeURIComponent(`ORA · ${repo.repo}`) +
-                "&expires_in=90&contents=write&pull_requests=write"
-              }
-              target="_blank"
-              rel="noopener noreferrer"
-              data-testid="generate-token-cta"
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                gap: 10, padding: 13,
-                background: "#24292e", color: "#fff",
-                border: "2px solid var(--accent-2, #FF8A2A)",
-                borderRadius: 10, textDecoration: "none",
-                fontSize: 14, fontWeight: 500, marginBottom: 14,
-              }}
-            >
-              <Github size={18} />
-              Generate token for {repo.repo}
-              <ExternalLink size={13} style={{ opacity: 0.75 }} />
-            </a>
-
-            <ol style={{
-              margin: "0 0 14px", paddingLeft: 18,
-              fontSize: 12, lineHeight: 1.7, color: "var(--text-dim)",
-            }}>
-              <li>
-                <strong style={{ color: "var(--text)" }}>Repository access:</strong>{" "}
-                pick <em>Only select repositories</em> →{" "}
-                <code style={codeChip}>{repo.full_name}</code>
-              </li>
-              <li>
-                <strong style={{ color: "var(--text)" }}>Permissions:</strong>{" "}
-                <code style={codeChip}>Contents: Read and write</code> +{" "}
-                <code style={codeChip}>Pull requests: Read and write</code>{" "}
-                — already pre-selected by the button above
-              </li>
-              <li>
-                Click <em>Generate token</em>, copy it, paste below.
-              </li>
-            </ol>
-
-            <label style={{ display: "grid", gap: 6, marginBottom: 4 }}>
-              <span style={{
-                fontSize: 11, color: "var(--text-dim)",
-                fontFamily: "'JetBrains Mono', monospace",
-                letterSpacing: "0.06em", textTransform: "uppercase",
-              }}>
-                Paste your PAT
-              </span>
-              <input
-                data-testid="pat-input"
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                value={pat}
-                onChange={(e) => setPat(e.target.value)}
-                placeholder="github_pat_xxx or ghp_xxx"
-                className="input"
-                style={{
-                  fontFamily: "'JetBrains Mono', monospace", fontSize: 12,
-                  borderColor:
-                    check.status === "ok"      ? "rgba(34,197,94,0.55)"  :
-                    check.status === "error"   ? "rgba(239,68,68,0.55)"  :
-                    check.status === "loading" ? "rgba(245,158,11,0.4)" :
-                    undefined,
-                }}
-              />
-            </label>
-
-            {/* Verify pill */}
-            {check.status === "loading" && (
-              <div data-testid="pat-verify-loading" style={pillStyle("loading")}>
-                <Loader2 size={11} className="animate-spin" /> Checking against {repo.full_name}…
-              </div>
-            )}
-            {check.status === "ok" && (
-              <div data-testid="pat-verify-ok" style={pillStyle("ok")}>
-                <Check size={12} /> Token valid — access to {check.full_name}
-              </div>
-            )}
-            {check.status === "error" && (
-              <div data-testid="pat-verify-error" style={pillStyle("error")}>
-                <AlertCircle size={12} style={{ marginTop: 1 }} />
-                <span>{check.detail}</span>
-              </div>
-            )}
-            </>
-            )}
-            {/* end PAT disclosure block (installationForRepo || !patDisclosureOpen hide it) */}
-
             <div style={navRowStyle}>
               <button
                 type="button"
@@ -638,14 +452,9 @@ export default function AddProjectWizard({ onClose, onAdded }) {
               <button
                 type="button"
                 onClick={() => setStep(3)}
-                disabled={
-                  // App-installed repos skip PAT verify entirely.
-                  installationForRepo
-                    ? false
-                    : check.status !== "ok"
-                }
+                disabled={!installationForRepo}
                 data-testid="wizard-next-2"
-                style={cta(!!installationForRepo || check.status === "ok")}
+                style={cta(!!installationForRepo)}
               >
                 Next <ArrowRight size={14} />
               </button>
@@ -654,7 +463,7 @@ export default function AddProjectWizard({ onClose, onAdded }) {
         )}
 
         {/* ──────────────── Step 3 — Confirm + save ──────────────── */}
-        {step === 3 && repo && (installationForRepo || check.status === "ok") && (
+        {step === 3 && repo && installationForRepo && (
           <div data-testid="wizard-step-3">
             <p style={{
               fontSize: 13, color: "var(--text-dim)",
@@ -679,47 +488,13 @@ export default function AddProjectWizard({ onClose, onAdded }) {
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <ShieldCheck size={14} style={{ color: "#22c55e" }} />
-                <span>Access to <strong>{check.full_name}</strong> verified</span>
+                <span>Access to <strong>{repo.full_name}</strong> verified</span>
               </div>
               <div style={{
                 fontSize: 11, color: "var(--text-dim)", paddingLeft: 22,
               }}>
-                {check.fine_grained
-                  ? "Fine-grained PAT · scope limited to this repo."
-                  : `Classic PAT · scopes: ${(check.scopes || []).join(", ") || "—"}`}
+                Connected via GitHub App · @{installationForRepo.github_login}
               </div>
-              {typeof check.total_accessible_repos === "number" && (
-                <div style={{
-                  fontSize: 11, color: "var(--text-dim)", paddingLeft: 22,
-                }}>
-                  Token grants access to{" "}
-                  <strong style={{
-                    color: check.warning ? "#f59e0b" : "#22c55e",
-                  }}>
-                    {check.total_accessible_repos}{" "}
-                    repo{check.total_accessible_repos === 1 ? "" : "s"}
-                  </strong>{" "}
-                  in your GitHub account.
-                </div>
-              )}
-              {check.warning && (
-                <div
-                  data-testid="confirm-warning"
-                  style={{
-                    marginTop: 4, padding: "8px 12px",
-                    background: "rgba(245,158,11,0.10)",
-                    border: "1px solid rgba(245,158,11,0.35)",
-                    borderRadius: 8,
-                    fontSize: 11, color: "#f59e0b",
-                    fontFamily: "'JetBrains Mono', monospace",
-                    display: "flex", alignItems: "flex-start", gap: 8,
-                    lineHeight: 1.55,
-                  }}
-                >
-                  <ShieldAlert size={13} style={{ marginTop: 1, flexShrink: 0 }} />
-                  <span>{check.warning}</span>
-                </div>
-              )}
             </div>
 
             <label style={{ display: "grid", gap: 6, marginBottom: 4 }}>
@@ -804,34 +579,3 @@ function cta(enabled) {
   };
 }
 
-function pillStyle(kind) {
-  if (kind === "loading") {
-    return {
-      marginTop: 8, fontSize: 11, color: "#94a3b8",
-      display: "inline-flex", alignItems: "center", gap: 6,
-      padding: "4px 10px",
-      background: "rgba(255,255,255,0.04)",
-      border: "0.5px solid rgba(255,255,255,0.12)",
-      borderRadius: 999, alignSelf: "flex-start",
-    };
-  }
-  if (kind === "ok") {
-    return {
-      marginTop: 8, fontSize: 11, color: "#22c55e",
-      display: "inline-flex", alignItems: "center", gap: 6,
-      padding: "4px 10px",
-      background: "rgba(34,197,94,0.10)",
-      border: "0.5px solid rgba(34,197,94,0.35)",
-      borderRadius: 999, alignSelf: "flex-start",
-      fontFamily: "'JetBrains Mono', monospace",
-    };
-  }
-  return {
-    marginTop: 8, fontSize: 11, color: "#ef4444",
-    display: "inline-flex", alignItems: "flex-start", gap: 6,
-    padding: "6px 10px",
-    background: "rgba(239,68,68,0.10)",
-    border: "0.5px solid rgba(239,68,68,0.35)",
-    borderRadius: 8, alignSelf: "flex-start", maxWidth: "100%",
-  };
-}

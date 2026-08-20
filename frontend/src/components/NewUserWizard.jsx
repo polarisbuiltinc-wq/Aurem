@@ -1,9 +1,11 @@
 /**
  * NewUserWizard.jsx — Onboarding wizard for fresh signups (0 projects).
  *
- *   Step 1  Connect repo     → POST /cto/projects/add
- *   Step 2  First task brief → POST /cto/tasks/submit
- *   Step 3  Live worker tape → <TaskLiveTape /> driven by /cto/tasks/{id}/stream
+ *   Connect repo → POST /cto/projects/add → straight to the chat window.
+ *
+ * 2026-08-20 — founder's call: removed the old forced "first task" +
+ * "shipping" steps (2/3). Connecting a repo is now the whole job here;
+ * the user lands in the normal chat window afterward like anyone else.
  *
  * Dismiss rules:
  *   • localStorage["aurem_wizard_dismissed"] = "1" → never show again
@@ -14,16 +16,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Loader2, X, ArrowRight, Github } from "lucide-react";
 import { api, getToken, API_BASE } from "../lib/api";
-import TaskLiveTape from "./TaskLiveTape";
 import { setActiveProjectId } from "./TabBar";
 import RobotGuide, { RobotGuideKeyframes, escapeHtml, oraPulseRingStyle } from "./RobotGuide";
 import useModalA11y from "../hooks/useModalA11y";
 
 const DISMISS_KEY = "aurem_wizard_dismissed";
 const REPO_RX = /^(https?:\/\/)?(www\.)?github\.com\/[\w.-]+\/[\w.-]+\/?$/i;
-const TASK_HINT =
-  "Be specific. e.g. \"Add a dark-mode toggle to the navbar in " +
-  "components/Navbar.jsx — use localStorage to persist the choice.\"";
 
 export function isWizardDismissed() {
   try { return localStorage.getItem(DISMISS_KEY) === "1"; }
@@ -34,24 +32,10 @@ export function dismissWizard() {
 }
 
 export default function NewUserWizard({ onComplete }) {
-  const [step, setStep]         = useState(1);
+  const [step]         = useState(1);
   const [repoUrl, setRepoUrl]   = useState("");
   const [branch, setBranch]     = useState("main");
-  // Iter 212m-92 — per-project PAT input. Backend rejects /projects/add
-  // without a github_token even when GitHub OAuth is connected (OAuth
-  // is identity-only since iter 211). The wizard now collects this
-  // directly so users don't hit the dead-end error state in
-  // production where the helper link wasn't clickable.
-  const [pat, setPat] = useState("");
-  // Iter 212m-94 — track "user clicked Generate PAT" so we can:
-  //   • auto-focus the PAT input when they tab back from GitHub
-  //   • show a glowing visual cue + success step indicator
-  //   • dismiss the cue once they've actually pasted something
-  const [patGenClicked, setPatGenClicked] = useState(false);
-  const patInputRef = React.useRef(null);
-  const [task, setTask]         = useState("");
   const [projectId, setProject] = useState(null);
-  const [taskId, setTaskId]     = useState(null);
   const [busy, setBusy]         = useState(false);
   const [err, setErr]           = useState("");
 
@@ -71,13 +55,9 @@ export default function NewUserWizard({ onComplete }) {
   // `appPickerActive` — flips to true after a successful install so
   //                the UI transitions from "Continue with GitHub App"
   //                CTA → repo picker sourced from installation.repositories.
-  // `patDisclosureOpen` — controls the disclosure fallback that reveals
-  //                the legacy PAT input block. False by default per
-  //                Phase 3 decision #4 (PAT stays permanently but hidden).
   const [appInstalls, setAppInstalls]           = useState([]);
   const [appInstallsBusy, setAppInstallsBusy]   = useState(false);
   const [appPickerActive, setAppPickerActive]   = useState(false);
-  const [patDisclosureOpen, setPatDisclosureOpen] = useState(false);
   const appPopupRef = useRef(null);
 
   // Initial OAuth status check.
@@ -90,12 +70,12 @@ export default function NewUserWizard({ onComplete }) {
         // "Continue with GitHub" (OAuth identity link) but never
         // installed the Aurem GitHub App was landing straight on
         // ghStatus="connected" — which skips the "choosing" step
-        // entirely and shows ONLY the repo dropdown + a REQUIRED PAT
-        // field, with the recommended "Continue with GitHub App" CTA
-        // never surfaced at all. Root cause: OAuth-linked ≠ App-
-        // installed, but the old logic treated them as equivalent.
-        // Fix: always check for an active App installation FIRST. Only
-        // skip straight past the App CTA if one already exists.
+        // entirely and shows ONLY the repo dropdown, with the
+        // recommended "Continue with GitHub App" CTA never surfaced
+        // at all. Root cause: OAuth-linked ≠ App-installed, but the
+        // old logic treated them as equivalent. Fix: always check for
+        // an active App installation FIRST. Only skip straight past
+        // the App CTA if one already exists.
         const [oauthRes, installsRes] = await Promise.allSettled([
           api.get("/github/oauth/status"),
           api.get("/github/app/installations"),
@@ -105,7 +85,7 @@ export default function NewUserWizard({ onComplete }) {
         const oauthConnected = oauthRes.status === "fulfilled" && oauthRes.value.data?.connected;
         if (oauthConnected) {
           setGhLogin(oauthRes.value.data.login || "");
-          fetchRepos();  // convenience dropdown for the PAT-disclosure fallback
+          fetchRepos();  // convenience dropdown for OAuth-linked accounts
         }
 
         const installs = (installsRes.status === "fulfilled" && installsRes.value.data?.installations) || [];
@@ -114,13 +94,12 @@ export default function NewUserWizard({ onComplete }) {
           // picker, no CTA needed.
           setAppInstalls(installs);
           setAppPickerActive(true);
+          maybeAutoSelectSingleRepo(installs);
           setGhStatus("choosing");
         } else {
           // No App installed yet (whether or not legacy OAuth is
           // linked) — land on "choosing" so the App-install CTA is
-          // always the first thing a user without an App sees. PAT
-          // stays available only via the "Or paste a Personal Access
-          // Token instead" disclosure.
+          // always the first thing a user without an App sees.
           setGhStatus("choosing");
         }
       } catch {
@@ -134,27 +113,6 @@ export default function NewUserWizard({ onComplete }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Iter 212m-94 — auto-focus the PAT input when the user tabs back
-  // from the GitHub PAT-creation page. We listen for window focus
-  // events and snap focus + scroll to the PAT input if the user has
-  // clicked "Generate PAT" but hasn't yet pasted a token.
-  useEffect(() => {
-    if (!patGenClicked || pat) return;
-    const onFocus = () => {
-      // small delay so the focus lands AFTER browser tab switch animation
-      setTimeout(() => {
-        if (patInputRef.current) {
-          patInputRef.current.focus();
-          patInputRef.current.scrollIntoView({
-            behavior: "smooth", block: "center",
-          });
-        }
-      }, 250);
-    };
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [patGenClicked, pat]);
-
   async function fetchRepos() {
     setReposBusy(true);
     try {
@@ -164,6 +122,20 @@ export default function NewUserWizard({ onComplete }) {
       setRepos([]);
     } finally {
       setReposBusy(false);
+    }
+  }
+
+  // 2026-08-20 — auto-select the repo when an install grants exactly
+  // ONE repo — there's no real choice to make, so requiring a click
+  // is pointless friction. Distinct from the earlier "no auto-fill"
+  // fix, which was specifically about MULTI-repo installs (auto-
+  // highlighting one of several created false confidence about which
+  // repo was chosen). A single repo has no such ambiguity.
+  function maybeAutoSelectSingleRepo(installs) {
+    const allRepos = (installs || []).flatMap((inst) => inst.repositories || []);
+    if (allRepos.length === 1) {
+      setRepoUrl(`https://github.com/${allRepos[0].full_name}`);
+      setBranch(allRepos[0].default_branch || "main");
     }
   }
 
@@ -177,12 +149,15 @@ export default function NewUserWizard({ onComplete }) {
       if (list.length > 0) {
         setAppPickerActive(true);
         // 2026-08-20 — deliberately NOT auto-filling repoUrl here
-        // anymore. Auto-picking the first repo of the installation
-        // and rendering it pre-highlighted created a false sense of
-        // completion right after "App installed" — a user could
-        // reasonably believe the connect was already done and never
-        // click the still-required Continue button below. Requiring
-        // an explicit repo click keeps the "done" state honest.
+        // anymore when there's more than 1 repo. Auto-picking the
+        // first repo of a multi-repo installation and rendering it
+        // pre-highlighted created a false sense of completion right
+        // after "App installed" — a user could reasonably believe
+        // the connect was already done and never click the still-
+        // required Continue button below. Requiring an explicit repo
+        // click keeps the "done" state honest for multi-repo installs.
+        // A single-repo install has no such ambiguity — auto-select it.
+        maybeAutoSelectSingleRepo(list);
       }
     } catch {
       setAppInstalls([]);
@@ -230,8 +205,10 @@ export default function NewUserWizard({ onComplete }) {
           try { appPopupRef.current?.close?.(); } catch {}
           setAppInstalls(r.data.installations);
           setAppPickerActive(true);
-          // 2026-08-20 — no auto-fill here either, same reasoning as
-          // fetchAppInstallations() above — see comment there.
+          // 2026-08-20 — no auto-fill here either for multi-repo
+          // installs, same reasoning as fetchAppInstallations() above.
+          // Single-repo installs still get auto-selected.
+          maybeAutoSelectSingleRepo(r.data.installations);
         }
       } catch { /* keep polling */ }
     }, 1500);
@@ -252,7 +229,7 @@ export default function NewUserWizard({ onComplete }) {
             ? "Session expired while installing. Please try again."
             : d.err === "github_probe_failed"
               ? "GitHub couldn't verify the install. Try again."
-              : "Install did not complete — try again or use a PAT below.",
+              : "Install did not complete — please try again.",
         );
       } else if (d.status === "pending") {
         setErr(
@@ -332,10 +309,6 @@ export default function NewUserWizard({ onComplete }) {
     dismissWizard();
     onComplete?.();
   }
-  function goDashboard() {
-    if (projectId) setActiveProjectId(projectId);
-    close();
-  }
 
   async function submitRepo(e) {
     e?.preventDefault();
@@ -352,8 +325,7 @@ export default function NewUserWizard({ onComplete }) {
       // 2026-02-10 · Phase 4 — if the App picker is active AND the
       // chosen repo belongs to one of the user's installations,
       // submit with `installation_id` so the backend uses the App-
-      // install branch. Otherwise fall back to PAT (legacy path,
-      // fully preserved).
+      // install branch. Otherwise no token is sent (public-repo path).
       let installation_id = null;
       if (appPickerActive && appInstalls.length > 0) {
         const chosenFullName = repoUrl.trim()
@@ -377,13 +349,20 @@ export default function NewUserWizard({ onComplete }) {
       };
       if (installation_id) {
         payload.installation_id = installation_id;
-      } else {
-        payload.github_token = pat.trim() || undefined;
       }
+      // No PAT field in the UI anymore — a repo with no installation
+      // match is submitted with no github_token, i.e. a public-repo
+      // clone (unauthenticated). Private repos need the GitHub App.
 
       const r = await api.post("/cto/projects/add", payload);
-      setProject(r.data?.project_id);
-      setStep(2);
+      // 2026-08-20 — founder's call: no forced "first task" step
+      // inside the wizard anymore. Connecting the repo is the whole
+      // job here — land straight in the normal chat window, same as
+      // any returning user, instead of steps 2/3 (task + shipping).
+      const newProjectId = r.data?.project_id;
+      setProject(newProjectId);
+      setActiveProjectId(newProjectId);
+      close();
     } catch (e2) {
       const detail = e2?.response?.data?.detail;
       const msg = (typeof detail === "object" && detail?.message)
@@ -403,31 +382,7 @@ export default function NewUserWizard({ onComplete }) {
     }
   }
 
-  async function submitTask(e) {
-    e?.preventDefault();
-    setErr("");
-    if (task.trim().length < 12) {
-      setErr("Give ORA a bit more detail (12+ characters).");
-      return;
-    }
-    setBusy(true);
-    try {
-      const r = await api.post("/cto/tasks/submit", {
-        project_id: projectId, task: task.trim(), files: [], context: "",
-      });
-      setTaskId(r.data?.task_id);
-      setActiveProjectId(projectId);
-      setStep(3);
-    } catch (e2) {
-      const msg = e2?.response?.data?.detail || e2?.message || "Submit failed.";
-      setErr(msg);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const robotMsg = buildRobotMessage({ step, ghStatus, busy, err, repoUrl, task, taskId });
-  const stepLabel = ["Connect repo", "First task", "Shipping"][step - 1];
+  const robotMsg = buildRobotMessage({ ghStatus, busy, err, repoUrl });
 
   // Iter 388t · Bug 27 · Escape + focus trap.  Wizard was aria-modal
   // but had NO keyboard-close path — a keyboard-only user who hit
@@ -489,12 +444,6 @@ export default function NewUserWizard({ onComplete }) {
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div data-testid="wizard-progress" style={{
-              fontSize: 11, color: "#64748b",
-              fontFamily: "var(--font-mono, ui-monospace, monospace)",
-            }}>
-              Step {step} of 3
-            </div>
             <button data-testid="wizard-close" onClick={close} title="Skip"
                     style={{ background:"transparent", border:"none", padding:4,
                              color:"#64748b", cursor:"pointer", display:"flex" }}>
@@ -505,27 +454,6 @@ export default function NewUserWizard({ onComplete }) {
 
         <div style={{ padding: "20px 20px 16px", overflowY: "auto",
                        flex: "1 1 auto", minHeight: 0 }}>
-          {/* Step dots + label */}
-          <div style={{
-            display: "flex", alignItems: "center", gap: 6, marginBottom: 18,
-          }}>
-            {[1,2,3].map((i) => (
-              <div key={i} data-testid={`wizard-dot-${i}`} style={{
-                width: i === step ? 20 : 8,
-                height: 8,
-                borderRadius: i === step ? 4 : "50%",
-                background: i < step ? "#22c55e"
-                          : i === step ? "#f59e0b"
-                          : "rgba(255,255,255,0.15)",
-                transition: "all .3s ease",
-              }}/>
-            ))}
-            <div style={{
-              fontSize: 11, color: "#64748b", marginLeft: 4,
-              fontFamily: "var(--font-mono, ui-monospace, monospace)",
-            }}>{stepLabel}</div>
-          </div>
-
           {/* Robot Guide */}
           <RobotGuide message={robotMsg} kind={err ? "error" : "info"} testid="wizard-robot-guide" />
           {step === 1 && (
@@ -729,23 +657,6 @@ export default function NewUserWizard({ onComplete }) {
                     </div>
                   )}
 
-                  {/* ── PAT disclosure — kept forever, hidden by default ── */}
-                  {ghStatus === "choosing" && !patDisclosureOpen && !appPickerActive && (
-                    <button
-                      data-testid="wizard-pat-disclosure-toggle"
-                      type="button"
-                      onClick={() => { setPatDisclosureOpen(true); setGhStatus("manual"); }}
-                      style={{
-                        background: "transparent", border: "none",
-                        color: "var(--text-faint)", fontSize: 11,
-                        padding: "4px 0", cursor: "pointer",
-                        textDecoration: "underline dotted",
-                        textUnderlineOffset: 3,
-                      }}>
-                      ▸ Or paste a Personal Access Token instead
-                    </button>
-                  )}
-
                   {(ghStatus === "connected" || (ghStatus === "choosing" && ghLogin && !appPickerActive)) && (
                     <div data-testid="wizard-gh-connected" style={{
                       display:"flex", alignItems:"center", gap:8,
@@ -762,9 +673,9 @@ export default function NewUserWizard({ onComplete }) {
                           the App CTA below is just for repo access. */}
                     </div>
                   )}
-                  {/* 2026-02-10 · Phase 4 — hide repo URL / branch / PAT
+                  {/* 2026-02-10 · Phase 4 — hide repo URL / branch
                       while the user is still on the "choosing" landing
-                      (no App picker yet AND PAT disclosure not opened). */}
+                      (no App picker yet). */}
                   {!(ghStatus === "choosing" && !appPickerActive) && (
                   <>
                   <p style={pStyle}>
@@ -821,115 +732,9 @@ export default function NewUserWizard({ onComplete }) {
                     placeholder="main"
                     style={iStyle}
                   />
-
-                  {/* 2026-02-10 · Phase 4 — PAT sub-block hidden when
-                      user picked App path. App-installed repos don't
-                      need a stored PAT (installation token minted per-
-                      request server-side). */}
-                  {!appPickerActive && (
-                  <>
-                  {/* Iter 212m-92 — PAT input + Generate PAT CTA.
-                      Without this users hit a dead-end "Personal Access
-                      Token required" error with no actionable button. */}
-                  <label style={lStyle} htmlFor="wizard-pat-input">
-                    GitHub Personal Access Token
-                    <span style={{ color: "var(--text-faint)",
-                                   marginLeft: 6, fontSize: 10 }}>
-                      (required · Contents: Read &amp; write)
-                    </span>
-                  </label>
-                  <div style={{
-                    display: "flex", gap: 6, alignItems: "stretch",
-                    transition: "all .25s ease",
-                    ...(patGenClicked && !pat ? {
-                      // Glow ring when user just generated PAT but hasn't pasted yet
-                      boxShadow: "0 0 0 3px rgba(255,102,8,0.28)",
-                      borderRadius: 6,
-                    } : {}),
-                  }}>
-                    <input
-                      id="wizard-pat-input"
-                      data-testid="wizard-pat-input"
-                      ref={patInputRef}
-                      type="password"
-                      autoComplete="off"
-                      value={pat}
-                      onChange={(e) => setPat(e.target.value)}
-                      placeholder={patGenClicked && !pat
-                        ? "Paste your fresh PAT here ↓"
-                        : "ghp_… or github_pat_…"}
-                      style={{ ...iStyle, flex: 1, fontFamily:
-                        "var(--font-mono, ui-monospace, monospace)",
-                        ...(patGenClicked && !pat
-                          ? { borderColor: "#FF6608" } : {}),
-                      }}
-                    />
-                    <a
-                      data-testid="wizard-generate-pat-btn"
-                      href="https://github.com/settings/tokens/new?scopes=repo,workflow,read:user,user:email&description=AUREM%20(per-project)&default_expires_at=90"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => setPatGenClicked(true)}
-                      style={{
-                        display: "inline-flex", alignItems: "center",
-                        gap: 6, padding: "9px 14px", fontSize: 12,
-                        fontWeight: 600, whiteSpace: "nowrap",
-                        background: "#FF6608", color: "#0A0A0A",
-                        border: "1px solid #FF6608", borderRadius: 6,
-                        textDecoration: "none", cursor: "pointer",
-                      }}
-                    >{patGenClicked ? "Open GitHub again" : "Generate PAT →"}</a>
-                  </div>
-
-                  {/* Iter 212m-94 — Strong "next step" CTA visible only
-                      after Generate PAT click. Walks the user back
-                      from GitHub to the paste-here input. */}
-                  {patGenClicked && !pat && (
-                    <div data-testid="wizard-paste-pat-cta" style={{
-                      marginTop: 8, padding: "10px 12px", borderRadius: 6,
-                      background: "rgba(255,102,8,0.08)",
-                      border: "1px solid rgba(255,102,8,0.36)",
-                      color: "#FF6608", fontSize: 12, fontWeight: 600,
-                      display: "flex", alignItems: "center", gap: 8,
-                      fontFamily: "var(--font-mono, ui-monospace, monospace)",
-                    }}>
-                      <span style={{
-                        display: "inline-block", width: 6, height: 6,
-                        borderRadius: "50%", background: "#FF6608",
-                        boxShadow: "0 0 8px #FF6608",
-                        animation: "oraBlink 1.5s infinite",
-                      }} />
-                      <span style={{ flex: 1 }}>
-                        GitHub tab opened ↑ — copy your new token, paste it above, then hit <strong>Continue</strong>.
-                      </span>
-                    </div>
-                  )}
-
-                  {pat && pat.length > 10 && (
-                    <div data-testid="wizard-pat-ready" style={{
-                      marginTop: 8, padding: "8px 12px", borderRadius: 6,
-                      background: "rgba(34,197,94,0.08)",
-                      border: "1px solid rgba(34,197,94,0.36)",
-                      color: "#22C55E", fontSize: 11, fontWeight: 600,
-                      fontFamily: "var(--font-mono, ui-monospace, monospace)",
-                    }}>
-                      ✓ Token detected — click <strong>Continue</strong> to connect this repo.
-                    </div>
-                  )}
-                  <p style={{
-                    margin: "6px 0 0", fontSize: 10,
-                    color: "var(--text-faint)",
-                    fontFamily: "var(--font-mono, ui-monospace, monospace)",
-                  }}>
-                    Encrypted at rest · only used to read &amp; push this repo
-                  </p>
                   </>
                   )}
-                  {/* end PAT sub-block (hidden when appPickerActive) */}
-
-                  </>
-                  )}
-                  {/* end URL/branch/PAT outer conditional
+                  {/* end URL/branch outer conditional
                       (hidden on pure "choosing" landing) */}
 
                   {err && <div data-testid="wizard-error" style={errStyle}>{err}</div>}
@@ -942,48 +747,6 @@ export default function NewUserWizard({ onComplete }) {
                 </>
               )}
             </form>
-          )}
-
-          {step === 2 && (
-            <form onSubmit={submitTask} data-testid="wizard-step-2">
-              <h2 style={hStyle}>What should ORA build first?</h2>
-              <p style={pStyle}>{TASK_HINT}</p>
-              <textarea
-                data-testid="wizard-task-input"
-                autoFocus
-                value={task}
-                onChange={(e) => setTask(e.target.value)}
-                rows={5}
-                placeholder="Add a /healthz endpoint that returns build hash + uptime…"
-                style={{ ...iStyle, fontFamily:"var(--font-mono, ui-monospace, monospace)",
-                         resize:"vertical", minHeight: 110 }}
-              />
-              {err && <div data-testid="wizard-error" style={errStyle}>{err}</div>}
-              <Footer
-                busy={busy}
-                primary="Ship it"
-                onPrimary={submitTask}
-                onSkip={close}
-              />
-            </form>
-          )}
-
-          {step === 3 && (
-            <div data-testid="wizard-step-3">
-              <h2 style={hStyle}>ORA is shipping…</h2>
-              <p style={pStyle}>
-                Live progress below. You can leave this open or jump to
-                the dashboard — the task keeps running in the background.
-              </p>
-              <TaskLiveTape taskId={taskId} />
-              <div style={{ display:"flex", justifyContent:"flex-end",
-                            gap: 8, padding: "14px 0 4px" }}>
-                <button data-testid="wizard-goto-dashboard"
-                        onClick={goDashboard} style={primaryBtn}>
-                  Go to dashboard <ArrowRight size={12} />
-                </button>
-              </div>
-            </div>
           )}
         </div>
       </div>
@@ -1036,21 +799,12 @@ const primaryBtn = { display: "inline-flex", alignItems: "center", gap: 6,
                      borderRadius: 8, fontSize: 13, fontWeight: 600,
                      letterSpacing: "0.02em", cursor: "pointer" };
 
-function buildRobotMessage({ step, ghStatus, busy, err, repoUrl, task, taskId }) {
+function buildRobotMessage({ ghStatus, busy, err, repoUrl }) {
   if (err) {
-    // Iter 212m-92 — if the error mentions PAT, inject a clickable
-    // "Generate PAT" link so the user has a one-tap path forward
-    // (used to be plain text URL — production users got stuck).
-    const isPatErr = /personal access token|github_pat_|ghp_/i.test(err);
-    if (isPatErr) {
-      return `Hmm — <strong>GitHub Personal Access Token needed.</strong> ` +
-        `Tap <a href="https://github.com/settings/tokens/new?scopes=repo&description=AUREM" target="_blank" rel="noopener" style="color:#FF6608;text-decoration:underline;font-weight:600;">Generate PAT on GitHub →</a> ` +
-        `then paste it in the field below. Or skip for now.`;
-    }
     return `Hmm — <strong>${escapeHtml(err)}</strong>. Try again, or skip for now.`;
   }
   if (busy) return `Working on it… <span class="ora-arrow">⏳</span>`;
-  if (step === 1) {
+  {
     if (ghStatus === "checking") return `Checking your GitHub connection…`;
     if (ghStatus === "disconnected")
       return `<strong>Fastest way:</strong> click <strong>Continue with GitHub</strong> below <span class="ora-arrow">👇</span> — connects in seconds, no PAT needed.`;
@@ -1058,15 +812,6 @@ function buildRobotMessage({ step, ghStatus, busy, err, repoUrl, task, taskId })
       return `Paste any <strong>public repo URL</strong> below. For private repos, connect GitHub from Settings later. <span class="ora-arrow">👇</span>`;
     if (!repoUrl) return `Your GitHub repos are loaded! <strong>Pick a repo</strong> from the dropdown — or paste a URL. <span class="ora-arrow">👇</span>`;
     return `Nice — <strong>${escapeHtml(repoUrl.replace(/^https?:\/\/github\.com\//, ""))}</strong> looks good. Click <strong>Continue</strong> to connect it. <span class="ora-arrow">👇</span>`;
-  }
-  if (step === 2) {
-    if (!task) return `Tell me <strong>what to build first</strong>. Be specific — file paths help me ship faster. <span class="ora-arrow">👇</span>`;
-    if (task.length < 12) return `A little more detail, please — <strong>12+ characters</strong> so I can scope it right.`;
-    return `Looks shippable. Hit <strong>Ship it</strong> when you&rsquo;re ready. <span class="ora-arrow">👇</span>`;
-  }
-  if (step === 3) {
-    if (!taskId) return `Spinning up the worker…`;
-    return `<strong>Shipping live below.</strong> You can close this — the task keeps running in the background. <span class="ora-arrow">🚀</span>`;
   }
   return "";
 }
