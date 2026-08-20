@@ -153,15 +153,13 @@ export default function NewUserWizard({ onComplete }) {
       setAppInstalls(list);
       if (list.length > 0) {
         setAppPickerActive(true);
-        // Auto-populate the repo input with the first repo of the
-        // most-recent installation so the user can hit Continue
-        // straight away if they only added one repo.
-        const first = list[0];
-        const firstRepo = (first?.repositories || [])[0];
-        if (firstRepo) {
-          setRepoUrl(`https://github.com/${firstRepo.full_name}`);
-          setBranch(firstRepo.default_branch || "main");
-        }
+        // 2026-08-20 — deliberately NOT auto-filling repoUrl here
+        // anymore. Auto-picking the first repo of the installation
+        // and rendering it pre-highlighted created a false sense of
+        // completion right after "App installed" — a user could
+        // reasonably believe the connect was already done and never
+        // click the still-required Continue button below. Requiring
+        // an explicit repo click keeps the "done" state honest.
       }
     } catch {
       setAppInstalls([]);
@@ -209,16 +207,13 @@ export default function NewUserWizard({ onComplete }) {
           try { appPopupRef.current?.close?.(); } catch {}
           setAppInstalls(r.data.installations);
           setAppPickerActive(true);
-          const first = r.data.installations[0];
-          const firstRepo = (first?.repositories || [])[0];
-          if (firstRepo) {
-            setRepoUrl(`https://github.com/${firstRepo.full_name}`);
-            setBranch(firstRepo.default_branch || "main");
-          }
+          // 2026-08-20 — no auto-fill here either, same reasoning as
+          // fetchAppInstallations() above — see comment there.
         }
       } catch { /* keep polling */ }
     }, 1500);
   }
+
 
   // Listen for the postMessage handshake from /api/aurem-dev/github/app/installed.
   useEffect(() => {
@@ -679,6 +674,18 @@ export default function NewUserWizard({ onComplete }) {
                               </div>
                             </div>
                           ))}
+                          {repoUrl && (
+                            <div data-testid="wizard-app-repo-selected-cta" style={{
+                              marginTop: 8, padding: "8px 12px", borderRadius: 6,
+                              background: "rgba(34,197,94,0.08)",
+                              border: "1px solid rgba(34,197,94,0.36)",
+                              color: "#22C55E", fontSize: 11, fontWeight: 600,
+                              fontFamily: "var(--font-mono, ui-monospace, monospace)",
+                            }}>
+                              ✓ {repoUrl.replace(/^https?:\/\/github\.com\//i, "")} selected —
+                              click <strong>Continue</strong> below to connect it.
+                            </div>
+                          )}
                           <button
                             data-testid="wizard-app-add-more-btn"
                             type="button"

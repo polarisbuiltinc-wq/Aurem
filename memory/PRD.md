@@ -529,6 +529,48 @@ this pass): the one-click admin "Backfill OAuth email_verified" button
 for pre-existing Google/GitHub OAuth users (Luke West, Laurence
 Bellinger included).
 
+## Real drop-off point found via new instrumentation: GitHub App install → project never created (2026-08-20)
+
+Founder used the new `/admin/users/{id}` timeline (fix above) to pull
+Luke West's real activity: `app_install_redirect` → `app_installed`
+(18 repos granted) → **nothing after**. Zero `project_connected`,
+`project_count` still 0.
+
+**Root cause confirmed** (`components/NewUserWizard.jsx`): after a
+successful GitHub App install, the wizard auto-filled the FIRST repo
+of the installation into `repoUrl` state and rendered it pre-
+highlighted with the message "App installed. Pick a repo below to
+connect." — creating a false sense of completion. Unlike the PAT
+sub-flow (which has an explicit "✓ Token detected — click Continue"
+nudge), the App-install path had no equivalent reminder that a
+separate, required "Continue" click (→ `POST /cto/projects/add`) still
+remained. A user could reasonably believe the connect was already done
+and abandon at exactly this point — matching Luke's timeline exactly.
+
+**Fixed** (founder-approved, both parts):
+1. Removed the auto-fill/auto-highlight of the first repo in
+   `fetchAppInstallations()` and the popup-close polling fallback —
+   nothing looks "selected" until the user explicitly clicks a repo
+   button.
+2. Added a matching "✓ {repo} selected — click **Continue** below to
+   connect it." nudge to the App-install repo-picker block, mirroring
+   the PAT flow's existing pattern.
+
+**`AddProjectWizard.jsx` (add-a-2nd-project flow) investigated too** —
+does NOT have this bug: it requires the repo to be typed first (no
+multi-repo auto-picker), and already shows an explicit "Click
+Continue to name and save this project." banner when an installation
+covers that typed repo. No change needed there.
+
+**Verified live** via Playwright with a mocked `/github/app/installations`
+response simulating a real install (2 repos) + the real `postMessage`
+handshake: before any click — no repo highlighted, no nudge, robot
+guide says "Pick a repo." After clicking a repo — it highlights
+orange, the new green "click Continue" nudge appears, robot guide
+updates, Continue button enabled. Screenshot-confirmed both states.
+
+**Not yet deployed** — preview-only until founder redeploys.
+
 ## Engineering-Discipline Audit — 12 categories, all checkpoints complete (2026-08-20)
 
 Founder-requested honest status check across Software Engineering,
