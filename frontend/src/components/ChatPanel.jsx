@@ -4990,6 +4990,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                     display: "inline-flex", alignItems: "center",
                     justifyContent: "center",
                     width: 38, height: 38, borderRadius: "50%",
+                    flexShrink: 0, minWidth: 38,
                     background: "rgba(255,102,8,0.9)",
                     border: "1px solid rgba(255,102,8,0.9)",
                     color: "#0A0A0A", cursor: "pointer",
@@ -5008,6 +5009,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                 style={{
                   display: "inline-flex", alignItems: "center", justifyContent: "center",
                   width: 38, height: 38, borderRadius: "50%",
+                  flexShrink: 0, minWidth: 38,
                   background: "rgba(255,102,8,0.18)",
                   border: "1px solid rgba(255,102,8,0.45)",
                   color: "#FF6608",
@@ -5071,6 +5073,11 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
               style={{
                 display: "inline-flex", alignItems: "center", justifyContent: "center",
                 width: 38, height: 38, borderRadius: "50%",
+                // 2026-08-20 — was collapsing to ~0px wide on a real
+                // 390px mobile viewport (nothing in this toolbar row
+                // protected it from flexbox shrink) — users could
+                // type a message but had no usable Send button.
+                flexShrink: 0, minWidth: 38,
                 background: (!input.trim() || !sessionId || exhausted)
                   ? "rgba(255,102,8,0.25)"
                   : "#FF6608",

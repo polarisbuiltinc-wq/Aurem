@@ -275,13 +275,23 @@ export default function AskAdvisorReal({ collapsed = false, onCollapse, projectI
           Vertically centered (not bottom-anchored) so it never sits
           in the same row as the chat composer's send button at any
           viewport width — bottom-anchoring previously put it at
-          roughly the same height as the composer toolbar. */}
+          roughly the same height as the composer toolbar.
+          2026-08-20 — was `absolute` anchored via a negative offset
+          (`-left-7`) from a ZERO-WIDTH flex sibling sitting exactly
+          at the layout's right boundary. That's fragile: any
+          subpixel/rounding drift in the ancestor flex math (founder
+          reproduced this on a real 150% OS display-scaling laptop,
+          a very common real-user setup) can push the button outside
+          the practically-clickable region even though it's still
+          technically "in" the DOM at that x. Switched to `fixed`,
+          anchored directly to the true viewport edge (`right-0`) —
+          no ancestor layout math involved at all. */}
       <button onClick={() => onCollapse?.(false)} aria-label="Open Advisor panel"
         data-testid="ds2-advisor-open"
         className={cn(
-          "absolute top-1/2 -translate-y-1/2 z-30 flex h-[96px] w-[26px] flex-col items-center justify-center gap-1.5 rounded-l-lg border border-r-0 border-border bg-card px-1.5 py-3 shadow-lg transition-all duration-200 ease-in-out hover:bg-secondary",
-          collapsed ? "-left-7 opacity-100 pointer-events-auto"
-                    : "left-0 opacity-0 pointer-events-none",
+          "fixed top-1/2 -translate-y-1/2 z-30 flex h-[96px] w-[26px] flex-col items-center justify-center gap-1.5 rounded-l-lg border border-r-0 border-border bg-card px-1.5 py-3 shadow-lg transition-all duration-200 ease-in-out hover:bg-secondary",
+          collapsed ? "right-0 opacity-100 pointer-events-auto"
+                    : "right-[-40px] opacity-0 pointer-events-none",
         )}>
         <Sparkles className="size-3 text-primary" strokeWidth={2.5} />
         <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground"

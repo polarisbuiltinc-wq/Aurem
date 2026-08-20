@@ -15,6 +15,14 @@
  *   className optional extra class.
  *   wide      boolean — Iter 154 — 34×34 → 42×34 so the Attach +
  *             GitHub buttons read clearer after the Maxx retire.
+ *
+ * 2026-08-20 — `flexShrink: 0` added. Founder found via a scripted
+ * 390px-mobile check: this button (along with the composer's send
+ * button) was collapsing to ~0-2px wide on narrow viewports because
+ * nothing in the composer toolbar row protected it from flexbox
+ * shrink — the IntentTierIndicator/CharCounter/LoopModeToggle labels
+ * simply ate all the space first. On a real phone this meant users
+ * could type a message but had no usable Send button at all.
  */
 import React from "react";
 
@@ -31,6 +39,7 @@ export default function ToolButton({
       className={className}
       style={{
         width: w, height: 34, borderRadius: wide ? 8 : 4,
+        flexShrink: 0, minWidth: w,
         background: active ? "var(--accent-soft)" : "transparent",
         border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
         color: active ? "var(--accent-2)" : "var(--text-dim)",

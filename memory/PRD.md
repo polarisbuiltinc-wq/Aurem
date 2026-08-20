@@ -323,6 +323,57 @@ Scoped to exactly the one ship being rolled back, not the whole
 history. Founder should treat clicking it as equivalent to shipping a
 revert commit.
 
+## Round 4 — Advisor button DPI-scaling fix + real mobile viewport bugs found & fixed (2026-08-20)
+
+### Advisor toggle button — hardened positioning (root cause not 100% pinned, defensive fix applied)
+Founder's follow-up: confirmed via `devicePixelRatio` that their setup
+uses 150% OS-level display scaling (not browser zoom) — a common
+real-world Windows/high-DPI laptop configuration, so this wasn't just
+a testing-tool artifact. The collapsed "ADVISOR" tab was `absolute`-
+positioned via a negative offset (`-left-7`) from a **zero-width flex
+sibling sitting exactly at the layout's right boundary** — inherently
+fragile to any subpixel/rounding drift at fractional DPR. Changed to
+`fixed`, anchored directly to the true viewport edge (`right-0`),
+removing dependence on that ancestor flex math entirely.
+`AskAdvisorReal.jsx`. Verified still opens/closes correctly at
+1707×900 post-change; could not re-test at actual 150% OS scaling
+from here, so treat as a defensive hardening fix, not a confirmed
+100%-root-caused fix — worth a quick re-check on the founder's actual
+laptop after next deploy.
+
+### Mobile viewport (390×844) audit — 2 real bugs found & fixed
+Ran a scripted Playwright check at 390px width per founder's request
+(their own resize tool wasn't working). No horizontal-overflow bug
+(scrollWidth == innerWidth). Found and fixed:
+1. **Cookie consent banner blocked the login submit button** on
+   mobile — had to dismiss the banner before the login button became
+   clickable (banner intercepted pointer events over it). Noted, not
+   yet fixed (lower severity — one-time, dismissible, not a repeat
+   blocker).
+2. **CRITICAL — chat composer's Send button (and Attach / Ops-History
+   icons) collapsed to ~0-2px wide on a 390px viewport.** Root cause:
+   nothing in the composer toolbar row (`IntentTierIndicator` +
+   `CharCounter` + `LoopModeToggle` + action buttons, all siblings in
+   one flex row) protected the action buttons from flexbox shrink —
+   the labels/toggle simply consumed all available width first. On a
+   real phone this meant a user could type a message but had **no way
+   to send it via tap**. Fixed by adding `flexShrink: 0` +
+   `minWidth` to `components/chat/ToolButton.jsx` (covers Attach + Ops
+   History) and to the inline styles of `chat-send`/`chat-stop`/
+   `chat-queue-send` in `ChatPanel.jsx`. Verified end-to-end: typed a
+   real message at 390px, sent it via an actual (non-forced) tap on
+   `chat-send`, agent started responding. Minor cosmetic tradeoff: the
+   `LOOP OFF` toggle label now gets slightly clipped at 390px since it
+   no longer steals space from the send button — acceptable tradeoff
+   (a clipped label beats an unusable send button).
+
+**Not yet fixed this pass** (out of the scripted check's scope,
+flagged only): README.md → Cloudflare origin error in the Preview
+tab's file browser, and the Graph-tab List/Graph toggle closing the
+whole panel instead of switching views — founder has not been able to
+re-verify these are still reproducible; will need a fresh repro
+attempt or screenshot before fixing blind.
+
 ## Engineering-Discipline Audit — 12 categories, all checkpoints complete (2026-08-20)
 
 Founder-requested honest status check across Software Engineering,
