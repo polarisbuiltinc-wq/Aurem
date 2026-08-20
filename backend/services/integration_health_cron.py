@@ -101,6 +101,27 @@ async def _probe_and_persist_once(db) -> Optional[dict]:
             counts["ok"], counts["total"],
             counts["warn"], counts["broken"], counts["missing"],
         )
+        # 2026-08-20 · prod bug fix — this 10-min cron persisted the raw
+        # snapshot but never fed it to `topup_alerts.process_snapshot()`,
+        # so recovered integrations (e.g. a founder topping up Tavily
+        # credits) only got their `topup_alerts`/G20 incident row
+        # auto-resolved by the once-daily 06:00 UTC digest or a manual
+        # "Refresh" click — up to 24h of a stale "red"/open-incident
+        # after the real problem was already fixed. Same standing gap
+        # class flagged this session for G8: a wired probe with no
+        # alert/resolve branch on its own fast cycle. Now every 10-min
+        # tick both opens AND resolves alerts/incidents, matching what
+        # the manual refresh endpoint already did.
+        try:
+            from services.topup_alerts import process_snapshot
+            alert_result = await process_snapshot(db, snap)
+            if alert_result["new_alert_count"]:
+                logger.warning(
+                    "🚨 integration_health cron · %s new alert(s), emailed=%s",
+                    alert_result["new_alert_count"], alert_result["emailed"],
+                )
+        except Exception as e:                              # noqa: BLE001
+            logger.warning("topup_alerts processing on cron tick failed: %r", e)
         return snap
     except Exception as e:                                  # noqa: BLE001
         logger.warning("integration_health cron probe failed: %r", e)

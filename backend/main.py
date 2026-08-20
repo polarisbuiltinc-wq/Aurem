@@ -75,6 +75,7 @@ from routers.admin_vanguard import router as admin_vanguard_router  # Iter 212m-
 from routers.admin_bin import router as admin_bin_router  # Iter 212m-171 admin panel rebuild
 from routers.security_scan import router as security_scan_router    # Iter 212m-55 1-click vuln scanner
 from routers.vanguard_ci import router as vanguard_ci_router        # Iter 212m-120 Phase 1: trufflehog CI ingest
+from routers.synthetic_checks_ci import router as synthetic_checks_ci_router  # 2026-08-20 · G1/G15 CI ingest
 from routers.fix_pipeline import router as fix_pipeline_router      # Iter 212m-121 bulk + SSE fix pipeline
 from routers.repo_status import router as repo_status_router        # Iter 212m-125 live repo connection ping
 from routers.codebase_health import router as codebase_health_router # Iter 212m-72 5-category health scanner
@@ -2866,6 +2867,7 @@ app.include_router(backups_admin_router,    prefix="/api/aurem-dev")  # /api/aur
 app.include_router(admin_public_router,  prefix="/api/aurem-dev")  # Iter 358 — un-gated /admin/errors/report
 app.include_router(admin_qa_router,      prefix="/api/aurem-dev")  # Iter 303 — /admin/qa dashboard
 app.include_router(admin_health_router,  prefix="/api")             # Feb 2026 — /api/aurem-dev/admin/status/*
+app.include_router(synthetic_checks_ci_router, prefix="/api/aurem-dev")  # 2026-08-20 · G1/G15 CI ingest
 app.include_router(admin_observability_router, prefix="/api")       # 2026-02-11 — /api/aurem-dev/admin/observability/breakers
 app.include_router(admin_payments_router, prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split
 app.include_router(admin_support_router,  prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split

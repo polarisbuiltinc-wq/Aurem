@@ -117,6 +117,128 @@ cron / on-demand webhook call, not hourly — but same bug class; worth
 a follow-up pass if founder wants it preempted rather than waiting for
 an incident.
 
+## Cockpit follow-up round — G20 incident staleness, G1/G15 CI ingest, council-recall response-mismatch bug (2026-08-20)
+
+### G20 "Firecrawl still red after recharge" — fixed, verified
+Root cause: the 10-min `integration_health_cron` persisted fresh probe
+status but never called `topup_alerts.process_snapshot()` (the
+incident-open/auto-resolve logic). That only ran from the once-daily
+06:00 UTC digest or a manual admin "Refresh" click — so a recovered
+integration's `incidents` row (feeding G20 on the cockpit) could stay
+"open" for up to 24h after the real problem was already fixed.
+Fix: `services/integration_health_cron.py`'s `_probe_and_persist_once`
+now calls `process_snapshot(db, snap)` on every 10-min tick too.
+Verified live: inserted a synthetic open Tavily incident, ran
+`process_snapshot` with a healthy snapshot → incident flipped
+open→resolved. 32/33 relevant tests pass (1 pre-existing unrelated
+route-registration failure).
+
+### G18 Timeout Audit red — could not reproduce
+Ran `scripts/timeout_audit.run_audit()` against both of today's last
+2 production commits directly (git worktree) — both come back 0
+violations (89/89 call sites covered). Genuinely unexplained from
+code alone; likely transient (8s per-check timeout under load).
+Founder will screenshot the expanded detail text next time it recurs.
+
+### G1/G15 stuck gray "no runs yet" — real architecture gap, fixed (founder chose Option 1: authenticated endpoint, no DB creds in CI)
+Root cause (corrected from initial hypothesis): the `g1-route-sweep`
+and `g15-dependency-scan` CI jobs (`.github/workflows/qa-weekly.yml`,
+`ci.yml`) never had `MONGO_URL` in their env at all (that hardcoded
+`localhost:27017` value exists only in the *unrelated* `backend-tests`
+/`simulated-user-qa`/`qa-weekly`-parent jobs). So `_persist_result()`
+always silently hit its "MONGO_URL not set — skipping" no-op branch —
+100% of CI runs, forever — meaning `synthetic_checks` in the real app
+DB never got a G1/G15 row no matter how many times CI ran.
+
+Fix — new authenticated ingestion endpoint, reusing the existing
+`AUREM_CI_INGEST_TOKEN` shared-secret pattern already proven for the
+trufflehog CI ingest (`routers/vanguard_ci.py`) — no DB credentials
+touch CI at all:
+- New `backend/routers/synthetic_checks_ci.py`:
+  `POST /api/aurem-dev/admin/synthetic-checks/ingest`, auth via
+  `_verify_ci_auth` (imported from `vanguard_ci.py`), accepts
+  `kind: g1_route_sweep | g15_dep_scan` + the same fields the scripts
+  used to write directly, inserts into `synthetic_checks`.
+- Registered in `main.py`.
+- `backend/scripts/g1_route_smoke_sweep.py` and
+  `g15_dependency_scan.py`'s `_persist_result()` now POST to that
+  endpoint (via `AUREM_API_URL` + `AUREM_CI_INGEST_TOKEN` env) instead
+  of connecting to Mongo directly.
+- `.github/workflows/qa-weekly.yml` (`g1-route-sweep`,
+  `g15-dependency-scan` jobs) and `ci.yml` (`security-scan`/G15 job)
+  now pass `AUREM_CI_INGEST_TOKEN: ${{ secrets.AUREM_CI_INGEST_TOKEN }}`
+  + `AUREM_API_URL: ${{ vars.AUREM_API_URL }}`.
+- Preview `.env`: generated and set a real `AUREM_CI_INGEST_TOKEN`
+  value (was empty). **Founder action required**: add the exact same
+  value as a GitHub Actions repo secret (`AUREM_CI_INGEST_TOKEN`) and
+  a repo variable `AUREM_API_URL=https://auremcto.com`, and add
+  `AUREM_CI_INGEST_TOKEN` to production env too (see
+  `/app/memory/test_credentials.md`).
+
+Verified live end-to-end in preview: POSTed real g1/g15 payloads to
+the new endpoint (200 OK), wrong-token request correctly 401'd,
+`/admin/status/all` flipped both `g1_route_sweep` and `g15_deps` from
+gray → green immediately after. 5 new endpoint tests +
+existing 29 health-registry tests all pass. Test docs cleaned up from
+preview DB after verification.
+
+**AUREM Org (GitHub) / Vercel Deploy Hook**: founder confirmed neither
+is used (app deploys via Emergent, not Vercel) — left gray
+permanently, by design, not a bug. No code change.
+
+### CRITICAL — council-recall response-mismatch bug, fixed, verified
+Founder reproduced live in production: sent a trivial message
+("Testing Pro mode - what is 2+2?") in a long-running session and got
+back a **completely unrelated old answer** (a "Dashboard-D-e3bXRk.js
+onRetry bug fix" from an earlier, unrelated conversation already in
+that session's history) — including a "Ship via CTO" button that
+would have committed that unrelated fix to the real repo had it been
+clicked. Founder correctly held off clicking Ship and flagged the
+"📚 ORA recalled 2 similar past answers" banner as the likely cause.
+
+Root cause confirmed in `services/ora_council_retriever.py`: the
+few-shot "recall similar past answers" RAG feature (meant only as
+style/depth calibration for the model, explicitly labeled "never copy
+verbatim") used a TF-IDF similarity gate of `if s > 0` — ANY nonzero
+score qualified. For a low-information query like "Testing Pro mode -
+what is 2+2?", generic filler words ("testing", "mode", "what", "is")
+score weakly-but-nonzero (0.15–0.22 in reproduction) against almost
+any unrelated past row, so the retriever confidently injected an
+unrelated example — and the model, given a trivial real question and
+a much richer injected example, echoed the example instead of treating
+it as calibration-only. Genuine topical matches (real shared
+vocabulary) score 0.33+ in the same corpus, so there's a clean margin.
+
+Also independently confirmed: `shipViaCTO()` in `MessageBubble.jsx`
+parses whatever text is literally rendered in that bubble (looking for
+a ` ```aurem-handoff ` fence) and submits it verbatim to
+`/cto/tasks/submit` — **zero validation** that the content matches the
+user's actual question. So yes, clicking Ship on a mismatched response
+would have shipped the wrong, unrelated change. Founder's instinct to
+hold off was correct.
+
+Fix: added `_MIN_SCORE = 0.25` threshold in
+`services/ora_council_retriever.py` — `get_council_few_shot` now
+requires `s >= _MIN_SCORE` instead of `s > 0` before injecting a past
+example. New regression test
+`tests/test_council_retriever_weak_match_filter.py` reproduces the
+exact incident corpus shape (weak filler-word-only matches → 0
+examples recalled) and confirms genuine topical matches (React
+onClick example, score 0.36) still get recalled correctly. 10/10
+tests pass (8 existing + 2 new).
+
+**Not changed** (flagged, no action needed unless founder wants it):
+`shipViaCTO()` has no independent verification that the ship content
+matches the live question — the retrieval fix removes the primary way
+that mismatch could realistically happen, but it's still theoretically
+possible via other means (e.g. a genuinely buggy LLM response). Adding
+a stricter "does this response actually address the visible user
+question" guard before showing Ship would be defense-in-depth, not
+requested this pass.
+
+**Production status**: all fixes above are code-only, preview-tested/
+verified, **not yet deployed to production** — needs founder redeploy.
+
 ## Engineering-Discipline Audit — 12 categories, all checkpoints complete (2026-08-20)
 
 Founder-requested honest status check across Software Engineering,

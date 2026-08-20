@@ -60,6 +60,18 @@ _MIN_BUCKET     = 20     # >=20 rows in a bucket → personalised RAG
 _DEFAULT_K      = 2      # examples returned per call
 _USER_MSG_CAP   = 280    # truncate stored prompts for the prompt budget
 _REPLY_CAP      = 600    # truncate replies for the prompt budget
+# 2026-08-20 · prod bug fix — trivial/low-information queries (e.g.
+# "Testing Pro mode - what is 2+2?") only share generic filler words
+# ("testing", "mode", "what", "is") with completely unrelated past
+# rows, which scored 0.15-0.22 here — nonzero, so the old `if s > 0`
+# gate let them through as "similar past answers". The model then
+# (observed live) echoed the unrelated recalled reply almost verbatim
+# instead of treating it as style-only calibration, i.e. the user got
+# someone else's old Dashboard-debugging answer for a "what's 2+2"
+# question. Genuine topical matches (shared substantive vocabulary)
+# score 0.33+ in the same corpus — 0.25 cleanly separates real matches
+# from filler-word noise without needing per-word stopword lists.
+_MIN_SCORE      = 0.25
 
 _TOKEN_RE = re.compile(r"[a-z0-9_]+")
 
@@ -286,7 +298,7 @@ async def get_council_few_shot(
     for i in cand_idx:
         row = _index["rows"][i]
         s = _score(q_tf, row, total_docs)
-        if s > 0:
+        if s >= _MIN_SCORE:
             scored.append((s, row))
     if not scored:
         return ("", 0)

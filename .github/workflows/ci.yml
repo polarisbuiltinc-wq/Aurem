@@ -307,6 +307,9 @@ jobs:
     name: Security — Dependency audit (G15)
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      AUREM_CI_INGEST_TOKEN: ${{ secrets.AUREM_CI_INGEST_TOKEN }}
+      AUREM_API_URL:         ${{ vars.AUREM_API_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

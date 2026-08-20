@@ -171,26 +171,38 @@ def _is_allowlisted(finding: dict, allowlist: list[dict]) -> tuple[bool, str]:
 
 
 def _persist_result(findings: list[dict], hard_fails: list[dict]) -> None:
-    """2026-08-19 · guards-audit fix — this scan ran fine but never
-    wrote its result anywhere, so `/admin/qa` + the health-checks
-    aggregator could never show anything but gray. Best-effort: sync
-    pymongo (no asyncio plumbing needed for a one-shot CI script)."""
-    mongo_url = os.environ.get("MONGO_URL")
-    db_name = os.environ.get("DB_NAME")
-    if not mongo_url or not db_name:
-        print("[g15] MONGO_URL/DB_NAME not set — skipping result persistence")
+    """2026-08-20 · CI-can't-reach-real-DB fix — every CI workflow
+    hardcodes `MONGO_URL=mongodb://localhost:27017` (a throwaway
+    service inside the ephemeral runner), so a direct Mongo write
+    here never reached the real app database — /admin/status/all
+    could only ever see "no dep-scan runs yet", forever, no matter
+    how often this actually ran. POST to the app's own ingest
+    endpoint instead (same shared-secret pattern already used for
+    the trufflehog CI ingest — no DB credentials touch CI at all)."""
+    import json
+    import urllib.request
+
+    token = os.environ.get("AUREM_CI_INGEST_TOKEN")
+    api_url = os.environ.get("AUREM_API_URL", "https://auremcto.com")
+    if not token:
+        print("[g15] AUREM_CI_INGEST_TOKEN not set — skipping result persistence")
         return
+    body = {
+        "kind":           "g15_dep_scan",
+        "total_findings": len(findings),
+        "high_critical":  len(hard_fails),
+        "findings":       findings[:100],
+    }
+    req = urllib.request.Request(
+        f"{api_url}/api/aurem-dev/admin/synthetic-checks/ingest",
+        data=json.dumps(body).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json",
+                 "Authorization": f"Bearer {token}"},
+    )
     try:
-        from pymongo import MongoClient
-        client = MongoClient(mongo_url, serverSelectionTimeoutMS=5000)
-        client[db_name].synthetic_checks.insert_one({
-            "kind":          "g15_dep_scan",
-            "finished_at":   datetime.now(timezone.utc),
-            "total_findings": len(findings),
-            "high_critical": len(hard_fails),
-            "findings":      findings[:100],
-        })
-        client.close()
+        with urllib.request.urlopen(req, timeout=15) as r:
+            print(f"[g15] persisted result: {r.status}")
     except Exception as e:
         print(f"[g15] WARN persistence failed: {e}")
 

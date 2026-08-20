@@ -174,6 +174,8 @@ jobs:
 
     env:
       G1_BASE_URL: "https://auremcto.com"
+      AUREM_CI_INGEST_TOKEN: ${{ secrets.AUREM_CI_INGEST_TOKEN }}
+      AUREM_API_URL:         ${{ vars.AUREM_API_URL }}
 
     steps:
       - uses: actions/checkout@v4
@@ -233,6 +235,10 @@ jobs:
     if: github.event.schedule == '0 9 * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
+    env:
+      AUREM_CI_INGEST_TOKEN: ${{ secrets.AUREM_CI_INGEST_TOKEN }}
+      AUREM_API_URL:         ${{ vars.AUREM_API_URL }}
 
     steps:
       - uses: actions/checkout@v4

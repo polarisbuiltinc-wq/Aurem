@@ -117,29 +117,39 @@ async def sweep(base_url: str) -> dict:
 
 
 async def _persist_result(result: dict) -> None:
-    """2026-08-19 · G21-audit fix — the docstring always claimed this
-    persists to `synthetic_checks` but the write was never actually
-    implemented, so `/admin/qa` + the health-checks aggregator could
-    never show anything but gray. Best-effort: a scan that ran fine
-    but failed to write to Mongo should still exit with the real
-    pass/fail code (CI cares about the exit code, not the DB write)."""
-    mongo_url = os.environ.get("MONGO_URL")
-    db_name = os.environ.get("DB_NAME")
-    if not mongo_url or not db_name:
-        print("[g1] MONGO_URL/DB_NAME not set — skipping result persistence")
+    """2026-08-20 · CI-can't-reach-real-DB fix — every CI workflow
+    hardcodes `MONGO_URL=mongodb://localhost:27017` (a throwaway
+    service inside the ephemeral runner), so a direct Mongo write
+    here never reached the real app database — /admin/status/all
+    could only ever see "no g1 runs yet", forever, no matter how
+    often this actually ran. POST to the app's own ingest endpoint
+    instead (same shared-secret pattern already used for the
+    trufflehog CI ingest — no DB credentials touch CI at all)."""
+    import json
+    import urllib.request
+
+    token = os.environ.get("AUREM_CI_INGEST_TOKEN")
+    api_url = os.environ.get("AUREM_API_URL", "https://auremcto.com")
+    if not token:
+        print("[g1] AUREM_CI_INGEST_TOKEN not set — skipping result persistence")
         return
+    body = {
+        "kind":     "g1_route_sweep",
+        "base_url": result["base_url"],
+        "total":    result["total"],
+        "failed":   result["failed"],
+        "results":  result["results"],
+    }
+    req = urllib.request.Request(
+        f"{api_url}/api/aurem-dev/admin/synthetic-checks/ingest",
+        data=json.dumps(body).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json",
+                 "Authorization": f"Bearer {token}"},
+    )
     try:
-        from motor.motor_asyncio import AsyncIOMotorClient
-        client = AsyncIOMotorClient(mongo_url)
-        await client[db_name].synthetic_checks.insert_one({
-            "kind":         "g1_route_sweep",
-            "finished_at":  datetime.now(timezone.utc),
-            "base_url":     result["base_url"],
-            "total":        result["total"],
-            "failed":       result["failed"],
-            "results":      result["results"],
-        })
-        client.close()
+        with urllib.request.urlopen(req, timeout=15) as r:
+            print(f"[g1] persisted result: {r.status}")
     except Exception as e:
         print(f"[g1] WARN persistence failed: {e}")
 
