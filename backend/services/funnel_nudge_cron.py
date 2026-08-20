@@ -223,17 +223,38 @@ async def _has_been_sent(db, user_id: str, stage: str) -> bool:
     return doc is not None
 
 
-async def _record_send(db, user_id: str, email: str, stage: str,
-                        sent_ok: bool, error: Optional[str], dry_run: bool) -> None:
+async def _claim_send_slot(db, user_id: str, email: str, stage: str) -> Optional[object]:
+    """Atomically claim the (user_id, campaign, stage) slot BEFORE
+    sending. Returns the inserted `_id` on success, or None if another
+    process already claimed it (real 2026-08-20 incident: a rolling-
+    deploy cutover briefly ran 2 pod boots, both firing the cron's
+    first tick immediately with no startup delay; the old check-then-
+    act pattern — read "already sent?", THEN send, THEN write — raced,
+    so ~30 real users got the same stage email twice. This insert
+    relies on the `uniq_user_campaign_stage` unique index
+    (services/db_indexes.py) to make the claim atomic across any
+    number of concurrent processes, not just this one."""
+    from pymongo.errors import DuplicateKeyError
     try:
-        await db.onboarding_emails.insert_one({
+        res = await db.onboarding_emails.insert_one({
             "user_id": user_id, "email": email, "campaign": CAMPAIGN,
-            "stage": stage, "sent_at": _now(), "sent_ok": bool(sent_ok),
-            "error": error, "dry_run": bool(dry_run),
+            "stage": stage, "sent_at": _now(), "sent_ok": False,
+            "error": "claimed, send in progress", "dry_run": False,
             "clicked_at": None, "click_count": 0,
         })
+        return res.inserted_id
+    except DuplicateKeyError:
+        return None
+
+
+async def _finalize_send(db, doc_id, sent_ok: bool, error: Optional[str]) -> None:
+    try:
+        await db.onboarding_emails.update_one(
+            {"_id": doc_id},
+            {"$set": {"sent_ok": bool(sent_ok), "error": error, "sent_at": _now()}},
+        )
     except Exception as e:
-        logger.warning("funnel_nudge onboarding_emails insert failed: %r", e)
+        logger.warning("funnel_nudge finalize_send failed: %r", e)
 
 
 async def classify_users(db) -> dict[str, list[dict]]:
@@ -378,8 +399,15 @@ async def send_stage_nudge(user: dict, *, dry_run: bool = False) -> dict:
         return {"ok": True, "user_id": user.get("user_id"), "email": user.get("email"),
                 "stage": stage, "dry_run": True,
                 "preview": {"subject": subject, "text": text}}
+    # Claim the slot BEFORE sending — see _claim_send_slot docstring.
+    # If another process (e.g. an overlapping pod during a rolling
+    # deploy) already claimed it, skip entirely: no Resend call.
+    claim_id = await _claim_send_slot(db, user["user_id"], user["email"], stage)
+    if claim_id is None:
+        return {"ok": True, "user_id": user.get("user_id"), "email": user.get("email"),
+                "stage": stage, "skipped": True, "reason": "already claimed"}
     sent_ok, err = await _resend_send(user["email"], subject=subject, text=text, html=html)
-    await _record_send(db, user["user_id"], user["email"], stage, sent_ok, err, dry_run=False)
+    await _finalize_send(db, claim_id, sent_ok, err)
     return {"ok": bool(sent_ok), "user_id": user.get("user_id"), "email": user.get("email"),
             "stage": stage, "error": err}
 
@@ -393,8 +421,11 @@ async def run_nudge_batch(db, *, dry_run: bool = False) -> dict:
         summary["recipients"].append({
             "user_id": res.get("user_id"), "email": res.get("email"),
             "stage": res.get("stage"), "ok": bool(res.get("ok")), "dry_run": bool(dry_run),
+            "skipped": bool(res.get("skipped")),
         })
-        if res.get("ok"):
+        if res.get("skipped"):
+            summary["skipped"] += 1
+        elif res.get("ok"):
             summary["sent"] += 1
         else:
             summary["failed"] += 1
@@ -436,17 +467,28 @@ async def stage_counts(db) -> dict:
             "nudges_clicked": clicked, "nudges_clicked_total": total_clicked}
 
 
-async def nudge_cron(interval_seconds: int = 86400) -> None:
-    """Daily loop. Idempotent — `_has_been_sent` gates every send."""
+async def nudge_cron(interval_seconds: int = 86400, *, startup_delay_seconds: int = 120) -> None:
+    """Daily loop. Idempotent — the atomic claim in `send_stage_nudge`
+    gates every send, even across concurrent processes.
+
+    2026-08-20 — `startup_delay_seconds` added after a real incident:
+    a rolling-deploy cutover briefly ran 2 pod boots, both firing this
+    loop's first tick IMMEDIATELY (no delay), sending ~30 real users
+    the same nudge email twice within seconds (the old pod hadn't
+    finished terminating before the new pod's first tick fired). The
+    claim-based dedup above now makes that scenario safe even if it
+    happens again, but the delay also avoids wasting a tick on a pod
+    that's about to be replaced during the ~30-60s cutover window."""
     import asyncio
+    await asyncio.sleep(startup_delay_seconds)
     while True:
         try:
             db = get_db()
             if db is not None:
                 result = await run_nudge_batch(db, dry_run=False)
-                if result["sent"] or result["failed"]:
-                    logger.info("🪧 funnel_nudge cron — sent=%d failed=%d",
-                                result["sent"], result["failed"])
+                if result["sent"] or result["failed"] or result["skipped"]:
+                    logger.info("🪧 funnel_nudge cron — sent=%d failed=%d skipped=%d",
+                                result["sent"], result["failed"], result["skipped"])
         except Exception as e:
             logger.warning("funnel_nudge_cron tick failed: %r", e)
         await asyncio.sleep(interval_seconds)

@@ -120,6 +120,50 @@ async def ensure_dedup_indexes(db) -> List[dict]:
               "uniq_code", unique=True,
               partial={"code": {"$exists": True, "$type": "string"}})
 
+    # 9) Funnel stage-nudge dedup — one send per (user, campaign, stage)
+    # ever. 2026-08-20 — added after a real incident: a rolling-deploy
+    # cutover briefly overlapped 2 pod boots, both running
+    # `funnel_nudge_cron`'s first tick immediately (no startup delay),
+    # and the old check-then-act dedup (read `onboarding_emails`, THEN
+    # send, THEN write) raced — both pods' read happened before either
+    # write landed, so ~30 real users got the same stage email twice.
+    # This unique index + an atomic claim-insert (funnel_nudge_cron.py)
+    # closes the race regardless of how many processes call it at once.
+    #
+    # A unique index CANNOT be built over existing duplicate rows —
+    # and the incident above already wrote ~30 real dupes into this
+    # exact collection. Self-heal first (best-effort, collapses each
+    # dup group down to its earliest row) so the index build below
+    # actually succeeds instead of silently no-op'ing.
+    try:
+        dup_removed = 0
+        pipeline = [
+            {"$match": {"stage": {"$exists": True, "$type": "string"}}},
+            {"$sort": {"sent_at": 1}},
+            {"$group": {
+                "_id": {"user_id": "$user_id", "campaign": "$campaign", "stage": "$stage"},
+                "ids": {"$push": "$_id"}, "n": {"$sum": 1},
+            }},
+            {"$match": {"n": {"$gt": 1}}},
+        ]
+        async for grp in db.onboarding_emails.aggregate(pipeline):
+            dupe_ids = grp["ids"][1:]   # keep the earliest, drop the rest
+            if dupe_ids:
+                r = await db.onboarding_emails.delete_many({"_id": {"$in": dupe_ids}})
+                dup_removed += r.deleted_count
+        if dup_removed:
+            logger.warning(
+                "[G6] onboarding_emails: removed %d duplicate (user,campaign,stage) "
+                "rows before building uniq_user_campaign_stage", dup_removed,
+            )
+    except Exception as e:
+        logger.warning("[G6] onboarding_emails dedup cleanup failed: %r", e)
+
+    await _mk("onboarding_emails",
+              [("user_id", ASCENDING), ("campaign", ASCENDING), ("stage", ASCENDING)],
+              "uniq_user_campaign_stage", unique=True,
+              partial={"stage": {"$exists": True, "$type": "string"}})
+
     return results
 
 
@@ -143,6 +187,7 @@ async def get_dedup_index_report(db) -> dict:
         "email_verifications": ["uniq_token"],
         "oauth_states":  ["uniq_state"],
         "oauth_codes":   ["uniq_code"],
+        "onboarding_emails": ["uniq_user_campaign_stage"],
     }
     present: dict[str, bool] = {}
     dup_counts: dict[str, int] = {}

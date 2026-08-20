@@ -690,6 +690,68 @@ Founder redeploying to pick up the newer commit.
 
 **Not yet deployed** — preview-only until founder redeploys.
 
+## Production incident: duplicate nudge emails from a boot-time race (2026-08-20)
+
+Founder shared production boot logs (thinking it was a build failure —
+it wasn't; `deployment_agent` confirmed the deploy itself succeeded
+cleanly, health checks 200 OK, MongoDB ping OK). But reading those
+logs surfaced a real, already-happened incident: two `funnel_nudge_cron`
+ticks fired ~2 seconds apart during the same boot window
+(`sent=33 failed=0` then `sent=31 failed=0`, both blasting real
+`POST https://api.resend.com/emails` calls), consistent with 2 pod
+processes briefly overlapping during the rolling-deploy cutover — each
+one firing the cron's first tick immediately with no startup delay.
+
+**Root cause**: `nudge_cron()` ran its first batch instantly on
+process boot, and the dedup was check-then-act (read "already sent?"
+from `onboarding_emails`, THEN call Resend, THEN write the record).
+Two near-simultaneous pod boots both read "not sent yet" before
+either write landed — classic TOCTOU race. Real result: roughly 30
+real users likely received the same stage nudge email twice within
+seconds.
+
+**Fixed** (3 parts):
+1. `services/funnel_nudge_cron.py` — replaced check-then-act with an
+   atomic claim: `send_stage_nudge()` now does an `insert_one` claim
+   row BEFORE calling Resend; if a `DuplicateKeyError` comes back
+   (another process already claimed that exact user+campaign+stage),
+   it skips with zero Resend calls. The send outcome is then written
+   via `update_one` on the same claimed row (`_finalize_send`).
+2. `services/db_indexes.py` — added a new unique index
+   `uniq_user_campaign_stage` on `onboarding_emails(user_id, campaign,
+   stage)`, which is what makes the claim atomic across ANY number of
+   concurrent processes/pods, not just within one. Also added a
+   one-time best-effort cleanup pass that runs right before the index
+   build: groups existing rows by (user_id, campaign, stage), keeps
+   the earliest, deletes the rest — required because a unique index
+   cannot be built over pre-existing duplicates, and the incident
+   above already wrote ~30 real dupes into this exact production
+   collection. Self-heals automatically on next boot, no manual
+   migration needed.
+3. `nudge_cron()` now sleeps 120s before its first tick, so a pod
+   that's about to be replaced during the ~30-60s cutover window
+   doesn't waste a tick (defense in depth — the claim above is what
+   actually makes it safe either way).
+
+**Verified live**: ran the exact race — two concurrent
+`send_stage_nudge()` calls for the same synthetic user+stage —
+confirmed exactly 1 row was ever created in `onboarding_emails`, the
+second call correctly returned `skipped=True` with zero Resend calls.
+Confirmed the new unique index builds cleanly in preview. 112 targeted
+tests pass; same 9 pre-existing baseline failures as before (unrelated,
+confirmed via earlier git-stash diff) plus 1 new unrelated flake in a
+yarn-audit CVE-dedup test (real upstream CVE data changed, not
+touched by this work).
+
+**Founder action**: no data cleanup needed on your end — the
+self-heal runs automatically on the next boot/deploy. Recommend
+scanning Resend's send log around `16:12:47`–`16:12:59` UTC today for
+any of the ~30-33 affected users if you want to know exactly who got
+duplicated (cosmetic annoyance — same email twice — not a security or
+data-integrity issue).
+
+**Not yet deployed** — preview-only until founder redeploys.
+
 ## Engineering-Discipline Audit — 12 categories, all checkpoints complete (2026-08-20)
 
 Founder-requested honest status check across Software Engineering,
