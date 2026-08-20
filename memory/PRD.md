@@ -2664,6 +2664,60 @@ not PyPI. Requires Emergent to publish 1.84 to their asset host
 first. 10 CVEs pending closure.
 
 
+## Activation Funnel drill-down + Emails-sent history (2026-08-20)
+
+Founder asked for richer funnel analytics before further status
+questions: clickable Activation Funnel stage counts, per-user email
+history, live bottleneck summary, live stuck-count highlight.
+
+**Status closure answered first**: (1) nudge admin card code confirmed
+present in `AdminOverview.jsx` right below Activation Funnel, gated on
+`/admin/funnel`'s `nudge_stages` field — likely a stale prod
+build/frontend bundle if founder can't see it; (2) cold-start chat
+mismatch fix still preview-only, not prod-confirmed; (3) R2 branding
+migration NOT started — only the private Mongo-backup bucket exists,
+blocked on founder providing `aurem-public-assets` credentials.
+
+**Built** (`backend/routers/admin.py`):
+- `_compute_stage_buckets()` — waterfall-classifies every real
+  (non-test) user into their current, most-advanced Activation Funnel
+  stage (signed_up / connected_github / added_project / sent_message /
+  shipped_code), with `stage_reached_at` + `stuck_hours`. Same
+  filtering as `_compute_activation_funnel` so totals reconcile
+  exactly (`sum(stuck_counts.values()) == funnel.signed_up`).
+- `_compute_stage_users(stage_key)` — drill-down for one stage.
+- `_compute_activation_funnel()` now also returns
+  `bottleneck_summary` (plain-language sentence), `stuck_counts`
+  (per-stage), `biggest_bottleneck_stage`.
+
+**New endpoint** (`backend/routers/admin_users.py`):
+`GET /admin/insights/activation-funnel/stage-users?stage=<key>` →
+`{ok, stage, label, count, users:[{user_id,email,name,tier,
+stage_reached_at,stuck_hours}]}`, sorted longest-stuck first.
+
+**`get_user()`** now also returns `emails_sent` (from
+`onboarding_emails`, campaign=`funnel_stage_nudge`): stage, sent_at,
+sent_ok, clicked_at, click_count.
+
+**Frontend**:
+- `AdminOverview.jsx`'s `FunnelCard` — bottleneck-summary banner,
+  "MOST STUCK" pill on the worst stage, and each stage's count is now
+  a clickable button opening `StageUsersModal` (email/name/reached-
+  time/stuck-duration list). Existing `FunnelNudgeStageCard` untouched.
+- `Admin.jsx`'s `UserDetail` — new "Emails sent" card between Activity
+  Logs and Support tickets.
+
+**Verified**: `testing_agent` iter 368 — 12/12 backend pytest pass
+(`tests/test_activation_funnel_drilldown.py`), full Playwright pass on
+bottleneck banner, pill, all 5 stage-click modals (incl. empty-state),
+Emails-sent card, zero new console errors, zero regressions to
+existing funnel/nudge cards. Manually curl-verified reconciliation
+invariant (61==61) before handoff.
+
+**Not yet deployed** — preview-only until founder redeploys.
+
+---
+
 ### Iter 389 — Meta Pixel conversion events (2026-02-15)
 
 Meta Pixel was loading `PageView` only (Iter 388-ag). This iter adds

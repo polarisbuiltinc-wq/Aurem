@@ -1002,6 +1002,52 @@ function UserDetail({ user, onBack }) {
         </div>
       </Card>
 
+      {/* 2026-08-20 · Funnel nudge emails sent to this user — stage,
+          sent time, and whether they clicked through. Reads
+          onboarding_emails via GET /admin/users/{id} (emails_sent). */}
+      <h3 data-testid="admin-user-emails-sent-header"
+          style={{ fontSize: 12, letterSpacing: "0.1em",
+                   textTransform: "uppercase",
+                   color: "var(--text-faint)", margin: "0 0 8px" }}>
+        Emails sent
+        <span style={{ marginLeft: 8, color: "var(--text-faint)",
+                       textTransform: "none", letterSpacing: 0, fontSize: 11 }}>
+          ({(d.emails_sent || []).length} funnel nudge{(d.emails_sent || []).length === 1 ? "" : "s"})
+        </span>
+      </h3>
+      <Card style={{ padding: 12, marginBottom: 14 }}>
+        <div data-testid="admin-user-emails-sent-list"
+             style={{ maxHeight: 240, overflowY: "auto", fontSize: 12 }}>
+          {(d.emails_sent || []).length === 0 && (
+            <div style={{ color: "var(--text-faint)", padding: "8px 0" }}>
+              No nudge emails sent to this user yet.
+            </div>
+          )}
+          {(d.emails_sent || []).map((e, i) => (
+            <div key={i}
+                 data-testid={`admin-user-email-sent-row-${i}`}
+                 style={{ padding: "6px 4px", borderBottom: "1px solid var(--border)",
+                          display: "grid",
+                          gridTemplateColumns: "1fr auto auto", gap: 10, alignItems: "center" }}>
+              <span>
+                <span style={{ color: "var(--text)", fontWeight: 500 }}>
+                  {(e.stage || "").replace(/^stage\d_/, "").replace(/_/g, " ")}
+                </span>
+                {!e.sent_ok && (
+                  <span style={{ color: "var(--danger, #e84646)", marginLeft: 6, fontSize: 10 }}>send failed</span>
+                )}
+              </span>
+              <span style={{ color: "var(--text-faint)", fontSize: 11 }}>
+                sent {ago(e.sent_at)}
+              </span>
+              <span style={{ fontSize: 11, color: e.clicked_at ? "#3ECF8E" : "var(--text-faint)" }}>
+                {e.clicked_at ? `clicked ${ago(e.clicked_at)} (×${e.click_count || 1})` : "not clicked"}
+              </span>
+            </div>
+          ))}
+        </div>
+      </Card>
+
       <h3 style={{ fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase",
                     color: "var(--text-faint)", margin: "0 0 8px" }}>
         Support tickets{" "}

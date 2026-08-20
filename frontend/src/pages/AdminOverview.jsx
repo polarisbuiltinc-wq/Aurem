@@ -1677,8 +1677,122 @@ function SystemMappingCard() {
 // count + "% of previous step". The biggest drop-off step gets a
 // red accent so the founder can spot the leaky stage at a glance.
 // ──────────────────────────────────────────────────────────────
+const _fadmAgo = (v) => {
+  if (v == null) return "—";
+  const s = Math.floor(Date.now() / 1000 - v);
+  if (s < 0) return "—";
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+};
+const _fadmDuration = (hours) => {
+  if (hours == null) return "—";
+  if (hours < 1) return `${Math.round(hours * 60)}m`;
+  if (hours < 48) return `${hours.toFixed(1)}h`;
+  return `${(hours / 24).toFixed(1)}d`;
+};
+
+// 2026-08-20 — clickable-stage drill-down modal: shows the real users
+// currently stuck at one Activation Funnel stage (email, name, when
+// they reached it, how long they've been stuck).
+function StageUsersModal({ stageInfo, data, loading, onClose }) {
+  return (
+    <div
+      data-testid="funnel-stage-users-modal"
+      style={{
+        position: "fixed", inset: 0,
+        background: "rgba(0,0,0,0.65)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 9000, padding: 24,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "var(--bg-1, #0a0e1a)",
+          border: "1px solid var(--line, rgba(255,255,255,0.08))",
+          borderRadius: 12,
+          width: "min(680px, 100%)",
+          maxHeight: "80vh",
+          overflowY: "auto",
+          padding: 20,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between",
+                       alignItems: "center", marginBottom: 10 }}>
+          <h3 style={{ fontSize: 14, margin: 0 }}>
+            Stuck at: {stageInfo.label}
+          </h3>
+          <button
+            data-testid="funnel-stage-users-modal-close"
+            onClick={onClose}
+            style={{ background: "none", border: "none",
+                     color: "var(--text-faint)", cursor: "pointer", fontSize: 18 }}>
+            ×
+          </button>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--text-faint)", marginBottom: 12,
+                       fontFamily: "'JetBrains Mono', monospace" }}>
+          {loading ? "Loading…" : `${data?.count ?? 0} user${(data?.count ?? 0) === 1 ? "" : "s"} — longest-stuck first`}
+        </div>
+
+        {!loading && data?.error && (
+          <div style={{ color: "var(--danger, #e84646)", fontSize: 12 }}>
+            Failed to load — try again.
+          </div>
+        )}
+        {!loading && !data?.error && (data?.users || []).length === 0 && (
+          <div style={{ color: "var(--text-faint)", fontSize: 12, padding: "8px 0" }}>
+            No real users currently stuck at this stage.
+          </div>
+        )}
+        {!loading && (data?.users || []).length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {data.users.map((u, i) => (
+              <div
+                key={u.user_id || i}
+                data-testid={`funnel-stage-user-row-${i}`}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 90px 90px",
+                  gap: 10, alignItems: "center",
+                  padding: "8px 10px", borderRadius: 6,
+                  background: "var(--panel-2)",
+                  border: "1px solid var(--border)",
+                  fontSize: 12,
+                }}
+              >
+                <div>
+                  <div style={{ color: "var(--text)", fontWeight: 500 }}>
+                    {u.email || u.user_id}
+                  </div>
+                  {u.name && (
+                    <div style={{ color: "var(--text-faint)", fontSize: 10 }}>{u.name}</div>
+                  )}
+                </div>
+                <div style={{ textAlign: "right", color: "var(--text-dim)", fontSize: 11 }}>
+                  reached {_fadmAgo(u.stage_reached_at)}
+                </div>
+                <div style={{ textAlign: "right", color: "#FF8A2A", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>
+                  {_fadmDuration(u.stuck_hours)} stuck
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FunnelCard({ data }) {
   const steps = (data && data.funnel_steps) || [];
+  const [activeStage, setActiveStage] = useState(null);
+  const [stageData, setStageData] = useState(null);
+  const [stageLoading, setStageLoading] = useState(false);
+
   if (!steps.length) return null;
 
   // Bar widths scaled to step 0 (signed_up) so each subsequent step
@@ -1686,9 +1800,43 @@ function FunnelCard({ data }) {
   // step is 0.
   const baseCount = Math.max(steps[0]?.count || 1, 1);
   const dropIdx = (typeof data.biggest_dropoff_idx === "number") ? data.biggest_dropoff_idx : -1;
+  const bottleneckStage = data.biggest_bottleneck_stage || null;
+
+  async function openStage(s) {
+    setActiveStage({ key: s.key, label: s.label });
+    setStageLoading(true);
+    setStageData(null);
+    try {
+      const r = await api.get("/admin/insights/activation-funnel/stage-users", {
+        params: { stage: s.key },
+      });
+      setStageData(r.data);
+    } catch (e) {
+      setStageData({ error: true, users: [], count: 0 });
+    } finally {
+      setStageLoading(false);
+    }
+  }
 
   return (
     <Section title="Activation funnel — real-user conversion">
+      {data.bottleneck_summary && (
+        <div
+          data-testid="funnel-bottleneck-summary"
+          style={{
+            marginBottom: 12,
+            padding: "8px 12px",
+            background: "rgba(255,138,42,0.07)",
+            border: "1px solid rgba(255,138,42,0.24)",
+            borderRadius: 6,
+            fontSize: 12,
+            color: "var(--text)",
+            lineHeight: 1.5,
+          }}
+        >
+          {data.bottleneck_summary}
+        </div>
+      )}
       <div
         data-testid="activation-funnel-card"
         style={{
@@ -1700,6 +1848,7 @@ function FunnelCard({ data }) {
         {steps.map((s, i) => {
           const widthPct = Math.max(((s.count || 0) / baseCount) * 100, 4);
           const isDrop = (i === dropIdx);
+          const isBottleneck = (s.key === bottleneckStage);
           const isFirst = (i === 0);
           const stepColor = isDrop
             ? "rgba(232, 70, 70, 0.85)"   // red — leaky stage
@@ -1740,6 +1889,18 @@ function FunnelCard({ data }) {
                   width: 18,
                 }}>{i + 1}</span>
                 {s.label}
+                {isBottleneck && (
+                  <span
+                    data-testid={`funnel-bottleneck-pill-${s.key}`}
+                    style={{
+                      fontSize: 8, letterSpacing: "0.06em", textTransform: "uppercase",
+                      color: "#FF8A2A", border: "1px solid rgba(255,138,42,0.4)",
+                      borderRadius: 4, padding: "1px 5px",
+                    }}
+                  >
+                    most stuck
+                  </span>
+                )}
               </div>
 
               {/* Bar */}
@@ -1759,19 +1920,28 @@ function FunnelCard({ data }) {
                 }} />
               </div>
 
-              {/* Count */}
-              <div
+              {/* Count — clickable, opens drill-down of stuck users */}
+              <button
                 data-testid={`funnel-count-${s.key}`}
+                onClick={() => openStage(s)}
+                title="Click to see who's stuck here"
                 style={{
                   fontSize: 16,
                   fontFamily: "'JetBrains Mono', monospace",
                   color: "var(--text)",
                   textAlign: "right",
                   fontWeight: 600,
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 0,
+                  textDecoration: "underline",
+                  textDecorationColor: "var(--text-faint)",
+                  textDecorationStyle: "dotted",
                 }}
               >
                 {s.count ?? 0}
-              </div>
+              </button>
 
               {/* % of prev */}
               <div
@@ -1831,6 +2001,15 @@ function FunnelCard({ data }) {
           {data.totals.test_users_excluded || 0} test/automation account
           {data.totals.test_users_excluded === 1 ? "" : "s"} excluded from this view.
         </div>
+      )}
+
+      {activeStage && (
+        <StageUsersModal
+          stageInfo={activeStage}
+          data={stageData}
+          loading={stageLoading}
+          onClose={() => setActiveStage(null)}
+        />
       )}
     </Section>
   );

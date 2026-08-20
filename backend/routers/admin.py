@@ -428,6 +428,142 @@ async def _github_app_live_probe(
 # without an SQL shell.
 
 
+STAGE_ORDER = ["signed_up", "connected_github", "added_project", "sent_message", "shipped_code"]
+STAGE_LABELS = {
+    "signed_up":        "Signed up",
+    "connected_github": "Connected GitHub",
+    "added_project":    "Added Project",
+    "sent_message":     "Sent Message",
+    "shipped_code":     "Shipped Code",
+}
+
+
+def _epoch(v):
+    """Coerce a Mongo-stored timestamp (float epoch / datetime / None)
+    into a float epoch, or None if unusable."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if hasattr(v, "timestamp"):
+        try:
+            return float(v.timestamp())
+        except Exception:
+            return None
+    return None
+
+
+async def _compute_stage_buckets() -> dict:
+    """2026-08-20 — bucket every real (non-test, non-internal) user
+    into the ONE activation-funnel stage they're currently stuck at
+    (most-advanced step reached, not yet progressed past it). Powers
+    both the funnel's clickable per-stage drill-down and its plain-
+    language bottleneck summary — same waterfall logic as
+    services/funnel_nudge_cron.py's stage classifier, mapped onto the
+    5-step activation-funnel model instead of the 4-stage nudge model."""
+    db = require_db()
+    from services.test_accounts import is_test_email as is_test
+
+    all_users = await db.dev_users.find(
+        {}, {"_id": 0, "user_id": 1, "email": 1, "name": 1, "tier": 1,
+             "created_at": 1, "github": 1, "first_chat_at": 1,
+             "first_ship_at": 1, "is_admin": 1, "is_unlimited": 1},
+    ).to_list(5000)
+    # Same exclusion rule as `_compute_activation_funnel` (test/automation
+    # accounts only) — keeps this bucketing's totals reconcilable 1:1 with
+    # the funnel_steps counts it's drilling down into.
+    real_users = [u for u in all_users if not is_test(u.get("email"))]
+    real_ids = [u["user_id"] for u in real_users if u.get("user_id")]
+
+    # Connected-GitHub reach time: legacy OAuth link (`dev_users.github.
+    # connected_at`) or the earliest active App installation.
+    github_reached: dict = {}
+    for u in real_users:
+        ts = _epoch((u.get("github") or {}).get("connected_at"))
+        if ts:
+            github_reached[u["user_id"]] = ts
+    try:
+        cur = db.github_installations.find(
+            {"active": True, "user_id": {"$in": real_ids}},
+            {"_id": 0, "user_id": 1, "created_at": 1},
+        )
+        async for row in cur:
+            uid = row.get("user_id")
+            ts = _epoch(row.get("created_at"))
+            if uid and ts and (uid not in github_reached or ts < github_reached[uid]):
+                github_reached[uid] = ts
+    except Exception:
+        pass
+
+    # Added-project reach time: earliest cto_projects.created_at.
+    project_reached: dict = {}
+    cur = db.cto_projects.find(
+        {"user_id": {"$in": real_ids}}, {"_id": 0, "user_id": 1, "created_at": 1},
+    )
+    async for p in cur:
+        uid = p.get("user_id")
+        ts = _epoch(p.get("created_at"))
+        if uid and ts and (uid not in project_reached or ts < project_reached[uid]):
+            project_reached[uid] = ts
+    # A project proves *some* GitHub connection even if the signal above
+    # missed it (raw-PAT path never writes `github.connected_at`) — same
+    # fix rationale as the funnel-count-undercounting bug (2026-08-20).
+    for uid, ts in project_reached.items():
+        github_reached.setdefault(uid, ts)
+
+    now_epoch = time.time()
+    buckets: dict = {k: [] for k in STAGE_ORDER}
+    for u in real_users:
+        uid = u.get("user_id")
+        if not uid:
+            continue
+        has_shipped = bool(u.get("first_ship_at"))
+        has_chatted = bool(u.get("first_chat_at"))
+        has_project = uid in project_reached
+        has_github  = uid in github_reached
+
+        if has_shipped:
+            stage, reached_at = "shipped_code", _epoch(u.get("first_ship_at"))
+        elif has_chatted:
+            stage, reached_at = "sent_message", _epoch(u.get("first_chat_at"))
+        elif has_project:
+            stage, reached_at = "added_project", project_reached.get(uid)
+        elif has_github:
+            stage, reached_at = "connected_github", github_reached.get(uid)
+        else:
+            stage, reached_at = "signed_up", _epoch(u.get("created_at"))
+
+        stuck_hours = round((now_epoch - reached_at) / 3600, 1) if reached_at else None
+        buckets[stage].append({
+            "user_id":          uid,
+            "email":            u.get("email"),
+            "name":             u.get("name") or "",
+            "tier":             u.get("tier", "free"),
+            "stage_reached_at": reached_at,
+            "stuck_hours":      stuck_hours,
+        })
+
+    for stage in buckets:
+        buckets[stage].sort(key=lambda r: r["stuck_hours"] or 0, reverse=True)
+    return buckets
+
+
+async def _compute_stage_users(stage_key: str) -> dict:
+    """Drill-down for one Activation Funnel stage — the real users
+    currently stuck there, sorted longest-stuck first."""
+    if stage_key not in STAGE_LABELS:
+        raise HTTPException(400, f"unknown stage: {stage_key}")
+    buckets = await _compute_stage_buckets()
+    rows = buckets.get(stage_key, [])
+    return {
+        "ok":    True,
+        "stage": stage_key,
+        "label": STAGE_LABELS[stage_key],
+        "count": len(rows),
+        "users": rows,
+    }
+
+
 async def _compute_activation_funnel() -> dict:
     """The actual aggregation body.  Pulled out of the route handler
     so the cache wrapper above can call it on a cold miss."""
@@ -588,8 +724,41 @@ async def _compute_activation_funnel() -> dict:
 
     recent = sorted(real_users, key=_ca_epoch, reverse=True)[:10]
 
+    # 2026-08-20 — plain-language bottleneck summary + live per-stage
+    # stuck counts, so the founder gets a sentence, not just a chart.
+    # Excludes "shipped_code" from "stuck" — reaching the final step is
+    # success, not a bottleneck.
+    bottleneck_summary = "No real users currently stuck in the funnel."
+    stuck_counts: dict = {}
+    biggest_bottleneck_stage = None
+    try:
+        stage_buckets = await _compute_stage_buckets()
+        stuck_counts = {k: len(v) for k, v in stage_buckets.items()}
+        stuck_stage_keys = ["signed_up", "connected_github", "added_project", "sent_message"]
+        biggest_bottleneck_stage = max(stuck_stage_keys, key=lambda k: stuck_counts.get(k, 0))
+        bottleneck_n = stuck_counts.get(biggest_bottleneck_stage, 0)
+        if bottleneck_n > 0 and n_signup:
+            pct_stuck = round((bottleneck_n / n_signup) * 100, 1)
+            phrasing = {
+                "signed_up":        "signed up but haven't connected GitHub yet",
+                "connected_github": "connected GitHub but haven't added a project yet",
+                "added_project":    "added a project but haven't sent a chat message yet",
+                "sent_message":     "sent a message but haven't shipped code yet",
+            }[biggest_bottleneck_stage]
+            bottleneck_summary = (
+                f"{bottleneck_n} user{'s' if bottleneck_n != 1 else ''} ({pct_stuck}%) "
+                f"{phrasing} — this is your biggest bottleneck right now."
+            )
+        else:
+            biggest_bottleneck_stage = None
+    except Exception:
+        pass
+
     return {
         "ok": True,
+        "bottleneck_summary": bottleneck_summary,
+        "stuck_counts": stuck_counts,
+        "biggest_bottleneck_stage": biggest_bottleneck_stage,
         # Iter 212m-3 — 5-step funnel: the canonical shape going
         # forward. `funnel.signed_up/connected_repo/shipped_task/paying`
         # below stays for backward-compat with the old AdminOverview

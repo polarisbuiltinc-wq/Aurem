@@ -59,7 +59,7 @@ router = APIRouter(
 from routers._admin_common import _require_admin  # noqa: E402
 # 2026-02-11 · Phase 2 split fix — helper still lives in pre-split
 # admin.py stub. Re-import so handlers resolve it at runtime.
-from routers.admin import _compute_activation_funnel  # noqa: E402
+from routers.admin import _compute_activation_funnel, _compute_stage_users  # noqa: E402
 
 
 @router.get("/me")
@@ -251,6 +251,24 @@ async def get_user(user_id: str, authorization: Optional[str] = Header(None)):
     user["token_grants"] = await db.cto_token_grants.find(
         {"user_id": user_id}, {"_id": 0},
     ).sort("granted_at", -1).limit(20).to_list(20)
+
+    # 2026-08-20 — Funnel nudge emails sent to this user (stage, sent
+    # time, click-through), from services/funnel_nudge_cron.py's
+    # `onboarding_emails` audit collection.
+    emails_sent_raw = await db.onboarding_emails.find(
+        {"user_id": user_id, "campaign": "funnel_stage_nudge"},
+        {"_id": 0, "user_id": 0, "email": 0},
+    ).sort("sent_at", -1).to_list(50)
+    user["emails_sent"] = [
+        {
+            "stage":       e.get("stage"),
+            "sent_at":     e.get("sent_at").timestamp() if hasattr(e.get("sent_at"), "timestamp") else e.get("sent_at"),
+            "sent_ok":     bool(e.get("sent_ok")),
+            "clicked_at":  e.get("clicked_at").timestamp() if hasattr(e.get("clicked_at"), "timestamp") else e.get("clicked_at"),
+            "click_count": e.get("click_count", 0),
+        }
+        for e in emails_sent_raw
+    ]
 
     # ── 2026-02-12 · Admin user-detail expansion ──────────────────────
     # Founder asked for 3 additions on the admin user detail page:
@@ -973,6 +991,20 @@ async def activation_funnel(
         builder=_compute_activation_funnel,
         hard_timeout=4.0,          # never block the frontend past abort threshold
     )
+
+
+@router.get("/insights/activation-funnel/stage-users")
+async def activation_funnel_stage_users(
+    stage: str,
+    authorization: Optional[str] = Header(None),
+):
+    """2026-08-20 — clickable drill-down for the Activation Funnel:
+    the real users currently stuck at one specific stage, with email,
+    name, when they reached that stage, and how long they've been
+    stuck there (longest-stuck first). Not cached (on-demand click,
+    not a hot path)."""
+    await _require_admin(authorization)
+    return await _compute_stage_users(stage)
 
 
 @router.get("/insights/user-patterns")
