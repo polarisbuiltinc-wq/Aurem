@@ -341,7 +341,10 @@ def test_main_wires_onboarding_router_and_cron():
     src = open("/app/backend/main.py").read()
     assert "from routers.onboarding import router as onboarding_router" in src
     assert "app.include_router(onboarding_router" in src
-    assert "from services.onboarding_email import nudge_cron" in src
+    # 2026-08-20 — retired in favor of the stage-aware funnel nudge
+    # cron (services/funnel_nudge_cron.py), which replaces the old
+    # single-message "0 projects" nudge. See PRD for rationale.
+    assert "from services.funnel_nudge_cron import nudge_cron as _funnel_nudge_cron" in src
     assert "nudge_task" in src
 
 

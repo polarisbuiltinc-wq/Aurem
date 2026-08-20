@@ -571,6 +571,55 @@ updates, Continue button enabled. Screenshot-confirmed both states.
 
 **Not yet deployed** — preview-only until founder redeploys.
 
+## Stage-aware funnel nudge email system (2026-08-20)
+
+Founder approved building an automated daily job that classifies every
+user into their exact current funnel stage and sends ONE stage-
+specific email (never repeated per stage), replacing the old generic
+"connect a repo" nudge.
+
+**Built** (`services/funnel_nudge_cron.py`):
+- Waterfall stage classifier (most-advanced progress wins):
+  `stage3_no_chat` (has project, never chatted) → `stage2_project_pending`
+  (GitHub connected via App-install or legacy OAuth, zero projects —
+  Luke's exact case) → `stage1_github_started` (clicked connect but
+  never finished) → `stage4_fully_inactive` (zero engagement since
+  signup). Users who already sent a chat are excluded (funnel complete).
+- 24h+ stuck-at-stage gate before nudging; dedup + audit reuse the
+  existing `onboarding_emails` collection (`campaign="funnel_stage_nudge"`,
+  `stage=<name>`) — same pattern as the old nudge, one place for admin
+  tooling to look.
+- Respects `email_unsubscribes` (existing mechanism, reused as-is —
+  no new legal gap).
+- 4 dedicated email templates (dark-themed, matches brand), each with
+  a working unsubscribe link via `services.first50_campaign.unsub_url`.
+- Daily cron (`nudge_cron(86400)`), registered in `main.py`, **replacing**
+  the retired `services/onboarding_email.py` t24/t72 cron entirely
+  (kept the old module file for reference, just stopped scheduling it).
+- Admin visibility: `/admin/funnel` now returns `nudge_stages` (stuck
+  counts per stage + nudges-sent counts per stage), and a new
+  "Funnel nudge emails — where users are stuck" card added to
+  `pages/AdminOverview.jsx`, right below the existing Activation
+  Funnel card.
+
+**Verified live**: seeded 4 synthetic users (one per stage, incl. an
+exact Luke-style install-but-no-project case) directly in Mongo,
+confirmed `classify_users` bucketed all 4 correctly, `send_stage_nudge`
+(dry_run) rendered the correct subject/body per stage, `stage_counts`
+aggregation correct. Screenshot-confirmed the new admin card renders
+live data at `/admin/overview`. Test data cleaned up.
+
+**Tests**: 88 targeted tests pass (cto_projects/admin_users/promo_first50/
+funnel/nudge/onboarding). Updated 1 test (`test_main_wires_onboarding_router_and_cron`)
+to assert the new cron wiring instead of the retired one. Confirmed via
+git-stash comparison that the remaining 9 failing tests in this
+targeted run are pre-existing baseline failures (activation-funnel
+route-lookup + SWR-cache tests referencing a stale `routers.admin`
+attribute, and one stale locked-copy assertion) — unrelated to this
+change, present before it too.
+
+**Not yet deployed** — preview-only until founder redeploys.
+
 ## Engineering-Discipline Audit — 12 categories, all checkpoints complete (2026-08-20)
 
 Founder-requested honest status check across Software Engineering,

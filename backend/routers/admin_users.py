@@ -644,6 +644,7 @@ async def admin_funnel_dashboard(
             "d7_retention_pct":           0.0,
             "d30_retention_pct":          0.0,
             "event_counts":               {},
+            "nudge_stages":               {"stuck": {}, "nudges_sent": {}, "nudges_sent_total": 0},
         }
 
     n_chat = sum(1 for u in cohort if u.get("first_chat_at"))
@@ -701,6 +702,15 @@ async def admin_funnel_dashboard(
     def _pct(hits: int, total: int) -> float:
         return round((hits / total) * 100, 1) if total else 0.0
 
+    # 2026-08-20 — stage-aware nudge visibility (stuck-stage counts +
+    # nudges actually sent). Independent of the `days` window above.
+    nudge_stats = {"stuck": {}, "nudges_sent": {}, "nudges_sent_total": 0}
+    try:
+        from services.funnel_nudge_cron import stage_counts
+        nudge_stats = await stage_counts(db)
+    except Exception:
+        pass
+
     return {
         "window_days":                days,
         "signups":                    n,
@@ -710,6 +720,7 @@ async def admin_funnel_dashboard(
         "d7_retention_pct":           _pct(d7_hits, n_eligible_7),
         "d30_retention_pct":          _pct(d30_hits, n_eligible_30),
         "event_counts":               ev_counts,
+        "nudge_stages":               nudge_stats,
     }
 
 

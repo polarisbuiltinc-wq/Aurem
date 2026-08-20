@@ -28,6 +28,7 @@ export default function AdminOverview() {
   const [councilHealth, setCouncilHealth] = useState(null); // iter 212m-192 — Council A live status
   const [vscodeMarketplace, setVscodeMarketplace] = useState(null); // Session 6 · Item 1 — VS Code real status
   const [ghFunnel, setGhFunnel] = useState(null); // 2026-08-01 — GitHub Connect drop-off funnel
+  const [nudgeStages, setNudgeStages] = useState(null); // 2026-08-20 — stage-aware nudge visibility
   const [refreshingHealth, setRefreshingHealth] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -35,7 +36,7 @@ export default function AdminOverview() {
     const h = { Authorization: `Bearer ${getToken()}` };
     const HEALTH_URL = `${process.env.REACT_APP_BACKEND_URL}/api/health`;
     try {
-      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes, ghFunnelRes] =
+      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes, ghFunnelRes, nudgeStagesRes] =
         await Promise.allSettled([
           fetch(HEALTH_URL, { signal: AbortSignal.timeout(10000) }).then((r) => r.json()),
           api.get("/usage/public/stats"),
@@ -52,6 +53,7 @@ export default function AdminOverview() {
           api.get("/admin/qa/guard17-breakers", { headers: h }), // Iter 360 — Guard 17
           api.get("/admin/qa/vscode-marketplace-status", { headers: h }), // Session 6 · Item 1
           api.get("/funnel/github/stats?days=7", { headers: h }),         // 2026-08-01 — GitHub Connect funnel
+          api.get("/admin/funnel", { headers: h }),          // 2026-08-20 — stage-aware nudge stats
         ]);
       if (healthRes.status   === "fulfilled") setHealth(healthRes.value);
       if (statsRes.status    === "fulfilled") setStats(statsRes.value.data);
@@ -68,6 +70,7 @@ export default function AdminOverview() {
       if (breakersRes.status === "fulfilled") setBreakers(breakersRes.value.data);
       if (vscodeRes.status === "fulfilled") setVscodeMarketplace(vscodeRes.value.data);
       if (ghFunnelRes.status === "fulfilled") setGhFunnel(ghFunnelRes.value.data);
+      if (nudgeStagesRes.status === "fulfilled") setNudgeStages(nudgeStagesRes.value.data);
     } catch { /* silent */ }
     finally { setLoading(false); }
   }, []);
@@ -802,6 +805,10 @@ export default function AdminOverview() {
       {/* ── Iter 212m-3 — Activation funnel (FunnelCard) ────── */}
       {funnel && (
         <FunnelCard data={funnel} />
+      )}
+      {/* ── 2026-08-20 — stage-aware nudge visibility ────────── */}
+      {nudgeStages?.nudge_stages && (
+        <FunnelNudgeStageCard data={nudgeStages.nudge_stages} />
       )}
 
       {/* ── Next actions section removed (Iter 351) ─────────────
@@ -1825,6 +1832,98 @@ function FunnelCard({ data }) {
           {data.totals.test_users_excluded === 1 ? "" : "s"} excluded from this view.
         </div>
       )}
+    </Section>
+  );
+}
+
+
+// ──────────────────────────────────────────────────────────────
+// 2026-08-20 — Stage-aware funnel nudge visibility card.
+//
+// Reads `/admin/funnel`'s `nudge_stages` field: how many users are
+// CURRENTLY stuck 24h+ at each stage (regardless of whether they've
+// been emailed yet), and how many stage-specific nudge emails have
+// actually been sent per stage. Built so the founder has a real
+// number instead of blind trust that the daily cron is working.
+// ──────────────────────────────────────────────────────────────
+const NUDGE_STAGE_LABELS = {
+  stage4_fully_inactive:  "Signed up, never started",
+  stage1_github_started:  "Started GitHub connect, didn't finish",
+  stage2_project_pending: "GitHub connected, no project (Luke's case)",
+  stage3_no_chat:         "Project created, never chatted",
+};
+const NUDGE_STAGE_ORDER = [
+  "stage4_fully_inactive", "stage1_github_started",
+  "stage2_project_pending", "stage3_no_chat",
+];
+
+function FunnelNudgeStageCard({ data }) {
+  const stuck = data?.stuck || {};
+  const sent  = data?.nudges_sent || {};
+  const total = data?.nudges_sent_total ?? 0;
+
+  return (
+    <Section title="Funnel nudge emails — where users are stuck">
+      <div
+        data-testid="funnel-nudge-stage-card"
+        style={{ display: "flex", flexDirection: "column", gap: 8 }}
+      >
+        {NUDGE_STAGE_ORDER.map((key) => (
+          <div
+            key={key}
+            data-testid={`nudge-stage-row-${key}`}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 90px 90px",
+              alignItems: "center",
+              gap: 12,
+              padding: "7px 10px",
+              borderRadius: 6,
+              background: "var(--panel-2)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            <div style={{ fontSize: 12, color: "var(--text)" }}>
+              {NUDGE_STAGE_LABELS[key]}
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <span
+                data-testid={`nudge-stage-stuck-${key}`}
+                style={{
+                  fontSize: 16, fontWeight: 600,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  color: stuck[key] > 0 ? "#FF8A2A" : "var(--text-faint)",
+                }}
+              >
+                {stuck[key] ?? 0}
+              </span>
+              <div style={{ fontSize: 9, color: "var(--text-faint)" }}>stuck now</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <span
+                data-testid={`nudge-stage-sent-${key}`}
+                style={{
+                  fontSize: 16, fontWeight: 600,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  color: "var(--text)",
+                }}
+              >
+                {sent[key] ?? 0}
+              </span>
+              <div style={{ fontSize: 9, color: "var(--text-faint)" }}>nudged</div>
+            </div>
+          </div>
+        ))}
+        <div
+          data-testid="nudge-stage-total-sent"
+          style={{
+            marginTop: 4, fontSize: 10, color: "var(--text-faint)",
+            fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.04em",
+          }}
+        >
+          {total} nudge email{total === 1 ? "" : "s"} sent total · daily cron, one-time per stage
+        </div>
+      </div>
     </Section>
   );
 }

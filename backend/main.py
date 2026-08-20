@@ -802,24 +802,25 @@ async def lifespan(app: FastAPI):
         except Exception as e:                              # noqa: BLE001
             logger.warning("ORA codebase index warm failed: %r", e)
     _asyncio.create_task(_warm_codebase_index())
-    # Iter 212m-32 — hourly onboarding nudge cron. Sends the
-    # "connect a repo" email to users 24h after signup (and again at
-    # 72h if still no repo). Idempotent via the `onboarding_emails`
-    # audit log; safe to run every hour. Opt-in flag so dev pods
-    # without RESEND_API_KEY don't spam each other's inboxes.
+    # 2026-08-20 — retired the old single-message "connect a repo"
+    # nudge (services/onboarding_email.py). It only knew "0 projects"
+    # and couldn't tell a user who never touched GitHub apart from one
+    # who installed the App and dropped off right before the final
+    # Continue click (Luke West's real case). Replaced by the
+    # stage-aware funnel nudge cron below.
     if os.environ.get("ENABLE_ONBOARDING_NUDGE", "1").lower() in ("1", "true", "yes"):
         try:
-            from services.onboarding_email import nudge_cron
+            from services.funnel_nudge_cron import nudge_cron as _funnel_nudge_cron
             app.state.nudge_task = _supervise(
-                nudge_cron(3600),
-                name="onboarding_nudge",
+                _funnel_nudge_cron(86400),
+                name="funnel_stage_nudge",
                 db_getter=lambda: app.state.db,
                 long_lived=True,
             )
-            logger.info("📧 onboarding nudge cron enabled (hourly)")
+            logger.info("📧 funnel stage-nudge cron enabled (daily)")
         except Exception as e:
             app.state.nudge_task = None
-            logger.warning("nudge_cron not started: %r", e)
+            logger.warning("funnel_nudge_cron not started: %r", e)
     else:
         app.state.nudge_task = None
     # Track 3 (item #31) — hourly cron to auto-downgrade First-50 promo
