@@ -20,6 +20,7 @@ Env:
 from __future__ import annotations
 
 import os
+import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import List
@@ -78,12 +79,42 @@ async def run_reconciliation(db) -> dict:
     except Exception as e:
         logger.warning("[G7] local pending sweep failed: %r", e)
 
+    # 2026-08-20 · prod-hang fix — `stripe.PaymentIntent.list(...)` /
+    # `stripe.Subscription.list(...)` and their `.auto_paging_iter()`
+    # are SYNCHRONOUS network calls (each page = a blocking HTTP
+    # round-trip to Stripe). Called bare inside this `async def` they
+    # freeze the entire event loop for the duration — same class of
+    # bug already fixed for G18/G21/CI-drift. This is the real root
+    # cause of the recurring "/admin/status/all timed out after 15s"
+    # + "Business Pulse timeout of 12000ms" hangs: this cron fires
+    # hourly and stalls every other in-flight request while it runs.
+    # Fetch off-loop via asyncio.to_thread, then do the async Mongo
+    # comparison against plain in-memory lists (no Stripe calls left
+    # inside the loop).
+
+    def _fetch_pis() -> list:
+        pis = stripe.PaymentIntent.list(created={"gte": since_epoch}, limit=100)
+        out = []
+        for pi in pis.auto_paging_iter():
+            out.append(pi)
+            # Cap the scan so a slow/huge Stripe response can't hang the tick.
+            if len(out) >= 500:
+                break
+        return out
+
+    def _fetch_active_subs() -> list:
+        subs = stripe.Subscription.list(status="active", limit=100)
+        out = []
+        for s in subs.auto_paging_iter():
+            out.append(s)
+            if len(out) >= 500:
+                break
+        return out
+
     # (2) Stripe succeeded PIs that never landed locally as "paid".
     try:
-        pis = stripe.PaymentIntent.list(
-            created={"gte": since_epoch}, limit=100,
-        )
-        for pi in pis.auto_paging_iter():
+        pis = await asyncio.to_thread(_fetch_pis)
+        for pi in pis:
             checked_pi += 1
             if pi.status != "succeeded":
                 continue
@@ -105,16 +136,13 @@ async def run_reconciliation(db) -> dict:
                     "local_status": local.get("status"),
                     "stripe_status": "succeeded",
                 })
-            # Cap the scan so a slow Stripe response can't hang the tick.
-            if checked_pi >= 500:
-                break
     except Exception as e:
         logger.warning("[G7] Stripe PI sweep failed: %r", e)
 
     # (3) Stripe active subs whose local row is canceled.
     try:
-        subs = stripe.Subscription.list(status="active", limit=100)
-        for s in subs.auto_paging_iter():
+        subs = await asyncio.to_thread(_fetch_active_subs)
+        for s in subs:
             checked_sub += 1
             local = await db.subscriptions.find_one(
                 {"stripe_subscription_id": s.id},
@@ -126,8 +154,6 @@ async def run_reconciliation(db) -> dict:
                     "sub_id":     s.id,
                     "user_id":    local.get("user_id"),
                 })
-            if checked_sub >= 500:
-                break
     except Exception as e:
         logger.warning("[G7] Stripe sub sweep failed: %r", e)
 

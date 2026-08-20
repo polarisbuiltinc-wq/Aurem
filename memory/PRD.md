@@ -64,6 +64,59 @@ fine, not worth chasing"):
 
 **Session closed by founder as production-confirmed.**
 
+## Cockpit hang bug — G7 payment reconciliation blocking event loop (2026-08-20)
+
+Founder reported (production, recurring): cockpit showing "System Health
+unavailable — status/all timed out after 15s" and "Business Pulse
+partial — dashboard: timeout of 12000ms exceeded", with Total
+Users/DAU/Revenue stuck at 0 despite real users existing.
+
+**Root cause found**: `services/payment_reconciliation.py`'s hourly
+`schedule_payment_reconciliation` cron (added 2026-08-19 to wire up G7)
+called the SYNCHRONOUS Stripe SDK (`stripe.PaymentIntent.list()` +
+`.auto_paging_iter()`, `stripe.Subscription.list()` + pagination)
+bare inside an `async def`. Each paginated page = a blocking network
+round-trip that freezes the entire single-threaded event loop —
+stalling every other in-flight request (status/all, dashboard, pulse)
+for however long Stripe takes to respond. Same exact bug class already
+fixed for G18/G21/CI-drift ("prod-hang fix" comments), just missed for
+G7 when it was wired up the day before. Explains why it's *recurring*
+(fires every hour) and why unrelated endpoints go down together (one
+process, one event loop).
+
+**Fix**: wrapped both Stripe list+paginate calls in `asyncio.to_thread`
+(fetch full result as a plain list off-loop), then do the async Mongo
+comparison against the already-fetched list — no Stripe calls left
+inside the loop body. Code-only, no Docker changes (per founder
+constraint).
+
+Verified:
+- 3/3 existing `test_g7_*` adapter tests still pass.
+- Manual concurrency test: `run_reconciliation()` run concurrently
+  with a 20×50ms asyncio.sleep loop — sleep loop completed in 1.005s
+  (not blocked), confirming the event loop stays free during the
+  Stripe call.
+- Live preview: `/api/aurem-dev/admin/status/all` → 200, no
+  `aggregator_timeout`, 21 green/1 red/3 gray. `/api/aurem-dev/admin/dashboard`
+  → 200 in 0.18s, `total_users: 40` (previously falling back to 0 when
+  the endpoint timed out).
+- Preview's `STRIPE_API_KEY` is an invalid placeholder (401 from
+  Stripe), so the actual pagination path wasn't exercised end-to-end
+  against real data — the concurrency proof above is what confirms the
+  fix, not a real multi-page Stripe response. **Not yet
+  production-confirmed** — needs founder redeploy + a repeat check of
+  the cockpit an hour+ after deploy (to catch the next G7 tick).
+
+**Related finding, NOT fixed (out of scope for this pass, flagged for
+founder)**: `services/billing_cron.py` has the same unwrapped-sync-
+Stripe-call pattern in `schedule_maxx_overage_billing`
+(`stripe.InvoiceItem.create`/`Invoice.create`/`finalize_invoice` per
+user in a loop) and `grant_referral_reward`
+(`stripe.Subscription.retrieve`/`modify`). Lower urgency — monthly
+cron / on-demand webhook call, not hourly — but same bug class; worth
+a follow-up pass if founder wants it preempted rather than waiting for
+an incident.
+
 ## Engineering-Discipline Audit — 12 categories, all checkpoints complete (2026-08-20)
 
 Founder-requested honest status check across Software Engineering,
