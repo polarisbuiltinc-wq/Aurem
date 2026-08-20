@@ -165,7 +165,10 @@ export default function OraGuideMascot() {
   return (
     <div
       data-testid="ora-guide-mascot-root"
-      style={{ position: "fixed", bottom: 20, right: 20, zIndex: 9990 }}
+      // 2026-08-20 — was `bottom: 20`, sat directly on top of the chat
+      // composer's send button on the chat page (both anchor to the
+      // bottom-right corner). Raised clear of the composer footer row.
+      style={{ position: "fixed", bottom: 92, right: 20, zIndex: 9990 }}
     >
       <GuideSpotlightStyle />
       <style>{MASCOT_KEYFRAMES}</style>
