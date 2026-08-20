@@ -1,0 +1,37 @@
+{
+  "summary": "Comprehensive backend + frontend testing of magic-login 'resume your setup' feature (POST /auth/magic-login/exchange & /refresh, /magic-login React route). 10/10 backend pytest cases pass, 5/5 frontend Playwright scenarios pass. Covers valid exchange for both stages, single-use replay (410), bogus token (404), expired-unused (410), refresh mint+consume flow, refresh replay dead, click tracking increment, dry-run preview not minting real tokens, bare /magic-login dead state, and GitHub wizard auto-open on landing (Step 1/3, 'Continue with GitHub App' primary + RECOMMENDED, PAT collapsed as secondary — external GitHub auth NOT bypassed).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/aurem-dev/auth/magic-login/exchange", "issue": "Both 'already_used' and 'expired' return HTTP 410 with different detail strings ('already_used' vs 'expired'), but frontend (MagicLogin.jsx) branches only on status code — so a REPLAYED (already-used) valid token shows the same 'This link has expired' UI as a genuinely expired one. Not silent (spec-compliant), but message is misleading. Consider distinct 4xx codes (e.g., 409 for used vs 410 for expired) OR have frontend parse response.detail."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Magic-login replay after successful use", "issue": "Replayed just-used token shows 'This link has expired' + 'get a new one' button. Clicking it correctly fails (backend 410 already_used → refresh) and falls to dead UI, so no silent auth — but the two-step user experience is confusing. See backend minor issue above.", "affected_selectors": ["[data-testid=magic-login-status]", "[data-testid=magic-login-get-new-one]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_magic_login_2026_08_20.py",
+    "/app/test_reports/pytest/magic_login_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL/MINOR: differentiate 'already_used' vs 'expired' at the frontend so a replayed used token shows the true 'This link isn't valid — it may have already been used' dead state directly (currently shows 'expired' → 'get a new one' fails → then dead)."
+  ],
+  "critical_code_review_comments": [
+    "backend/routers/auth.py:670-693 — /magic-login/refresh will happily mint+consume a new token for ANY unused row, including one whose expires_at is still in the future. That's technically fine (possession of the original 32-byte opaque token is inbox-proof) but is slightly inconsistent with the docstring 'only for a token that's genuinely just time-expired'. Consider gating refresh with `if old_row.get('expires_at', 0) > time.time(): raise 400` if the founder wants refresh to be strictly for expired links only. Currently non-blocking.",
+    "frontend/src/pages/MagicLogin.jsx:66 — status===410 collapses both already_used and expired into 'expired' UI. See minor bug above."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_magic_login_2026_08_20.py (new)"
+  ],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100% (5/5)"},
+  "test_credentials": "Created TEST_ prefixed dev_users + magic_login_tokens rows on-the-fly inside the tests, cleaned up in fixture teardown. Founder preview creds NOT needed.",
+  "seed_data_creation": "test_magic_login_2026_08_20.py inserts+deletes TEST_ prefixed rows in db=aurem_dev, collections: dev_users, magic_login_tokens, onboarding_emails. Verified full cleanup — 0 TEST_ rows remain after run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "backend test file at /app/backend/tests/test_magic_login_2026_08_20.py is idempotent — safe to re-run any time. Uses REACT_APP_BACKEND_URL from env, MONGO_URL default localhost. It relies on the funnel_nudge_cron.magic_click_url signature (preview kwarg) — if the cron signature changes, TestDryRunNudge will need updating.",
+  "rca of the issue": "No blocking issues. One minor UX quirk documented: frontend cannot distinguish already-used vs expired since backend uses HTTP 410 for both. Spec-compliant (no silent auto-login on replay) but message wording is not ideal for the replay path. Recommend: check response body detail string in MagicLogin.jsx, or have backend return 409 for already_used."
+}

@@ -97,6 +97,7 @@ const BrainDump         = lazy(() => import("./pages/BrainDump"));
 const OpsRecipes        = lazy(() => import("./pages/OpsRecipes"));
 const Automations       = lazy(() => import("./pages/Automations"));
 const OAuthFinish       = lazy(() => import("./pages/OAuthFinish"));
+const MagicLogin        = lazy(() => import("./pages/MagicLogin"));   // 2026-08-20
 const VsDevin           = lazy(() => import("./pages/VsDevin"));
 const VsPage            = lazy(() => import("./pages/VsPage"));      // Iter 358
 const CompareHub        = lazy(() => import("./pages/CompareHub"));  // Iter 358
@@ -195,7 +196,7 @@ function SessionExpiredListener() {
           }).catch(() => {});
         } catch { /* noop */ }
         const path = window.location.pathname + window.location.search;
-        const isAuthPage = /^\/(login|signup|verify|oauth-finish)/.test(
+        const isAuthPage = /^\/(login|signup|verify|oauth-finish|magic-login)/.test(
           window.location.pathname,
         );
         const nextParam = (!isAuthPage && path && path !== "/")
@@ -471,6 +472,7 @@ export default function App() {
           <Route path="/wrapped" element={<PrivateRoute><Wrapped /></PrivateRoute>} />
           <Route path="/automations" element={<PrivateRoute><Automations /></PrivateRoute>} />
           <Route path="/oauth-finish" element={<OAuthFinish />} />
+          <Route path="/magic-login" element={<MagicLogin />} />       {/* 2026-08-20 */}
           <Route path="/vs/devin"  element={<VsDevin />} />
           <Route path="/pricing" element={<Pricing />} />
           {/* Iter 358 — real comparison pages for every competitor

@@ -639,6 +639,91 @@ async def reset_password(body: ResetPasswordBody) -> dict:
     return {"ok": True}
 
 
+class MagicLoginExchangeBody(BaseModel):
+    token: str
+
+
+# 2026-08-20 — "Resume your setup" magic links (funnel_nudge_cron.py).
+# Deliberately NOT the same TTL as password reset above — founder's
+# call: this is a "resume where you left off" convenience link, not
+# an account-security action, so 7 days > 1 hour is fine. Still:
+# single-use, opaque random token, never the real session itself.
+@router.post("/magic-login/exchange")
+async def magic_login_exchange(body: MagicLoginExchangeBody) -> dict:
+    """Consumes a magic-login token from a stage-nudge email and
+    returns a real session, same shape as /auth/login. `used=True` is
+    set the moment a VALID token is consumed — a forwarded/leaked
+    link that's already been used can never authenticate again."""
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "Database not connected")
+    row = await db.magic_login_tokens.find_one({"token": body.token})
+    if not row:
+        raise HTTPException(404, "invalid_link")
+    if row.get("used"):
+        raise HTTPException(410, "already_used")
+    if row.get("expires_at", 0) < time.time():
+        raise HTTPException(410, "expired")
+    return await _consume_magic_token(db, row)
+
+
+@router.post("/magic-login/refresh")
+async def magic_login_refresh(body: MagicLoginExchangeBody) -> dict:
+    """'Get a new one' — only for a token that's genuinely just time-
+    expired, never for one already used (that stays permanently dead,
+    same single-use guarantee as above). Possessing the original
+    unguessable 32-byte token is itself proof of inbox access, so this
+    mints + immediately consumes a fresh one for the same user/stage
+    without a second email round-trip."""
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "Database not connected")
+    old_row = await db.magic_login_tokens.find_one({"token": body.token})
+    if not old_row:
+        raise HTTPException(404, "invalid_link")
+    if old_row.get("used"):
+        raise HTTPException(410, "already_used")
+    # Permanently retire the stale token, then mint + consume a fresh one.
+    await db.magic_login_tokens.update_one({"_id": old_row["_id"]}, {"$set": {"used": True}})
+    from services.funnel_nudge_cron import create_magic_login_token
+    new_token = await create_magic_login_token(
+        db, old_row["user_id"], old_row["email"], old_row["stage"],
+    )
+    new_row = await db.magic_login_tokens.find_one({"token": new_token})
+    return await _consume_magic_token(db, new_row)
+
+
+async def _consume_magic_token(db, row: dict) -> dict:
+    await db.magic_login_tokens.update_one(
+        {"_id": row["_id"]}, {"$set": {"used": True, "used_at": time.time()}},
+    )
+    user = await db.dev_users.find_one({"user_id": row["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(404, "account_not_found")
+    is_founder = is_founder_email(user.get("email", ""))
+    is_admin = bool(user.get("is_admin")) or is_founder
+    session = _issue_session(user, is_admin, is_founder)
+    session["stage"] = row.get("stage")
+    # Log the click the same way GET /onboarding/click does, so admin
+    # visibility (emails-sent card, click-through stats) is identical
+    # regardless of which link style a user actually clicked.
+    try:
+        now = datetime.now(timezone.utc)
+        doc = await db.onboarding_emails.find_one(
+            {"user_id": row["user_id"], "campaign": "funnel_stage_nudge",
+             "stage": row.get("stage"), "sent_ok": True},
+            sort=[("sent_at", -1)],
+        )
+        if doc:
+            upd = {"$inc": {"click_count": 1}}
+            if not doc.get("clicked_at"):
+                upd["$set"] = {"clicked_at": now}
+            await db.onboarding_emails.update_one({"_id": doc["_id"]}, upd)
+    except Exception:
+        pass
+    return session
+
+
 @router.post("/change-password")
 async def change_password(
     body: ChangePasswordBody, authorization: Optional[str] = Header(None),

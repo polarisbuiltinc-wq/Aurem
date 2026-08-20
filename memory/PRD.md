@@ -2890,3 +2890,59 @@ pass; preview-verified `fbq.loaded === true`. **prod-verification
 pending** (founder will DevTools-check signup + project-add triggers
 after deploy).
 
+---
+
+## "Resume your setup" magic-login links (2026-08-20)
+
+Embedded into the existing stage-nudge emails (`funnel_nudge_cron.py`)
+for the two most fixable stuck stages: `stage1_github_started` (never
+connected GitHub) and `stage2_project_pending` (GitHub connected, 0
+projects). Founder's choices: 7-day expiry, reuse existing nudge
+system (no separate campaign), expired links show a clear "get a new
+one" UI instead of silently bouncing to login.
+
+**How it works**: `create_magic_login_token()` mints an opaque
+`secrets.token_urlsafe(32)` (never the real session JWT) stored in
+`magic_login_tokens` with `user_id`/`stage`/`expires_at`/`used`.
+`magic_click_url()` builds the email CTA link to `/magic-login?token=`.
+New frontend bridge page `MagicLogin.jsx` exchanges it via
+`POST /auth/magic-login/exchange`, sets the session, and redirects to
+`/dashboard?action=connect-repo` which auto-opens the GitHub-connect
+wizard (Step 1/3, "Continue with GitHub App" primary CTA — GitHub's
+own authorization click is never bypassed). Single-use enforced
+server-side (`used=True` the moment a valid token is consumed).
+Expired-but-unused tokens get a distinct "This link has expired /
+Click here to get a new one" UI → `POST /auth/magic-login/refresh`
+mints+consumes a fresh token in one click (no second email).
+
+**Fixed during this pass**: replayed already-used tokens were showing
+the same "expired" UI as genuinely time-expired ones (both returned
+HTTP 410). `MagicLogin.jsx` now also checks `response.data.detail`
+("expired" vs "already_used") so a replay goes straight to the
+correct "isn't valid — already used" dead state with a "Go to login"
+button, instead of a confusing failed-refresh detour.
+
+**Verified**: manual screenshot smoke test (both stages: valid token
+→ auto-login → wizard opens; expired token → expired UI → refresh →
+new session → wizard opens) + `testing_agent` full pass — 10/10
+backend pytest (`backend/tests/test_magic_login_2026_08_20.py`,
+covers exchange/refresh/replay-410/bogus-404/expired-410/dry-run-no-
+real-token/click-tracking) and 5/5 frontend Playwright scenarios, all
+test rows cleaned up. See report:
+`/app/test_reports/iteration_magic_login_2026_08_20.json`.
+
+**Not yet deployed** — preview-only, needs a founder redeploy to go
+live in the actual nudge emails.
+
+### Redeploy checklist (preview-only fixes awaiting founder redeploy)
+As of 2026-08-20, the following are preview-tested/agent-verified but
+**not yet confirmed live in production** — bundle into the next
+redeploy:
+1. Magic-login "resume your setup" links (this entry)
+2. PAT-was-primary-path GitHub onboarding fix (`NewUserWizard.jsx`, iter 371)
+3. Admin funnel dashboard drill-down + bottleneck summary + ad attribution (iter 368/369)
+4. Weekly restore-drill cron + Backup & Restore health card, same-DB prefixed-collection fix (iter 370)
+5. E2B sync-call event-loop fix + `/api/health` HEAD support
+6. One-time DB dedupe migration guard (`db_indexes.py`)
+7. ORA Guide mascot bottom-offset fix (send button overlap)
+

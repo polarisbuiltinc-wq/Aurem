@@ -185,6 +185,15 @@ async def ensure_dedup_indexes(db) -> List[dict]:
               "uniq_user_campaign_stage", unique=True,
               partial={"stage": {"$exists": True, "$type": "string"}})
 
+    # 10) "Resume your setup" magic-login token (2026-08-20) — single-use
+    # opaque token embedded in stage-nudge emails (routers/auth.py's
+    # /magic-login/exchange + /magic-login/refresh, services/
+    # funnel_nudge_cron.py's magic_click_url()). Uniqueness backstop
+    # during its 7-day live window, same rationale as oauth_codes above.
+    await _mk("magic_login_tokens", [("token", ASCENDING)],
+              "uniq_token", unique=True,
+              partial={"token": {"$exists": True, "$type": "string"}})
+
     return results
 
 
@@ -209,6 +218,7 @@ async def get_dedup_index_report(db) -> dict:
         "oauth_states":  ["uniq_state"],
         "oauth_codes":   ["uniq_code"],
         "onboarding_emails": ["uniq_user_campaign_stage"],
+        "magic_login_tokens": ["uniq_token"],
     }
     present: dict[str, bool] = {}
     dup_counts: dict[str, int] = {}

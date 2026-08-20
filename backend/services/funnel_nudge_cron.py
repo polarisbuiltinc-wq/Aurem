@@ -88,6 +88,44 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# 2026-08-20 — "Resume your setup" magic links.
+#
+# Not password-reset-grade (this is a convenience deep-link, not an
+# account-security action) — founder explicitly chose a 7-day window
+# over the tighter password-reset TTL. Still single-use + tied to one
+# user_id, same posture otherwise: opaque `secrets.token_urlsafe(32)`,
+# never the real session token itself.
+MAGIC_LINK_TTL_S = 7 * 86400
+
+
+async def create_magic_login_token(db, user_id: str, email: str, stage: str) -> str:
+    import secrets
+    import time as _time
+    token = secrets.token_urlsafe(32)
+    await db.magic_login_tokens.insert_one({
+        "token":      token,
+        "user_id":    user_id,
+        "email":      email,
+        "stage":      stage,
+        "created_at": _time.time(),
+        "expires_at": _time.time() + MAGIC_LINK_TTL_S,
+        "used":       False,
+    })
+    return token
+
+
+async def magic_click_url(db, user_id: str, email: str, stage: str, *, preview: bool = False) -> str:
+    """Auto-login deep link for the nudge email CTA — replaces the
+    plain tracked-redirect `click_url()` below. Exchanged once by
+    `POST /auth/magic-login/exchange` (routers/auth.py) for a real
+    session, then the SAME `?action=connect-repo` logic `click_url()`
+    already used decides which exact screen to land on."""
+    if preview:
+        return f"{PUBLIC_BASE}/magic-login?token=preview-not-a-real-token"
+    token = await create_magic_login_token(db, user_id, email, stage)
+    return f"{PUBLIC_BASE}/magic-login?token={token}"
+
+
 def _created_at_dt(raw) -> Optional[datetime]:
     """Coerce dev_users.created_at (datetime / epoch / ISO string) → aware dt."""
     if raw is None:
@@ -131,11 +169,11 @@ def click_url(user_id: str, stage: str) -> str:
     )
 
 
-def render_text(user: dict, stage: str) -> str:
+async def render_text(db, user: dict, stage: str, *, preview: bool = False) -> str:
     from services.first50_campaign import unsub_url
     first = _first_name(user)
     body = BODIES[stage]
-    cta = click_url(user.get("user_id", ""), stage)
+    cta = await magic_click_url(db, user.get("user_id", ""), user.get("email", ""), stage, preview=preview)
     unsub = unsub_url(user.get("email", ""))
     return (
         f"Hey {first},\n\n{body}\n\n"
@@ -145,11 +183,11 @@ def render_text(user: dict, stage: str) -> str:
     )
 
 
-def render_html(user: dict, stage: str) -> str:
+async def render_html(db, user: dict, stage: str, *, preview: bool = False) -> str:
     from services.first50_campaign import unsub_url
     first = _first_name(user)
     body = BODIES[stage].replace("\n\n", "<br><br>")
-    cta = click_url(user.get("user_id", ""), stage)
+    cta = await magic_click_url(db, user.get("user_id", ""), user.get("email", ""), stage, preview=preview)
     unsub = unsub_url(user.get("email", ""))
     return f"""<!doctype html>
 <html><body style="margin:0;padding:0;background:#0b0b0b;color:#e8e8e8;
@@ -445,19 +483,23 @@ async def send_stage_nudge(user: dict, *, dry_run: bool = False) -> dict:
         return {"ok": False, "error": "invalid stage or db unavailable",
                 "user_id": user.get("user_id")}
     subject = SUBJECTS[stage]
-    text = render_text(user, stage)
-    html = render_html(user, stage)
     if dry_run:
+        # Preview only — never mint a real magic-login token for a
+        # send that won't actually go out.
+        text = await render_text(db, user, stage, preview=True)
         return {"ok": True, "user_id": user.get("user_id"), "email": user.get("email"),
                 "stage": stage, "dry_run": True,
                 "preview": {"subject": subject, "text": text}}
     # Claim the slot BEFORE sending — see _claim_send_slot docstring.
     # If another process (e.g. an overlapping pod during a rolling
-    # deploy) already claimed it, skip entirely: no Resend call.
+    # deploy) already claimed it, skip entirely: no Resend call, and
+    # no magic-login token minted for a send that won't happen.
     claim_id = await _claim_send_slot(db, user["user_id"], user["email"], stage)
     if claim_id is None:
         return {"ok": True, "user_id": user.get("user_id"), "email": user.get("email"),
                 "stage": stage, "skipped": True, "reason": "already claimed"}
+    text = await render_text(db, user, stage)
+    html = await render_html(db, user, stage)
     sent_ok, err = await _resend_send(user["email"], subject=subject, text=text, html=html)
     await _finalize_send(db, claim_id, sent_ok, err)
     return {"ok": bool(sent_ok), "user_id": user.get("user_id"), "email": user.get("email"),
