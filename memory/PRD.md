@@ -367,7 +367,27 @@ Ran a scripted Playwright check at 390px width per founder's request
    no longer steals space from the send button — acceptable tradeoff
    (a clipped label beats an unusable send button).
 
-**Not yet fixed this pass** (out of the scripted check's scope,
+### Mobile composer strip — founder correction, implemented & screenshot-verified
+Founder correction: keep the Loop toggle visible on mobile (it's
+functional, not decoration); instead remove the CASUAL/QUERY mode
+label (`intent-tier-indicator`) and the "0/20,000" char counter
+(`chat-char-counter`) — pure clutter that was part of what squeezed
+the Send button toward 0px (previous fix). Desktop unchanged.
+Implemented in the existing mobile-only `@media (max-width: 768px)`
+block in `index.css` (Iter 265's declutter rule) — added both
+testids to the `display: none` list, and simplified the sibling-
+margin logic now that `intent-tier-indicator` is always hidden on
+mobile (removed the now-dead "QUERY pill present → reset margin"
+rule, which would otherwise have canceled the Loop toggle's
+right-alignment since a hidden-but-present sibling still matches CSS
+`~` selectors).
+Screenshot-verified at 390×844: `intent-tier-indicator` and
+`chat-char-counter` computed `display: none`; `loop-mode-toggle`
+visible (`display: flex`) and correctly right-aligned next to
+Attach/History/Send, all full-size. Re-verified desktop (1600px):
+both elements still `display: flex`/`block` (untouched).
+
+**Still not yet fixed this pass** (out of the scripted check's scope,
 flagged only): README.md → Cloudflare origin error in the Preview
 tab's file browser, and the Graph-tab List/Graph toggle closing the
 whole panel instead of switching views — founder has not been able to

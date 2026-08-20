@@ -714,18 +714,23 @@ body.aurem-glass #root {
   .composer-toolbar [data-testid="composer-footer-caption"] {
     display: none !important;
   }
-  /* Caption was the flex-1 spacer — push the right cluster (QUERY
-     pill → LOOP toggle → send) to the proper right edge. */
+  /* 2026-08-20 — founder follow-up: also drop the CASUAL/QUERY mode
+     label and the "0/20,000" char counter on mobile — pure clutter
+     at 390px width that was crowding the Send/Attach buttons down
+     toward 0px wide (see ToolButton.jsx flexShrink fix). Keep the
+     Loop ON/OFF toggle — it's a functional control, not decoration.
+     Desktop (>768px) keeps the full strip unchanged. */
   .composer-toolbar [data-testid="intent-tier-indicator"],
+  .composer-toolbar [data-testid="chat-char-counter"] {
+    display: none !important;
+  }
+  /* Caption was the flex-1 spacer — push the right cluster (LOOP
+     toggle → attach/history → send) to the proper right edge. The
+     intent-tier-indicator is hidden now but still present in the DOM,
+     so it no longer needs its own margin rule. */
   .composer-toolbar [data-testid="loop-mode-toggle"],
   .composer-toolbar [data-testid="loop-mode-toggle-locked"] {
     margin-left: auto;
-  }
-  /* When the QUERY pill is present it takes the spacer role — reset
-     the loop toggle back to normal flow. */
-  .composer-toolbar [data-testid="intent-tier-indicator"] ~ [data-testid="loop-mode-toggle"],
-  .composer-toolbar [data-testid="intent-tier-indicator"] ~ [data-testid="loop-mode-toggle-locked"] {
-    margin-left: 0;
   }
 }
 
