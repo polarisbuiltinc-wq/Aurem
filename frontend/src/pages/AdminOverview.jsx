@@ -29,6 +29,8 @@ export default function AdminOverview() {
   const [vscodeMarketplace, setVscodeMarketplace] = useState(null); // Session 6 · Item 1 — VS Code real status
   const [ghFunnel, setGhFunnel] = useState(null); // 2026-08-01 — GitHub Connect drop-off funnel
   const [nudgeStages, setNudgeStages] = useState(null); // 2026-08-20 — stage-aware nudge visibility
+  const [backupStatus, setBackupStatus] = useState(null); // 2026-08-20 — nightly backup health
+  const [drillHistory, setDrillHistory] = useState(null); // 2026-08-20 — recurring restore-drill health
   const [refreshingHealth, setRefreshingHealth] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -36,7 +38,7 @@ export default function AdminOverview() {
     const h = { Authorization: `Bearer ${getToken()}` };
     const HEALTH_URL = `${process.env.REACT_APP_BACKEND_URL}/api/health`;
     try {
-      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes, ghFunnelRes, nudgeStagesRes] =
+      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes, ghFunnelRes, nudgeStagesRes, backupStatusRes, drillHistoryRes] =
         await Promise.allSettled([
           fetch(HEALTH_URL, { signal: AbortSignal.timeout(10000) }).then((r) => r.json()),
           api.get("/usage/public/stats"),
@@ -54,6 +56,8 @@ export default function AdminOverview() {
           api.get("/admin/qa/vscode-marketplace-status", { headers: h }), // Session 6 · Item 1
           api.get("/funnel/github/stats?days=7", { headers: h }),         // 2026-08-01 — GitHub Connect funnel
           api.get("/admin/funnel", { headers: h }),          // 2026-08-20 — stage-aware nudge stats
+          api.get("/admin/backups/status", { headers: h }),        // 2026-08-20 — backup health
+          api.get("/admin/backups/drill-history", { headers: h }), // 2026-08-20 — restore-drill health
         ]);
       if (healthRes.status   === "fulfilled") setHealth(healthRes.value);
       if (statsRes.status    === "fulfilled") setStats(statsRes.value.data);
@@ -71,6 +75,8 @@ export default function AdminOverview() {
       if (vscodeRes.status === "fulfilled") setVscodeMarketplace(vscodeRes.value.data);
       if (ghFunnelRes.status === "fulfilled") setGhFunnel(ghFunnelRes.value.data);
       if (nudgeStagesRes.status === "fulfilled") setNudgeStages(nudgeStagesRes.value.data);
+      if (backupStatusRes.status === "fulfilled") setBackupStatus(backupStatusRes.value.data);
+      if (drillHistoryRes.status === "fulfilled") setDrillHistory(drillHistoryRes.value.data);
     } catch { /* silent */ }
     finally { setLoading(false); }
   }, []);
@@ -482,6 +488,9 @@ export default function AdminOverview() {
 
       {/* ── DB health (iter 118) ────────────────────────────── */}
       <DbHealthCard data={dbHealth}/>
+
+      {/* ── Backup + restore-drill health (2026-08-20) ──────── */}
+      <BackupHealthCard backupStatus={backupStatus} drillHistory={drillHistory}/>
 
       {/* ── Mode classifier telemetry — last 100 messages ──── */}
       {telemetry && telemetry.total > 0 && (
@@ -1525,6 +1534,70 @@ function humanAgo(iso) {
   return `${Math.round(s / 86400)}d ago`;
 }
 
+/**
+ * BackupHealthCard — 2026-08-20.
+ * Nightly-backup status + the recurring restore-drill status
+ * (services/restore_drill_cron.py) side by side — closes the "restore
+ * only tested once" gap: this reads real backup_history +
+ * restore_drill_history rows, not a static claim.
+ */
+function BackupHealthCard({ backupStatus, drillHistory }) {
+  if (!backupStatus && !drillHistory) return null;
+
+  const backupOk = backupStatus && !backupStatus.alert;
+  const backupColor = backupOk ? "#6dd4a1" : "#ff6b6b";
+  const backupBg = backupOk ? "rgba(109,212,161,0.10)" : "rgba(255,107,107,0.10)";
+
+  const lastDrill = drillHistory?.last_result;
+  const drillOk = lastDrill ? !!lastDrill.ok : null;
+  const drillColor = drillOk == null ? "var(--text-faint, #888)" : (drillOk ? "#6dd4a1" : "#ff6b6b");
+  const drillBg = drillOk == null ? "var(--panel-2, rgba(255,255,255,0.04))"
+    : (drillOk ? "rgba(109,212,161,0.10)" : "rgba(255,107,107,0.10)");
+
+  return (
+    <div data-testid="backup-health-card" style={{
+      marginTop: 12, padding: "12px 14px",
+      borderRadius: 8, background: "var(--panel-2, rgba(255,255,255,0.03))",
+      border: "1px solid var(--border)",
+      display: "flex", flexWrap: "wrap", gap: 20,
+      fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12,
+    }}>
+      <div data-testid="backup-health-nightly" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{
+          padding: "2px 8px", borderRadius: 4, fontWeight: 700,
+          fontSize: 10, letterSpacing: ".1em", color: backupColor, background: backupBg,
+        }}>{backupOk ? "BACKUP OK" : "BACKUP ALERT"}</span>
+        <span style={{ color: "var(--text-faint, #888)" }}>
+          last success {humanAgo(backupStatus?.last_success_at)}
+          {backupStatus?.consecutive_failures > 0 && (
+            <span style={{ color: "#ff6b6b" }}> · {backupStatus.consecutive_failures} consecutive failures</span>
+          )}
+        </span>
+      </div>
+      <div style={{ color: "var(--text-faint, #888)" }}>|</div>
+      <div data-testid="backup-health-drill" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{
+          padding: "2px 8px", borderRadius: 4, fontWeight: 700,
+          fontSize: 10, letterSpacing: ".1em", color: drillColor, background: drillBg,
+        }}>
+          {drillOk == null ? "RESTORE DRILL: PENDING" : (drillOk ? "RESTORE DRILL OK" : "RESTORE DRILL FAILED")}
+        </span>
+        {lastDrill && (
+          <span style={{ color: "var(--text-faint, #888)" }}>
+            {lastDrill.restored_total_docs ?? 0} docs / {lastDrill.restored_collections ?? 0} colls restored
+            {" · "}checked {humanAgo(lastDrill.checked_at)}
+          </span>
+        )}
+        {!lastDrill && (
+          <span style={{ color: "var(--text-faint, #888)" }}>
+            First automated drill runs ~10min after boot, then weekly.
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 /**
  * SystemMappingCard — Iter 152.
@@ -1767,6 +1840,16 @@ function StageUsersModal({ stageInfo, data, loading, onClose }) {
                 <div>
                   <div style={{ color: "var(--text)", fontWeight: 500 }}>
                     {u.email || u.user_id}
+                    {u.ad_source && (
+                      <span data-testid={`funnel-stage-user-ad-source-${i}`}
+                            style={{
+                              marginLeft: 8, fontSize: 9, letterSpacing: "0.04em",
+                              color: "#8fb8ff", border: "1px solid rgba(143,184,255,0.35)",
+                              borderRadius: 4, padding: "1px 5px", textTransform: "uppercase",
+                            }}>
+                        via {u.ad_source}
+                      </span>
+                    )}
                   </div>
                   {u.name && (
                     <div style={{ color: "var(--text-faint)", fontSize: 10 }}>{u.name}</div>

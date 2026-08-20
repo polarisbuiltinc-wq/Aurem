@@ -89,6 +89,15 @@ export default function Signup() {
           localStorage.removeItem("aurem_ref");
         }
       } catch { /* non-blocking */ }
+      // 2026-08-20 — Attribute ad click (gclid/fbclid/UTM) captured by
+      // App.jsx on landing, now that we have a token.
+      try {
+        const raw = localStorage.getItem("aurem_ad_attr");
+        if (raw) {
+          await api.post("/ads/attribute-click", JSON.parse(raw));
+          localStorage.removeItem("aurem_ad_attr");
+        }
+      } catch { /* non-blocking */ }
       // Iter 156 — Google Ads conversion. Fire AFTER the account row
       // exists and BEFORE navigation so the event leaves the page
       // before React unmounts.

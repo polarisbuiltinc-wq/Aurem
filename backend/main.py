@@ -863,10 +863,18 @@ async def lifespan(app: FastAPI):
                 hour, retention,
             )
             # 2026-02-09 — Diagnostic: log which mongodump/mongorestore
-            # binaries the runtime can see. Was pure guesswork earlier
-            # when prod threw FileNotFoundError with no useful trace.
-            # This logs on every boot so we know at a glance whether
-            # the base image has the tools.
+            # binaries the runtime can see, purely informational.
+            #
+            # 2026-08-20 correction: this used to claim "backups WILL
+            # fail" if these binaries are missing — that was STALE. The
+            # backup/restore pipeline (services/db_backup.py,
+            # services/db_restore.py — "Backup Hardening item #5") is
+            # 100% Python-native (motor/pymongo + boto3 → R2), with zero
+            # subprocess/binary dependency. Verified: neither file
+            # references `mongodump`/`mongorestore` outside comments.
+            # These binaries are NOT required for backups or restores to
+            # work; this block is now advisory-only (e.g. if an admin
+            # ever wants to shell in and run the official CLI by hand).
             import shutil as _shutil
             for _bin in ("mongodump", "mongorestore"):
                 _path = _shutil.which(_bin)
@@ -881,10 +889,10 @@ async def lifespan(app: FastAPI):
                         _ver = "(--version failed)"
                     logger.info("🗄️  found %s at %s — %s", _bin, _path, _ver)
                 else:
-                    logger.warning(
-                        "🗄️  %s NOT found on PATH — backups will fail with "
-                        "MISSING BINARY error until installed via "
-                        ".emergent/system_deps.txt or bundled in repo",
+                    logger.info(
+                        "🗄️  %s not on PATH — harmless, the automated backup/"
+                        "restore pipeline doesn't use it (Python-native, see "
+                        "services/db_backup.py)",
                         _bin,
                     )
         except Exception as e:
@@ -892,6 +900,31 @@ async def lifespan(app: FastAPI):
             logger.warning("db backup cron not started: %r", e)
     else:
         app.state.backup_task = None
+
+    # 2026-08-20 — Recurring, automated restore drill. Founder's audit:
+    # "a backup nobody restores from isn't verified" was previously only
+    # provable via a manual-trigger endpoint (POST /admin/backups/
+    # test-restore) — run exactly once, ever. This makes that same
+    # restore-and-diff check run weekly with zero manual action, and
+    # emails the founder the moment a drill fails.
+    if os.environ.get("ENABLE_RESTORE_DRILL", "1").lower() in ("1", "true", "yes"):
+        try:
+            from services.restore_drill_cron import restore_drill_cron, DRILL_INTERVAL_SECONDS
+            app.state.restore_drill_task = _supervise(
+                restore_drill_cron(db_getter=lambda: app.state.db),
+                name="restore_drill",
+                db_getter=lambda: app.state.db,
+                long_lived=True,
+            )
+            logger.info(
+                "🧪 restore-drill cron enabled (every %ds ≈ %.1f days)",
+                DRILL_INTERVAL_SECONDS, DRILL_INTERVAL_SECONDS / 86400,
+            )
+        except Exception as e:
+            app.state.restore_drill_task = None
+            logger.warning("restore drill cron not started: %r", e)
+    else:
+        app.state.restore_drill_task = None
 
     # Iter 264 Fix D — nightly ORA grounding canary (default OFF).
     # Turn on ONLY after acceptance criteria pass — a warning system
@@ -2527,13 +2560,9 @@ async def health():
         # list of long-lived crons that terminated unexpectedly since
         # pod start (each also gets a Guard 20 incident row).
         "supervised_tasks": _supervised_tasks_health_snapshot(),
-        # 2026-02-09 — Backup-tools presence diagnostic. Surfaces
-        # mongodump/mongorestore binary paths + versions so we can
-        # confirm .emergent/system_deps.txt actually installed them
-        # without needing shell access to prod. This replaces the
-        # guesswork that led to the 2026-02-09 FileNotFoundError
-        # incident. If either is null → backups WILL fail until the
-        # base image / system_deps is fixed.
+        # 2026-02-09 — Backup-tools presence diagnostic (advisory only —
+        # see 2026-08-20 correction at boot time: the real backup/
+        # restore pipeline is Python-native and does NOT need these).
         "backup_tools": _backup_tools_snapshot(),
     }
 

@@ -1002,6 +1002,24 @@ function UserDetail({ user, onBack }) {
         </div>
       </Card>
 
+      {/* 2026-08-20 · Ad-click attribution — which paid ad (if any)
+          brought this real user in, joined with their funnel stage
+          data above. Reads dev_users.ad_attribution (set once by
+          POST /ads/attribute-click right after signup/OAuth). */}
+      {d.ad_attribution && (
+        <div data-testid="admin-user-ad-attribution"
+             style={{ fontSize: 11, color: "var(--text-faint)", margin: "0 0 14px",
+                      padding: "8px 10px", borderRadius: 6,
+                      background: "rgba(143,184,255,0.06)",
+                      border: "1px solid rgba(143,184,255,0.24)" }}>
+          <strong style={{ color: "#8fb8ff" }}>
+            Ad source: {d.ad_attribution.gclid ? "Google Ads" : d.ad_attribution.fbclid ? "Meta Ads" : (d.ad_attribution.utm_source || "unknown")}
+          </strong>
+          {d.ad_attribution.utm_campaign && <span> · campaign: {d.ad_attribution.utm_campaign}</span>}
+          {d.ad_attribution.landing_path && <span> · landed on {d.ad_attribution.landing_path}</span>}
+        </div>
+      )}
+
       {/* 2026-08-20 · Funnel nudge emails sent to this user — stage,
           sent time, and whether they clicked through. Reads
           onboarding_emails via GET /admin/users/{id} (emails_sent). */}

@@ -2749,6 +2749,58 @@ redeploy to go live.
 
 ---
 
+## Code-fixable audit items closed (2026-08-20)
+
+Founder asked to fix whatever from the earlier "genuinely broken"
+audit list is actually code-fixable, real, zero mocks. 3 were:
+
+1. **Recurring restore drill** — `services/restore_drill_cron.py`
+   (new), weekly automated restore-and-diff against a scratch DB,
+   reusing the existing `db_restore.restore_to_scratch()`. Writes to
+   new `restore_drill_history` collection, alerts founder on failure.
+   New endpoints `GET/POST /admin/backups/drill-history|drill-now`.
+   New `BackupHealthCard` on `/admin/overview`.
+2. **Misleading boot warning** — `main.py` claimed "backups WILL
+   fail" if `mongodump`/`mongorestore` missing from PATH. False: the
+   real backup/restore pipeline (`db_backup.py`/`db_restore.py`) is
+   100% Python-native, zero subprocess dependency. Fixed the log
+   wording (no functional change).
+3. **Ad-click → funnel join** — `App.jsx` captures gclid/fbclid/
+   utm_* first-touch → `POST /ads/attribute-click` (new,
+   `routers/engagement.py`, mirrors existing `/referrals/attribute`
+   pattern) persists once onto `dev_users.ad_attribution`. Now
+   surfaced in: Admin user-detail banner, Activation Funnel
+   drill-down modal ("via Google Ads" badge), and
+   `_compute_stage_buckets()`'s `ad_source` field.
+
+**Verified**: `testing_agent` iter 369 — 11/11 backend pytest pass,
+full real end-to-end (real backup → real drill → 138/138 collections
+restored; real signup → real gclid attribution → shows up in admin +
+funnel drill-down). Applied 1 code-review fix after: `/ads/
+attribute-click` now rejects a `landing_path`-only payload (requires
+a real gclid/fbclid/utm_* signal) so an organic visit can never get
+mistagged as "ad (unknown source)".
+
+**Also discovered while investigating**: Google Ads conversion
+tracking (`frontend/src/lib/analytics.js`) has NEVER actually fired —
+`SIGNUP_LABEL`/`PURCHASE_LABEL` are still the literal placeholder
+string `"CONVERSION_LABEL"`, never replaced with the founder's real
+Google Ads conversion-action labels. Needs founder's Ads console
+labels to fix — flagged, not guessed.
+
+**Not code-fixable, explicitly not attempted this pass** (per
+founder's own list): SEC-001 git-history leak (needs Emergent
+Support), external pentest (3rd-party service), single-pod
+redundancy (platform infra, not app code), exact per-token cost
+accounting + per-user $ cap (needs founder's $ figures), load/stress
+testing (needs founder's go-ahead against a real environment), R2
+public branding bucket (needs founder's new R2 credentials).
+
+**Not yet deployed** — preview-only until founder redeploys.
+`deployment_agent` gave a clean PASS for this whole batch.
+
+---
+
 ## Iter 389 — Meta Pixel conversion events (2026-02-15)
 
 Meta Pixel was loading `PageView` only (Iter 388-ag). This iter adds

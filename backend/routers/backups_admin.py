@@ -139,6 +139,52 @@ async def post_run(
     return result
 
 
+@router.get(
+    "/drill-history",
+    summary="Recurring restore-drill history (services/restore_drill_cron.py)",
+)
+async def get_drill_history(
+    limit: int = Query(20, ge=1, le=200),
+    _admin: dict = Depends(require_admin_dep),
+) -> dict:
+    """Automated weekly restore drills — same restore+diff proof as
+    /test-restore, but run on a schedule with zero manual action."""
+    db = require_db()
+    cursor = db.restore_drill_history.find({}, sort=[("checked_at", -1)]).limit(limit)
+    rows = []
+    async for doc in cursor:
+        doc.pop("_id", None)
+        rows.append(doc)
+    last_ok = next((r["checked_at"] for r in rows if r.get("ok")), None)
+    last_fail = next((r["checked_at"] for r in rows if not r.get("ok")), None)
+    return {
+        "ok":            True,
+        "history":       rows,
+        "last_ok_at":    last_ok,
+        "last_fail_at":  last_fail,
+        "last_result":   rows[0] if rows else None,
+    }
+
+
+@router.post(
+    "/drill-now",
+    summary="Run the automated restore drill NOW (blocks until done)",
+)
+async def post_drill_now(
+    _admin: dict = Depends(require_admin_dep),
+) -> dict:
+    """Founder-triggerable so drill status can be proven fresh on
+    demand, same as `POST /run` does for backups."""
+    from services.restore_drill_cron import run_restore_drill
+    db = require_db()
+    result = await run_restore_drill(db)
+    logger.info(
+        "manual restore drill by admin=%s: ok=%s coverage=%s",
+        _admin.get("email"), result.get("ok"), result.get("collection_coverage"),
+    )
+    return result
+
+
 @router.post(
     "/test-restore",
     summary=(

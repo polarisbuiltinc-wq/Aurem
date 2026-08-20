@@ -453,6 +453,22 @@ def _epoch(v):
     return None
 
 
+def _ad_source_label(ad_attribution) -> Optional[str]:
+    """2026-08-20 — human-readable attribution tag from a dev_users.
+    ad_attribution dict (set by POST /ads/attribute-click). None = no
+    ad-click captured for this user (organic, direct, or referral)."""
+    if not ad_attribution:
+        return None
+    if ad_attribution.get("gclid"):
+        return "Google Ads"
+    if ad_attribution.get("fbclid"):
+        return "Meta Ads"
+    src = ad_attribution.get("utm_source")
+    if src:
+        return src[:40]
+    return "ad (unknown source)"
+
+
 async def _compute_stage_buckets() -> dict:
     """2026-08-20 — bucket every real (non-test, non-internal) user
     into the ONE activation-funnel stage they're currently stuck at
@@ -467,7 +483,8 @@ async def _compute_stage_buckets() -> dict:
     all_users = await db.dev_users.find(
         {}, {"_id": 0, "user_id": 1, "email": 1, "name": 1, "tier": 1,
              "created_at": 1, "github": 1, "first_chat_at": 1,
-             "first_ship_at": 1, "is_admin": 1, "is_unlimited": 1},
+             "first_ship_at": 1, "is_admin": 1, "is_unlimited": 1,
+             "ad_attribution": 1},
     ).to_list(5000)
     # Same exclusion rule as `_compute_activation_funnel` (test/automation
     # accounts only) — keeps this bucketing's totals reconcilable 1:1 with
@@ -541,6 +558,11 @@ async def _compute_stage_buckets() -> dict:
             "tier":             u.get("tier", "free"),
             "stage_reached_at": reached_at,
             "stuck_hours":      stuck_hours,
+            # 2026-08-20 — joins ad-click attribution (captured by
+            # App.jsx + POST /ads/attribute-click) onto the funnel
+            # drill-down, so admin can see which stuck users arrived
+            # via a paid ad vs organic/referral.
+            "ad_source":        _ad_source_label(u.get("ad_attribution")),
         })
 
     for stage in buckets:

@@ -61,6 +61,14 @@ export default function OAuthFinish() {
               localStorage.removeItem("aurem_ref");
             }
           } catch { /* non-blocking */ }
+          // 2026-08-20 — Attribute ad click captured on landing.
+          try {
+            const raw = localStorage.getItem("aurem_ad_attr");
+            if (raw) {
+              await api.post("/ads/attribute-click", JSON.parse(raw));
+              localStorage.removeItem("aurem_ad_attr");
+            }
+          } catch { /* non-blocking */ }
           try { localStorage.setItem("aurem_just_logged_in", "1"); } catch {}
           if (d.new) {
             trackSignup();
@@ -104,6 +112,14 @@ export default function OAuthFinish() {
         }
         // Flag for the PWA install popup so the Dashboard can prompt.
         try { localStorage.setItem("aurem_just_logged_in", "1"); } catch {}
+        // 2026-08-20 — Attribute ad click captured on landing.
+        try {
+          const raw = localStorage.getItem("aurem_ad_attr");
+          if (raw) {
+            await api.post("/ads/attribute-click", JSON.parse(raw));
+            localStorage.removeItem("aurem_ad_attr");
+          }
+        } catch { /* non-blocking */ }
         // Iter 156 — Google Ads signup conversion for GitHub OAuth
         // path. Only fires when backend flagged this hop as a new
         // account; return-logins are a no-op.

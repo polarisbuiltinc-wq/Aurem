@@ -239,6 +239,30 @@ export default function App() {
     } catch { /* no-op */ }
   }, []);
 
+  // 2026-08-20 — Capture ad-click IDs / UTM params on first landing so
+  // the admin funnel can finally show which real signups came from a
+  // paid ad vs organic/referral (founder's audit: "ad-tracking not
+  // joined to internal funnel"). First-touch only — never overwrites
+  // an attribution already captured this browser. Read + sent once by
+  // Signup.jsx / OAuthFinish.jsx right after account creation via
+  // POST /ads/attribute-click, then cleared.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("aurem_ad_attr")) return; // first-touch already captured
+      const params = new URLSearchParams(window.location.search);
+      const fields = ["gclid", "fbclid", "utm_source", "utm_medium", "utm_campaign"];
+      const attr = {};
+      for (const f of fields) {
+        const v = params.get(f);
+        if (v) attr[f] = v.slice(0, 200);
+      }
+      if (Object.keys(attr).length > 0) {
+        attr.landing_path = window.location.pathname.slice(0, 120);
+        localStorage.setItem("aurem_ad_attr", JSON.stringify(attr));
+      }
+    } catch { /* no-op */ }
+  }, []);
+
   return (
     <BrowserRouter>
       {/* Iter 388t — Bug 25 fix.  Skip-to-content landmark link for

@@ -75,6 +75,48 @@ async def attribute_signup_to_referrer(payload: dict,
     return {"ok": True, "referrer": ref_code}
 
 
+@router.post("/ads/attribute-click")
+async def attribute_ad_click(payload: dict, authorization: str = Header(None)) -> dict[str, Any]:
+    """Called once, right after signup/OAuth-login (mirrors
+    /referrals/attribute above) — persists the first-touch ad-click-id
+    / UTM data App.jsx captured on landing onto this user's dev_users
+    row. Closes the founder's audit gap: "ad-tracking not joined to
+    internal funnel" — the admin funnel drill-down + user-detail page
+    can now show WHICH real signups came from a paid ad vs organic.
+
+    Idempotent: refuses to overwrite an already-attributed user
+    (first-touch wins, never gets clobbered by a later session).
+
+    Body: {"gclid"|"fbclid"|"utm_source"|"utm_medium"|"utm_campaign"|
+    "landing_path": "<value>"} — any subset, all optional.
+    """
+    me = await current_dev(authorization)
+    db = require_db()
+    user_id = me["user_id"]
+    existing = await db.dev_users.find_one(
+        {"user_id": user_id}, {"_id": 0, "ad_attribution": 1},
+    )
+    if existing and existing.get("ad_attribution"):
+        return {"ok": False, "reason": "already attributed"}
+    fields = ["gclid", "fbclid", "utm_source", "utm_medium", "utm_campaign", "landing_path"]
+    attribution = {
+        k: str((payload or {}).get(k))[:200]
+        for k in fields if (payload or {}).get(k)
+    }
+    # Require at least one real ad-signal field — `landing_path` alone
+    # (no gclid/fbclid/utm_*) would tag an organic visit as "ad
+    # (unknown source)" downstream in _ad_source_label(). The frontend
+    # already only calls this when a real signal was captured, but the
+    # endpoint itself must not trust that.
+    if not any(attribution.get(k) for k in ("gclid", "fbclid", "utm_source", "utm_medium", "utm_campaign")):
+        return {"ok": False, "reason": "no ad-signal field in payload"}
+    attribution["captured_at"] = datetime.now(timezone.utc).isoformat()
+    await db.dev_users.update_one(
+        {"user_id": user_id}, {"$set": {"ad_attribution": attribution}},
+    )
+    return {"ok": True, "ad_attribution": attribution}
+
+
 # ─── Referrals ───────────────────────────────────────────────────────
 @router.get("/referrals/my")
 async def my_referrals(authorization: str = Header(None)) -> dict[str, Any]:
