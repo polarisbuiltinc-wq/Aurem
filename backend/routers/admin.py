@@ -459,6 +459,29 @@ async def _compute_activation_funnel() -> dict:
             if uid:
                 github_uids.add(uid)
 
+    # 2026-08-20 — real-data bug: this step used to ONLY count the
+    # legacy OAuth identity link, missing both the GitHub App-install
+    # path (`github_installations`, no `dev_users.github` doc written)
+    # and the raw-PAT path (`/cto/projects/add` with `github_token`,
+    # which never touches `dev_users.github` either). That made
+    # "Added Project" (step 3) show MORE users than "Connected GitHub"
+    # (step 2) — a funnel step showing a higher count than the step
+    # before it, which is a contradiction (you can't add a project
+    # without some GitHub connection). Broadened to a true superset:
+    # OAuth link OR an active App installation OR having added a
+    # project at all (any of the 3 auth methods proves a connection
+    # happened, even if this step's original signal missed it).
+    try:
+        cursor = db.github_installations.find(
+            {"active": True}, {"_id": 0, "user_id": 1},
+        )
+        async for row in cursor:
+            uid = row.get("user_id")
+            if uid in real_ids:
+                github_uids.add(uid)
+    except Exception:
+        pass
+
     # Step 3 — added_project: at least one row in cto_projects.
     project_uids = set()
     cursor = db.cto_projects.find({}, {"_id": 0, "user_id": 1})
@@ -466,6 +489,7 @@ async def _compute_activation_funnel() -> dict:
         uid = p.get("user_id")
         if uid in real_ids:
             project_uids.add(uid)
+    github_uids |= project_uids   # see note above — added a project ⇒ connected github
 
     # Step 4 — sent_message: at least one chat session with ≥1 turn.
     session_uids = set()

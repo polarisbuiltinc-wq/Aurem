@@ -655,6 +655,41 @@ targeted tests pass, same 9 pre-existing baseline failures as before
 
 **Not yet deployed** — preview-only until founder redeploys.
 
+## Activation funnel step-2 undercounting fix (2026-08-20)
+
+Founder spotted a real data anomaly: "Added Project" (9) showed MORE
+completions than "Connected GitHub" (7) in the Activation Funnel card
+— a logical impossibility (a step showing more users than the step
+before it).
+
+**Root cause** (`routers/admin.py::_compute_activation_funnel`): step 2
+("Connected GitHub") only checked the legacy OAuth identity link
+(`dev_users.github.id/access_token/login`). It never counted the
+GitHub **App-install** path (`github_installations`, which never
+writes to `dev_users.github`) or the raw **PAT** path (`/cto/projects/add`
+with `github_token`, which also never touches that field). Both let a
+user add a project without ever tripping step 2's signal.
+
+**Fixed**: broadened step 2 to a true superset — OAuth link OR an
+active App installation OR having added a project via any method at
+all (logically, adding a project proves *some* GitHub connection
+happened, even if the original signal missed which kind).
+
+**Verified**: seeded a synthetic PAT-only user (project exists, zero
+`dev_users.github`, zero `github_installations`) — confirmed this
+reproduces the exact ordering violation on the pre-fix logic and is
+resolved after the fix (`connected_github >= added_project` holds).
+Cleaned up test data.
+
+**Also confirmed the deploy the founder ran was stale** — production
+`build_hash` matched an earlier commit than the one containing the
+funnel-nudge-cron system + admin card, which is why `onboarding_nudge`
+was still showing in `supervised_tasks.alive` instead of
+`funnel_stage_nudge`, and why the new admin card wasn't visible.
+Founder redeploying to pick up the newer commit.
+
+**Not yet deployed** — preview-only until founder redeploys.
+
 ## Engineering-Discipline Audit — 12 categories, all checkpoints complete (2026-08-20)
 
 Founder-requested honest status check across Software Engineering,
