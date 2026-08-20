@@ -3,6 +3,21 @@
 **Live URL**: https://auremcto.com
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
+## ⚠️ Ongoing Maintenance / Time-Bomb Items
+- **GitHub Actions PAT expires Sep 18, 2026** — fine-grained tokens can't
+  auto-renew. Founder must generate a new token and update
+  `GITHUB_ACTIONS_TOKEN` in `backend/.env` before this date, or CI/CD +
+  the G8 CI-drift guard will stop working. **Confirmed this session: G8
+  does NOT detect or alert on an expired/invalid token** — `github_sync.py`'s
+  `_sync_alert()` has no handling for `status: "error"` (which is exactly
+  what an expired token produces), so it fails completely silently — no
+  banner, no email, just a buried `logger.warning` line. Nobody will know
+  it broke unless they check the QA panel manually. Fix proposed, not yet
+  built (see chat 2026-08-20) — add an `_sync_alert` branch for
+  `status == "error"` so an expired/invalid token raises the same
+  topup_alerts banner + founder email as any other integration failure.
+
+
 
 ## Engineering-Discipline Audit — 12 categories, all checkpoints complete (2026-08-20)
 
