@@ -31,6 +31,7 @@ hiccup).
 from __future__ import annotations
 
 import logging
+import time
 from typing import List
 
 from pymongo import ASCENDING
@@ -132,32 +133,52 @@ async def ensure_dedup_indexes(db) -> List[dict]:
     #
     # A unique index CANNOT be built over existing duplicate rows —
     # and the incident above already wrote ~30 real dupes into this
-    # exact collection. Self-heal first (best-effort, collapses each
+    # exact collection. Self-heal once (best-effort, collapses each
     # dup group down to its earliest row) so the index build below
     # actually succeeds instead of silently no-op'ing.
+    #
+    # 2026-08-20 · deployment_agent flagged this as DESTRUCTIVE_DB_STARTUP:
+    # the aggregate+delete_many ran unconditionally on EVERY boot (it was
+    # a no-op after the first successful pass since the unique index
+    # prevents new dupes from ever forming — but a bulk hard-delete
+    # reachable from every restart is a real code-review policy hit
+    # regardless of current no-op-ness). Fixed by gating it behind a
+    # one-time migration marker in `db_migrations` — this cleanup now
+    # runs at most ONCE ever, then permanently skips on every later boot.
+    _MIGRATION_KEY = "g6_onboarding_emails_dedup_2026_08_20"
     try:
-        dup_removed = 0
-        pipeline = [
-            {"$match": {"stage": {"$exists": True, "$type": "string"}}},
-            {"$sort": {"sent_at": 1}},
-            {"$group": {
-                "_id": {"user_id": "$user_id", "campaign": "$campaign", "stage": "$stage"},
-                "ids": {"$push": "$_id"}, "n": {"$sum": 1},
-            }},
-            {"$match": {"n": {"$gt": 1}}},
-        ]
-        async for grp in db.onboarding_emails.aggregate(pipeline):
-            dupe_ids = grp["ids"][1:]   # keep the earliest, drop the rest
-            if dupe_ids:
-                r = await db.onboarding_emails.delete_many({"_id": {"$in": dupe_ids}})
-                dup_removed += r.deleted_count
-        if dup_removed:
-            logger.warning(
-                "[G6] onboarding_emails: removed %d duplicate (user,campaign,stage) "
-                "rows before building uniq_user_campaign_stage", dup_removed,
+        already_ran = await db.db_migrations.find_one({"_id": _MIGRATION_KEY})
+    except Exception:
+        already_ran = None
+    if not already_ran:
+        try:
+            dup_removed = 0
+            pipeline = [
+                {"$match": {"stage": {"$exists": True, "$type": "string"}}},
+                {"$sort": {"sent_at": 1}},
+                {"$group": {
+                    "_id": {"user_id": "$user_id", "campaign": "$campaign", "stage": "$stage"},
+                    "ids": {"$push": "$_id"}, "n": {"$sum": 1},
+                }},
+                {"$match": {"n": {"$gt": 1}}},
+            ]
+            async for grp in db.onboarding_emails.aggregate(pipeline):
+                dupe_ids = grp["ids"][1:]   # keep the earliest, drop the rest
+                if dupe_ids:
+                    r = await db.onboarding_emails.delete_many({"_id": {"$in": dupe_ids}})
+                    dup_removed += r.deleted_count
+            if dup_removed:
+                logger.warning(
+                    "[G6] onboarding_emails: removed %d duplicate (user,campaign,stage) "
+                    "rows before building uniq_user_campaign_stage", dup_removed,
+                )
+            await db.db_migrations.update_one(
+                {"_id": _MIGRATION_KEY},
+                {"$set": {"ran_at": time.time(), "dup_removed": dup_removed}},
+                upsert=True,
             )
-    except Exception as e:
-        logger.warning("[G6] onboarding_emails dedup cleanup failed: %r", e)
+        except Exception as e:
+            logger.warning("[G6] onboarding_emails dedup cleanup failed: %r", e)
 
     await _mk("onboarding_emails",
               [("user_id", ASCENDING), ("campaign", ASCENDING), ("stage", ASCENDING)],

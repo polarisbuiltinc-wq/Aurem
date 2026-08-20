@@ -2718,7 +2718,38 @@ invariant (61==61) before handoff.
 
 ---
 
-### Iter 389 — Meta Pixel conversion events (2026-02-15)
+### Deploy fix: one-time-only dedup cleanup (2026-08-20)
+
+Founder pasted a boot log (thought it was a deploy failure — it was
+actually a healthy boot; app was already live, real traffic 200s
+everywhere). Ran `deployment_agent` per founder's request anyway —
+found a real, separate issue: the `onboarding_emails` duplicate-
+cleanup in `services/db_indexes.py` (built earlier this session for
+the nudge-email race fix) ran its aggregate+`delete_many` on **every
+single boot**, not just once. Flagged as DESTRUCTIVE_DB_STARTUP policy
+violation — a no-op after the first successful pass, but any
+unconditional bulk-delete reachable from startup is a blocker
+regardless of current no-op-ness.
+
+**Fixed**: gated the cleanup behind a one-time migration marker doc
+(`db_migrations` collection, `_id: "g6_onboarding_emails_dedup_
+2026_08_20"`). Runs at most once ever now, then permanently skips.
+Verified live: 1st restart ran + wrote the marker (`dup_removed: 0` —
+already clean from the earlier run), 2nd restart skipped the cleanup
+step entirely while all 9 dedup indexes still built fine.
+
+Re-ran `deployment_agent` after the fix: **status WARN, no hard
+blockers** — clear to redeploy. Remaining flags are pre-existing/
+intentional (Supabase downgrade sweeper has its own 30-day-grace +
+verification safeguards; `CORS_ORIGINS` unused dead env var, no
+functional impact).
+
+**Not yet deployed** — this specific fix needs one more founder
+redeploy to go live.
+
+---
+
+## Iter 389 — Meta Pixel conversion events (2026-02-15)
 
 Meta Pixel was loading `PageView` only (Iter 388-ag). This iter adds
 3 standard-event helpers in `frontend/src/lib/analytics.js` wired to
