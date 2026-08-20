@@ -203,6 +203,15 @@ function DashboardV2Body() {
     return () => window.removeEventListener("aurem:ora-open", onOraOpen);
   }, []);
 
+  // 2026-08-20 — Live Site Reminder. ChatPanel fires this once per
+  // project right after its first successful ship if there's no
+  // preview_url yet, so the user doesn't hit an empty Preview tab.
+  useEffect(() => {
+    const onSuggest = () => setShowLiveSiteModal(true);
+    window.addEventListener("aurem:suggest-live-site", onSuggest);
+    return () => window.removeEventListener("aurem:suggest-live-site", onSuggest);
+  }, []);
+
   // Iter 212m-124 — Left-edge reveal trigger.  Per founder spec:
   // once the sidebar fully hides (chatActive=true), the ONLY way to
   // bring it back without explicit pinning is to move the cursor

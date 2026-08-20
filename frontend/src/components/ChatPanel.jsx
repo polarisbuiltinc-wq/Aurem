@@ -5174,14 +5174,31 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           // bubble by `shipped_task_id` so only the correct turn shows
           // the inline diff (later turns stay untouched).
           const files = task?.edited_files?.files;
-          if (!Array.isArray(files) || files.length === 0) return;
-          const tid = task?.task_id;
-          if (!tid) return;
-          setMessages((msgs) => msgs.map((m) =>
-            (m.role === "assistant" && m.shipped_task_id === tid)
-              ? { ...m, edited_files: files }
-              : m
-          ));
+          if (Array.isArray(files) && files.length > 0) {
+            const tid = task?.task_id;
+            if (tid) {
+              setMessages((msgs) => msgs.map((m) =>
+                (m.role === "assistant" && m.shipped_task_id === tid)
+                  ? { ...m, edited_files: files }
+                  : m
+              ));
+            }
+          }
+          // 2026-08-20 — Live Site Reminder. First-ever successful
+          // ship on a project with no `preview_url` set means the
+          // user's next Preview click hits an empty state. Nudge once
+          // per project, right when the win is freshest.
+          try {
+            const pid = activeProject?.project_id;
+            const nudgeKey = pid && `aurem_live_site_nudged_${pid}`;
+            if (pid && nudgeKey && !activeProject?.preview_url
+                && !localStorage.getItem(nudgeKey)) {
+              localStorage.setItem(nudgeKey, "1");
+              window.dispatchEvent(new CustomEvent("aurem:suggest-live-site", {
+                detail: { project_id: pid },
+              }));
+            }
+          } catch { /* never let a nudge crash the ship flow */ }
         }}
       />
       {/* Iter 165 — Codebase Graph drawer (right side). */}

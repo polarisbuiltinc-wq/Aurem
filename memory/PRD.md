@@ -3052,3 +3052,34 @@ invoked for this round.
 
 **Not yet deployed** — add to the redeploy checklist above (item 9).
 
+---
+
+## Cold-start recheck + Live Site Reminder (2026-08-20)
+
+**Cold-start/council-recall recheck — could NOT reproduce, flagged
+not guess-fixed.** Tested both extremes directly: (1) a brand-new
+account with 0 `ora_council_logs` rows — recall never activates at
+all (`_candidate_indices` returns empty below `_MIN_BUCKET=20`, code-
+confirmed), so this mechanism physically cannot cause a mismatch for
+a fresh user; (2) the founder's own account (575 rows, well above
+threshold) — sent "2+2=?" fresh, got the correct "4" with a clean
+5-adviser council verdict, no recall banner, no mismatch. The
+`_MIN_SCORE=0.25` + cross-user-fallback-removal fix from earlier today
+is confirmed still active in the current code and did not misfire in
+either test. If the founder's QA account still reproduces this, it
+needs exact repro details (which account, which project, exact prior
+message history) for a next pass — not assumed-covered.
+
+**Live Site Reminder — DONE.** `ChatPanel.jsx`'s `LiveTaskPopup
+onDone` (fires once per task, only on real `status === "done"`
+success) now also checks: does `activeProject` have no `preview_url`
+AND has this project not been nudged before (`localStorage`
+`aurem_live_site_nudged_{project_id}`)? If so, dispatches
+`aurem:suggest-live-site`, which `Dashboard.jsx` listens for and opens
+the (now-fixed) `AddLiveSiteModal` — same modal as the Preview-tab
+fix above, reused. Fires once per project, right after the first
+successful ship, before the user ever hits the empty Preview state.
+Screenshot-verified: firing the event opens the modal correctly.
+
+**Not yet deployed** — add to the redeploy checklist (item 10).
+
