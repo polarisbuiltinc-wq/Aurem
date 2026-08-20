@@ -1,0 +1,73 @@
+{
+  "summary": "Iter 371 — Frontend-only verification of NewUserWizard.jsx state-machine fix (OAuth-linked-but-no-App user was previously landing on PAT-required screen; now lands on 'choosing' with App CTA primary + PAT hidden). Signed up a real test user (TEST_wiz_...@aurem.dev) and covered ALL 3 scenarios via direct Mongo injection between browser runs. ALL 3 SCENARIOS PASSED with zero console errors (one benign 499 client-abort from initial route-change on scenario 2). Cleaned up test user + installations row after run.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "NewUserWizard scenario 3 (App already installed)", "issues": ["Minor: the '▸ Or paste a Personal Access Token instead' disclosure toggle is still rendered above the repo URL/branch inputs even when the user is on the App-picker path (ghStatus === 'choosing' && appPickerActive). Founder spec only required it in the OAuth-only-no-App state; showing it here is harmless but slightly noisy. Consider gating it with `&& !appPickerActive`. Non-blocking."]}
+    ]
+  },
+  "scenarios_covered": {
+    "S1_no_oauth_no_app": {
+      "result": "PASS",
+      "evidence": "/app/test_reports/iter371_wizard/s1_no_oauth_no_app.jpeg",
+      "assertions": [
+        "wizard-app-cta-block visible",
+        "wizard-app-install-btn (Continue with GitHub App) visible as primary",
+        "wizard-pat-disclosure-toggle ('▸ Or paste a Personal Access Token instead') visible",
+        "wizard-pat-input HIDDEN by default",
+        "wizard-gh-connected badge HIDDEN (no OAuth link) ✓",
+        "wizard-repo-input HIDDEN by default (choosing state hides URL/branch/PAT block)",
+        "After clicking PAT disclosure toggle: pat-input + repo-input become visible (fallback path works)"
+      ]
+    },
+    "S2_oauth_only_no_app_THE_BUG_FIX": {
+      "result": "PASS — bug fix confirmed",
+      "evidence": "/app/test_reports/iter371_wizard/s2_oauth_only.jpeg",
+      "setup": "Injected dev_users.github = {login: 'pattest_legacy_oauth_user', connected_at, access_token} directly in Mongo; zero github_installations rows.",
+      "assertions": [
+        "wizard-app-cta-block visible (previously would have been HIDDEN by the old logic)",
+        "wizard-app-install-btn 'Continue with GitHub App' is the primary CTA ✓",
+        "wizard-pat-disclosure-toggle visible below CTA ✓",
+        "wizard-pat-input HIDDEN by default ✓ (was previously the primary REQUIRED field — the founder-reported bug)",
+        "wizard-gh-connected green badge visible with exact text 'Connected as pattest_legacy_oauth_user' ✓ (reassurance badge for OAuth-linked users)"
+      ]
+    },
+    "S3_app_installed": {
+      "result": "PASS — no regression",
+      "evidence": "/app/test_reports/iter371_wizard/s3_app_installed.jpeg",
+      "setup": "Kept the OAuth doc from S2 and added a github_installations row with 2 repos (demo-repo public + secret-repo private).",
+      "assertions": [
+        "wizard-app-repo-picker visible immediately (no CTA click needed)",
+        "wizard-app-install-btn HIDDEN (already installed) ✓",
+        "Both repo chips rendered: demo-repo + secret-repo (with 'private' badge)",
+        "Clicking a chip fills repoUrl + branch and reveals wizard-app-repo-selected-cta green banner ✓",
+        "wizard-pat-input HIDDEN — PAT sub-block correctly gated behind !appPickerActive"
+      ]
+    }
+  },
+  "test_report_links": [
+    "/app/test_reports/iter371_wizard/setup.py",
+    "/app/test_reports/iter371_wizard/s1_no_oauth_no_app.jpeg",
+    "/app/test_reports/iter371_wizard/s2_oauth_only.jpeg",
+    "/app/test_reports/iter371_wizard/s3_app_installed.jpeg"
+  ],
+  "action_items": [
+    "OPTIONAL / low priority: consider hiding the '▸ Or paste a Personal Access Token instead' disclosure link when appPickerActive === true (S3). Currently it still appears above the URL/branch inputs — harmless but slightly redundant since the user is already on the App path."
+  ],
+  "critical_code_review_comments": [
+    "NewUserWizard.jsx line 99-129: the Promise.allSettled + install-first-then-oauth ordering is the correct fix — installs.length is the only signal that reliably means 'App can access repos', and the code now uses that as the sole gate for skipping the CTA. Legacy OAuth link only drives the reassurance badge and the PAT-fallback repo dropdown. Good.",
+    "NewUserWizard.jsx line 733: 'ghStatus === choosing && !patDisclosureOpen' — the disclosure link renders in both no-oauth-no-app AND app-installed states because both use ghStatus='choosing'. Consider also gating on !appPickerActive so the S3 UI stays clean (see design_issues above).",
+    "NewUserWizard.jsx line 749: connected-badge condition '(ghStatus==\"connected\" || (ghStatus==\"choosing\" && ghLogin && !appPickerActive))' is correct and delivers exactly the founder-requested behavior — verified in both S1 (no badge) and S2 (badge with correct login).",
+    "File length is now ~1082 lines — approaching the 700-line split threshold in the code-review guidelines. Consider splitting the step-1 GitHub-connect UI into a separate WizardStepConnect component in a future refactor."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only per request)", "frontend": "100% (3/3 scenarios)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview, unused this iter). Ephemeral signup: TEST_wiz_1787257078_81f95e@aurem.dev — DELETED at end of run.",
+  "seed_data_creation": "One dev_users row + one github_installations row (both prefixed/tagged with the test user_id) — both DELETED at end of run. Post-cleanup counts confirmed via pymongo delete_many/delete_one.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "To repro this test: (1) POST /api/aurem-dev/auth/signup with honeypot='' + form_age_ms>=3000 → get token; (2) direct Mongo write to dev_users.github = {login, connected_at, access_token: 'anything'} — access_token gate is what /oauth/status checks (found this the hard way: setting only 'connected_at' returned connected=false); (3) direct Mongo insert to github_installations with active=true; (4) log in via /login → /dashboard → wizard opens automatically (isWizardDismissed()===false && projects.length===0). data-testids in NewUserWizard.jsx: wizard-app-cta-block, wizard-app-install-btn, wizard-app-repo-picker, wizard-app-repo-<full_name>, wizard-app-repo-selected-cta, wizard-pat-disclosure-toggle, wizard-pat-input, wizard-gh-connected.",
+  "rca_of_the_issue": "Confirmed by test: pre-fix, /github/oauth/status returned connected=true for OAuth-linked users, which set ghStatus='connected' — that state renders the URL/branch/PAT block WITHOUT the App CTA (line 749 old condition), and made the PAT input a REQUIRED field. Post-fix, ghStatus is derived ONLY from /github/app/installations length: >0 → picker, ==0 → 'choosing' (App CTA primary + PAT hidden behind disclosure). OAuth link status is now used solely to (a) populate ghLogin for the reassurance badge and (b) prefetch repos for the PAT-fallback dropdown. Verified end-to-end for the exact bug scenario (dev_users.github set, github_installations empty) — wizard now correctly shows 'Install Aurem for your repos [RECOMMENDED]' + 'Continue with GitHub App' as the sole primary CTA + green 'Connected as pattest_legacy_oauth_user' badge below the disclosure link."
+}

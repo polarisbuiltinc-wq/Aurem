@@ -2846,6 +2846,33 @@ Re-verified real sandbox call still works after the change.
 
 ---
 
+## Critical fix: PAT was primary path for OAuth-only users (2026-08-20)
+
+Founder found (with prod screenshots) that "Add Project" showed a
+REQUIRED PAT field instead of "Continue with GitHub App" for some
+users. Root cause: `NewUserWizard.jsx` decided its UI state from
+`/github/oauth/status` alone — any user with a legacy OAuth GitHub
+link (common, since "Continue with GitHub" is an auth option) but no
+App installation got dumped straight into a PAT-required repo picker,
+never seeing the App CTA. Not an App-config/org issue — pure frontend
+state-machine bug, likely hit a large share of users.
+
+**Fixed**: wizard now checks `/github/app/installations` FIRST (the
+only reliable "can this user access repos" signal). 0 installs → App
+CTA always primary, PAT collapsed behind a disclosure link. OAuth
+link now only drives a reassurance "Connected as X" badge + the PAT-
+fallback repo dropdown convenience.
+
+**Verified**: `testing_agent` iter 371 — 3/3 scenarios PASS (no-oauth/
+no-app, oauth-only/no-app [the exact bug], app-installed), zero
+console errors, real Mongo-injection repro + screenshots for each.
+Applied 1 cosmetic follow-up (hide PAT disclosure link once App
+picker is active).
+
+**Not yet deployed** — preview-only, needs redeploy.
+
+---
+
 ## Iter 389 — Meta Pixel conversion events (2026-02-15)
 
 Meta Pixel was loading `PageView` only (Iter 388-ag). This iter adds

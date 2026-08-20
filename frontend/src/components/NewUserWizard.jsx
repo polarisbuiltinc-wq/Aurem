@@ -85,19 +85,42 @@ export default function NewUserWizard({ onComplete }) {
     let cancelled = false;
     (async () => {
       try {
-        const r = await api.get("/github/oauth/status");
+        // 2026-08-20 — CRITICAL FIX: previously this checked ONLY legacy
+        // GitHub OAuth link status. A user who signed up/logged in via
+        // "Continue with GitHub" (OAuth identity link) but never
+        // installed the Aurem GitHub App was landing straight on
+        // ghStatus="connected" — which skips the "choosing" step
+        // entirely and shows ONLY the repo dropdown + a REQUIRED PAT
+        // field, with the recommended "Continue with GitHub App" CTA
+        // never surfaced at all. Root cause: OAuth-linked ≠ App-
+        // installed, but the old logic treated them as equivalent.
+        // Fix: always check for an active App installation FIRST. Only
+        // skip straight past the App CTA if one already exists.
+        const [oauthRes, installsRes] = await Promise.allSettled([
+          api.get("/github/oauth/status"),
+          api.get("/github/app/installations"),
+        ]);
         if (cancelled) return;
-        if (r.data?.connected) {
-          setGhStatus("connected");
-          setGhLogin(r.data.login || "");
-          fetchRepos();
+
+        const oauthConnected = oauthRes.status === "fulfilled" && oauthRes.value.data?.connected;
+        if (oauthConnected) {
+          setGhLogin(oauthRes.value.data.login || "");
+          fetchRepos();  // convenience dropdown for the PAT-disclosure fallback
+        }
+
+        const installs = (installsRes.status === "fulfilled" && installsRes.value.data?.installations) || [];
+        if (installs.length > 0) {
+          // Already has the App installed — go straight to its repo
+          // picker, no CTA needed.
+          setAppInstalls(installs);
+          setAppPickerActive(true);
+          setGhStatus("choosing");
         } else {
-          // 2026-02-10 · Phase 4 — landing state for disconnected users
-          // is now "choosing" (App-first CTA + PAT disclosure), not
-          // straight into the manual PAT form. Preserves the wizard
-          // step order/position but adds the recommended path above
-          // the legacy PAT input. Set to "manual" only when the user
-          // explicitly clicks "Or paste a Personal Access Token".
+          // No App installed yet (whether or not legacy OAuth is
+          // linked) — land on "choosing" so the App-install CTA is
+          // always the first thing a user without an App sees. PAT
+          // stays available only via the "Or paste a Personal Access
+          // Token instead" disclosure.
           setGhStatus("choosing");
         }
       } catch {
@@ -707,7 +730,7 @@ export default function NewUserWizard({ onComplete }) {
                   )}
 
                   {/* ── PAT disclosure — kept forever, hidden by default ── */}
-                  {ghStatus === "choosing" && !patDisclosureOpen && (
+                  {ghStatus === "choosing" && !patDisclosureOpen && !appPickerActive && (
                     <button
                       data-testid="wizard-pat-disclosure-toggle"
                       type="button"
@@ -723,7 +746,7 @@ export default function NewUserWizard({ onComplete }) {
                     </button>
                   )}
 
-                  {ghStatus === "connected" && (
+                  {(ghStatus === "connected" || (ghStatus === "choosing" && ghLogin && !appPickerActive)) && (
                     <div data-testid="wizard-gh-connected" style={{
                       display:"flex", alignItems:"center", gap:8,
                       padding:"6px 10px", marginBottom:12,
@@ -734,6 +757,9 @@ export default function NewUserWizard({ onComplete }) {
                     }}>
                       <Github size={11} />
                       Connected as <strong>{ghLogin || "github user"}</strong>
+                      {/* 2026-08-20 — reassures OAuth-linked-but-no-App
+                          users that GitHub identity IS already linked;
+                          the App CTA below is just for repo access. */}
                     </div>
                   )}
                   {/* 2026-02-10 · Phase 4 — hide repo URL / branch / PAT
