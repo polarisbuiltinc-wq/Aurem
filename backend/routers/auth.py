@@ -722,6 +722,21 @@ async def get_tokens(authorization: Optional[str] = Header(None)) -> dict:
     return {"ok": True, "tokens_remaining": int((u or {}).get("tokens_remaining", 0))}
 
 
+@router.get("/me/funnel-stage")
+async def my_funnel_stage(authorization: Optional[str] = Header(None)) -> dict:
+    """2026-08-20 — powers the in-app "ORA Guide" mascot. Same stage
+    waterfall as the email nudge cron (services/funnel_nudge_cron.py)
+    but live, single-user, and with NO 24h stuck-gate — the mascot
+    should react the instant a user lands on a stage, not a day later."""
+    payload = await current_dev(authorization)
+    db = get_db()
+    if db is None:
+        return {"ok": True, "stage": None}
+    from services.funnel_nudge_cron import current_stage_for_user
+    stage = await current_stage_for_user(db, payload["user_id"])
+    return {"ok": True, "stage": stage}
+
+
 
 # ── Iter 212m-235 — Track selection (Personal Track vs Developer Track).
 # Users pick their track at signup and CAN switch later via Settings.

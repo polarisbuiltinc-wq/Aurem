@@ -51,7 +51,7 @@ PUBLIC_TICKET_RATE_PER_IP_MIN = 5
 # insert (as "unknown") — never a 400 that would surface to a user
 # who's already frustrated enough to open a ticket.
 _KNOWN_SOURCES = {
-    "in_app", "in_app_dashboard", "in_app_empty_state",
+    "in_app", "in_app_dashboard", "in_app_empty_state", "in_app_guide",
     "email_stage_0", "email_stage_3", "email_stage_7",
     "email_other", "landing", "unknown",
 }

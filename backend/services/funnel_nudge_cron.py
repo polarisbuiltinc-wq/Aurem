@@ -257,6 +257,58 @@ async def _finalize_send(db, doc_id, sent_ok: bool, error: Optional[str]) -> Non
         logger.warning("funnel_nudge finalize_send failed: %r", e)
 
 
+async def current_stage_for_user(db, user_id: str) -> Optional[str]:
+    """2026-08-20 — single-user, NO 24h gate variant of the classifier
+    above, for the live in-app "ORA Guide" mascot (services/
+    funnel_nudge_cron.py owns the stage waterfall; this just runs it
+    for one user on demand instead of the daily email-nudge batch,
+    and returns the stage the instant a user reaches it — not 24h
+    later). Returns None once fully progressed (has sent a chat) or
+    not yet in any trackable stage.
+    """
+    u = await db.dev_users.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "user_id": 1, "first_chat_at": 1, "github": 1,
+         "is_admin": 1, "is_unlimited": 1, "tier": 1},
+    )
+    if not u or u.get("first_chat_at"):
+        return None
+    if u.get("is_admin") or u.get("is_unlimited") or u.get("tier") == "founder":
+        return None
+
+    has_project = await db.cto_projects.find_one(
+        {"user_id": user_id}, {"_id": 1},
+    ) is not None
+    if has_project:
+        return "stage3_no_chat"
+
+    has_github = bool((u.get("github") or {}).get("login"))
+    if not has_github:
+        try:
+            has_github = await db.github_installations.find_one(
+                {"user_id": user_id, "active": True}, {"_id": 1},
+            ) is not None
+        except Exception:
+            pass
+    if has_github:
+        return "stage2_project_pending"
+
+    has_started = await db.funnel_events.find_one(
+        {"user_id": user_id, "event_type": {"$ne": "signup_completed"}}, {"_id": 1},
+    ) is not None
+    if not has_started:
+        try:
+            has_started = await db.github_funnel_events.find_one(
+                {"user_id": user_id}, {"_id": 1},
+            ) is not None
+        except Exception:
+            pass
+    if has_started:
+        return "stage1_github_started"
+
+    return "stage4_fully_inactive"
+
+
 async def classify_users(db) -> dict[str, list[dict]]:
     """Bucket every non-internal signed-up user into their current
     stage (or None if fully progressed / too new). Batched — no N+1."""

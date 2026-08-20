@@ -752,6 +752,65 @@ data-integrity issue).
 
 **Not yet deployed** — preview-only until founder redeploys.
 
+## ORA Guide system — fixed mascot + stage-aware onboarding (2026-08-20)
+
+Built a fixed bottom-right mascot that replaces the old "Need help?"
+floating button (`GlobalHelpFAB`), guiding users through onboarding
+via a stationary avatar + spotlight highlights (never moves toward
+UI elements) — reusing the funnel-stage classifier already built for
+the email nudge system.
+
+**Built** (5 components, all in preview, no new dependencies):
+1. **Fixed mascot** (`OraGuideMascot.jsx`) — 38px avatar, bottom-right,
+   idle float+blink CSS animation, replaces `GlobalHelpFAB` in `App.jsx`
+   (single floating element, not two). Reuses `GlobalHelpFAB`'s
+   exported `shouldHide()`/`HIDE_PREFIXES` so both agree on where help
+   makes sense.
+2. **Stage-aware auto-open** — new live endpoint `GET /auth/me/funnel-stage`
+   (`current_stage_for_user()` in `funnel_nudge_cron.py`, same
+   waterfall as the email cron but single-user, no 24h gate). Mascot
+   polls every 15s, auto-opens once per stage-group per **session**
+   (sessionStorage, deliberately NOT the email system's permanent
+   Mongo dedup — different semantics), and auto-closes if the user
+   progresses past the stage before dismissing.
+3. **Spotlight highlight** (`hooks/useGuideSpotlight.jsx`) — pulsing
+   orange glow on whichever element carries `data-guide-target="..."`,
+   added to the Connect-GitHub and Continue/Save buttons in both
+   `NewUserWizard.jsx` and `AddProjectWizard.jsx`.
+4. **First-message chips** (`FirstMessageChips.jsx`) — 3 example
+   prompts ("Fix a bug" / "Add a feature" / "Explain this codebase")
+   above the composer, shown only pre-first-message
+   (`messages.length <= 1`, using real persisted history as the
+   single source of truth — no redundant localStorage flag needed).
+   Click pre-fills the input, never auto-sends.
+5. **Escape hatch** — "Something's wrong" inside any bubble state
+   files a real ticket via the existing `POST /support/tickets`
+   (`source="in_app_guide"` added to the known-sources allow-list),
+   auto-tagged with stage/page/timestamp, confirmation toast, auto-close.
+
+**Merge-vs-separate decision** (founder-approved): kept separate from
+the Advisor panel — general "How can I help?" state has an "Open
+Advisor" bridge that dispatches the existing `aurem:ora-open` event,
+zero risk, no merge (Advisor is desktop-only and lives in the top bar
+now, moved there specifically to avoid composer overlap — merging
+would reintroduce that risk or break mobile help).
+
+**Verified**: manually screenshot-tested all 4 stage messages +
+correct spotlight targets, the escape-hatch ticket end-to-end (real
+Mongo doc confirmed with correct tags), 150%-DPI CDP emulation showing
+zero UI overlap (flagged as an approximation — real 150% OS scaling
+not fully replicable by this tool, same caveat as the earlier Advisor
+DPI issue; founder to confirm on real laptop if anything looks off).
+`testing_agent` ran a full E2E pass separately: **12/12 scenarios
+pass, zero bugs found** (`/app/test_reports/iteration_367.json`).
+Applied 2 of 5 minor code-review suggestions (interval-cleanup safety,
+escalation-timeout mode guard); the other 3 were cosmetic/edge-case
+notes, not required fixes. 200 backend tests pass, 7 pre-existing
+baseline failures confirmed unrelated via git-stash diff. Test data
+cleaned up.
+
+**Not yet deployed** — preview-only until founder redeploys.
+
 ## Engineering-Discipline Audit — 12 categories, all checkpoints complete (2026-08-20)
 
 Founder-requested honest status check across Software Engineering,

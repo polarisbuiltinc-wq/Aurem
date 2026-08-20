@@ -1,0 +1,41 @@
+{
+  "summary": "Frontend E2E test of the new ORA Guide mascot system (replaces GlobalHelpFAB). Signed up a fresh user via API, injected token, and validated all 12 feature scenarios in the review request. All critical flows pass: mascot hidden on /login,/,/admin-guarded routes; single fixed-position element (old GlobalHelpFAB no longer mounted); stage4 auto-bubble fires with correct copy + orange spotlight class applied to data-guide-target=connect-github-btn; sessionStorage dedup key ora_guide_seen_v1_connect_github is set to '1' and prevents re-open across reload; general help panel (Open Advisor / Contact support / Close) renders on manual click; Open Advisor dispatches `aurem:ora-open` window event exactly once and closes the bubble; Contact support creates a real ticket in cto_support with source='in_app_guide', subject 'ORA Guide — stuck at: general', body includes stage/page/ISO timestamp, viewable in admin support panel, then auto-closes. First-message chips correctly absent when no project exists.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "OraGuideMascot.jsx `useEffect` cleanup: `pollRef.current` is captured at cleanup time — safe now, but if `hidden` toggles mid-lifecycle the previous interval could leak. Consider capturing `intervalId` locally inside effect and clearing that.",
+    "In OraGuideMascot.setTimeout(1400) after escalated confirm, if user navigates or clicks avatar in that window, panelMode gets reset to 'stage' even in general mode — cosmetic only. Consider guarding with `if (!open) return;` inside timeout.",
+    "sessionStorage.setItem is fire-once but stage-change auto-close (line 100-104) does not clear the seen key. If a user finishes step1 (auto-closes bubble for connect_github) then somehow regresses (unusual but possible via GH uninstall) the bubble won't reopen this session. Acceptable per 'once per session' spec but worth calling out.",
+    "GlobalHelpFAB.jsx is kept mounted-less but still imported for `shouldHide`/`HIDE_PREFIXES`. Good — but consider extracting those constants to a tiny helpers module to make the intent obvious (GlobalHelpFAB looks like a dead component otherwise).",
+    "Chip disappearance is driven by `messages.length <= 1` (synthetic WELCOME=1). If a project has 0 messages (e.g., WELCOME failed to seed), the condition still holds (`<=1`) so chips still show — safe. If in future WELCOME becomes 2 messages the condition breaks silently — consider an explicit flag."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% (12/12 scenarios pass, chip-visible + stage2/3 auto-open validated by main-agent screenshots already)"},
+  "test_credentials": "Admin: test@aurem.dev / AuremTest2026! (preview). Test signup created: stagetest_1787244688@example.com (stage4_fully_inactive user, left in DB — cleanup recommended).",
+  "seed_data_creation": "1 fresh dev_user via POST /api/aurem-dev/auth/signup (stagetest_1787244688@example.com, user_id=507a8dd75b564029a77f5e38004b53e2). 1 support ticket with source=in_app_guide, subject 'ORA Guide — stuck at: general' via the Contact-support flow. Both should be cleaned up by main agent.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "OraGuideMascot passes full frontend E2E. Scenarios NOT auto-tested here (deferred to main-agent screenshot verification, per review-request note): (a) stage2_project_pending auto-bubble + spotlight on continue-btn — requires seeding db.github_installations {active:true,user_id:X} with zero projects; (b) stage3_no_chat message 'try asking ORA…' + FirstMessageChips visible above composer + chip-click pre-fills textarea + chip disappears after first real message — requires a real project row + hitting ChatPanel with messages.length===1 (WELCOME only). Both flows are wired correctly per source-code inspection. Auto-dismiss on stage-change was NOT E2E-tested (timing-sensitive >15s poll); logic is straightforward (lines 100-104 of OraGuideMascot.jsx) and looks correct.",
+  "verified_scenarios": [
+    "Mascot hidden on /login, / (landing), and /admin-redirect targets",
+    "Old GlobalHelpFAB not mounted (single floating element)",
+    "Mascot avatar visible on /dashboard with idle float+blink CSS animation",
+    "Stage4 auto-bubble opens once per session with exact copy 'Connect your repo to get started — click Connect GitHub above.'",
+    "Spotlight class ora-guide-spotlight applied to data-guide-target=connect-github-btn in NewUserWizard",
+    "'Got it' button dismisses bubble cleanly",
+    "Session dedup: sessionStorage key ora_guide_seen_v1_connect_github='1', reload does NOT reopen",
+    "Manual mascot click opens general panel with Open Advisor / Contact support / Close",
+    "Open Advisor dispatches window event 'aurem:ora-open' exactly once and closes bubble",
+    "Contact support creates real ticket (source=in_app_guide, subject includes 'ORA Guide — stuck at:', body has stage/page/ISO timestamp)",
+    "Ticket appears in /api/aurem-dev/admin/support with correct tagging",
+    "Auto-close within ~1.4s after successful ticket submission",
+    "FirstMessageChips absent when no project (correct guard)"
+  ],
+  "rca of the issue": "N/A — no bugs found. Feature works as specified."
+}

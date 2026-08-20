@@ -21,6 +21,7 @@ import { toast, dismissToast } from "./Toast";
 import PreviewPanel from "./PreviewPanel";
 import ModeSelector from "./ModeSelector";
 import ThinkingHint from "./ThinkingHint";
+import FirstMessageChips from "./FirstMessageChips";
 import LiveTaskPopup from "./LiveTaskPopup";
 import WarmStatusBar from "./WarmStatusBar";
 import { useWarmStart } from "../hooks/useWarmStart";
@@ -4698,6 +4699,17 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
               @{activeProject.branch}
             </span>
           </div>
+        )}
+
+        {/* 2026-08-20 — ORA Guide: 3 example-prompt chips, shown only
+            before this project's first real message. Clicking one
+            pre-fills the composer — never auto-sends. `messages` is
+            hydrated from real persisted history on load (see the
+            `turns.map(...)` loader), so `length <= 1` (just WELCOME)
+            is already a reliable "never sent a real message" signal —
+            no extra localStorage flag needed. */}
+        {activeProject && activeProject.project_id !== "home" && messages.length <= 1 && (
+          <FirstMessageChips onPick={(prompt) => setInput(prompt)} />
         )}
 
         {/* Iter 147 — unified composer card: textarea + toolbar share

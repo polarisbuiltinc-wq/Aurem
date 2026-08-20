@@ -26,7 +26,7 @@ import FixProgressDrawer from "./components/FixProgressDrawer";
 import { FixJobProvider } from "./components/FixJobContext";
 import PersistentFixBar from "./components/PersistentFixBar";
 import CookieConsentBanner from "./components/CookieConsentBanner";
-import GlobalHelpFAB from "./components/GlobalHelpFAB";
+import OraGuideMascot from "./components/OraGuideMascot";
 import { PrivateRoute, AdminRoute } from "./components/PrivateRoute";
 
 // Eager — these three are the first surfaces every visitor sees and
@@ -318,7 +318,7 @@ export default function App() {
       <MetaPixelRouteTracker />
       <SessionExpiredListener />
       <Toaster />
-      <GlobalHelpFAB />
+      <OraGuideMascot />
       {/* Iter 212m-148 — Global FixJob provider owns the SSE so the
           job survives panel toggles, route changes, and backdrop
           clicks.  PersistentFixBar is the always-visible 44px chrome;

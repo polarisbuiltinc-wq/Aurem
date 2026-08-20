@@ -16,15 +16,19 @@ import { SupportButton } from "./SupportPopup";
 // Paths where the FAB stays hidden — marketing, auth, admin (admin has
 // its own inbox and doesn't need to file tickets to itself), and pages
 // that already have their own support surface.
-const HIDE_PREFIXES = [
+// 2026-08-20 — exported so `OraGuideMascot` (the new fixed-position
+// help entry point that replaces this FAB in App.jsx) can reuse the
+// exact same "where does help even make sense" rules without forking
+// the list.
+export const HIDE_PREFIXES = [
   "/login", "/signup", "/verify", "/support",
   "/demo", "/bug-hunt", "/why-ora", "/both",
   "/admin",
   "/dev/",
 ];
-const EXACT_HIDE = new Set(["/"]);
+export const EXACT_HIDE = new Set(["/"]);
 
-function shouldHide(pathname) {
+export function shouldHide(pathname) {
   if (EXACT_HIDE.has(pathname)) return true;
   return HIDE_PREFIXES.some((p) => pathname.startsWith(p));
 }

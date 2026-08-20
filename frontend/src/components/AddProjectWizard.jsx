@@ -479,6 +479,7 @@ export default function AddProjectWizard({ onClose, onAdded }) {
                 <button
                   type="button"
                   data-testid="add-wizard-app-install-btn"
+                  data-guide-target="connect-github-btn"
                   onClick={openAppInstallPopup}
                   style={{
                     display: "inline-flex", alignItems: "center", gap: 8,
@@ -758,6 +759,7 @@ export default function AddProjectWizard({ onClose, onAdded }) {
                 onClick={handleSave}
                 disabled={saving || !projectName.trim()}
                 data-testid="wizard-save"
+                data-guide-target="continue-btn"
                 style={cta(!saving && !!projectName.trim())}
               >
                 {saving ? <Loader2 size={14} className="animate-spin" /> : null}

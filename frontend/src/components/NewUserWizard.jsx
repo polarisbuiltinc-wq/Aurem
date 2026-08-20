@@ -531,6 +531,7 @@ export default function NewUserWizard({ onComplete }) {
                     <div data-testid="wizard-pulse-ring" style={oraPulseRingStyle} />
                     <button
                       data-testid="wizard-connect-github"
+                      data-guide-target="connect-github-btn"
                       type="button"
                       onClick={connectGithub}
                       style={githubBtnStyle}
@@ -595,6 +596,7 @@ export default function NewUserWizard({ onComplete }) {
                           </p>
                           <button
                             data-testid="wizard-app-install-btn"
+                            data-guide-target="connect-github-btn"
                             type="button"
                             onClick={openAppInstallPopup}
                             disabled={appInstallsBusy}
@@ -974,7 +976,7 @@ function Footer({ busy, primary, onPrimary, onSkip }) {
         Skip for now
       </button>
       <div style={{ flex:1 }} />
-      <button data-testid="wizard-next" type="button" onClick={onPrimary}
+      <button data-testid="wizard-next" data-guide-target="continue-btn" type="button" onClick={onPrimary}
               disabled={busy} style={primaryBtn}>
         {busy
           ? <><Loader2 size={12} style={{ animation:"spin 1s linear infinite" }} /> working…</>
