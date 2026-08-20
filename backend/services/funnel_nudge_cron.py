@@ -118,14 +118,28 @@ def dashboard_url() -> str:
     return f"{PUBLIC_BASE}/dashboard"
 
 
+def click_url(user_id: str, stage: str) -> str:
+    """Tracked CTA — reuses the existing click-logger/redirector at
+    `/onboarding/click` (routers/onboarding.py), extended with a
+    `stage` param so clicks attribute to the exact stage email sent,
+    not just the campaign. The endpoint itself decides the redirect
+    target based on `stage` (wizard vs plain dashboard)."""
+    from urllib.parse import quote
+    return (
+        f"{PUBLIC_BASE}/api/aurem-dev/onboarding/click"
+        f"?uid={quote(user_id)}&c={CAMPAIGN}&stage={quote(stage)}"
+    )
+
+
 def render_text(user: dict, stage: str) -> str:
     from services.first50_campaign import unsub_url
     first = _first_name(user)
     body = BODIES[stage]
+    cta = click_url(user.get("user_id", ""), stage)
     unsub = unsub_url(user.get("email", ""))
     return (
         f"Hey {first},\n\n{body}\n\n"
-        f"Open your dashboard → {dashboard_url()}\n\n"
+        f"Open your dashboard → {cta}\n\n"
         f"{SIGNOFF}\n\n"
         f"---\nDon't want these emails? Unsubscribe: {unsub}\n"
     )
@@ -135,6 +149,7 @@ def render_html(user: dict, stage: str) -> str:
     from services.first50_campaign import unsub_url
     first = _first_name(user)
     body = BODIES[stage].replace("\n\n", "<br><br>")
+    cta = click_url(user.get("user_id", ""), stage)
     unsub = unsub_url(user.get("email", ""))
     return f"""<!doctype html>
 <html><body style="margin:0;padding:0;background:#0b0b0b;color:#e8e8e8;
@@ -149,7 +164,7 @@ font-family:'Helvetica Neue',Arial,sans-serif;line-height:1.55;">
         <tr><td style="color:#e8e8e8;font-size:15px;">
           Hey {first},<br><br>
           {body}<br><br>
-          <a href="{dashboard_url()}"
+          <a href="{cta}"
              style="display:inline-block;padding:12px 22px;background:#ff6608;
                     color:#0b0b0b;text-decoration:none;font-weight:600;
                     border-radius:8px;font-size:14px;">
@@ -158,6 +173,7 @@ font-family:'Helvetica Neue',Arial,sans-serif;line-height:1.55;">
           <span style="color:#aaa;font-size:13px;">{SIGNOFF}</span>
         </td></tr>
       </table>
+ [43 lines shown. Remaining: lines 161-426 (266 lines). Use view_range parameter to continue.]
       <p style="color:#555;font-size:11px;margin-top:16px;">
         <a href="{unsub}" style="color:#555;">Unsubscribe</a> from these emails.
       </p>
@@ -389,24 +405,35 @@ async def run_nudge_batch(db, *, dry_run: bool = False) -> dict:
 
 async def stage_counts(db) -> dict:
     """Admin visibility — how many users are currently stuck at each
-    stage (regardless of whether they've already been nudged), plus
-    how many nudges have actually been sent per stage."""
+    stage (regardless of whether they've already been nudged), how
+    many nudges have actually been sent per stage, and how many of
+    those were clicked (real engagement, not just delivery)."""
     buckets = await classify_users(db)
     stuck = {s: len(users) for s, users in buckets.items()}
     sent: dict[str, int] = {s: 0 for s in STAGES}
+    clicked: dict[str, int] = {s: 0 for s in STAGES}
     total_sent = 0
+    total_clicked = 0
     try:
         pipeline = [
             {"$match": {"campaign": CAMPAIGN, "sent_ok": True}},
-            {"$group": {"_id": "$stage", "n": {"$sum": 1}}},
+            {"$group": {
+                "_id": "$stage", "n": {"$sum": 1},
+                "n_clicked": {"$sum": {"$cond": [
+                    {"$ifNull": ["$clicked_at", False]}, 1, 0,
+                ]}},
+            }},
         ]
         async for row in db.onboarding_emails.aggregate(pipeline):
             if row["_id"] in sent:
                 sent[row["_id"]] = int(row["n"])
+                clicked[row["_id"]] = int(row.get("n_clicked", 0))
                 total_sent += int(row["n"])
+                total_clicked += int(row.get("n_clicked", 0))
     except Exception:
         pass
-    return {"stuck": stuck, "nudges_sent": sent, "nudges_sent_total": total_sent}
+    return {"stuck": stuck, "nudges_sent": sent, "nudges_sent_total": total_sent,
+            "nudges_clicked": clicked, "nudges_clicked_total": total_clicked}
 
 
 async def nudge_cron(interval_seconds: int = 86400) -> None:

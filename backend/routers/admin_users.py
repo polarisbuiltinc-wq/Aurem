@@ -644,7 +644,8 @@ async def admin_funnel_dashboard(
             "d7_retention_pct":           0.0,
             "d30_retention_pct":          0.0,
             "event_counts":               {},
-            "nudge_stages":               {"stuck": {}, "nudges_sent": {}, "nudges_sent_total": 0},
+            "nudge_stages":               {"stuck": {}, "nudges_sent": {}, "nudges_sent_total": 0,
+                                            "nudges_clicked": {}, "nudges_clicked_total": 0},
         }
 
     n_chat = sum(1 for u in cohort if u.get("first_chat_at"))
@@ -704,7 +705,8 @@ async def admin_funnel_dashboard(
 
     # 2026-08-20 — stage-aware nudge visibility (stuck-stage counts +
     # nudges actually sent). Independent of the `days` window above.
-    nudge_stats = {"stuck": {}, "nudges_sent": {}, "nudges_sent_total": 0}
+    nudge_stats = {"stuck": {}, "nudges_sent": {}, "nudges_sent_total": 0,
+                   "nudges_clicked": {}, "nudges_clicked_total": 0}
     try:
         from services.funnel_nudge_cron import stage_counts
         nudge_stats = await stage_counts(db)

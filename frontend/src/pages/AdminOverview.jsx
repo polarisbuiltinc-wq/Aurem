@@ -1858,9 +1858,11 @@ const NUDGE_STAGE_ORDER = [
 ];
 
 function FunnelNudgeStageCard({ data }) {
-  const stuck = data?.stuck || {};
-  const sent  = data?.nudges_sent || {};
-  const total = data?.nudges_sent_total ?? 0;
+  const stuck   = data?.stuck || {};
+  const sent    = data?.nudges_sent || {};
+  const clicked = data?.nudges_clicked || {};
+  const total       = data?.nudges_sent_total ?? 0;
+  const totalClicked = data?.nudges_clicked_total ?? 0;
 
   return (
     <Section title="Funnel nudge emails — where users are stuck">
@@ -1874,7 +1876,7 @@ function FunnelNudgeStageCard({ data }) {
             data-testid={`nudge-stage-row-${key}`}
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 90px 90px",
+              gridTemplateColumns: "1fr 80px 80px 80px",
               alignItems: "center",
               gap: 12,
               padding: "7px 10px",
@@ -1912,6 +1914,19 @@ function FunnelNudgeStageCard({ data }) {
               </span>
               <div style={{ fontSize: 9, color: "var(--text-faint)" }}>nudged</div>
             </div>
+            <div style={{ textAlign: "right" }}>
+              <span
+                data-testid={`nudge-stage-clicked-${key}`}
+                style={{
+                  fontSize: 16, fontWeight: 600,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  color: clicked[key] > 0 ? "#3ECF8E" : "var(--text-faint)",
+                }}
+              >
+                {clicked[key] ?? 0}
+              </span>
+              <div style={{ fontSize: 9, color: "var(--text-faint)" }}>clicked</div>
+            </div>
           </div>
         ))}
         <div
@@ -1921,7 +1936,9 @@ function FunnelNudgeStageCard({ data }) {
             fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.04em",
           }}
         >
-          {total} nudge email{total === 1 ? "" : "s"} sent total · daily cron, one-time per stage
+          {total} nudge email{total === 1 ? "" : "s"} sent · {totalClicked} clicked
+          {total > 0 ? ` (${((totalClicked / total) * 100).toFixed(0)}%)` : ""} ·
+          daily cron, one-time per stage
         </div>
       </div>
     </Section>

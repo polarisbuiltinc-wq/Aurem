@@ -620,6 +620,41 @@ change, present before it too.
 
 **Not yet deployed** — preview-only until founder redeploys.
 
+## Nudge email click-through tracking (2026-08-20)
+
+Extended the new funnel nudge system so the founder can see which
+stage-specific emails actually get clicked, not just sent — reusing
+the existing `/onboarding/click` tracked-redirect endpoint rather than
+building a new one.
+
+**Built**:
+- `services/funnel_nudge_cron.py::click_url()` — CTA links in all 4
+  nudge emails now route through `/api/aurem-dev/onboarding/click?uid=
+  ...&c=funnel_stage_nudge&stage=<stage>` instead of a raw dashboard link.
+- `routers/onboarding.py::onboarding_click` — now accepts an optional
+  `stage` param: (1) filters the `onboarding_emails` lookup by exact
+  stage so a click attributes to the specific email sent (a user can
+  get several different stage nudges over their lifetime, unlike the
+  old campaign's single t24/t72 pair); (2) decides the redirect
+  target — `stage1_github_started`/`stage2_project_pending`/
+  `stage4_fully_inactive` reopen the connect-repo wizard,
+  `stage3_no_chat` lands on the plain dashboard (already has a
+  project). Old links with no `stage` param keep the exact old
+  behavior (backward compatible).
+- `stage_counts()` now also aggregates `nudges_clicked` per stage +
+  `nudges_clicked_total`, surfaced in the admin card as a 3rd
+  "clicked" column + click-through %.
+
+**Verified live**: seeded a real `onboarding_emails` row, hit the
+tracked click URL, confirmed `clicked_at`/`click_count` set correctly,
+`stage_counts()` picked it up, redirect targets correct for both the
+wizard-reopening stages and the `stage3_no_chat` plain-dashboard case,
+and legacy (no-`stage`) links still behave exactly as before. 48
+targeted tests pass, same 9 pre-existing baseline failures as before
+(unrelated, confirmed via earlier git-stash diff).
+
+**Not yet deployed** — preview-only until founder redeploys.
+
 ## Engineering-Discipline Audit — 12 categories, all checkpoints complete (2026-08-20)
 
 Founder-requested honest status check across Software Engineering,

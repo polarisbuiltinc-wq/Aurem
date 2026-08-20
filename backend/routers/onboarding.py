@@ -100,17 +100,31 @@ async def send_connect_nudge(
 async def onboarding_click(
     uid: str = "",
     c:   str = CAMPAIGN,
+    stage: Optional[str] = None,
 ):
     """Public 302 — logs the click and redirects to the dashboard.
 
     Always returns a redirect, even when `uid` is missing or the
     audit row can't be located, so a malformed link still drops the
     user on the right page rather than showing an error.
+
+    2026-08-20 — `stage` is optional and used by the newer
+    `funnel_stage_nudge` campaign (services/funnel_nudge_cron.py) so
+    a click attributes to the exact stage email that was sent (a user
+    can receive several different stage nudges over their lifetime,
+    unlike the old campaign's single t24/t72 pair). It also decides
+    the redirect target: the two GitHub-related stages reopen the
+    connect-repo wizard; `stage3_no_chat` users already have a
+    project, so they land on the plain dashboard instead.
     """
+    action = "connect-repo"
+    if stage == "stage3_no_chat":
+        action = None
+
     target_path = "/dashboard?" + urlencode({
-        "action":       "connect-repo",
+        **({"action": action} if action else {}),
         "utm_source":   "email",
-        "utm_campaign": "onboarding",
+        "utm_campaign": c,
     })
 
     public_base = os.environ.get(
@@ -121,13 +135,16 @@ async def onboarding_click(
     db = get_db()
     if db is not None and uid:
         try:
-            # Latest sent row for this user+campaign. Idempotent: if
-            # the user clicks twice we bump `click_count` and update
-            # `last_clicked_at`, but `clicked_at` (first-click) sticks.
+            # Latest sent row for this user+campaign(+stage when given).
+            # Idempotent: if the user clicks twice we bump
+            # `click_count` and update `last_clicked_at`, but
+            # `clicked_at` (first-click) sticks.
             now = datetime.now(timezone.utc)
+            query: dict = {"user_id": uid, "campaign": c, "sent_ok": True}
+            if stage:
+                query["stage"] = stage
             doc = await db.onboarding_emails.find_one(
-                {"user_id": uid, "campaign": c, "sent_ok": True},
-                sort=[("sent_at", -1)],
+                query, sort=[("sent_at", -1)],
             )
             if doc:
                 update: dict = {
