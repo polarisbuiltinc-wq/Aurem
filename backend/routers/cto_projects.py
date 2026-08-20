@@ -869,6 +869,28 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
     db = require_db()
     owner, repo = _parse_repo(body.github_url)
 
+    # 2026-08-20 · funnel visibility — attempt event fires before any
+    # verification, so a stalled/abandoned add still leaves a trace
+    # even if the user never reaches success or a clean failure.
+    from services.signup_guards import emit_funnel_event
+    await emit_funnel_event(
+        db, user_id=me["user_id"], event_type="project_add_attempt",
+        metadata={"github_url": body.github_url,
+                  "auth_mode": "installation" if body.installation_id else "pat"},
+    )
+
+    async def _fail(status_code: int, payload, reason: str):
+        """Emit a project_add_failure funnel event, then raise. Every
+        rejection branch below routes through here so a stalled/failed
+        add finally leaves a trace in the Admin Activity Log instead
+        of the silent gap that made real signups look inactive."""
+        await emit_funnel_event(
+            db, user_id=me["user_id"], event_type="project_add_failure",
+            metadata={"github_url": body.github_url, "reason": reason,
+                      "status_code": status_code},
+        )
+        raise HTTPException(status_code, payload)
+
     # ═══════════════════════════════════════════════════════════════
     # 2026-02-10 · Phase 3a — dual-auth gate
     # ═══════════════════════════════════════════════════════════════
@@ -901,14 +923,14 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
             "active":          True,
         })
         if not install_row:
-            raise HTTPException(400, {
+            await _fail(400, {
                 "error":   "installation_not_found_or_inactive",
                 "message": (
                     "That GitHub App installation isn't linked to your "
                     "account, or has been suspended/uninstalled. Re-install "
                     "the App and try again."
                 ),
-            })
+            }, "installation_not_found_or_inactive")
         # 2. Verify installation has access to THIS repo — real GitHub
         #    call using a fresh short-lived installation token (never
         #    stored). Same trust boundary as the PAT branch's live
@@ -922,7 +944,7 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
         except _httpx.HTTPStatusError as _e:
             code = _e.response.status_code
             if code == 404:
-                raise HTTPException(400, {
+                await _fail(400, {
                     "error":   "installation_no_repo_access",
                     "message": (
                         f"The App installation on @{install_row.get('github_login','')} "
@@ -930,26 +952,26 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
                         "Grant access on GitHub → your App → Configure → "
                         "\"Repository access\" (add this repo)."
                     ),
-                })
+                }, "installation_no_repo_access")
             if code in (401, 403):
-                raise HTTPException(400, {
+                await _fail(400, {
                     "error":   "installation_token_rejected",
                     "message": (
                         "GitHub rejected the installation access token. The "
                         "installation may have been suspended — check the "
                         "App settings on GitHub."
                     ),
-                })
-            raise HTTPException(502, {
+                }, "installation_token_rejected")
+            await _fail(502, {
                 "error":   "github_probe_failed",
                 "message": f"GitHub returned HTTP {code} while verifying "
                            f"installation access to {owner}/{repo}.",
-            })
+            }, "github_probe_failed")
         except _httpx.RequestError as _e:
-            raise HTTPException(502, (
+            await _fail(502, (
                 f"Couldn't reach GitHub to verify installation access "
                 f"({type(_e).__name__}). Try again in a moment."
-            ))
+            ), "installation_probe_request_error")
         auth_method         = "github_app"
         encrypted_token     = None   # never stored — token minted per-request
         installation_active = True
@@ -957,10 +979,11 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
     # ── Branch B: PAT (unchanged from prior behavior) ───────────────
     elif pat:
         if not (pat.startswith("ghp_") or pat.startswith("github_pat_")):
-            raise HTTPException(
+            await _fail(
                 400,
                 "That doesn't look like a GitHub PAT — should start with "
                 "ghp_ (classic) or github_pat_ (fine-grained).",
+                "pat_malformed",
             )
         # Iter 211 — atomic verify: hit GitHub /repos/{owner}/{repo}
         # with the PAT BEFORE writing the project doc. Same code as
@@ -982,43 +1005,47 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
                         },
                     )
             except _httpx.RequestError as _e:
-                raise HTTPException(
+                await _fail(
                     502,
                     f"Couldn't reach GitHub to verify the token ({type(_e).__name__}). "
                     "Try again in a moment.",
+                    "pat_probe_request_error",
                 )
             if _r.status_code in (401, 403):
-                raise HTTPException(
+                await _fail(
                     400,
                     "GitHub rejected the PAT (401/403). Regenerate it with "
                     "Contents: Read and write for this repo, then try again.",
+                    "pat_rejected",
                 )
             if _r.status_code == 404:
-                raise HTTPException(
+                await _fail(
                     400,
                     f"Repo not found at github.com/{owner}/{repo} via this PAT. "
                     "The repo may not be in the token's scope — re-pick it when "
                     "generating a fine-grained PAT.",
+                    "pat_repo_not_found",
                 )
             if _r.status_code != 200:
-                raise HTTPException(
+                await _fail(
                     502,
                     f"GitHub returned HTTP {_r.status_code} during verification. "
                     "Try a fresh token.",
+                    "pat_probe_bad_status",
                 )
         auth_method     = "pat"
         encrypted_token = await _encrypt_pat(me["user_id"], pat)
 
     # ── Neither provided ────────────────────────────────────────────
     else:
-        raise HTTPException(400, {
+        await _fail(400, {
             "error": "auth_required",
             "message": (
                 "Connect via the GitHub App (recommended) or paste a "
                 "Personal Access Token. Both options are available in "
                 "the connect-repo wizard."
             ),
-        })
+        }, "auth_required")
 
     proj_id = f"p_{uuid.uuid4().hex[:10]}"
     doc = {
@@ -1078,6 +1105,12 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
     }
     if auth_method == "github_app":
         resp["installation_id"] = int(installation_id)
+
+    await emit_funnel_event(
+        db, user_id=me["user_id"], event_type="project_add_success",
+        metadata={"project_id": proj_id, "owner": owner, "repo": repo,
+                  "auth_method": auth_method},
+    )
     return resp
 
 

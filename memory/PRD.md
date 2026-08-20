@@ -467,6 +467,68 @@ post-deploy, or (b) I build a one-click "Backfill OAuth
 email_verified" action in the admin panel instead. Not implemented
 yet pending founder's choice.
 
+## Funnel-tracking investigation + 3 instrumentation gaps closed (2026-08-20)
+
+Founder asked: does real step-by-step (not just final-state) funnel
+tracking exist, so we can see WHERE a user drops off? Investigated
+before writing code.
+
+**Findings**:
+- `github_funnel_events` (`routers/github_funnel.py`) IS genuinely
+  step-by-step for the GitHub-connect sub-flow: `cta_click →
+  oauth_redirect → callback_received → linked → repo_selected` (+ App
+  install variants), with real per-stage conversion % via
+  `GET /funnel/github/stats`.
+- `funnel_events` (`services/signup_guards.emit_funnel_event`) was
+  SPARSE — only 4 milestones (`signup_completed`, `first_chat_sent`,
+  `first_loop_started`, `first_task_shipped`). No event existed for
+  email verification, or for project-add attempt/success/failure —
+  meaning a stalled/failed `/cto/projects/add` call left **zero**
+  trace anywhere, which is exactly the kind of silent gap that made
+  real signups look "inactive".
+- No PostHog/Mixpanel/GA/Amplitude anywhere in the codebase — confirmed
+  via full-repo search. Only Google Ads gtag + Meta Pixel conversion
+  helpers (`lib/analytics.js`), which report into Google/Meta's own
+  dashboards, not our DB.
+- Real production evidence on the 2 signups founder flagged (Luke
+  West, Laurence Bellinger): `RESEND_API_KEY` in this env IS the real
+  live account (verified `aurem.live`/`auremcto.com` domains). Scanned
+  700+ real sends — **neither name appears anywhere** (no verify
+  email, no welcome email, no 24h nudge) — consistent with (not proof
+  of) the already-fixed OAuth-signup bug: OAuth users get zero emails
+  by design, and 24h nudge cron may not have reached them yet.
+
+**Fixed (founder-approved, all 3, live-tested)**:
+1. `routers/cto_projects.py::add_project` now emits
+   `project_add_attempt` at the top, and every one of the 8 rejection
+   branches (installation not found, no repo access, token rejected,
+   GitHub probe failed, PAT malformed/rejected/repo-not-found/bad
+   status, auth required) routes through a new `_fail()` helper that
+   emits `project_add_failure` with a `reason` before raising — plus
+   `project_add_success` on the real success path.
+2. `routers/admin_users.py::get_user` now merges `cto_projects.created_at`
+   into the Activity Log timeline as a `project_connected` entry
+   (data already existed, was never surfaced chronologically).
+3. `routers/promo_first50.py::verify_email` now emits a real
+   `email_verified` funnel_event (previously only inferable from
+   `email_verifications.used_at`, which `/admin/funnel`'s aggregate
+   `event_counts` never queried).
+
+**Verified live**: real signup → bad-PAT project add → good-PAT
+project add, confirmed all 4 events (`signup_completed`,
+`project_add_attempt` ×2, `project_add_failure`, `project_add_success`)
+landed in `funnel_events`, and `GET /admin/users/{id}` correctly shows
+both the failed attempt and the successful connect (as both a funnel
+event and a `project_connected` timeline row) in the right order. 65
+targeted regression tests pass, zero regressions. Test user/data
+cleaned up.
+
+**Not yet deployed to production** — preview-only until founder
+redeploys. Still separate/pending (founder chose to keep apart from
+this pass): the one-click admin "Backfill OAuth email_verified" button
+for pre-existing Google/GitHub OAuth users (Luke West, Laurence
+Bellinger included).
+
 ## Engineering-Discipline Audit — 12 categories, all checkpoints complete (2026-08-20)
 
 Founder-requested honest status check across Software Engineering,

@@ -170,6 +170,16 @@ async def verify_email(token: str = ""):
         logger.warning("verify: user %s not found for token", user_id)
         return _redirect_to_frontend("error", reason="user_not_found")
 
+    # 2026-08-20 — real funnel_events row so `/admin/funnel`'s
+    # `event_counts` (aggregate) and the per-user Activity Log both
+    # see this milestone. Previously only inferable from
+    # `email_verifications.used_at`, which the aggregate endpoint
+    # never queries.
+    from services.signup_guards import emit_funnel_event
+    await emit_funnel_event(
+        db, user_id=user_id, event_type="email_verified", metadata={},
+    )
+
     # Track 3 (item #33) — fire the post-verification welcome email
     # as a safe_bg task. Idempotent by campaign + user_id inside the
     # welcome module itself, so a second verify click is a no-op.

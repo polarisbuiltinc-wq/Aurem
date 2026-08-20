@@ -299,6 +299,25 @@ async def get_user(user_id: str, authorization: Optional[str] = Header(None)):
             "at":       ev.get("ts"),
             "detail":   {"source": ev.get("source"), **(ev.get("meta") or {})},
         })
+    # 2026-08-20 — Project-connect success events. `cto_projects` rows
+    # already exist (fetched above as `user["projects"]`) but were
+    # never surfaced in this chronological timeline — a real project
+    # add was invisible here unless it also happened to trigger a task.
+    for p in user["projects"]:
+        ts = p.get("created_at")
+        if hasattr(ts, "timestamp"):
+            ts = ts.timestamp()
+        timeline.append({
+            "kind":     "project",
+            "type":     "project_connected",
+            "at":       ts,
+            "detail":   {
+                "project_id": p.get("project_id"),
+                "owner":      p.get("github_owner"),
+                "repo":       p.get("github_repo"),
+                "auth_method": p.get("auth_method"),
+            },
+        })
     # Tasks (task run + status).
     for t in user["recent_tasks"]:
         ts = t.get("created_at")
