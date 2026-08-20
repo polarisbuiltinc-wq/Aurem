@@ -35,9 +35,14 @@ What this module does
 
 Activation threshold
 --------------------
-- N >= 20 rows for the same (user, mode, project) bucket → activate.
-- N >= 5 rows globally for a fresh user → activate with global fallback.
-- N <  5 rows total → return empty string (no false-learning).
+- N >= 20 rows for the same (user, mode, project) bucket → personalised.
+- N >= 20 rows for the same (user, mode) bucket → personalised (any project).
+- Otherwise → return empty string (no recall). 2026-08-20: removed the
+  old "N >= 5 rows globally for a fresh user → cross-user global
+  fallback" tier — once real paying customers exist, a strong topical
+  match in that tier could recall and surface ANOTHER customer's past
+  conversation content into a different customer's chat. A user only
+  ever sees their OWN past examples now, never anyone else's.
 
 This module is intentionally pure-Python (no scikit-learn / numpy
 hot path) so the cold-start latency on chat is well under 50 ms.
@@ -208,9 +213,23 @@ def _score(query_tokens: dict[str, int], row: dict, total_docs: int) -> float:
 def _candidate_indices(
     mode: str, user_id: Optional[str], project_id: Optional[str],
 ) -> tuple[list[int], str]:
-    """Return (candidate_indices, bucket_label). Falls back from
-    most-specific bucket to global pool when the personalised bucket
-    is too small."""
+    """Return (candidate_indices, bucket_label).
+
+    2026-08-20 · SECURITY FIX (founder-directed, pre-multi-tenant) —
+    this used to fall back to a "mode-wide (cross-user)" and then a
+    fully "global" bucket when the calling user didn't have enough of
+    their OWN history yet. That means, once there's more than one
+    real customer, a strong topical match could recall and inject
+    ANOTHER customer's past conversation content (their code,
+    business logic, whatever they typed) into a DIFFERENT customer's
+    chat — and per `_format_block`'s "never copy verbatim" note being
+    only a soft instruction to the model, that content could end up
+    literally visible in someone else's response (this is exactly how
+    the founder's own cold-start mismatch bug surfaced unrelated old
+    content). Founder decision: no user ever sees another user's
+    recalled examples, full stop — even at the cost of new users
+    getting the self-learning benefit later than before. Only tiers
+    scoped to THIS `user_id` are eligible; no cross-user fallback."""
     mode_pool = _index["by_mode"].get(mode) or set()
     # Tier 1 — user+mode+project intersection.
     if user_id and project_id:
@@ -225,12 +244,8 @@ def _candidate_indices(
         inter = u & mode_pool
         if len(inter) >= _MIN_BUCKET:
             return list(inter), "user+mode"
-    # Tier 3 — mode-wide (cross-user).
-    if len(mode_pool) >= _MIN_GLOBAL:
-        return list(mode_pool), "mode-global"
-    # Tier 4 — anything we've got.
-    if _index["row_count"] >= _MIN_GLOBAL:
-        return list(range(_index["row_count"])), "global"
+    # No cross-user tiers. A user without enough of their own history
+    # yet gets no recalled examples — never someone else's.
     return [], "below-threshold"
 
 

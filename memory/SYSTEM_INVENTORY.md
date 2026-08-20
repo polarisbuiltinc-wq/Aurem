@@ -804,3 +804,10 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 ### Iter 0 · 2026-08-18
 
 | `routers/admin_bi.py` | `/admin/bi` | 3 | auto-detected new router (verify) (Iter 0, 2026-08-18T05:36:45.359330Z) | <!-- inv:router:routers/admin_bi.py -->
+
+### Iter 0 · 2026-08-20
+
+| `routers/synthetic_checks_ci.py` | `/admin/synthetic-checks` | 1 | auto-detected new router (verify) (Iter 0, 2026-08-20T05:58:21.756207Z) | <!-- inv:router:routers/synthetic_checks_ci.py -->
+- `AUREM_CI_INGEST_TOKEN` — auto-detected in backend/scripts/g15_dependency_scan.py (verify) (default: unset) [Iter 0, 2026-08-20T05:58:21.756236Z] <!-- inv:envvar:AUREM_CI_INGEST_TOKEN -->
+- `AUREM_API_URL` — auto-detected in backend/scripts/g15_dependency_scan.py (verify) (default: unset) [Iter 0, 2026-08-20T05:58:21.756253Z] <!-- inv:envvar:AUREM_API_URL -->
+- `loop_run_log kind='not_a_real_kind'` — auto-detected in backend/tests/test_synthetic_checks_ci_ingest.py (verify) [Iter 0, 2026-08-20T05:58:21.756300Z] <!-- inv:loop_run_log_kind:not_a_real_kind -->

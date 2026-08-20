@@ -239,6 +239,90 @@ requested this pass.
 **Production status**: all fixes above are code-only, preview-tested/
 verified, **not yet deployed to production** — needs founder redeploy.
 
+## Round 3 — cross-tenant recall fix (bundled per founder priority), UX fixes, and new QA findings triage (2026-08-20)
+
+### Cross-user council-recall leakage — FIXED (founder: highest priority, bundle with mismatch fix before deploy)
+`services/ora_council_retriever.py`'s `_candidate_indices()` had two
+cross-user fallback tiers ("mode-wide" and "global") explicitly
+designed to give brand-new users day-1 value before they had their
+own history. Removed both entirely — a user now ONLY ever sees
+recalled examples from their OWN (user_id, mode[, project_id])
+history; if they don't have >= `_MIN_BUCKET` (20) of their own, they
+get nothing, never another tenant's content. Docstring/comments
+updated. New regression test
+`test_cross_user_fallback_removed_no_leakage` proves a strong topical
+match from a different, data-rich user is NOT recalled for a
+zero-history user. 2 pre-existing tests updated to pass matching
+user_id/project_id (they'd only ever exercised the now-removed
+cross-user tiers). 11/11 tests pass.
+
+### `/security-scan` clean-pass confirmation — FIXED
+`ChatPanel.jsx`'s `_executeSlashScan` now fires a "✓ Scan clean — no
+critical/high issues" toast when a scan completes with 0 critical/high
+findings (previously: total silence, indistinguishable from a hung/
+failed scan).
+
+### `window.confirm()` blocking dialog on "SEND TO ORA" — FIXED, root cause confirmed
+Traced `TopBarStatusSlot.jsx`'s F12 "SEND TO ORA" button → dispatches
+`aurem:f12-send-to-ora` → `ChatPanel.jsx`'s handler called
+`window.confirm()`, a synchronous native dialog that blocks the whole
+main thread until dismissed — exactly matching the founder's "renderer
+may be frozen" / CDP timeout symptom (native dialogs are notorious for
+this under any automated/CDP-driven browser control, and are a poor
+pattern for real users too — unstyled, fully blocking). Replaced with
+a normal async in-app confirm card (same OK/Cancel semantics: confirm
+→ send to ORA, cancel → copy to clipboard). Verified app still renders
+correctly post-change (screenshot, no console/compile errors).
+**Related, not yet fixed**: the same `window.confirm()` pattern exists
+once more, in `clearChat()` (line ~986) — lower risk since it's a
+deliberate user-initiated destructive action (not an F12 auto-flow),
+not fixed this pass unless founder wants it too.
+
+### Investigated, could NOT reproduce in preview (flagged, not guess-fixed)
+- **Advisor toggle button "off-screen"** and **collapse arrow "not
+  closing"**: reproduced the founder's exact viewport (1707×900) with
+  a live scripted browser session. Both buttons' real (non-forced)
+  Playwright clicks succeeded normally — open tab appeared and was
+  clickable, collapse arrow correctly collapsed the panel. Inspected
+  the full ancestor chain for the open-tab button — no ancestor clips
+  it below full viewport width. Could not reproduce either bug here;
+  likely specific to the founder's actual physical monitor/OS zoom or
+  a difference between preview and production builds. Did NOT
+  guess-fix given no reproduction — flagged for founder to retry with
+  browser zoom reset to 100% and note exact OS/monitor scaling if it
+  recurs.
+- **Preview tab README.md → Cloudflare origin error**, **Graph tab
+  "Graph" mode closing the panel instead of rendering**: not yet
+  investigated — flagged, pending next pass.
+- **Duplicate Loop-cancel message** on navigate-away-and-back: traced
+  the two candidate sources (a local status label on the loop's
+  progress bubble vs. the real persisted `"⏹️ Loop cancelled at
+  {phase} phase."` message) but could not confirm which mechanism
+  the founder actually saw without a live repro through a connected
+  GitHub project — not fixed this pass, needs a repro screenshot
+  showing both indicators together.
+
+### `cart_inline.py` / `blog_inline.py` — NOT a bug in our app
+These filenames do not exist anywhere in this codebase (`/app/backend`,
+`/app/frontend`) — confirmed via full-repo search. The "Preview" tab's
+file browser was almost certainly showing the founder's **connected
+test project's own repo** (their "automation"/aurem-demo test
+project), not AUREM CTO's own codebase — so these are likely real
+files in whatever demo/starter repo is connected there, unrelated to
+AUREM itself. Not investigated further this pass.
+
+### Rollback — answered founder's safety question (no code involved)
+Traced `routers/chat_commits.py`'s `/rollback` (used by the OPS
+HISTORY panel's "Rollback" button on completed ships): confirms the
+message→commit link, then the frontend follows up with
+`POST /aurem-cto/deploy/run mode=revert_to sha=<that commit>`. **This
+is a real action** — it runs an actual `git revert` of that ONE
+specific commit (not a wholesale app rollback, not a no-op sandbox
+action) and then triggers a real redeploy of the reverted codebase.
+Scoped to exactly the one ship being rolled back, not the whole
+history. Founder should treat clicking it as equivalent to shipping a
+revert commit.
+
 ## Engineering-Discipline Audit — 12 categories, all checkpoints complete (2026-08-20)
 
 Founder-requested honest status check across Software Engineering,

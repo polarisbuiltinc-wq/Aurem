@@ -64,6 +64,9 @@ async def test_below_threshold_returns_empty():
 
 @pytest.mark.asyncio
 async def test_returns_few_shot_block_when_active():
+    # 2026-08-20 — post cross-user-fallback removal: needs >= _MIN_BUCKET
+    # (20) rows in the SAME (user, project, mode) bucket to activate at
+    # all now (no more cross-user global fallback at low N).
     rows = [
         _row("How do I add a button to React?",
              "Use a <button> element with onClick handler."),
@@ -77,10 +80,11 @@ async def test_returns_few_shot_block_when_active():
              "<button onClick={handler}>Click</button>"),
         _row("Pydantic v2 model basic example",
              "class Item(BaseModel): name: str"),
-    ]
+    ] + [_row(f"filler q{i}", f"filler a{i}") for i in range(14)]
     db = _FakeDB(rows)
     out, n = await r.get_council_few_shot(
         db, "add an onClick button in React", mode="A", k=2,
+        user_id="u1", project_id="p1",
     )
     assert "[ORA COUNCIL — LEARNED EXAMPLES]" in out
     assert "Past example #1" in out
@@ -146,11 +150,14 @@ def test_get_retriever_stats_shape():
 
 @pytest.mark.asyncio
 async def test_top_k_capped():
+    # 2026-08-20 — must be scoped to the SAME user/project as the rows
+    # now that there's no cross-user fallback tier.
     rows = [_row(f"question about react state {i}",
                  f"answer {i}") for i in range(30)]
     db = _FakeDB(rows)
     out, n = await r.get_council_few_shot(
         db, "react state question", mode="A", k=3,
+        user_id="u1", project_id="p1",
     )
     # Block must mention exactly 3 past examples.
     assert "Past example #1" in out

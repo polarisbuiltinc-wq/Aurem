@@ -436,6 +436,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   // `aurem:f12-copy` or `aurem:f12-send-to-ora`; we execute the
   // exact same logic that used to live inline in the removed
   // composer-status-bar block.
+  const [f12ConfirmPayload, setF12ConfirmPayload] = useState(null);
   useEffect(() => {
     const onCopy = () => {
       const payload = f12.flush();
@@ -444,27 +445,14 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       } catch { /* ignore */ }
     };
     const onSend = () => {
+      // 2026-08-20 — `window.confirm()` is a synchronous, main-thread-
+      // blocking native dialog. Founder reported the tab going fully
+      // unresponsive for 5+ seconds after clicking "SEND TO ORA" —
+      // exactly the symptom a blocking native dialog causes. Replace
+      // with a normal async in-app confirm card (same OK/Cancel
+      // semantics: confirm → send, cancel → copy to clipboard).
       const payload = f12.flush();
-      const cc = payload?.console_errors?.length || 0;
-      const nc = payload?.network_errors?.length || 0;
-      const msg = `F12 errors captured (${cc} console, ${nc} network). Please diagnose.`;
-      const ok = window.confirm(
-        `Send the captured F12 errors to ORA for analysis?\n\n` +
-        `${cc} console error(s), ${nc} network error(s)\n\n` +
-        `OK → send to ORA\nCancel → copy payload to clipboard instead`
-      );
-      if (!ok) {
-        try {
-          navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-        } catch { /* ignore */ }
-        return;
-      }
-      setInput(msg);
-      lastF12PayloadRef.current = payload;
-      setTimeout(() => {
-        const form = taRef.current && taRef.current.form;
-        if (form) form.requestSubmit();
-      }, 50);
+      setF12ConfirmPayload(payload);
     };
     window.addEventListener("aurem:f12-copy",        onCopy);
     window.addEventListener("aurem:f12-send-to-ora", onSend);
@@ -473,6 +461,29 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       window.removeEventListener("aurem:f12-send-to-ora", onSend);
     };
   }, [f12]);
+
+  function handleF12ConfirmSend() {
+    const payload = f12ConfirmPayload;
+    setF12ConfirmPayload(null);
+    if (!payload) return;
+    const cc = payload?.console_errors?.length || 0;
+    const nc = payload?.network_errors?.length || 0;
+    setInput(`F12 errors captured (${cc} console, ${nc} network). Please diagnose.`);
+    lastF12PayloadRef.current = payload;
+    setTimeout(() => {
+      const form = taRef.current && taRef.current.form;
+      if (form) form.requestSubmit();
+    }, 50);
+  }
+
+  function handleF12ConfirmCopyInstead() {
+    const payload = f12ConfirmPayload;
+    setF12ConfirmPayload(null);
+    if (!payload) return;
+    try {
+      navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    } catch { /* ignore */ }
+  }
   // ──────────────────────────────────────────────────────────────
   // Iter 212m-58 — Prompt / Loop execution mode.
   // ──────────────────────────────────────────────────────────────
@@ -2488,12 +2499,24 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       }
       const summary = r.data?.summary || {};
       const bySev   = summary.by_severity || {};
+      const crit    = bySev.critical || 0;
+      const high    = bySev.high || 0;
       markScanJustCompleted({
-        critical:    bySev.critical || 0,
-        high:        bySev.high || 0,
+        critical:    crit,
+        high:        high,
         projectId,
         projectName: activeProject?.github_repo || projectId,
       });
+      // 2026-08-20 — a clean scan previously showed NOTHING at all,
+      // identical to a silent failure. Confirm success explicitly so
+      // "clean" and "broken" are never visually indistinguishable.
+      if (!crit && !high) {
+        toast({
+          message: `✓ Scan clean — no critical/high issues (${cmd.label})`,
+          kind: "success",
+          duration: 4000,
+        });
+      }
     } catch (e) {
       const status = e?.response?.status;
       const detail = e?.response?.data?.detail;
@@ -4379,6 +4402,38 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           busy={shipBusy}
           onConfirm={(approved) => approved ? handleShipConfirm() : handleShipCancel()}
         />
+      )}
+      {f12ConfirmPayload && (
+        <div
+          data-testid="f12-send-confirm-card"
+          className="mx-4 mb-2 rounded-lg border border-border bg-card px-4 py-3 text-sm"
+        >
+          <p className="mb-2 text-foreground">
+            Send the captured F12 errors to ORA for analysis?{" "}
+            <span className="text-muted-foreground">
+              ({f12ConfirmPayload?.console_errors?.length || 0} console,{" "}
+              {f12ConfirmPayload?.network_errors?.length || 0} network)
+            </span>
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              data-testid="f12-send-confirm-send"
+              onClick={handleF12ConfirmSend}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90"
+            >
+              Send to ORA
+            </button>
+            <button
+              type="button"
+              data-testid="f12-send-confirm-copy"
+              onClick={handleF12ConfirmCopyInstead}
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary"
+            >
+              Copy to clipboard instead
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Iter 324 · Fix B — composer-status-bar RELOCATED below the
