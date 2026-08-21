@@ -44,6 +44,8 @@ from routers.backups_admin import router as backups_admin_router  # 2026-02-09 �
 from routers.admin_public import router as admin_public_router  # Iter 358 — public /admin/errors/report sink
 from routers.admin_qa import router as admin_qa_router          # Iter 303 (/admin/qa dashboard)
 from routers.admin_health import router as admin_health_router  # Feb 2026 — unified health registry aggregator
+from routers.maintenance_public import router as maintenance_public_router  # 2026-08 — public maintenance status probe
+from routers.admin_maintenance import router as admin_maintenance_router    # 2026-08 — admin maintenance toggle + outage tracker
 from routers.admin_observability import router as admin_observability_router  # 2026-02-11 — /admin/observability/breakers
 from routers.admin_payments import router as admin_payments_router  # 2026-02-11 — Phase 2 split: /admin/payments, /financials, /stripe-*, /billing/*
 from routers.admin_support import router as admin_support_router  # 2026-02-11 — Phase 2 split: /admin/support, /errors, /alerts
@@ -513,6 +515,17 @@ async def lifespan(app: FastAPI):
                 raise
             except Exception as _e:                          # noqa: BLE001
                 logger.warning("G19 heartbeat/resolve failed: %r", _e)
+            # 2026-08 — persisted heartbeat for the maintenance outage
+            # tracker (separate from G19's in-memory-only beat, which
+            # doesn't survive a restart and can't be used to measure
+            # downtime across a boot gap).
+            try:
+                from services.maintenance import write_heartbeat as _maint_beat
+                await _maint_beat(app.state.db)
+            except _asyncio.CancelledError:
+                raise
+            except Exception as _e:                          # noqa: BLE001
+                logger.warning("[maintenance] heartbeat write failed: %r", _e)
             _first_run = False
             await _asyncio.sleep(60)
     app.state.loop_housekeeping_task = _supervise(
@@ -532,6 +545,42 @@ async def lifespan(app: FastAPI):
             logger.info("[G19] boot recorded: %s", _g19_boot)
     except Exception as _e:                                  # noqa: BLE001
         logger.warning("[G19] record_boot failed: %r", _e)
+
+    # 2026-08 — System Maintenance / Outage Tracker.
+    # Hydrate the manual-maintenance cache, then compare the last
+    # persisted heartbeat (bumped every 60s by loop_housekeeping,
+    # survives restarts) against "now" — a gap bigger than the
+    # admin-configured threshold means the backend was unreachable
+    # for that long (deploy restart or crash). Log it as an
+    # already-resolved incident so the admin tracker has real data
+    # without needing an external monitor. Write a fresh heartbeat
+    # immediately after so a crash-loop before the next 60s tick
+    # doesn't compound the same gap twice.
+    try:
+        from services.maintenance import (
+            load_maintenance_state as _maint_load,
+            read_last_heartbeat as _maint_last_beat,
+            record_boot_gap_incident as _maint_record_gap,
+            write_heartbeat as _maint_beat_now,
+        )
+        _maint_state = await _maint_load(app.state.db)
+        _last_beat_ts = await _maint_last_beat(app.state.db)
+        _boot_ts = time.time()
+        if _last_beat_ts:
+            _gap_s = _boot_ts - _last_beat_ts
+            _threshold = _maint_state.get("outage_threshold_s", 30)
+            if _gap_s > _threshold:
+                from datetime import datetime as _dt, timezone as _tz
+                await _maint_record_gap(
+                    app.state.db,
+                    gap_s=_gap_s,
+                    last_beat_iso=_dt.fromtimestamp(_last_beat_ts, tz=_tz.utc).isoformat(),
+                    boot_iso=_dt.fromtimestamp(_boot_ts, tz=_tz.utc).isoformat(),
+                )
+        await _maint_beat_now(app.state.db)
+    except Exception as _e:                                  # noqa: BLE001
+        logger.warning("[maintenance] boot-gap detection failed: %r", _e)
+
 
     # G6 · Iter 366 — DB dedup unique indexes. Central + idempotent.
     try:
@@ -2902,6 +2951,8 @@ app.include_router(backups_admin_router,    prefix="/api/aurem-dev")  # /api/aur
 app.include_router(admin_public_router,  prefix="/api/aurem-dev")  # Iter 358 — un-gated /admin/errors/report
 app.include_router(admin_qa_router,      prefix="/api/aurem-dev")  # Iter 303 — /admin/qa dashboard
 app.include_router(admin_health_router,  prefix="/api")             # Feb 2026 — /api/aurem-dev/admin/status/*
+app.include_router(maintenance_public_router, prefix="/api")        # 2026-08 — /api/aurem-dev/maintenance/status
+app.include_router(admin_maintenance_router,  prefix="/api")         # 2026-08 — /api/aurem-dev/admin/maintenance/*
 app.include_router(synthetic_checks_ci_router, prefix="/api/aurem-dev")  # 2026-08-20 · G1/G15 CI ingest
 app.include_router(admin_observability_router, prefix="/api")       # 2026-02-11 — /api/aurem-dev/admin/observability/breakers
 app.include_router(admin_payments_router, prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split

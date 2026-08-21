@@ -10,7 +10,7 @@ import {
   Cpu, CreditCard, Network as SitemapIcon, Settings as SettingsIcon,
   LogOut, ExternalLink, ArrowLeft, Loader2, Brain, Eye, Terminal,
   Mail, Activity, Plug, GitBranch, Zap, ShieldAlert, DollarSign, ShieldCheck,
-  Menu, X,
+  Menu, X, Wrench,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { toast } from "../components/Toast";
@@ -3397,6 +3397,7 @@ const NAV = [
   // as every other sidebar entry; keeps the founder one click away
   // from the live QA metrics without having to memorize a URL.
   { id: "qa_health", label: "QA Health", Icon: ShieldCheck, route: "/admin/qa" },
+  { id: "maintenance", label: "Maintenance", Icon: Wrench, route: "/admin/maintenance" },
   // Iter 331 — Architecture() (learning-health + persona-quality +
   // code-surface tiles) was defined but never wired into renderPage;
   // /admin/architecture silently fell through to Overview.

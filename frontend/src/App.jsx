@@ -27,6 +27,7 @@ import { FixJobProvider } from "./components/FixJobContext";
 import PersistentFixBar from "./components/PersistentFixBar";
 import CookieConsentBanner from "./components/CookieConsentBanner";
 import OraGuideMascot from "./components/OraGuideMascot";
+import MaintenanceGate from "./components/MaintenanceGate";  // 2026-08
 import { PrivateRoute, AdminRoute } from "./components/PrivateRoute";
 
 // Eager — these three are the first surfaces every visitor sees and
@@ -42,6 +43,7 @@ const LoopLiveFeedDemo  = lazy(() => import("./pages/LoopLiveFeedDemo"));
 const ShippedRowHarness = lazy(() => import("./pages/ShippedRowHarness"));
 const VisualFixtures    = lazy(() => import("./pages/VisualFixtures"));
 const AdminQADashboard  = lazy(() => import("./pages/AdminQADashboard"));
+const AdminMaintenance  = lazy(() => import("./pages/AdminMaintenance"));  // 2026-08 — maintenance toggle + outage tracker
 const Login             = lazy(() => import("./pages/Login"));
 const Signup            = lazy(() => import("./pages/Signup"));
 const Verify            = lazy(() => import("./pages/Verify"));  // Track 3 (item #31) — email verification landing
@@ -266,6 +268,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+    <MaintenanceGate>
       {/* Iter 388t — Bug 25 fix.  Skip-to-content landmark link for
           keyboard-only users (WCAG 2.4.1).  Repositioned + hardened
           after prod feedback ("present but useless as-is"):
@@ -447,6 +450,7 @@ export default function App() {
           <Route path="/admin/inspect-speed-diagnostic" element={<AdminRoute><AdminInspectSpeedDiagnostic /></AdminRoute>} />
           <Route path="/admin/inspect-scope-drift"      element={<AdminRoute><AdminInspectScopeDriftAudit /></AdminRoute>} />
           <Route path="/admin/qa"           element={<AdminRoute><AdminQADashboard /></AdminRoute>} />{/* Iter 303 */}
+          <Route path="/admin/maintenance"  element={<AdminRoute><AdminMaintenance /></AdminRoute>} />{/* 2026-08 */}
           <Route path="/admin/personal-track" element={<AdminRoute><PersonalTrackAdmin /></AdminRoute>} />
           <Route path="/admin/ora-chat"       element={<AdminRoute><OraChat /></AdminRoute>} />
           {/* Iter 212m-171 — direct URLs for new admin sections */}
@@ -499,6 +503,7 @@ export default function App() {
       </Suspense>
       </FixJobProvider>
       <CookieConsentBanner />
+    </MaintenanceGate>
     </BrowserRouter>
   );
 }

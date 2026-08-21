@@ -1,0 +1,32 @@
+{
+  "summary": "Full E2E test of System Maintenance / Outage Tracker feature. Backend: 11/11 pytest tests pass (public status endpoint no-auth, admin gating 401 without token, partial-update preserves other fields, threshold clamped to [5,600], manual toggle reflects publicly, incidents endpoint schema). Frontend: admin /admin/maintenance page loads with saved values, message/window/threshold persist across reload, toggle ON/OFF works with correct button labels, admin/founder bypass works (logged-in admin sees /dashboard normally with manual ON), anonymous incognito visit to `/` shows branded 'Scheduled Maintenance' overlay with correct message + window, /login and /signup remain accessible (exempt) while manual ON — admin can always sign back in, gate self-clears within ~5s after turning OFF. manual_enabled left FALSE at end (verified via public status endpoint).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/admin/maintenance", "issues": ["Cookie consent banner overlaps the bottom of the Outage incidents card in default 1440x900 viewport; not a functional block but obscures last row. Cosmetic only."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_maintenance.py",
+    "/app/test_reports/pytest/maintenance_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "MaintenanceGate EXEMPT_PREFIXES includes '/admin' — this means /admin/* routes always bypass the gate. Correct for the admin-must-be-able-to-recover use case, but also means the admin dashboard never sees the maintenance screen even for a non-admin user who somehow lands on an /admin/* URL. Acceptable since /admin/* is already server-side auth-gated.",
+    "Anon navigation to /dashboard results in a client-side redirect to /login?next=/dashboard BEFORE MaintenanceGate re-evaluates, so anon users on protected routes see the login form (exempt) rather than the maintenance screen. Public/landing routes (e.g. `/`) do correctly show the maintenance screen. This is fine given the design intent that /login must always be reachable, but worth noting: anon users going straight to auth-required URLs will see the sign-in form, not the maintenance overlay.",
+    "backend/services/maintenance.py `set_maintenance_state` always writes `updated_at`/`updated_by` even on a no-op call (empty body). Minor — harmless but bumps the cache timestamp on every call.",
+    "backend/services/maintenance.py `outage_stats` uses ISO-string comparison for the 30d cutoff; works because ISO 8601 UTC strings are lexically sortable, but is fragile if a naive/local-tz timestamp is ever inserted. Consider comparing on numeric `created_at_ts` for robustness."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_maintenance.py (new)"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% of tested flows"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (admin/founder, preview env) — verified working via /api/aurem-dev/auth/login",
+  "seed_data_creation": "None. All test settings written during testing (message/window/threshold=60, manual toggled ON then OFF) were cleared back to safe defaults at end. Confirmed manual_enabled=false on the public status endpoint at test completion.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature is stable and shipped. Backend pytest at /app/backend/tests/test_maintenance.py can be re-run as regression. Boot-gap auto-outage incident logging was NOT triggered (would require a supervisor restart with a stale heartbeat); shape/behavior of /admin/maintenance/incidents endpoint verified against empty dataset — schema is correct. If retesting, ensure you turn manual_enabled back OFF at end (test_zzz_final_ensure_manual_off does this automatically).",
+  "rca of the issue": "N/A — no bugs found. The one bug the main agent self-identified and fixed (MaintenanceGate blocking /login for logged-out sessions) is confirmed fixed: /login and /signup render normally for anon visitors while manual=ON."
+}

@@ -818,3 +818,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 ### Iter 0 · 2026-08-21
 
 - `services/response_confidence.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-21T01:27:08.019951Z] <!-- inv:service:services/response_confidence.py -->
+- `HEALTH_CONFIRM_TICKS` — auto-detected in backend/services/health_notifier.py (verify) (default: unset) [Iter 0, 2026-08-21T04:27:40.792903Z] <!-- inv:envvar:HEALTH_CONFIRM_TICKS -->
