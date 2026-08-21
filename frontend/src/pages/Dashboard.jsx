@@ -108,56 +108,9 @@ function DashboardV2Body() {
   // flip (incl. auto-open when a code reply lands), so we just mirror
   // that here as the source of truth for the button's effective state.
   const [previewOpen,      setPreviewOpen]      = useState(false);
-  // Iter 212m-97 — mode pill state is now SHARED with ChatPanel via a
-  // custom event bridge. Default reads from localStorage so we land on
-  // the same value the chat composer sees on first paint.
-  const [mode, setMode] = useState(() => {
-    try { return localStorage.getItem("aurem_chat_mode") || "swift"; }
-    catch { return "swift"; }
-  });
-  // Listen for ChatPanel broadcasts so a programmatic change there
-  // (e.g. Loop mode auto-flipping swift→pro) is reflected in the pills.
-  useEffect(() => {
-    const onChanged = (e) => {
-      const m = e?.detail?.mode;
-      if (m && m !== mode) setMode(m);
-    };
-    window.addEventListener("aurem:chat-mode-changed", onChanged);
-    return () => window.removeEventListener("aurem:chat-mode-changed", onChanged);
-  }, [mode]);
-  // Push pill clicks → ChatPanel
-  const handleModeChange = (m) => {
-    setMode(m);
-    try {
-      window.dispatchEvent(new CustomEvent("aurem:set-chat-mode", {
-        detail: { mode: m },
-      }));
-    } catch { /* ignore */ }
-  };
-  // 2026-08-21 — Loop execution mode bridge (same pattern as `mode`
-  // above). TopBar's Pro/Maxx → Prompt/Loop sub-choice lives here so
-  // the pill can show the right highlight without prop-drilling
-  // through ChatPanel.
-  const [execMode, setExecMode] = useState(() => {
-    try { return localStorage.getItem("ora_execution_mode") === "loop" ? "loop" : "prompt"; }
-    catch { return "prompt"; }
-  });
-  useEffect(() => {
-    const onChanged = (e) => {
-      const m = e?.detail?.mode;
-      if (m && m !== execMode) setExecMode(m);
-    };
-    window.addEventListener("aurem:exec-mode-changed", onChanged);
-    return () => window.removeEventListener("aurem:exec-mode-changed", onChanged);
-  }, [execMode]);
-  const handleExecModeChange = (m) => {
-    setExecMode(m);
-    try {
-      window.dispatchEvent(new CustomEvent("aurem:set-exec-mode", {
-        detail: { mode: m },
-      }));
-    } catch { /* ignore */ }
-  };
+  // 2026-08-21 — Swift/Pro/Maxx + Loop picker moved OUT of the TopBar
+  // into the chat composer (ModeLoopPill.jsx, lives inside ChatPanel
+  // now) — Dashboard no longer needs to own/bridge this state.
   const [sidebarPinned,    setSidebarPinned]    = useState(false);
   const [sidebarHovered,   setSidebarHovered]   = useState(false);
 
@@ -644,10 +597,6 @@ function DashboardV2Body() {
                 }));
               }
             }}
-            mode={mode}
-            onModeChange={handleModeChange}
-            execMode={execMode}
-            onExecModeChange={handleExecModeChange}
             hidden={false}
             onNewRun={handleNewRun}
             breadcrumb={activeProject ? {

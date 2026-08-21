@@ -40,6 +40,7 @@ import {
   EXEC_MODES, loadExecMode, saveExecMode,
 } from "./LoopModeToggle";
 import IntentTierIndicator from "./IntentTierIndicator";
+import ModeLoopPill from "./ModeLoopPill";
 import LoopStepBar from "./LoopStepBar";
 import LoopStatusChip from "./LoopStatusChip";        // Iter 309 · Batch-2 aftermath — sticky loop-status chip
 import RevokedRepoBanner from "./RevokedRepoBanner";   // 2026-08-20 — in-chat revoked-access banner
@@ -156,9 +157,9 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   // destructive Clear button.
   const [hideOlder, setHideOlder] = useState(false);
   // Iter 153 — review mode (swift / pro / maxx). Persisted across reloads.
-  // Iter 212m-97 — also synced with the TopBar pills in Dashboard via
-  // the `aurem:set-chat-mode` custom event so the two surfaces stay
-  // in lockstep (previously the TopBar was a dummy).
+  // 2026-08-21 — the Swift/Pro/Maxx (+ Loop) picker now lives directly
+  // in the composer (ModeLoopPill.jsx, below) and sets this state
+  // straight — no more cross-component event bridge to the TopBar.
   const [chatMode, setChatMode] = useState(() => {
     try { return localStorage.getItem("aurem_chat_mode") || "swift"; }
     catch { return "swift"; }
@@ -166,24 +167,6 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   useEffect(() => {
     try { localStorage.setItem("aurem_chat_mode", chatMode); }
     catch { /* ignore */ }
-    // Broadcast → TopBar
-    try {
-      window.dispatchEvent(new CustomEvent("aurem:chat-mode-changed", {
-        detail: { mode: chatMode },
-      }));
-    } catch { /* CustomEvent unsupported */ }
-  }, [chatMode]);
-
-  // Listen ← TopBar pill clicks
-  useEffect(() => {
-    const onSet = (e) => {
-      const m = e?.detail?.mode;
-      if (m && ["swift", "pro", "maxx"].includes(m) && m !== chatMode) {
-        setChatMode(m);
-      }
-    };
-    window.addEventListener("aurem:set-chat-mode", onSet);
-    return () => window.removeEventListener("aurem:set-chat-mode", onSet);
   }, [chatMode]);
 
   const [clearingChat, setClearingChat] = useState(false);
@@ -534,28 +517,6 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     }
     return m;
   });
-  // 2026-08-21 — execMode bridge to the TopBar's mode dropdown
-  // (Pro/Maxx → Prompt/Loop sub-choice). Same pattern as the
-  // chatMode bridge above: broadcast on change, listen for the
-  // TopBar's pick. The standalone composer LoopModeToggle is gone —
-  // this is now the ONLY way execMode changes from the UI.
-  useEffect(() => {
-    try {
-      window.dispatchEvent(new CustomEvent("aurem:exec-mode-changed", {
-        detail: { mode: execMode },
-      }));
-    } catch { /* ignore */ }
-  }, [execMode]);
-  useEffect(() => {
-    const onSet = (e) => {
-      const m = e?.detail?.mode;
-      if (m && [EXEC_MODES.PROMPT, EXEC_MODES.LOOP].includes(m) && m !== execMode) {
-        handleExecModeChange(m);
-      }
-    };
-    window.addEventListener("aurem:set-exec-mode", onSet);
-    return () => window.removeEventListener("aurem:set-exec-mode", onSet);
-  }, [execMode]);
   // Loop pipeline state. `phase` drives the LoopStepBar and decides
   // whether to render the PlanApprovalCard. `retryCount` is reserved
   // for future verify-loop auto-retry UX (max 3).
@@ -3732,6 +3693,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       setChatMode(lastPromptChatModeRef.current);
       lastPromptChatModeRef.current = null;
     }
+    try { saveExecMode(m); } catch { /* ignore */ }
     setExecMode(m);
   }
 
@@ -5074,14 +5036,15 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           {/* Iter 212m-149 → 212m-163 — Intent Tier Indicator. */}
           <IntentTierIndicator liveText={input} lastTier={lastIntentTier} />
           <CharCounter value={input} max={20000} style={{ marginRight: 8 }} />
-          {/* 2026-08-21 — founder request: standalone Loop toggle
-              removed from the composer entirely. Loop selection now
-              lives ONLY in the TopBar's mode dropdown — picking Pro
-              or Maxx there shows a Prompt/Loop sub-choice before the
-              mode is finalised (see TopBar.jsx). `execMode` itself
-              is still owned here and bridged to the TopBar via the
-              aurem:set-exec-mode / aurem:exec-mode-changed events
-              below (same pattern as the chatMode bridge above). */}
+          {/* 2026-08-21 — founder request: Swift/Pro/Maxx (+ Loop
+              sub-choice) moved here from the TopBar — same spot the
+              old standalone "LOOP OFF/ON" toggle used to live. */}
+          <ModeLoopPill
+            mode={chatMode}
+            onModeChange={setChatMode}
+            execMode={execMode}
+            onExecModeChange={handleExecModeChange}
+          />
 
 
           {busy ? (
