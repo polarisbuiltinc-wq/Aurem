@@ -15,7 +15,7 @@
     {
       "step": "history:api-baseline",
       "ok": true,
-      "detail": "session=d4bbcbd4-3e57-4c69-8ba1-394dfaa06962 count=40",
+      "detail": "session=bin-context-pat count=40",
       "ts": "05:27:42"
     },
     {

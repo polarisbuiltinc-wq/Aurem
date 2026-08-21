@@ -2,6 +2,84 @@
 
 **Live URL**: https://auremcto.com
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
+
+## 2026-08-23 — Chat-session-swap bug FIXED (real repro) + CitationGuard false "files not found" bug FIXED (testing-agent verified 34/34, zero issues)
+
+Founder reported: viewing "Check my code for any security problems" on
+dashboard, navigated to /settings and back, saw a COMPLETELY different
+real conversation ("ISSUE Hardcoded JWT secret fallbacks…"). Investigated
+with real reproduction (not code-reading alone) before touching any code,
+per founder's standing rule.
+
+**Verdict: real bug, but NOT data loss — a display bug.** Seeded 2 real
+sessions in DB, reproduced live: with the per-project `localStorage`
+pointer intact, Dashboard→Settings→Dashboard preserved the session
+(no bug). But `localStorage` is shared across ALL tabs/windows — simulating
+a 2nd tab overwriting that pointer (e.g. via "New run" elsewhere) and then
+doing the SAME nav **silently flipped the displayed conversation**,
+screenshot-confirmed, exact symptom reported. Checked DB directly:
+session A's turns were 100% intact throughout — never a data-loss bug.
+Also confirmed via code inspection: no session-switcher UI existed in the
+current (chromeless) dashboard, so users had no way to notice or recover.
+
+**Fixed (founder-approved: both)**:
+1. `Shell.jsx` — added `sessionStorage` (tab-scoped) stickiness ahead of
+   the shared `localStorage` cache, so a tab always keeps showing what
+   it was showing regardless of what any other tab writes.
+2. New `SessionSwitcher.jsx` — a "Chats (N)" dropdown next to "New run"
+   listing real past sessions for the active project (title, relative
+   time, "viewing now", delete, "+ New"), rendered via a React portal
+   (TopBar's `overflow-hidden` was clipping it pre-fix). Wired through
+   `Shell.jsx`'s SessionCtx (newly exposes `sessions/openSession/
+   deleteSession/startNewSession`) → `TopBar.jsx`'s new `historySlot`
+   prop → `Dashboard.jsx`.
+
+Founder also flagged a SEPARATE, more serious recurring bug in the SAME
+investigation: a detailed, accurate multi-file security audit
+immediately followed by "I cannot provide the requested information
+since none of the referenced files were found or accessible" — for the
+SAME files just cited correctly. Found a **previous agent's fix for this
+exact bug already sitting uncommitted in the working tree** (7 files,
+never tested/committed before the fork). Reviewed it fully before
+deciding keep-vs-revert (as instructed) — root cause confirmed correct:
+`routers/chat.py`'s `_ctx` dict built for `CitationGuard`'s own
+re-verification fetch was missing `bin_ctx` (every repo tool requires it
+via `local_tools._repo_ctx_from()`). Proved the exact mechanism live,
+code-level, no mocking of the bug itself: `_repo_ctx_from({...no bin_ctx})`
+→ `None` → immediate `"no_bin_ctx"` refusal for a file that WAS read
+successfully seconds earlier with the correct main-turn `bin_ctx` — vs.
+with `bin_ctx` present, the same call correctly passes the gate and
+reaches the real fetch layer. `CitationGuard.enforce()` converts ANY
+non-ok fetch into a blanket "FILE NOT FOUND", explaining the exact
+reported contradiction. Also fixed in the same batch: CitationGuard's
+rewrite is a single-shot completion with no tool loop — a stray
+`tool_call` fence from the model used to leak as raw text into the chat
+bubble; now stripped defensively (this explains the reported "raw
+tool_call syntax printed as text" on the 3rd retry attempt too).
+**Decision: KEEP the entire pending batch** (also included: `save_finding`
+chat tool to persist conversational audit findings into the real
+findings backlog; `response_confidence.py` audit/security-review intent
+words added to the confidence gate; `codebase_health.py` `/scan` +
+`/last-scan` relaxed from admin-only to any logged-in user, fixing a
+real "silently 403'd real paying customers" regression). Added 6 new
+regression tests (`test_citation_guard_bin_ctx_wiring_2026_08_23.py`).
+
+**testing_agent verified**: 34/34 backend tests pass (6 new + 28
+pre-existing across citation_guard/orchestrator/chat), zero regressions.
+Frontend: session-switcher dropdown opens/closes correctly (Escape +
+outside-click), lists real sessions with "viewing now", row-click
+switches + closes panel, delete/+New present, Dashboard↔Settings nav no
+longer changes the displayed conversation. Zero action items reported.
+Cosmetic-only note: cookie-consent banner overlaps chat input on first
+load (pre-existing, unrelated to this batch, not fixed).
+
+**Not yet committed/deployed** — all of the above (this batch + the
+previous agent's citation_guard batch it was riding on) is preview-only,
+uncommitted in the working tree. Founder still needs to redeploy for any
+of it (including the still-pending Ship-fix batch from 2026-08-22) to
+reach production. **Rollback flow safety checks + Security Pass (both
+founder-approved this session) are still queued, not started** — this
+red-flagged bug took priority per founder's explicit instruction.
 ## 2026-08-22 — Ship-fix batch DEEP-verified (testing-agent 98/98 + real interactive Preview-tab click-through), deployment scan PASS
 Founder requested a full re-run (backend + real interactive UI click, not just curl) before redeploying the fetch_file-signature fix batch. Result: **98/98 backend tests pass** (8 regression files, zero regressions from the arity fix across cto_projects.py/loop_engine.py/loop_execute.py/qa_matrix.py/mode_d_debugger.py). **Interactive Preview-tab click confirmed live**: clicking Code tab → GET /tree returns clean 401 JSON, GET /file returns clean 404 JSON — never the Cloudflare 502 that was the original bug. **Entitled natural-language Loop trigger confirmed live**: typing "run this as a loop" as founder actually started the real Loop pipeline (LOOP status header + PLAN/EXECUTE/VERIFY/SCAN/SHIP bar appeared within ~2s, chat mode auto-switched to AGENTIC/Pro) — failed at PLAN only due to the sandbox's expired GitHub PAT (expected/correct behavior here, not a bug). Non-entitled Loop-toast branch remains unverified (no working Free/Starter test account in sandbox — founder confirmed not urgent, queued). Two minor non-blocking UX notes from testing agent: (1) `/file` returns 404 instead of a clearer 401 "PAT invalid" when the token is actually expired (get_project_file doesn't preflight-validate the PAT the way loop_engine does) — cosmetic, not a bug; (2) in-panel codebase-err banner is shadowed by a higher-level dashboard "GitHub revoked" banner when both would apply — single-source-of-truth, arguably fine. Final `deployment_agent` scan: **PASS, no blockers** (only pre-existing WARN/INFO items unrelated to this batch — Redis fail-open behavior, an unused CORS_ORIGINS env var, and legacy standalone Dockerfiles not used by Emergent's pipeline). **Founder is redeploying now; will run the Live Ship Smoke Test personally post-deploy, then continue with Rollback + Security Pass.**
 

@@ -92,6 +92,10 @@ export function TopBar({
   // Iter 212m-192 — Preview/Graph tabs + "New run" hidden until a repo
   // is connected; they appear automatically once one is.
   hasRepo = true,
+  // 2026-08-23 — slot for the SessionSwitcher ("Chats") dropdown,
+  // placed right beside "New run" so past sessions for this project
+  // are always visible/switchable, not just the most-recent one.
+  historySlot = null,
 }) {
   // Iter 212m-93 → 212m-123 — Founder spec: TopBar hides ONLY when
   // the user starts typing in the chat composer (driven by the
@@ -175,6 +179,8 @@ export function TopBar({
             <div className="h-5 w-px bg-border" />
           </>
         )}
+
+        {historySlot}
 
         {hasRepo && (
           <button onClick={onNewRun} data-testid="ds2-new-run"

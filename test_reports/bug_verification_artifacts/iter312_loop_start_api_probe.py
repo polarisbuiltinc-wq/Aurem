@@ -3,7 +3,7 @@ import os
 import time
 import requests
 
-BASE = os.environ.get('AUREM_PREVIEW_URL', 'https://launch-pad-237.preview.emergentagent.com').rstrip('/')
+BASE = os.environ.get('AUREM_PREVIEW_URL', 'https://bin-context-pat.preview.emergentagent.com').rstrip('/')
 EMAIL = os.environ.get('AUREM_TEST_EMAIL', 'test@aurem.dev')
 PASSWORD = os.environ.get('AUREM_TEST_PASSWORD', 'AuremTest2026!')
 

@@ -13,7 +13,7 @@ import requests
 
 BASE = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 # Override BASE since this test file is run against preview backend
-PREVIEW = "https://launch-pad-237.preview.emergentagent.com"
+PREVIEW = "https://bin-context-pat.preview.emergentagent.com"
 BASE = PREVIEW
 API = f"{BASE}/api/aurem-dev"
 

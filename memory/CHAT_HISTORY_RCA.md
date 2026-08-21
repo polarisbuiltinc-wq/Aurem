@@ -200,7 +200,7 @@ genuinely has zero persisted turns**. Ways this could happen:
 Please paste, from a fresh reload on production while the bug is
 happening:
 
-1. Response body of `GET /chat/history?session_id=d4bbcbd4-3e57-4c69-8ba1-394dfaa06962`
+1. Response body of `GET /chat/history?session_id=bin-context-pat`
    — full JSON, not just status code. If `messages` array has
    entries → we're in case (b) (render discards; likely bundle
    issue). If `messages: []` → we're in case (a) (persistence /

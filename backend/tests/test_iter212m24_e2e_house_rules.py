@@ -16,7 +16,7 @@ import pytest
 import requests
 
 BASE = os.environ.get(
-    "REACT_APP_BACKEND_URL", "https://launch-pad-237.preview.emergentagent.com"
+    "REACT_APP_BACKEND_URL", "https://bin-context-pat.preview.emergentagent.com"
 ).rstrip("/")
 API = f"{BASE}/api/aurem-dev"
 

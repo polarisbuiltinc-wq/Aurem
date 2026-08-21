@@ -1,5 +1,5 @@
 {
-  "summary": "Iter 212m-156 — Mobile dashboard drawer browser-driven verification on PREVIEW (https://launch-pad-237.preview.emergentagent.com) at 390x844 (iPhone 14). All 8 acceptance scenarios PASS. Verified drawer state via CSS transform matrix + bounding box (not just is_visible(), which gave a false-positive 'visible' for an off-screen translated element).",
+  "summary": "Iter 212m-156 — Mobile dashboard drawer browser-driven verification on PREVIEW (https://bin-context-pat.preview.emergentagent.com) at 390x844 (iPhone 14). All 8 acceptance scenarios PASS. Verified drawer state via CSS transform matrix + bounding box (not just is_visible(), which gave a false-positive 'visible' for an off-screen translated element).",
   "backend_issues": {"critical": [], "minor": []},
   "frontend_issues": {
     "ui_bugs": [],

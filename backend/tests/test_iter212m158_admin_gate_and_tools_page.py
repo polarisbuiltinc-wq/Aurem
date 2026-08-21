@@ -55,14 +55,33 @@ def test_security_scan_run_uses_require_admin():
     assert "await require_admin(authorization)" in fix_body
 
 
-def test_codebase_health_all_four_routes_use_require_admin():
+def test_codebase_health_scan_and_last_use_current_dev_not_admin():
+    """2026-08-22 fix — `/scan` and `/last` were regressed to
+    require_admin in Iter 212m-158, but the frontend route guard was
+    already relaxed to <PrivateRoute> (any logged-in user) in a later
+    iteration, and `/fix` (Iter 212m-190) already uses current_dev
+    with its own Pro+ tier gate — the admin-only gate on `/scan`/
+    `/last` silently 403'd every real paying customer clicking
+    "Review findings →" from the chat reminder banner. Both are now
+    current_dev, already scoped to (project_id, user_id) internally,
+    matching `/fix`'s pattern. `/cache-stats` (ops-only) and
+    `/scanner-feedback` stay admin-gated — those are NOT in the
+    regular-user findings-review flow."""
     text = (_BACKEND / "routers" / "codebase_health.py").read_text()
     assert "from cto_services.auth import current_dev, require_admin" in text
-    # Each of the 4 handlers (cache-stats, scan, last, fix) calls the
-    # shared helper.  We verify by checking the count appears at
-    # least 4 times in the file.
-    assert text.count("await require_admin(authorization)") >= 4
-    # And the legacy inline "Admin only" 403 raise is gone.
+
+    scan_idx = text.index("async def scan(")
+    scan_body = text[scan_idx: scan_idx + 1200]
+    assert "await current_dev(authorization)" in scan_body
+    assert "await require_admin(authorization)" not in scan_body
+
+    last_idx = text.index("\n@router.get(\"/last\")")
+    last_body = text[last_idx: last_idx + 800]
+    assert "await current_dev(authorization)" in last_body
+    assert "await require_admin(authorization)" not in last_body
+
+    # cache-stats + scanner-feedback remain admin-only.
+    assert text.count("await require_admin(authorization)") == 2
     assert 'raise HTTPException(403, "Admin only")' not in text
 
 

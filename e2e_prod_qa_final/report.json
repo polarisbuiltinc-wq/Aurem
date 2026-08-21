@@ -27,7 +27,7 @@
     {
       "step": "chat:baseline-history",
       "ok": true,
-      "detail": "session=d4bbcbd4-3e57-4c69-8ba1-394dfaa06962 baseline_turns=40",
+      "detail": "session=bin-context-pat baseline_turns=40",
       "ts": "18:28:30"
     },
     {

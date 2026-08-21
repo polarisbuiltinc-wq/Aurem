@@ -14,7 +14,7 @@ import uuid
 import pytest
 import requests
 
-BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://launch-pad-237.preview.emergentagent.com").rstrip("/")
+BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://bin-context-pat.preview.emergentagent.com").rstrip("/")
 API = f"{BASE}/api/aurem-dev"
 
 FRESH_EMAIL = f"TEST_pr2_fresh_{uuid.uuid4().hex[:8]}@aurem.dev"

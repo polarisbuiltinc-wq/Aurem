@@ -175,7 +175,9 @@ class CitationGuard:
             "Your previous draft referenced files you did not read. "
             "REWRITE your answer using ONLY the content below. "
             "For any path marked `FILE NOT FOUND`, say so explicitly "
-            "instead of guessing.\n\n"
+            "instead of guessing. This rewrite is a plain text answer "
+            "only — do NOT emit a `tool_call` fence or request any "
+            "more tools here; there is no tool loop to run them.\n\n"
             + "\n\n".join(injection_parts)
         )
 
@@ -192,6 +194,17 @@ class CitationGuard:
             # Fallback signature if the caller expects (messages,) only.
             extra_msg = [{"role": "system", "content": injection}]
             new_text = await llm_caller((original_messages or []) + extra_msg)
+
+        # 2026-08-23 — this rewrite is a single-shot completion with no
+        # tool-execution loop behind it. If the model still emits a
+        # `tool_call` fence (habit from the main system prompt), it
+        # would otherwise leak straight into the chat bubble as raw
+        # JSON/XML text — a real prod symptom. Strip it defensively.
+        try:
+            from services.tools_bridge import strip_tool_calls
+            new_text = strip_tool_calls(new_text) if new_text else new_text
+        except Exception as _se:                   # noqa: BLE001
+            logger.warning("CitationGuard: strip_tool_calls skipped: %r", _se)
 
         return {
             "text":     new_text or response_text,

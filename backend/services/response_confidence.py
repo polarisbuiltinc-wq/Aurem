@@ -62,6 +62,16 @@ _CODE_SIGNAL_RE = re.compile(
 # change-request signals (verbs/states, not descriptive nouns) closes
 # that gap — accepting that a genuinely good response occasionally
 # gets the fallback treatment is the intended tradeoff here.
+#
+# 2026-08-22 (later same day) — real prod bug: that tightening had a
+# blind spot. "Check my code for any security problems" (a completely
+# legitimate audit request, no explicit "fix"/"bug" word) would get a
+# real, on-topic audit reply back that naturally says "Root cause:"
+# or proposes an aurem-handoff fix — and the gate wrongly nuked it as
+# a "mismatch" since none of its tokens were in this set. Added
+# AUDIT-specific signals (deliberately still not generic descriptive
+# nouns like "code"/"file" — "audit"/"vulnerability"/"security" etc.
+# are unambiguous code-review intent, unlike "code" or "file" alone).
 _FIX_INTENT_TOKENS = {
     "fix", "fixes", "fixed", "bug", "bugs", "error", "errors", "broken",
     "crash", "crashes", "fail", "fails", "failing", "failed", "issue",
@@ -70,6 +80,9 @@ _FIX_INTENT_TOKENS = {
     "write", "install", "upgrade", "migrate", "optimize",
     "improve", "remove", "delete", "revert",
     "rollback",
+    "audit", "audits", "scan", "scans", "review", "reviews",
+    "vulnerability", "vulnerabilities", "vulnerable", "insecure",
+    "security", "secure", "harden", "hardening", "exploit", "exploits",
 }
 
 # 2026-08-22 — raised from 10: widens the coverage of the STRICT,

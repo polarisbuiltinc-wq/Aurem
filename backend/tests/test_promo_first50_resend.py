@@ -22,7 +22,7 @@ if _BR not in sys.path:
 
 pytestmark = pytest.mark.asyncio
 BASE = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/") or \
-    "https://launch-pad-237.preview.emergentagent.com"
+    "https://bin-context-pat.preview.emergentagent.com"
 
 
 @pytest.fixture

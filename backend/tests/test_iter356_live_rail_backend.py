@@ -15,7 +15,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 BACKEND = Path(__file__).resolve().parents[1]
 load_dotenv(BACKEND / ".env")
 
-BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://launch-pad-237.preview.emergentagent.com").rstrip("/")
+BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://bin-context-pat.preview.emergentagent.com").rstrip("/")
 API = f"{BASE}/api/aurem-dev"
 ADMIN_EMAIL = "test@aurem.dev"
 ADMIN_PASSWORD = "AuremTest2026!"

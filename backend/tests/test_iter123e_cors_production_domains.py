@@ -31,7 +31,7 @@ def test_cors_regex_covers_all_deploy_routing_layers():
     # taken straight from real nginx upstream logs + Emergent docs.
     sample_origins = [
         # Preview pod (existing — must still work)
-        "https://launch-pad-237.preview.emergentagent.com",
+        "https://bin-context-pat.preview.emergentagent.com",
         # Emergent default production domain
         "https://aurem-dev.emergent.host",
         # Emergent K8s ingress fallback (seen in iter 123c production log)

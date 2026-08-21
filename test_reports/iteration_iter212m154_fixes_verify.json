@@ -1,5 +1,5 @@
 {
-  "summary": "Verified all 5 iter212m-154 PROD-regression fixes on PREVIEW (https://launch-pad-237.preview.emergentagent.com). 5/5 PASS. Regressions clean (login, dashboard hydrate, SystemStatsPage KPI cards). Tested both desktop 1440x900 and mobile 390x844.",
+  "summary": "Verified all 5 iter212m-154 PROD-regression fixes on PREVIEW (https://bin-context-pat.preview.emergentagent.com). 5/5 PASS. Regressions clean (login, dashboard hydrate, SystemStatsPage KPI cards). Tested both desktop 1440x900 and mobile 390x844.",
   "backend_issues": { "critical": [], "minor": [] },
   "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
   "fix_verification": {
@@ -38,9 +38,9 @@
     "fix3_mobile_text": " tokens remaining∞ Unlimited",
     "fix4_desktop_toast": {"top": 24, "right": 24, "css_top": "24px", "css_right": "24px", "class": "aurem-toaster", "viewport_w": 1440},
     "fix4_mobile_toast": {"top": 88, "right": 12, "css_top": "88px", "css_right": "12px", "class": "aurem-toaster", "viewport_w": 390},
-    "fix5_authed_url": "https://launch-pad-237.preview.emergentagent.com/codebase-health",
+    "fix5_authed_url": "https://bin-context-pat.preview.emergentagent.com/codebase-health",
     "fix5_authed_h1": "How healthy is your code today?",
-    "fix5_anon_url": "https://launch-pad-237.preview.emergentagent.com/bug-hunt",
+    "fix5_anon_url": "https://bin-context-pat.preview.emergentagent.com/bug-hunt",
     "fix5_anon_h1": "Detect security vulnerabilities in your codebase before they ship"
   },
   "test_report_links": ["/app/test_reports/iteration_iter212m154_fixes_verify.json"],

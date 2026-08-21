@@ -1,7 +1,7 @@
 """Iter 371 — Test setup: signup a user for wizard scenario testing."""
 import os, sys, requests, time, secrets, json
 
-BASE = os.environ["REACT_APP_BACKEND_URL"].rstrip("/") if os.environ.get("REACT_APP_BACKEND_URL") else "https://launch-pad-237.preview.emergentagent.com"
+BASE = os.environ["REACT_APP_BACKEND_URL"].rstrip("/") if os.environ.get("REACT_APP_BACKEND_URL") else "https://bin-context-pat.preview.emergentagent.com"
 API = f"{BASE}/api/aurem-dev"
 
 email = f"TEST_wiz_{int(time.time())}_{secrets.token_hex(3)}@aurem.dev"

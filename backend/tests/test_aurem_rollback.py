@@ -26,7 +26,7 @@ from pymongo import MongoClient
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
     # Fallback to the public preview URL the rest of the suite uses.
-    BASE_URL = "https://launch-pad-237.preview.emergentagent.com"
+    BASE_URL = "https://bin-context-pat.preview.emergentagent.com"
 
 API = f"{BASE_URL}/api/aurem-dev"
 CTO = f"{API}/cto"

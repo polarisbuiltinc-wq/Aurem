@@ -1,5 +1,5 @@
 {
-  "base_url": "https://launch-pad-237.preview.emergentagent.com",
+  "base_url": "https://bin-context-pat.preview.emergentagent.com",
   "project_id": null,
   "checks": {
     "login_status": 200,

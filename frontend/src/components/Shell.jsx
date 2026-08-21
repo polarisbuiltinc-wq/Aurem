@@ -80,6 +80,10 @@ const SessionCtx = createContext({
   sessionId: null,
   setSessionId: () => {},
   refreshSessions: () => {},
+  sessions: [],
+  openSession: () => {},
+  deleteSession: () => {},
+  startNewSession: () => {},
   tokensRemaining: null,
   setTokensRemaining: () => {},
   refreshTokens: () => {},
@@ -165,9 +169,26 @@ export default function Shell({ children, requireAuth, chromeless = false }) {
   // wedge).
   useEffect(() => {
     const key = sessionKeyFor(activeProjectId);
+    // 2026-08-23 — Session-swap-under-you fix. `localStorage` is
+    // shared across every tab/window of this browser, so a DIFFERENT
+    // tab writing a new session id for the same project (e.g. "New
+    // run" clicked elsewhere) used to silently hijack THIS tab's view
+    // the next time Shell remounted (any nav to a chrome-less page
+    // like /settings and back does that). `sessionStorage` is
+    // tab-scoped — check it FIRST so a tab that was already showing
+    // a specific session keeps showing that exact one, no matter what
+    // any other tab does to the shared localStorage pointer. Only a
+    // genuinely fresh tab (no sessionStorage entry yet) falls through
+    // to the old cross-device/localStorage adopt logic below.
+    const sticky = sessionStorage.getItem(key);
+    if (sticky) {
+      setSessionIdState(sticky);
+      return;
+    }
     const cached = localStorage.getItem(key);
     if (cached) {
       setSessionIdState(cached);
+      sessionStorage.setItem(key, cached);
       return;
     }
     // Iter 329 B1-race — detect "auto-seed will populate a project
@@ -198,6 +219,7 @@ export default function Shell({ children, requireAuth, chromeless = false }) {
       if (cancelled) return;
       const next = adopted || newSessionId();
       localStorage.setItem(key, next);
+      sessionStorage.setItem(key, next);
       setSessionIdState(next);
     };
 
@@ -359,8 +381,14 @@ export default function Shell({ children, requireAuth, chromeless = false }) {
   const setSessionId = useCallback((id) => {
     setSessionIdState(id);
     const key = sessionKeyFor(activeProjectId);
-    if (id) localStorage.setItem(key, id);
-    else localStorage.removeItem(key);
+    if (id) {
+      localStorage.setItem(key, id);
+      // Tab-scoped stickiness — see the mount effect above.
+      sessionStorage.setItem(key, id);
+    } else {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    }
   }, [activeProjectId]);
 
   const refreshSessions = useCallback(async (force = false) => {
@@ -421,6 +449,7 @@ export default function Shell({ children, requireAuth, chromeless = false }) {
   return (
     <SessionCtx.Provider value={{
       sessionId, setSessionId, refreshSessions,
+      sessions, openSession, deleteSession, startNewSession,
       tokensRemaining, setTokensRemaining, refreshTokens,
     }}>
       {/* Iter 212m-82 — `chromeless` escape hatch.  When set, Shell

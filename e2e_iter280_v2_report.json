@@ -15,7 +15,7 @@
     {
       "step": "history:api-baseline",
       "ok": true,
-      "detail": "session=d4bbcbd4-3e57-4c69-8ba1-394dfaa06962 count=0",
+      "detail": "session=bin-context-pat count=0",
       "ts": "05:20:32"
     },
     {
@@ -308,15 +308,15 @@
   "loop_sse": [],
   "network": [
     {
-      "url": "https://auremcto.com/api/chat/history?session_id=d4bbcbd4-3e57-4c69-8ba1-394dfaa06962",
+      "url": "https://auremcto.com/api/chat/history?session_id=bin-context-pat",
       "status": 404
     },
     {
-      "url": "https://auremcto.com/api/chat/history?session_id=d4bbcbd4-3e57-4c69-8ba1-394dfaa06962",
+      "url": "https://auremcto.com/api/chat/history?session_id=bin-context-pat",
       "status": 404
     },
     {
-      "url": "https://auremcto.com/api/chat/history?session_id=d4bbcbd4-3e57-4c69-8ba1-394dfaa06962",
+      "url": "https://auremcto.com/api/chat/history?session_id=bin-context-pat",
       "status": 404
     }
   ],

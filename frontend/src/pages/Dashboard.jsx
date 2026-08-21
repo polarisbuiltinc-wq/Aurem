@@ -49,6 +49,7 @@ import AddLiveSiteModal from "../components/AddLiveSiteModal";        // Iter 21
 import ShipConfirmModal from "../components/ShipConfirmModal";
 import ShipStreakWidget from "../components/ShipStreakWidget";
 import SecretScanCard from "../components/SecretScanCard";
+import SessionSwitcher from "../components/SessionSwitcher";
 import { toast } from "../components/Toast";
 import { api } from "../lib/api";
 import { logout, getUser } from "../lib/api";
@@ -608,6 +609,7 @@ function DashboardV2Body() {
             healthScore={healthScore}
             healthScoreLoading={healthScoreLoading}
             statusSlot={<TopBarStatusSlot />}
+            historySlot={<SessionSwitcher />}
             streakSlot={
               <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                 <ShipStreakWidget />

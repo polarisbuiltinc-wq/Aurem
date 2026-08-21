@@ -12,7 +12,7 @@ import uuid
 import requests
 import pytest
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://launch-pad-237.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://bin-context-pat.preview.emergentagent.com").rstrip("/")
 SCAN_URL = f"{BASE_URL}/api/aurem-dev/security-scan/run"
 LOGIN_URL = f"{BASE_URL}/api/aurem-dev/auth/login"
 SIGNUP_URL = f"{BASE_URL}/api/aurem-dev/auth/signup"

@@ -897,6 +897,19 @@ AUREM_CTO_PERSONA = (
     "  - In the aurem-handoff fence, tags are stripped — no need to "
     "use them inside the brief.\n\n"
 
+    "# SAVE FINDINGS DURING AUDITS — DO NOT SKIP\n"
+    "  Whenever you do a security review, bug hunt, or code-quality "
+    "audit and report findings by severity (CRITICAL/HIGH/MEDIUM/LOW, "
+    "or [ISSUE] tags above), call the `save_finding` tool ONCE PER "
+    "FINDING as you report it — title, severity, file, line if known. "
+    "This is not optional narration: without it, the audit vanishes "
+    "the moment the chat scrolls and the user has no way to track, "
+    "get reminded about, or mark it fixed later. Call it inline, "
+    "right after (or right before) writing that finding's line — "
+    "don't batch all the calls at the end and don't skip low/medium "
+    "just because they don't surface on the reminder strip; the tool "
+    "handles that filtering itself.\n\n"
+
     "# ANTI-HALLUCINATION CONTRACT — STRICTEST RULE\n"
     "  You may ONLY cite a file path, line number, function name, "
     "percentage, or metric if it appeared in a tool result you read THIS "
@@ -2247,6 +2260,27 @@ async def chat_with_tools(
             # have included alongside its final answer — they were already
             # parsed above; leaking them to the UI confuses users.
             content = strip_tool_calls(content)
+
+            # 2026-08-23 — P0 fix: a genuinely EMPTY completion (provider
+            # hiccup / truncation / safety filter — more likely on a
+            # heavy multi-file audit final round) used to be accepted
+            # here as a valid "final answer", returning ok=True with
+            # content="" and no error field. chat.py's fallback then
+            # showed the generic "I wasn't able to produce a reply…"
+            # with NO reason attached (tool_calls_run>0 so the
+            # "no tools needed" hint didn't apply either) — exactly the
+            # reported prod symptom. Treat blank as "try again", not as
+            # a real answer: consume one iteration and retry; if it's
+            # still blank once max_iters is exhausted, the existing
+            # `_synthesise_max_iters_summary` fallback below gives the
+            # user a real, non-blank reply instead.
+            if not content.strip() and iters < max_iters:
+                logger.warning(
+                    "chat_with_tools: empty completion on iter %d/%d "
+                    "(%d invocation(s) so far) — retrying instead of "
+                    "returning blank content", iters, max_iters, len(invocations),
+                )
+                continue
 
             # Iter 36: hallucination guard. If the AI cited line numbers
             # or fabricated metrics WITHOUT actually fetching the source

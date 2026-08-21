@@ -238,7 +238,7 @@ stall for days.
 
 ### Live verification
 ```
-$ curl -s https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/version | jq
+$ curl -s https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/version | jq
 {
   "commit_sha": "8cd8747638a0",
   "built_at": "2026-07-29T06:29:13.253344+00:00",

@@ -182,7 +182,7 @@ async def seed_and_check_mongo_hygiene() -> dict:
 
 
 def check_endpoint_auth_and_shape() -> dict:
-    base = 'https://launch-pad-237.preview.emergentagent.com/api/aurem-dev'
+    base = 'https://bin-context-pat.preview.emergentagent.com/api/aurem-dev'
     sess = requests.Session()
     unauth = sess.get(f'{base}/admin/loop-token-metrics', timeout=20)
     bad = sess.get(f'{base}/admin/loop-token-metrics', headers={'Authorization': 'Bearer invalid-token'}, timeout=20)

@@ -1,7 +1,7 @@
 """Iter 372 — Setup: signup a test user for wizard single-repo auto-select verification."""
 import os, sys, time, secrets, json, requests
 
-BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://launch-pad-237.preview.emergentagent.com").rstrip("/")
+BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://bin-context-pat.preview.emergentagent.com").rstrip("/")
 API = f"{BASE}/api/aurem-dev"
 
 email = f"TEST_wiz372_{int(time.time())}_{secrets.token_hex(3)}@aurem.dev"

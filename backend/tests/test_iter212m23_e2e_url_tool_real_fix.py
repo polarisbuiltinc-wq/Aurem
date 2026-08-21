@@ -19,7 +19,7 @@ import requests
 
 BASE_URL = os.environ.get(
     "REACT_APP_BACKEND_URL",
-    "https://launch-pad-237.preview.emergentagent.com",
+    "https://bin-context-pat.preview.emergentagent.com",
 ).rstrip("/")
 
 # 2026-08-19 SECURITY FIX — real founder credentials were hardcoded

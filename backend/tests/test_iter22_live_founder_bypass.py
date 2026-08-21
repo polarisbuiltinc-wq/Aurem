@@ -15,7 +15,7 @@ import os
 import pytest
 import requests
 
-BASE_URL = "https://launch-pad-237.preview.emergentagent.com"
+BASE_URL = "https://bin-context-pat.preview.emergentagent.com"
 # Iter 22 NOTE: On PREVIEW, `teji.ss1986@gmail.com` is not seeded with either
 # password from /app/memory/test_credentials.md (both return 401). However,
 # `test@aurem.dev` on PREVIEW is auto-promoted to tier=founder, is_admin=true,

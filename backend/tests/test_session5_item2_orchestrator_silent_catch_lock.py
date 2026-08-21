@@ -31,10 +31,12 @@ ORCHESTRATOR = BACKEND / "services" / "orchestrator.py"
 
 
 # The 7 currently-legitimate UI-hook wrapper sites (locked as of
-# 2026-07-31 post-Session-5-Item-2 audit). If a real hygiene target
-# ever slips into orchestrator.py, it will NOT be in this set and
-# the test below will fail.
-LEGIT_UI_HOOK_LINES = {1958, 1963, 2067, 2286, 2332, 2354, 2363}
+# 2026-07-31 post-Session-5-Item-2 audit, re-snapshotted 2026-08-23
+# after the P0 security-scan fix added lines to chat_with_tools —
+# all 7 sites verified still-hooks, only line numbers shifted). If a
+# real hygiene target ever slips into orchestrator.py, it will NOT be
+# in this set and the test below will fail.
+LEGIT_UI_HOOK_LINES = {2067, 2072, 2174, 2439, 2485, 2516, 2525}
 
 
 def _is_truly_empty_return(s: ast.stmt) -> bool:

@@ -20,7 +20,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 BASE = os.environ.get(
     "REACT_APP_BACKEND_URL",
-    "https://launch-pad-237.preview.emergentagent.com",
+    "https://bin-context-pat.preview.emergentagent.com",
 ).rstrip("/")
 API = f"{BASE}/api/aurem-dev"
 

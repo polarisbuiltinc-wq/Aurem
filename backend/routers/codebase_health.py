@@ -653,9 +653,15 @@ async def cache_stats(authorization: Optional[str] = Header(None)) -> dict:
 async def scan(
     body: dict, authorization: Optional[str] = Header(None),
 ) -> dict:
-    # Iter 212m-158 — Health scan is now admin/founder-only (matches
-    # the frontend route guard shipped in iter 212m-157).
-    user = await require_admin(authorization)
+    # 2026-08-22 fix — was require_admin (Iter 212m-158), but the
+    # frontend route guard was ALREADY relaxed to <PrivateRoute> (any
+    # logged-in user) back in a later iteration, and this handler
+    # already fully scopes by (project_id, user_id) + has its own
+    # rate limiting for non-founder accounts (line ~672) — the
+    # admin-only gate here was leftover from before that frontend
+    # change and silently 403'd every real paying customer who
+    # clicked "Review findings →" from the chat reminder banner.
+    user = await current_dev(authorization)
     user_id = user["user_id"]
     project_id = (body or {}).get("project_id")
     categories = (body or {}).get("categories") or list(SCANNERS.keys())
@@ -863,10 +869,12 @@ async def last_scan(
 ) -> dict:
     if not project_id:
         raise HTTPException(400, "project_id required")
-    # Iter 212m-158 — Admin/founder-only.  Non-admins shouldn't be
-    # able to poll last-scan state for any project (would leak the
-    # admin-only Health Scanner UX through a side channel).
-    user = await require_admin(authorization)
+    # 2026-08-22 fix — was require_admin, same regression as /scan
+    # above: silently 403'd real paying customers polling their own
+    # last scan result. Already scoped to this exact user_id in the
+    # query below, so relaxing to current_dev can't leak another
+    # user's scan data.
+    user = await current_dev(authorization)
     user_id = user["user_id"]
     db = get_db()
     if db is None:

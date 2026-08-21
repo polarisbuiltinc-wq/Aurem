@@ -13,7 +13,7 @@
   - users: 41 · real_developers: 30 · commits_shipped: 88 · tasks_shipped: 82
 
 ## /admin Banner Verification (via preview — same code as prod)
-Preview URL: https://launch-pad-237.preview.emergentagent.com/admin
+Preview URL: https://bin-context-pat.preview.emergentagent.com/admin
 - ✅ "1 critical integration alert (total active: 1)" — Session 6 Item 2 (Tavily dedup)
 - ✅ "74 Developers" — Session 6 Item 5 (`stats?.real_developers ?? stats?.users` fallback)
 - ✅ "Built — not yet published (aurem-cto-0.1.0.vsix ready; needs `vsce publish` + PAT)" — Session 6 Item 1

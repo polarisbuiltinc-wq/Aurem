@@ -1,19 +1,19 @@
 [
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/login"
+    "url": "https://bin-context-pat.preview.emergentagent.com/login"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/@vite/client"
+    "url": "https://bin-context-pat.preview.emergentagent.com/@vite/client"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/aurem-bg.webp"
+    "url": "https://bin-context-pat.preview.emergentagent.com/aurem-bg.webp"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/F12ErrorCapture.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/F12ErrorCapture.js"
   },
   {
     "method": "GET",
@@ -21,7 +21,7 @@
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/main.jsx?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/main.jsx?t=1785116446525"
   },
   {
     "method": "GET",
@@ -29,171 +29,171 @@
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/@react-refresh"
+    "url": "https://bin-context-pat.preview.emergentagent.com/@react-refresh"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/react.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/react-dom_client.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react-dom_client.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/App.jsx?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/App.jsx?t=1785116446525"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/index.css?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/index.css?t=1785116446525"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/utils/errorReporter.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/utils/errorReporter.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/vite/dist/client/env.mjs"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/vite/dist/client/env.mjs"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/react-router-dom.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react-router-dom.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/useAutoClearConsole.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/useAutoClearConsole.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/Toast.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/Toast.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/FixProgressDrawer.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/FixProgressDrawer.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/FixJobContext.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/FixJobContext.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PersistentFixBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PersistentFixBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/CookieConsentBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/CookieConsentBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/Landing.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/Landing.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/Both.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/Both.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/LoopLiveFeedDemo.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/LoopLiveFeedDemo.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/VisualFixtures.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/VisualFixtures.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/AdminQADashboard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/AdminQADashboard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/Login.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/Login.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/Signup.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/Signup.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/WhyOra.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/WhyOra.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/services/theme.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/services/theme.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-D2H3OWU7.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-D2H3OWU7.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-MTI3AIJG.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-MTI3AIJG.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-5LUJUZZY.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-5LUJUZZY.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LoopLiveFeed.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LoopLiveFeed.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/axios.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/axios.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LoopStepBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LoopStepBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/lucide-react.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/lucide-react.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/GoogleIcon.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/GoogleIcon.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/AuthShell.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/AuthShell.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/usePageMeta.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/usePageMeta.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/api.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/api.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/RobotGuide.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/RobotGuide.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/analytics.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/analytics.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/FounderOfferPill.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/FounderOfferPill.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PricingCards.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PricingCards.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/demo/WalkthroughPlayer.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/demo/WalkthroughPlayer.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/demo/demoSteps.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/demo/demoSteps.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/dompurify.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/dompurify.js?v=2aa46b32"
   },
   {
     "method": "GET",
@@ -201,23 +201,23 @@
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/cdn-cgi/challenge-platform/scripts/jsd/main.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/cdn-cgi/challenge-platform/scripts/jsd/main.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/cdn-cgi/challenge-platform/h/g/scripts/jsd/b0da9f4911ba/main.js?"
+    "url": "https://bin-context-pat.preview.emergentagent.com/cdn-cgi/challenge-platform/h/g/scripts/jsd/b0da9f4911ba/main.js?"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/aurem-bg.webp"
+    "url": "https://bin-context-pat.preview.emergentagent.com/aurem-bg.webp"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/auth/robot-guide"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/auth/robot-guide"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/auth/robot-guide"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/auth/robot-guide"
   },
   {
     "method": "GET",
@@ -233,7 +233,7 @@
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/cdn-cgi/challenge-platform/h/g/jsd/oneshot/b0da9f4911ba/0.5748515336314267:1785114038:XjnHbZOxgMMU1UXaVD4d0nnTjCz5rV_yqt9jb52yBOw/a217f21b193fff5c"
+    "url": "https://bin-context-pat.preview.emergentagent.com/cdn-cgi/challenge-platform/h/g/jsd/oneshot/b0da9f4911ba/0.5748515336314267:1785114038:XjnHbZOxgMMU1UXaVD4d0nnTjCz5rV_yqt9jb52yBOw/a217f21b193fff5c"
   },
   {
     "method": "POST",
@@ -241,95 +241,95 @@
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/cdn-cgi/rum?"
+    "url": "https://bin-context-pat.preview.emergentagent.com/cdn-cgi/rum?"
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/auth/login"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/auth/login"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/auth/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/auth/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/Dashboard.jsx?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/Dashboard.jsx?t=1785116446525"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/dashboard"
+    "url": "https://bin-context-pat.preview.emergentagent.com/dashboard"
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/cdn-cgi/rum?"
+    "url": "https://bin-context-pat.preview.emergentagent.com/cdn-cgi/rum?"
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/cdn-cgi/rum?"
+    "url": "https://bin-context-pat.preview.emergentagent.com/cdn-cgi/rum?"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ShipConfirmModal.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ShipConfirmModal.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ConnectRepoBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ConnectRepoBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/AddLiveSiteModal.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/AddLiveSiteModal.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/tour/ConnectRepoTour.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/tour/ConnectRepoTour.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PersonalTrackBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PersonalTrackBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/SecretScanCard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/SecretScanCard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/dashboard/v2/TopBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/dashboard/v2/TopBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/dashboard/v2/AskAdvisorReal.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/dashboard/v2/AskAdvisorReal.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/Shell.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/Shell.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/RepoCleanupBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/RepoCleanupBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ChatPanel.jsx?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ChatPanel.jsx?t=1785116446525"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ShipStreakWidget.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ShipStreakWidget.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/dashboard/v2/SidebarBound.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/dashboard/v2/SidebarBound.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/tour/FinishSetupBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/tour/FinishSetupBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/TabBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/TabBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/NewUserWizard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/NewUserWizard.jsx"
   },
   {
     "method": "GET",
@@ -341,187 +341,187 @@
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/aurem-bg.webp"
+    "url": "https://bin-context-pat.preview.emergentagent.com/aurem-bg.webp"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/F12ErrorCapture.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/F12ErrorCapture.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/main.jsx?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/main.jsx?t=1785116446525"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/@react-refresh"
+    "url": "https://bin-context-pat.preview.emergentagent.com/@react-refresh"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/@vite/client"
+    "url": "https://bin-context-pat.preview.emergentagent.com/@vite/client"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/react.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/vite/dist/client/env.mjs"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/vite/dist/client/env.mjs"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/react-dom_client.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react-dom_client.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/App.jsx?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/App.jsx?t=1785116446525"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/utils/errorReporter.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/utils/errorReporter.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/index.css?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/index.css?t=1785116446525"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-D2H3OWU7.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-D2H3OWU7.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-MTI3AIJG.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-MTI3AIJG.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/CookieConsentBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/CookieConsentBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/Toast.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/Toast.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/VisualFixtures.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/VisualFixtures.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/LoopLiveFeedDemo.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/LoopLiveFeedDemo.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/AdminQADashboard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/AdminQADashboard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/Login.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/Login.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/FixJobContext.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/FixJobContext.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/useAutoClearConsole.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/useAutoClearConsole.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/services/theme.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/services/theme.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/WhyOra.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/WhyOra.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/Signup.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/Signup.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PersistentFixBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PersistentFixBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/FixProgressDrawer.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/FixProgressDrawer.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/Landing.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/Landing.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/Both.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/Both.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/react-router-dom.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react-router-dom.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-5LUJUZZY.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-5LUJUZZY.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LoopStepBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LoopStepBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/AuthShell.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/AuthShell.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/RobotGuide.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/RobotGuide.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LoopLiveFeed.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LoopLiveFeed.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/GoogleIcon.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/GoogleIcon.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/api.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/api.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/FounderOfferPill.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/FounderOfferPill.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/demo/WalkthroughPlayer.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/demo/WalkthroughPlayer.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/usePageMeta.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/usePageMeta.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PricingCards.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PricingCards.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/analytics.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/analytics.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/demo/demoSteps.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/demo/demoSteps.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/axios.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/axios.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/dompurify.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/dompurify.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/lucide-react.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/lucide-react.js?v=2aa46b32"
   },
   {
     "method": "GET",
@@ -533,95 +533,95 @@
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/cdn-cgi/rum?"
+    "url": "https://bin-context-pat.preview.emergentagent.com/cdn-cgi/rum?"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/Dashboard.jsx?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/Dashboard.jsx?t=1785116446525"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ShipStreakWidget.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ShipStreakWidget.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/dashboard/v2/AskAdvisorReal.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/dashboard/v2/AskAdvisorReal.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/SecretScanCard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/SecretScanCard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/dashboard/v2/SidebarBound.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/dashboard/v2/SidebarBound.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/tour/ConnectRepoTour.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/tour/ConnectRepoTour.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/tour/FinishSetupBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/tour/FinishSetupBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/TabBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/TabBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PersonalTrackBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PersonalTrackBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/NewUserWizard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/NewUserWizard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/AddLiveSiteModal.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/AddLiveSiteModal.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ShipConfirmModal.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ShipConfirmModal.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ConnectRepoBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ConnectRepoBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/RepoCleanupBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/RepoCleanupBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/dashboard/v2/TopBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/dashboard/v2/TopBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/dashboard/v2/cn.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/dashboard/v2/cn.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/Shell.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/Shell.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ChatPanel.jsx?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ChatPanel.jsx?t=1785116446525"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/TaskLiveTape.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/TaskLiveTape.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/TokenBell.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/TokenBell.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/cacheCleaner.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/cacheCleaner.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ThemeToggle.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ThemeToggle.jsx"
   },
   {
     "method": "POST",
@@ -629,315 +629,315 @@
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PWAInstallPrompt.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PWAInstallPrompt.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ClearCacheButton.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ClearCacheButton.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/FloatingORAButton.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/FloatingORAButton.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/WarmStatusBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/WarmStatusBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ModeSelector.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ModeSelector.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PreviewPanel.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PreviewPanel.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ThinkingHint.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ThinkingHint.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ChatPanelF12.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ChatPanelF12.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LiveTaskPopup.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LiveTaskPopup.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/TemperatureBadge.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/TemperatureBadge.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PostTaskScan.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PostTaskScan.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/IntentTierIndicator.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/IntentTierIndicator.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/GraphPanel.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/GraphPanel.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LoopModeToggle.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LoopModeToggle.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/AgentStatusBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/AgentStatusBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LoopStatusChip.jsx?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LoopStatusChip.jsx?t=1785116446525"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/FounderOfferCard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/FounderOfferCard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PlanApprovalCard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PlanApprovalCard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/chat/TokenBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/chat/TokenBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/chat/RepoHelpDialog.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/chat/RepoHelpDialog.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/securityScanCache.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/securityScanCache.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ShipPendingCard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ShipPendingCard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/utils/chatBgTint.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/utils/chatBgTint.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/MessageBubble.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/MessageBubble.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/hooks/useChatMessages.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/hooks/useChatMessages.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/chat/StreamHealthPill.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/chat/StreamHealthPill.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/hooks/useChatStream.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/hooks/useChatStream.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/chat/ToolButton.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/chat/ToolButton.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/utils/chatTextUtils.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/utils/chatTextUtils.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ScanStatusStrip.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ScanStatusStrip.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/hooks/useChatSession.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/hooks/useChatSession.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/SecurityScanDrawer.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/SecurityScanDrawer.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/SlashCommandMenu.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/SlashCommandMenu.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/SuggestionBoxModal.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/SuggestionBoxModal.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/hooks/useWarmStart.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/hooks/useWarmStart.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LiveStepFloatingCard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LiveStepFloatingCard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LoopActionCards.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LoopActionCards.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/loopApi.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/loopApi.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/hooks/useORAPanel.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/hooks/useORAPanel.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ORASidePanel.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ORASidePanel.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/KnowledgeGraph.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/KnowledgeGraph.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/DeployPanel.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/DeployPanel.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/FileDiffPeek.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/FileDiffPeek.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/TaskManagementPanel.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/TaskManagementPanel.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ShipDialog.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ShipDialog.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/TaskProgressCard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/TaskProgressCard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/MermaidBlock.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/MermaidBlock.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PatRequiredCTA.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PatRequiredCTA.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/StepCards.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/StepCards.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/SystemSignalBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/SystemSignalBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/BulkFixConfirmModal.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/BulkFixConfirmModal.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/RenderedMessage.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/RenderedMessage.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/@xyflow/react/dist/style.css"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/@xyflow/react/dist/style.css"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/sonner.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/sonner.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/useFixQuota.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/useFixQuota.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/hooks/useTextToVoice.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/hooks/useTextToVoice.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/@xyflow_react.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/@xyflow_react.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/CodeBlock.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/CodeBlock.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ShipLintBadge.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ShipLintBadge.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/mermaid.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/mermaid.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-IXVEWXTN.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-IXVEWXTN.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-I676OURV.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-I676OURV.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-NBNKHDLM.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-NBNKHDLM.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-FRORFES4.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-FRORFES4.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-6IV5PJ4B.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-6IV5PJ4B.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-XDAX6ODJ.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-XDAX6ODJ.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-SQFHAAAJ.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-SQFHAAAJ.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-TNWHCC6S.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-TNWHCC6S.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-TVFYHS4S.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-TVFYHS4S.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-E27TLA6T.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-E27TLA6T.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-UYLWTCVG.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-UYLWTCVG.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-ZLWDVJFY.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-ZLWDVJFY.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-ZC5CJRJ4.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-ZC5CJRJ4.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-AG6KA2XO.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-AG6KA2XO.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-7AA2U3EY.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-7AA2U3EY.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-GYCHOOWS.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-GYCHOOWS.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-POX264PI.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-POX264PI.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-NVSIRJGP.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-NVSIRJGP.js?v=2aa46b32"
   },
   {
     "method": "GET",
@@ -949,207 +949,207 @@
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/health"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/health"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/health"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/health"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/wrapped/me?period=this_week"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/wrapped/me?period=this_week"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/vanguard/ci-findings?repo=mock%2Fiter312&limit=5"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/vanguard/ci-findings?repo=mock%2Fiter312&limit=5"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/auth/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/auth/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/cto/projects/cleanup-summary"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/cleanup-summary"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/cto/projects/list"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/list"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/founder-offer/status"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/founder-offer/status"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/founder-offer/user-status"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/founder-offer/user-status"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/findings/backlog?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/findings/backlog?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/fix-pipeline/quota"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/fix-pipeline/quota"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/usage/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/usage/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/agents/list"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/agents/list"
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/cto/projects/p_iter312_mock/warm-start"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/p_iter312_mock/warm-start"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/usage/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/usage/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/advisor/context?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/advisor/context?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/codebase-health/last?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/codebase-health/last?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/usage/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/usage/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/wrapped/me?period=this_week"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/wrapped/me?period=this_week"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/vanguard/ci-findings?repo=mock%2Fiter312&limit=5"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/vanguard/ci-findings?repo=mock%2Fiter312&limit=5"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/auth/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/auth/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/cto/projects/cleanup-summary"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/cleanup-summary"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/founder-offer/status"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/founder-offer/status"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/founder-offer/user-status"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/founder-offer/user-status"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/findings/backlog?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/findings/backlog?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/fix-pipeline/quota"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/fix-pipeline/quota"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/usage/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/usage/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/agents/list"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/agents/list"
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/cto/projects/p_iter312_mock/warm-start"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/p_iter312_mock/warm-start"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/usage/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/usage/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/advisor/context?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/advisor/context?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/codebase-health/last?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/codebase-health/last?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/usage/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/usage/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/cto/projects/connection-status"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/connection-status"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/history?session_id=fd6a0a7b-a49a-4c0e-b000-597b71858a47"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/history?session_id=bin-context-pat"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
@@ -1173,15 +1173,15 @@
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
@@ -1193,19 +1193,19 @@
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/classify-intent"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/classify-intent"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "POST",
@@ -1225,23 +1225,23 @@
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/start"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/start"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/thinking-hint"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/thinking-hint"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
@@ -1249,59 +1249,59 @@
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/loop_fake_iter312_recovery/stream"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/loop_fake_iter312_recovery/stream"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/loop_fake_iter312_recovery/stream"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/loop_fake_iter312_recovery/stream"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/cto/projects/list"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/list"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/loop_fake_iter312_recovery/stream"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/loop_fake_iter312_recovery/stream"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/cto/projects/list"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/list"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/loop_fake_iter312_recovery/stream"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/loop_fake_iter312_recovery/stream"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/cto/projects/list"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/list"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/dashboard"
+    "url": "https://bin-context-pat.preview.emergentagent.com/dashboard"
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/cdn-cgi/rum?"
+    "url": "https://bin-context-pat.preview.emergentagent.com/cdn-cgi/rum?"
   },
   {
     "method": "GET",
@@ -1309,7 +1309,7 @@
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/aurem-bg.webp"
+    "url": "https://bin-context-pat.preview.emergentagent.com/aurem-bg.webp"
   },
   {
     "method": "GET",
@@ -1321,31 +1321,31 @@
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/F12ErrorCapture.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/F12ErrorCapture.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/main.jsx?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/main.jsx?t=1785116446525"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/react.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/react-dom_client.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react-dom_client.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/utils/errorReporter.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/utils/errorReporter.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/index.css?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/index.css?t=1785116446525"
   },
   {
     "method": "GET",
@@ -1353,155 +1353,155 @@
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-D2H3OWU7.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-D2H3OWU7.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-MTI3AIJG.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-MTI3AIJG.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-5LUJUZZY.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-5LUJUZZY.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/@vite/client"
+    "url": "https://bin-context-pat.preview.emergentagent.com/@vite/client"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/@react-refresh"
+    "url": "https://bin-context-pat.preview.emergentagent.com/@react-refresh"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/App.jsx?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/App.jsx?t=1785116446525"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/useAutoClearConsole.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/useAutoClearConsole.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/services/theme.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/services/theme.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/react-router-dom.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react-router-dom.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/vite/dist/client/env.mjs"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/vite/dist/client/env.mjs"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/Toast.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/Toast.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/FixJobContext.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/FixJobContext.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/api.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/api.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/CookieConsentBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/CookieConsentBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/VisualFixtures.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/VisualFixtures.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/axios.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/axios.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/FixProgressDrawer.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/FixProgressDrawer.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/LoopLiveFeedDemo.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/LoopLiveFeedDemo.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/Signup.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/Signup.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PersistentFixBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PersistentFixBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/AdminQADashboard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/AdminQADashboard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/usePageMeta.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/usePageMeta.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/analytics.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/analytics.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/Login.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/Login.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/WhyOra.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/WhyOra.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/Both.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/Both.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/Landing.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/Landing.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/lucide-react.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/lucide-react.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LoopLiveFeed.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LoopLiveFeed.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LoopStepBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LoopStepBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/RobotGuide.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/RobotGuide.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/GoogleIcon.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/GoogleIcon.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/dompurify.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/dompurify.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/AuthShell.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/AuthShell.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PricingCards.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PricingCards.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/demo/WalkthroughPlayer.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/demo/WalkthroughPlayer.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/FounderOfferPill.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/FounderOfferPill.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/demo/demoSteps.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/demo/demoSteps.jsx"
   },
   {
     "method": "GET",
@@ -1529,407 +1529,407 @@
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/pages/Dashboard.jsx?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/pages/Dashboard.jsx?t=1785116446525"
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/cdn-cgi/rum?"
+    "url": "https://bin-context-pat.preview.emergentagent.com/cdn-cgi/rum?"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/TabBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/TabBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ConnectRepoBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ConnectRepoBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/tour/ConnectRepoTour.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/tour/ConnectRepoTour.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PersonalTrackBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PersonalTrackBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/NewUserWizard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/NewUserWizard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/RepoCleanupBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/RepoCleanupBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/AddLiveSiteModal.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/AddLiveSiteModal.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ShipStreakWidget.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ShipStreakWidget.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/dashboard/v2/TopBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/dashboard/v2/TopBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/Shell.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/Shell.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/SecretScanCard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/SecretScanCard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/dashboard/v2/cn.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/dashboard/v2/cn.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/cacheCleaner.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/cacheCleaner.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/tour/FinishSetupBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/tour/FinishSetupBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/dashboard/v2/AskAdvisorReal.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/dashboard/v2/AskAdvisorReal.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ShipConfirmModal.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ShipConfirmModal.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/dashboard/v2/SidebarBound.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/dashboard/v2/SidebarBound.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ChatPanel.jsx?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ChatPanel.jsx?t=1785116446525"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/TokenBell.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/TokenBell.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/TaskLiveTape.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/TaskLiveTape.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ThemeToggle.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ThemeToggle.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/FloatingORAButton.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/FloatingORAButton.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ClearCacheButton.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ClearCacheButton.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/hooks/useWarmStart.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/hooks/useWarmStart.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/securityScanCache.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/securityScanCache.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/hooks/useChatMessages.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/hooks/useChatMessages.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/loopApi.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/loopApi.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/utils/chatBgTint.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/utils/chatBgTint.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/hooks/useChatStream.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/hooks/useChatStream.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/hooks/useChatSession.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/hooks/useChatSession.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/utils/chatTextUtils.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/utils/chatTextUtils.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/hooks/useORAPanel.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/hooks/useORAPanel.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PWAInstallPrompt.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PWAInstallPrompt.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/SuggestionBoxModal.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/SuggestionBoxModal.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ThinkingHint.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ThinkingHint.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/WarmStatusBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/WarmStatusBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PreviewPanel.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PreviewPanel.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ModeSelector.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ModeSelector.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ChatPanelF12.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ChatPanelF12.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/TemperatureBadge.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/TemperatureBadge.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LoopModeToggle.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LoopModeToggle.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LiveStepFloatingCard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LiveStepFloatingCard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/GraphPanel.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/GraphPanel.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/AgentStatusBar.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/AgentStatusBar.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/FounderOfferCard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/FounderOfferCard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PostTaskScan.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PostTaskScan.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LiveTaskPopup.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LiveTaskPopup.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/IntentTierIndicator.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/IntentTierIndicator.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/chat/RepoHelpDialog.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/chat/RepoHelpDialog.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LoopStatusChip.jsx?t=1785116446525"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LoopStatusChip.jsx?t=1785116446525"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ShipPendingCard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ShipPendingCard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PlanApprovalCard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PlanApprovalCard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/chat/TokenBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/chat/TokenBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/SlashCommandMenu.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/SlashCommandMenu.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/MessageBubble.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/MessageBubble.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/chat/ToolButton.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/chat/ToolButton.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/chat/StreamHealthPill.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/chat/StreamHealthPill.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/LoopActionCards.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/LoopActionCards.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ScanStatusStrip.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ScanStatusStrip.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ORASidePanel.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ORASidePanel.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/SecurityScanDrawer.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/SecurityScanDrawer.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/hooks/useTextToVoice.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/hooks/useTextToVoice.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/lib/useFixQuota.js"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/lib/useFixQuota.js"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/sonner.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/sonner.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/KnowledgeGraph.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/KnowledgeGraph.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/DeployPanel.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/DeployPanel.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/@xyflow/react/dist/style.css"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/@xyflow/react/dist/style.css"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/@xyflow_react.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/@xyflow_react.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-IXVEWXTN.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-IXVEWXTN.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-I676OURV.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-I676OURV.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ShipDialog.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ShipDialog.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/RenderedMessage.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/RenderedMessage.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/SystemSignalBanner.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/SystemSignalBanner.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/FileDiffPeek.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/FileDiffPeek.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/TaskManagementPanel.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/TaskManagementPanel.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/TaskProgressCard.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/TaskProgressCard.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/BulkFixConfirmModal.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/BulkFixConfirmModal.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/StepCards.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/StepCards.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/PatRequiredCTA.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/PatRequiredCTA.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/MermaidBlock.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/MermaidBlock.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/mermaid.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/mermaid.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/ShipLintBadge.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/ShipLintBadge.jsx"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-NBNKHDLM.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-NBNKHDLM.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-UYLWTCVG.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-UYLWTCVG.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-FRORFES4.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-FRORFES4.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-ZLWDVJFY.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-ZLWDVJFY.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-XDAX6ODJ.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-XDAX6ODJ.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-6IV5PJ4B.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-6IV5PJ4B.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-E27TLA6T.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-E27TLA6T.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-TVFYHS4S.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-TVFYHS4S.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-TNWHCC6S.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-TNWHCC6S.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-SQFHAAAJ.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-SQFHAAAJ.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-AG6KA2XO.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-AG6KA2XO.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-7AA2U3EY.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-7AA2U3EY.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-ZC5CJRJ4.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-ZC5CJRJ4.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-POX264PI.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-POX264PI.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-NVSIRJGP.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-NVSIRJGP.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/node_modules/.vite/deps/chunk-GYCHOOWS.js?v=2aa46b32"
+    "url": "https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/chunk-GYCHOOWS.js?v=2aa46b32"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/src/components/CodeBlock.jsx"
+    "url": "https://bin-context-pat.preview.emergentagent.com/src/components/CodeBlock.jsx"
   },
   {
     "method": "GET",
@@ -1941,223 +1941,223 @@
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/health"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/health"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/health"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/health"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/wrapped/me?period=this_week"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/wrapped/me?period=this_week"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/vanguard/ci-findings?repo=mock%2Fiter312&limit=5"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/vanguard/ci-findings?repo=mock%2Fiter312&limit=5"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/auth/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/auth/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/cto/projects/cleanup-summary"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/cleanup-summary"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/cto/projects/list"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/list"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/founder-offer/status"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/founder-offer/status"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/founder-offer/user-status"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/founder-offer/user-status"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/findings/backlog?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/findings/backlog?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/fix-pipeline/quota"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/fix-pipeline/quota"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/usage/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/usage/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/agents/list"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/agents/list"
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/cto/projects/p_iter312_mock/warm-start"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/p_iter312_mock/warm-start"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/usage/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/usage/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/advisor/context?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/advisor/context?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/codebase-health/last?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/codebase-health/last?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/usage/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/usage/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/wrapped/me?period=this_week"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/wrapped/me?period=this_week"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/vanguard/ci-findings?repo=mock%2Fiter312&limit=5"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/vanguard/ci-findings?repo=mock%2Fiter312&limit=5"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/auth/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/auth/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/cto/projects/cleanup-summary"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/cleanup-summary"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/founder-offer/status"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/founder-offer/status"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/founder-offer/user-status"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/founder-offer/user-status"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/findings/backlog?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/findings/backlog?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/fix-pipeline/quota"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/fix-pipeline/quota"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/usage/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/usage/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/agents/list"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/agents/list"
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/cto/projects/p_iter312_mock/warm-start"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/p_iter312_mock/warm-start"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/usage/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/usage/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/advisor/context?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/advisor/context?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/codebase-health/last?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/codebase-health/last?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/usage/me"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/usage/me"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/sessions?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/cto/projects/connection-status"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/connection-status"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/history?session_id=fd6a0a7b-a49a-4c0e-b000-597b71858a47"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/history?session_id=bin-context-pat"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/chat/classify-intent"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/chat/classify-intent"
   },
   {
     "method": "POST",
@@ -2177,23 +2177,23 @@
   },
   {
     "method": "POST",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/start"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/start"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/thinking-hint"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/thinking-hint"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/loop_fake_iter312_happy/stream"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/loop_fake_iter312_happy/stream"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
@@ -2201,10 +2201,10 @@
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   },
   {
     "method": "GET",
-    "url": "https://launch-pad-237.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
+    "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/loop/active?project_id=p_iter312_mock"
   }
 ]

@@ -1,5 +1,5 @@
 export PROD_URL="https://auremcto.com"
-export PREV_URL="https://launch-pad-237.preview.emergentagent.com"
+export PREV_URL="https://bin-context-pat.preview.emergentagent.com"
 # 2026-08-19 SECURITY FIX — real founder credentials were hardcoded
 # here and committed to git (found during security audit). Removed.
 # Source these from an UNTRACKED local override file instead, e.g.

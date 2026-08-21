@@ -7,7 +7,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
 
-BASE = "https://launch-pad-237.preview.emergentagent.com"
+BASE = "https://bin-context-pat.preview.emergentagent.com"
 OUT = Path("/app/test_reports/bug_verification_artifacts/iter320_standalone")
 OUT.mkdir(parents=True, exist_ok=True)
 

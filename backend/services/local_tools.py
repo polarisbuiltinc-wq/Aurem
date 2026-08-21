@@ -1899,6 +1899,85 @@ async def get_repo_info(ctx: dict, args: dict) -> dict:
     }
 
 
+# ── TOOL: save_finding (persist a conversational audit finding) ─────────────
+#
+# 2026-08-22 — closes a real gap: when a user asks "check my code for
+# security problems" (or any bug/quality audit) conversationally, ORA
+# would previously just write a nice markdown report (## CRITICAL /
+# ## HIGH / ...) straight into the chat reply — and nothing was ever
+# saved. The report vanished into scroll-back with no way to track,
+# revisit, or get reminded about those issues later. `cto_open_findings`
+# already exists and already backs the reminder banner
+# (ScanStatusStrip.jsx) + the Prompt Starter panel's "FROM YOUR REPO"
+# suggestions — it was just never fed by conversational audits, only
+# by the automated scanner pipelines. This tool lets ORA write ONE
+# finding at a time into that same real backlog while it narrates the
+# audit, using the exact same persistence helper the scanners use.
+async def save_finding(ctx: dict, args: dict) -> dict:
+    """Persist one security/bug/quality finding discovered during a
+    conversational audit into the user's real findings backlog (the
+    same store the automated scanners write to) — call this once per
+    finding whenever you report a CRITICAL/HIGH/MEDIUM/LOW audit
+    result in chat, so it can be tracked and the user can be reminded
+    later instead of it only existing as chat text."""
+    rc = _repo_ctx_from(ctx)
+    if rc is None:
+        return _NO_BIN_CTX_ERROR
+
+    a = args or {}
+    title = (a.get("title") or "").strip()
+    severity = (a.get("severity") or "").strip().lower()
+    if not title:
+        return {"ok": False, "error": "title is required"}
+    if severity not in ("critical", "high", "medium", "low"):
+        return {"ok": False, "error": "severity must be one of: critical, high, medium, low"}
+
+    file_ = (a.get("file") or "").strip()
+    try:
+        line_ = int(a.get("line") or 0)
+    except (TypeError, ValueError):
+        line_ = 0
+
+    rule_slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60] or "finding"
+    finding = {
+        "scanner":  "ora_chat_audit",
+        "id":       rule_slug,
+        "severity": severity,
+        "file":     file_,
+        "line":     line_,
+        "title":    title[:200],
+        "message":  (a.get("description") or "")[:500],
+        "fix_hint": (a.get("fix_hint") or "")[:300],
+    }
+
+    db = get_db()
+    if db is None:
+        return {"ok": False, "error": "database unavailable"}
+
+    from services.loop_full_scan import persist_findings_to_backlog
+    try:
+        written = await persist_findings_to_backlog(
+            db, user_id=rc["bin_id"], project_id=rc["pid"],
+            findings=[finding], scan_source="ora_chat_audit",
+        )
+    except Exception as e:                             # noqa: BLE001
+        logger.warning("save_finding persist failed: %r", e)
+        return {"ok": False, "error": "failed to save finding"}
+
+    return {
+        "ok":       True,
+        "saved":    written > 0,
+        "severity": severity,
+        "note": (
+            "Saved to the user's findings backlog — it will surface in "
+            "their reminder strip and personalized suggestions."
+            if severity in ("critical", "high") else
+            "Recorded. Note: medium/low severity findings don't surface "
+            "on the reminder strip by design — only critical/high do."
+        ),
+    }
+
+
 # ── TOOL 8: execute_bash (read-only local pod filesystem) ────────────────────
 #
 # Iter 138 — closes the "ORA can't inspect /app/ files" gap that caused
@@ -2273,6 +2352,30 @@ TOOL_SPECS: list[dict] = [
         "args_spec": {},
     },
     {
+        "name": "save_finding",
+        "description": (
+            "Persist ONE security/bug/quality finding into the user's "
+            "real, trackable findings backlog. Call this ONCE PER "
+            "FINDING whenever you report a CRITICAL/HIGH/MEDIUM/LOW "
+            "issue during a security review, bug hunt, or code-quality "
+            "audit in chat — e.g. after saying '## CRITICAL — JWT secret "
+            "has an insecure default fallback value (auth.py:42)', "
+            "immediately call this "
+            "tool with that same title/severity/file/line so it's saved, "
+            "not just printed in the chat text. Without this call, the "
+            "finding disappears the moment the chat scrolls — nothing "
+            "gets tracked, reminded about later, or shown as 'fixed'."
+        ),
+        "args_spec": {
+            "title":       "string — short finding title, e.g. 'JWT secret has an insecure default fallback value'",
+            "severity":    "string — one of: critical, high, medium, low",
+            "file":        "string (optional) — file path the issue is in",
+            "line":        "integer (optional) — line number",
+            "description": "string (optional) — 1-2 sentence explanation",
+            "fix_hint":    "string (optional) — short suggested fix",
+        },
+    },
+    {
         "name": "execute_bash",
         "description": (
             "Run a READ-ONLY bash command on the LOCAL pod filesystem "
@@ -2304,6 +2407,7 @@ LOCAL_TOOLS: dict[str, callable] = {
     "semantic_search_repo": semantic_search_repo,
     "get_commit_diff":      get_commit_diff,
     "get_repo_info":        get_repo_info,
+    "save_finding":         save_finding,
     "execute_bash":         execute_bash,
     **_WEB_TOOLS,
     **_DEV_TOOLS,

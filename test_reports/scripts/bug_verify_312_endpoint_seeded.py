@@ -46,7 +46,7 @@ async def main():
         'ts_day': time.strftime('%Y-%m-%d', time.gmtime(now)),
         'qa_marker': marker,
     }
-    base = 'https://launch-pad-237.preview.emergentagent.com/api/aurem-dev'
+    base = 'https://bin-context-pat.preview.emergentagent.com/api/aurem-dev'
     sess = requests.Session()
     try:
         await db.ora_chat_usage.insert_one(seed)

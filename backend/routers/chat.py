@@ -3323,10 +3323,23 @@ async def chat_stream(
         try:
             from services.citation_guard import CitationGuard
             _turn_tool_calls = result.get("tool_calls") or []
+            # 2026-08-23 — P0 fix: this `_ctx` was missing `bin_ctx`,
+            # which every repo tool (`read_repo_file` et al.) requires
+            # via `_repo_ctx_from()` — see services/local_tools.py.
+            # Without it, EVERY re-fetch attempt below returned
+            # `_NO_BIN_CTX_ERROR` (ok=False), which enforce() then
+            # reports as "FILE NOT FOUND" for paths that were, in
+            # fact, correctly read earlier this same turn — causing a
+            # detailed, accurate audit reply to be immediately
+            # rewritten into "none of the referenced files were found
+            # or accessible" for those SAME files. `bin_ctx` is
+            # already built earlier in this function (see above) and
+            # scoped to this user/project — reuse it here.
             _ctx = {
                 "user_id":     user_id,
                 "project_id":  body.project_id,
                 "github_token": result.get("_github_token"),
+                "bin_ctx":     bin_ctx,
             }
 
             async def _llm_retry(*, original_messages=None,

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import os, json, requests
-BASE=os.environ.get("PREVIEW_URL", "https://launch-pad-237.preview.emergentagent.com")
+BASE=os.environ.get("PREVIEW_URL", "https://bin-context-pat.preview.emergentagent.com")
 API=f"{BASE}/api/aurem-dev"
 EMAIL="test@aurem.dev"; PASSWORD="AuremTest2026!"
 s=requests.Session()

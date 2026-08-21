@@ -16,7 +16,7 @@ import requests
 from motor.motor_asyncio import AsyncIOMotorClient
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/") or \
-    "https://launch-pad-237.preview.emergentagent.com"
+    "https://bin-context-pat.preview.emergentagent.com"
 MONGO_URL = os.environ.get("MONGO_URL")
 DB_NAME = os.environ.get("DB_NAME", "aurem_dev")
 

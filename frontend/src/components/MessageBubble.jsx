@@ -717,18 +717,14 @@ export default function MessageBubble({
               ))}
             </div>
           )}
-          {/* Chat UX #4 (Tier 1) — the live step trail above only
-              renders while `m.streaming && !m.content` (pre-first-token).
-              Once the turn is done (this session) OR the page was
-              refreshed and history hydrated `m.steps` from Mongo, this
-              block keeps the "📖 Reading repo… ✍️ Writing files…" trail
-              visible so it never silently disappears. */}
-          {m.role === "assistant" && !m.streaming
-            && Array.isArray(m.steps) && m.steps.length > 0 && (
-            <div style={{ marginTop: 10 }}>
-              <StepCards steps={m.steps} streaming={false} />
-            </div>
-          )}
+          {/* 2026-08-22 — removed the persisted post-completion step
+              trail (📖 Reading repo… ✍️ Writing files… ✅ Done). User
+              feedback: this duplicated what the live LiveTaskPopup
+              floating card (ChatPanel.jsx) already showed in real
+              time while the turn was running, so keeping it baked
+              into the final bubble was pure noise. The live-streaming
+              step cards above (m.streaming && !m.content block) are
+              unaffected — this only removed the AFTER-the-fact copy. */}
           {/* Iter 212m-59 — Blinking cursor at the tail of a streaming
               assistant message.  Makes the perceived speed match
               Cursor: the moment a single token lands the user sees a

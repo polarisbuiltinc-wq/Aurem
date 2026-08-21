@@ -17,7 +17,7 @@ status` on this preview container.
 | Nickname       | Where                                              | Reachable now?                                     |
 |----------------|----------------------------------------------------|----------------------------------------------------|
 | `local`        | Inside this pod / dev container                    | `curl http://localhost:8001/...`                   |
-| `preview`      | `https://launch-pad-237.preview.emergentagent.com` | Directly, from anywhere.                           |
+| `preview`      | `https://bin-context-pat.preview.emergentagent.com` | Directly, from anywhere.                           |
 | `production`   | `https://auremcto.com` **(confirmed 2026-02, Iter 293)** | Public HTTP reachable; DB / internal state gated behind founder JWT. |
 
 The critical mistake this ledger exists to prevent: treating
@@ -96,7 +96,7 @@ AUREM_CANARY_REPO_OWNER, AUREM_CANARY_REPO_NAME, AUREM_CANARY_BRANCH
 
 Frontend `.env` on preview (verified):
 ```
-REACT_APP_BACKEND_URL=https://launch-pad-237.preview.emergentagent.com
+REACT_APP_BACKEND_URL=https://bin-context-pat.preview.emergentagent.com
 ENABLE_HEALTH_CHECK, WDS_SOCKET_PORT
 ```
 

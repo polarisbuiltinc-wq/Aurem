@@ -285,6 +285,10 @@ def extract_tool_calls(text: str) -> list[dict]:
         "vercel_create_project", "vercel_pause_project",
         "vercel_resume_project", "vercel_add_domain",
         "vercel_delete_project",
+        # 2026-08-22 — save_finding (see local_tools.py) registered
+        # in LOCAL_TOOLS but must ALSO be listed here, same lesson as
+        # the Vercel batch above.
+        "save_finding",
     }
     # Hoisted so both Shape-4 and Shape-6 (XML block below) share it
     # without redefining per-iteration.

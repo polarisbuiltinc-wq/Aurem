@@ -9,7 +9,7 @@ import asyncio, json, time
 from pathlib import Path
 from playwright.async_api import async_playwright
 
-PREVIEW = "https://launch-pad-237.preview.emergentagent.com"
+PREVIEW = "https://bin-context-pat.preview.emergentagent.com"
 EMAIL, PWD = "test@aurem.dev", "AuremTest2026!"
 LOGDIR = Path("/app/e2e_iter281_step0_proof"); LOGDIR.mkdir(exist_ok=True)
 

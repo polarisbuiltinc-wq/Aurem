@@ -43,7 +43,7 @@ import requests
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 BASE_URL = os.environ.get(
     "REACT_APP_BACKEND_URL",
-    "https://launch-pad-237.preview.emergentagent.com",
+    "https://bin-context-pat.preview.emergentagent.com",
 ).rstrip("/")
 
 EMAIL = "test@aurem.dev"
