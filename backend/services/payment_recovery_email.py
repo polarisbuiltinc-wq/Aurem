@@ -41,7 +41,10 @@ def _first_name(user: dict) -> str:
     return (email.split("@", 1)[0] or "there").split(".", 1)[0]
 
 
-def render_text(user: dict, *, plan: str, amount_due: float, portal_url: str) -> str:
+def render_text(
+    user: dict, *, plan: str, amount_due: float, portal_url: str,
+    next_attempt_at: Optional[datetime] = None,
+) -> str:
     first = _first_name(user)
     return (
         f"Hey {first},\n"
@@ -49,9 +52,8 @@ def render_text(user: dict, *, plan: str, amount_due: float, portal_url: str) ->
         f"We just tried to charge your card for your AUREM {plan} plan "
         f"(${amount_due:.2f}) and it didn't go through.\n"
         "\n"
-        "Your subscription is still active for now — Stripe will keep "
-        "retrying automatically over the next couple of weeks — but to "
-        "avoid any interruption, update your card here:\n"
+        f"Your subscription is still active for now. {_grace_period_line(next_attempt_at)} "
+        "To avoid any interruption, update your card here:\n"
         "\n"
         f"  {portal_url}\n"
         "\n"
@@ -62,8 +64,33 @@ def render_text(user: dict, *, plan: str, amount_due: float, portal_url: str) ->
     )
 
 
-def render_html(user: dict, *, plan: str, amount_due: float, portal_url: str) -> str:
+def _grace_period_line(next_attempt_at: Optional[datetime]) -> str:
+    """2026-08-22 — founder ask: a clear, EXACT deadline (not a vague
+    'couple of weeks') motivates faster action. We deliberately only
+    ever quote the real `next_payment_attempt` Stripe gives us for
+    THIS invoice — that's the one number we can state with 100%
+    certainty. We don't invent a "total dunning window ends on X"
+    figure, since the account's exact Smart-Retries schedule isn't
+    something we can verify via API."""
+    if next_attempt_at is None:
+        return (
+            "This was Stripe's last scheduled automatic retry, so "
+            "there's no more time to wait —"
+        )
+    days = max((next_attempt_at.date() - datetime.now(timezone.utc).date()).days, 0)
+    when = next_attempt_at.strftime("%B %-d")
+    if days <= 0:
+        return f"Stripe will automatically try again later today ({when}) —"
+    day_word = "day" if days == 1 else "days"
+    return f"Stripe will automatically try again in {days} {day_word} (on {when}) —"
+
+
+def render_html(
+    user: dict, *, plan: str, amount_due: float, portal_url: str,
+    next_attempt_at: Optional[datetime] = None,
+) -> str:
     first = _first_name(user)
+    grace_line = _grace_period_line(next_attempt_at)
     return f"""<!doctype html>
 <html><body style="margin:0;padding:0;background:#0b0b0b;color:#e8e8e8;
 font-family:'Helvetica Neue',Arial,sans-serif;line-height:1.6;">
@@ -84,10 +111,12 @@ font-family:'Helvetica Neue',Arial,sans-serif;line-height:1.6;">
             <b>{plan}</b> plan (<b>${amount_due:.2f}</b>) and it
             didn&rsquo;t go through.
           </div>
-          <div style="color:#c8c8c8;margin-top:12px;">
-            Your subscription is still active for now — Stripe will
-            keep retrying automatically over the next couple of weeks
-            — but to avoid any interruption, update your card below.
+          <div data-testid="payment-recovery-email-grace-line"
+               style="color:#fbbf24;margin-top:12px;font-weight:600;">
+            {grace_line}
+          </div>
+          <div style="color:#c8c8c8;margin-top:4px;">
+            to avoid any interruption, update your card below.
           </div>
 
           <div style="text-align:center;margin:28px 0 8px;">
@@ -183,7 +212,7 @@ async def _record_send(
 
 async def send_payment_recovery_email(
     db, user: dict, *, invoice_id: str, plan: str, amount_due: float,
-    portal_url: str,
+    portal_url: str, next_attempt_at: Optional[datetime] = None,
 ) -> dict:
     """Send the "your card failed" email to the CUSTOMER. Idempotent
     per Stripe invoice id via `_already_sent`. Non-raising by design
@@ -197,8 +226,10 @@ async def send_payment_recovery_email(
     if await _already_sent(db, invoice_id):
         return {"ok": True, "skipped": "already_sent"}
 
-    text = render_text(user, plan=plan, amount_due=amount_due, portal_url=portal_url)
-    html = render_html(user, plan=plan, amount_due=amount_due, portal_url=portal_url)
+    text = render_text(user, plan=plan, amount_due=amount_due, portal_url=portal_url,
+                        next_attempt_at=next_attempt_at)
+    html = render_html(user, plan=plan, amount_due=amount_due, portal_url=portal_url,
+                        next_attempt_at=next_attempt_at)
     sent_ok, err = await _resend_send(email, subject=SUBJECT, text=text, html=html)
     await _record_send(db, user_id, email, invoice_id, sent_ok, err)
     if not sent_ok:

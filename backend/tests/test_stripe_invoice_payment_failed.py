@@ -132,6 +132,9 @@ async def test_invoice_payment_failed_flags_user(monkeypatch):
     assert recovery_calls[0]["invoice_id"] == "in_test_1"
     assert recovery_calls[0]["portal_url"] == "https://billing.stripe.com/p/session/test_fake"
     assert recovery_calls[0]["amount_due"] == 19.0
+    assert recovery_calls[0]["next_attempt_at"] is not None, (
+        "grace-period date must be threaded through from Stripe's next_payment_attempt"
+    )
     await _cleanup_user(user_id)
 
 
@@ -316,6 +319,29 @@ async def test_payment_recovered_email_dedups_per_invoice(monkeypatch):
     assert "all set" in send_calls[0][1].lower()
 
     await db.payment_recovered_emails.delete_many({"invoice_id": invoice_id})
+
+
+def test_grace_period_line_with_future_next_attempt():
+    """2026-08-22 — founder ask: an exact, verifiable deadline, not a
+    vague 'couple of weeks'. Uses the real next_payment_attempt date
+    Stripe gives us for this specific invoice."""
+    import datetime as dt
+    from services.payment_recovery_email import _grace_period_line
+
+    future = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=5)
+    line = _grace_period_line(future)
+    assert "5 days" in line
+    assert "Stripe will automatically try again" in line
+
+
+def test_grace_period_line_with_no_next_attempt():
+    """When Stripe reports no further scheduled retry (final attempt
+    already exhausted), the copy must say so plainly instead of
+    quoting a stale/future date."""
+    from services.payment_recovery_email import _grace_period_line
+
+    line = _grace_period_line(None)
+    assert "last scheduled automatic retry" in line
 
 
 if __name__ == "__main__":

@@ -712,6 +712,14 @@ async def stripe_webhook(request: Request) -> dict:
                         plan=user_row.get("tier", "?"),
                         amount_due=amount_due,
                         portal_url=portal.url,
+                        # 2026-08-22 — Grace Period Copy: the ONE date
+                        # we can state with 100% certainty (straight
+                        # from Stripe for THIS invoice), not a guessed
+                        # total dunning window.
+                        next_attempt_at=(
+                            datetime.fromtimestamp(next_attempt, tz=timezone.utc)
+                            if next_attempt else None
+                        ),
                     )
                 except Exception as e:  # noqa: BLE001
                     logger.warning("[webhook] invoice.payment_failed customer email failed: %r", e)
