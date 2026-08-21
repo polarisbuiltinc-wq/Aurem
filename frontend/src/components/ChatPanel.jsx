@@ -345,6 +345,13 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   const lastActivityRef = useRef(0);
   const idleTimerRef = useRef(null);
   const retryAttemptRef = useRef(0);
+  // 2026-08-21 — "Retry now" button fix. Clicking it used to only call
+  // `ctrl.abort()`, which the fetch layer treats as an intentional
+  // cancel (no onError, no retry) — the bubble just died silently.
+  // `runTurn` now points this ref at a real retry trigger (same reset
+  // + re-run logic the 90s auto-watchdog uses) so the button actually
+  // fires a fresh attempt instead of a dead-end abort.
+  const manualRetryRef = useRef(null);
   // Session 7 · Item 3 — synchronous send-in-flight lock. Prevents
   // rapid double-clicks from spawning two racing `startLoop`/chat
   // API calls (async `busy` state can't close the race — see send()).
@@ -1305,6 +1312,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       abortRef.current.abort();
       abortRef.current = null;
     }
+    manualRetryRef.current = null;
     // Iter 212m-65 — also abort any active Loop Mode SSE stream so a
     // user Stop click reliably cancels mid-pipeline.
     if (loopAbortRef.current) {
@@ -1902,8 +1910,21 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         if (idleFor < IDLE_TIMEOUT_MS) return;
         // Stream has gone silent — abort and recover.
         clearIdleWatchdog();
+        performRetry(idleFor, { manual: false });
+      }, WATCHDOG_TICK_MS);
+
+      // 2026-08-21 — shared retry executor. Used by BOTH the 90s
+      // auto-watchdog above and the "Retry now" button below (via
+      // manualRetryRef) so a manual click gets the exact same clean
+      // reset + re-run behaviour instead of a dead abort-only click.
+      // `manual: true` always gets a fresh attempt (resets the 1-shot
+      // budget) since the user explicitly asked for it — it should
+      // never silently no-op just because the auto-retry already
+      // used its one shot.
+      function performRetry(idleFor, { manual }) {
         try { ctrl.abort(); } catch { /* ignore */ }
         abortRef.current = null;
+        if (manual) retryAttemptRef.current = 0;
         if (retryAttemptRef.current < MAX_RETRIES) {
           retryAttemptRef.current += 1;
           // Iter 388q — Bug 23 fix.  If the ORIGINAL stream's onDone
@@ -1916,15 +1937,6 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           // reported in Bug 21+23.  Skip the retry entirely in that
           // case (the answer is already there), and only fire when
           // the bubble is still mid-stream.
-          setMessages((msgs) => {
-            const copy = msgs.slice();
-            const last = copy[copy.length - 1];
-            // NB: if the last assistant bubble already completed
-            // (streaming=false with any content), leave it alone —
-            // the retry short-circuit below will bail out.
-            return copy;
-          });
-          // Read latest streaming state via functional update.
           let alreadyDone = false;
           setMessages((cur) => {
             const last = cur[cur.length - 1];
@@ -1959,7 +1971,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                 ...last,
                 content: "",
                 streaming: true,
-                activity: "Reconnecting… (auto-recovery)",
+                activity: manual ? "Retrying… (manual)" : "Reconnecting… (auto-recovery)",
                 progressPct: 0,
                 seenActivities: [],
                 invocations: [],
@@ -1969,8 +1981,8 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
             return copy;
           });
           setLiveStepCard({ steps: [], provider: null, tokens: 0, visible: true });
-          // Fire the retry asynchronously so the current interval
-          // tick can unwind cleanly.
+          // Fire the retry asynchronously so the current call stack
+          // (interval tick or button click) can unwind cleanly.
           setTimeout(() => { runTurn().catch(() => {}); }, 50);
         } else {
           // Retry budget exhausted — fail the bubble gracefully.
@@ -1990,7 +2002,15 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           });
           setBusy(false);
         }
-      }, WATCHDOG_TICK_MS);
+      }
+
+      // "Retry now" button (rendered inline below the streaming
+      // bubble) calls this directly — no need to wait for the 90s
+      // idle threshold.
+      manualRetryRef.current = () => {
+        clearIdleWatchdog();
+        performRetry(Date.now() - lastActivityRef.current, { manual: true });
+      };
 
       await streamChat({
       prompt: finalPrompt,
@@ -2335,6 +2355,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         });
         setBusy(false);
         abortRef.current = null;
+        manualRetryRef.current = null;
         // Iter 212m-57 — clear any lingering "slow/reconnecting" pill.
         setStreamHealth({ phase: "idle", silentFor: 0, retryEtaSec: null });
         // Iter 212m-58 — Loop-mode phase transition on chat completion.
@@ -2417,6 +2438,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         });
         setBusy(false);
         abortRef.current = null;
+        manualRetryRef.current = null;
         // Iter 212m-57 — clear pill on terminal error too.
         setStreamHealth({ phase: "idle", silentFor: 0, retryEtaSec: null });
         // Iter 212m-58 — surface loop bar in error state if we were in
@@ -4187,6 +4209,26 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                 onOpenDeployTab={openDeployTab}
                 collapseDefault={i !== messages.length - 1}
               />
+              {/* 2026-08-21 — Stream health pill, now anchored right
+                  below THIS specific task's bubble (the one actually
+                  streaming) instead of a full-width bar near the
+                  composer — small, compact, and only ever shown under
+                  the task it's reporting on. */}
+              {m.role === "assistant" && m.streaming
+                && i === messages.length - 1
+                && streamHealth.phase !== "idle" && (
+                <StreamHealthPill
+                  compact
+                  state={streamHealth}
+                  onRetry={() => {
+                    if (manualRetryRef.current) {
+                      manualRetryRef.current();
+                    } else {
+                      try { abortRef.current?.abort(); } catch { /* ignore */ }
+                    }
+                  }}
+                />
+              )}
               {suggestions.length > 0 && (
                 <div
                   data-testid="chat-suggestion-chips"
@@ -4522,18 +4564,10 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           has_fully_claimed, sold-out, or >3 days since signup. */}
       <FounderOfferCard projectId={activeProject?.project_id} />
 
-      {/* Iter 212m-57 — Stream health pill (slow / reconnecting). Sits
-          directly above the composer so the user has clear feedback
-          when the SSE stream stalls — previously the chat just looked
-          frozen for up to 90s before silently auto-recovering.
-          Iter 212m-103 — `Retry now` button aborts the in-flight
-          controller; existing AbortError → retry path picks it up. */}
-      <StreamHealthPill
-        state={streamHealth}
-        onRetry={() => {
-          try { abortRef.current?.abort(); } catch { /* ignore */ }
-        }}
-      />
+      {/* 2026-08-21 — Stream health pill moved to render inline right
+          below the streaming assistant bubble (see the messages.map
+          loop above) instead of a full-width bar here — smaller,
+          and anchored to the specific task it's about. */}
 
       {/* Iter 212m-190 · Session 3 — Chat-native scan strip. Sits
           just above the composer form so scan lifecycle events

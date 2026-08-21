@@ -14,7 +14,7 @@
 import React from "react";
 import { Zap } from "lucide-react";
 
-export default function StreamHealthPill({ state, onRetry }) {
+export default function StreamHealthPill({ state, onRetry, compact }) {
   if (!state || state.phase === "idle") return null;
   const isReconnect = state.phase === "reconnecting";
   const accent = isReconnect ? "#EF4444" : "#FF6608";
@@ -25,21 +25,23 @@ export default function StreamHealthPill({ state, onRetry }) {
       role="status"
       aria-live="polite"
       style={{
-        display: "flex", alignItems: "center", gap: 10,
-        padding: "12px 16px",
-        margin: "8px 12px 0",
-        borderRadius: 12,
+        display: "inline-flex", alignItems: "center", gap: compact ? 7 : 10,
+        padding: compact ? "5px 10px" : "12px 16px",
+        margin: compact ? "4px 0 6px 4px" : "8px 12px 0",
+        borderRadius: compact ? 8 : 12,
+        width: compact ? "fit-content" : "auto",
+        maxWidth: "100%",
         background: isReconnect
           ? "rgba(239,68,68,0.07)"
           : "rgba(255,102,8,0.07)",
         border: `1px solid ${accent}`,
         color: "#E5E5E5",
         fontFamily: "'JetBrains Mono', monospace",
-        fontSize: 12,
+        fontSize: compact ? 10.5 : 12,
         animation: isReconnect ? "pillPulse 1.2s ease-in-out infinite" : "none",
       }}
     >
-      <Zap size={14} strokeWidth={2.5} style={{ color: accent, flexShrink: 0 }} />
+      <Zap size={compact ? 11 : 14} strokeWidth={2.5} style={{ color: accent, flexShrink: 0 }} />
       <span style={{ flex: 1, minWidth: 0,
                      display: "inline-flex", alignItems: "baseline", gap: 6 }}>
         <strong style={{ color: accent, fontWeight: 700 }}>
@@ -59,9 +61,9 @@ export default function StreamHealthPill({ state, onRetry }) {
           onClick={onRetry}
           style={{
             background: "transparent", border: "none",
-            color: "#E5E5E5", fontSize: 12, fontWeight: 600,
-            cursor: "pointer", padding: "4px 8px",
-            fontFamily: "inherit",
+            color: "#E5E5E5", fontSize: compact ? 10.5 : 12, fontWeight: 600,
+            cursor: "pointer", padding: compact ? "2px 6px" : "4px 8px",
+            fontFamily: "inherit", flexShrink: 0,
           }}
         >
           Retry now
