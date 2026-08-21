@@ -497,3 +497,11 @@ Founder reproduced the "cold-start mismatch" bug LIVE IN PRODUCTION after it was
 **Verification requests founder raised that I could NOT check from preview**:
 - Support ticket admin-visibility (whether the "Contact support" click created a properly source/stage-tagged `cto_support` row) — confirmed the CODE is correct (`OraGuideMascot.jsx` posts `source: "in_app_guide"` + `Stage: {...}` in the body, `routers/support.py` stores both), but I have no access to the PRODUCTION `cto_support` collection to confirm the actual row landed — founder must check the admin Support panel directly.
 - Demo account (`aurem-demo/frontend`, `aurem-demo/backend`) disconnected-repo banner — no access to that production project from preview; needs founder-side test.
+
+## 2026-08-21 — Confidence Badge (founder-approved add-on to the cold-start mitigation)
+
+When `response_confidence.response_seems_mismatched()` swaps a reply for the fallback message, the suppression is now surfaced to the founder instead of being silent:
+- `chat_stream`'s `meta` + `done` SSE frames and `chat_send`'s JSON response all carry `low_confidence: true/false`.
+- `_persist_turn()` pins `low_confidence: true` on the assistant turn so `GET /chat/history` round-trips it after a page refresh.
+- Frontend (`ChatPanel.jsx`) picks up `low_confidence` from the `meta` SSE frame into `lowConfidence` on the message, and renders a red "⚠ low confidence — response suppressed" badge (`data-testid="low-confidence-badge-{i}"`) above the bubble — checks both the live-stream flag and the persisted/reloaded flag, same pattern as the existing "📚 ORA recalled…" council caption.
+- Tests extended in `test_response_confidence_mismatch_gate.py` (still 3/3 passing): asserts `low_confidence: true` on meta/done/send responses when the gate fires, and `low_confidence: false` on a legitimate fix-intent reply (no false positive badge).

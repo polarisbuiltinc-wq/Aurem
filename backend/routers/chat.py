@@ -566,7 +566,8 @@ async def _persist_turn(user_id: str, session_id: str, user_prompt: str,
                         watchdog: Optional[dict] = None,
                         project_id: Optional[str] = None,
                         shipped_task_id: Optional[str] = None,
-                        steps: Optional[list] = None) -> None:
+                        steps: Optional[list] = None,
+                        low_confidence: bool = False) -> None:
     """Append user+assistant turns to db.chat_sessions, capped at 40 turns.
     Tags the session with the project it belongs to (None == Home/global).
     Iter 51 — when `shipped_task_id` is set (e.g. Mode D→C auto-handoff),
@@ -594,6 +595,12 @@ async def _persist_turn(user_id: str, session_id: str, user_prompt: str,
     if steps:
         # Cap so a runaway tool-loop can't bloat the session doc.
         assistant_turn["steps"] = steps[-40:]
+    # 2026-08-21 — Confidence Badge: pin the mismatch-mitigation flag
+    # on the assistant turn so GET /chat/history round-trips it and a
+    # page refresh still shows the "low confidence" badge (founder ask
+    # — a way to spot recurrences of the cold-start mismatch at a glance).
+    if low_confidence:
+        assistant_turn["low_confidence"] = True
     set_on_insert = {
         "session_id": session_id,
         "user_id": user_id,
@@ -819,6 +826,7 @@ async def chat_send(
     # swapped for a friendly fallback BEFORE the user ever sees it —
     # this also strips the aurem-handoff fence so Ship via CTO can
     # never render for it.
+    _low_confidence = False
     try:
         from services.response_confidence import (
             response_seems_mismatched, FALLBACK_MESSAGE,
@@ -829,6 +837,7 @@ async def chat_send(
                 "(handoff/diagnosis with no fix-intent in user message)",
             )
             content = FALLBACK_MESSAGE
+            _low_confidence = True
     except Exception as _rce:
         logger.debug("response_confidence gate skipped (chat_send): %r", _rce)
 
@@ -870,7 +879,8 @@ async def chat_send(
 
     await _persist_turn(user["user_id"], body.session_id or "",
                         body.prompt, content, provider, watchdog=watchdog,
-                        project_id=body.project_id)
+                        project_id=body.project_id,
+                        low_confidence=_low_confidence)
     if body.session_id:
         asyncio.create_task(
             _maybe_set_title(user["user_id"], body.session_id, body.prompt)
@@ -939,6 +949,7 @@ async def chat_send(
         "session_id": body.session_id,
         "user_id": user.get("user_id"),
         "tokens_remaining": tokens_remaining,
+        "low_confidence": _low_confidence,
         # Iter 212m-78 — Council self-learning indicator. FE renders
         # "📚 ORA recalled N similar past answers" above the bubble
         # when this is > 0.
@@ -2960,6 +2971,7 @@ async def chat_stream(
         # stream loop below so the user never sees the mismatched
         # content stream in — swapping it after streaming has begun
         # is too late.
+        _low_confidence = False
         try:
             from services.response_confidence import (
                 response_seems_mismatched, FALLBACK_MESSAGE,
@@ -2970,13 +2982,15 @@ async def chat_stream(
                     "(handoff/diagnosis with no fix-intent in user message)",
                 )
                 content = FALLBACK_MESSAGE
+                _low_confidence = True
         except Exception as _rce:
             logger.debug("response_confidence gate skipped (chat_stream): %r", _rce)
 
         meta = {"meta": True, "session_id": body.session_id,
                 "provider": provider, "mode": mode, "temperature": temperature,
                 "thinking_s": round(_t.monotonic() - t_start, 1),
-                "tool_calls_run": result.get("tool_calls_run", 0)}
+                "tool_calls_run": result.get("tool_calls_run", 0),
+                "low_confidence": _low_confidence}
         yield f"data: {json.dumps(meta)}\n\n"
 
         CHUNK = 6
@@ -3211,7 +3225,8 @@ async def chat_stream(
                             body.prompt, content, provider, watchdog=watchdog,
                             project_id=body.project_id,
                             shipped_task_id=handoff_task_id,
-                            steps=collected_steps)
+                            steps=collected_steps,
+                            low_confidence=_low_confidence)
 
         # Fire-and-forget audit row — never block the response.
         try:
@@ -3241,6 +3256,7 @@ async def chat_stream(
             "session_id": body.session_id,
             "tokens_remaining": tokens_remaining,
             "council": bool(result.get("council")),
+            "low_confidence": _low_confidence,
             # Iter 212m-171 — Scope Badge echo (see /chat/send).
             "repo_owner": getattr(bin_ctx, "repo_owner", None) if bin_ctx else None,
             "repo_name":  getattr(bin_ctx, "repo_name", None)  if bin_ctx else None,

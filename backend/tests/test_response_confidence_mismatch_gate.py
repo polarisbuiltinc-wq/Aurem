@@ -105,6 +105,17 @@ def test_mismatched_response_swapped_for_fallback_in_stream(client_factory):
     assert "root cause" not in content.lower()
     assert "I couldn't find a confident answer" in content
 
+    events = [json.loads(line[len("data: "):])
+              for line in r.text.splitlines() if line.startswith("data: ")]
+    meta = next((e for e in events if e.get("meta") and "low_confidence" in e), None)
+    done = next((e for e in events if e.get("done")), None)
+    assert meta is not None and meta.get("low_confidence") is True, (
+        "Confidence Badge: meta frame did not flag low_confidence"
+    )
+    assert done is not None and done.get("low_confidence") is True, (
+        "Confidence Badge: done frame did not flag low_confidence"
+    )
+
 
 def test_mismatched_response_swapped_for_fallback_in_send(client_factory):
     client = client_factory(MISMATCHED_REPLY)
@@ -116,9 +127,13 @@ def test_mismatched_response_swapped_for_fallback_in_send(client_factory):
               "max_tool_iters": 1},
     )
     assert r.status_code == 200, r.text
-    content = r.json().get("content", "")
+    payload = r.json()
+    content = payload.get("content", "")
     assert "aurem-handoff" not in content
     assert "I couldn't find a confident answer" in content
+    assert payload.get("low_confidence") is True, (
+        "Confidence Badge: /chat/send response did not flag low_confidence"
+    )
 
 
 def test_legit_fix_request_keeps_handoff_fence(client_factory):
@@ -141,6 +156,11 @@ def test_legit_fix_request_keeps_handoff_fence(client_factory):
         "legitimate fix-intent request was incorrectly suppressed"
     )
     assert "root cause" in content.lower()
+
+    events = [json.loads(line[len("data: "):])
+              for line in r.text.splitlines() if line.startswith("data: ")]
+    done = next((e for e in events if e.get("done")), None)
+    assert done is not None and done.get("low_confidence") is False
 
 
 if __name__ == "__main__":

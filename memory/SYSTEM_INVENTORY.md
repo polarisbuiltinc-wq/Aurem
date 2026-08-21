@@ -814,3 +814,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `loop_run_log kind='github_oauth'` — auto-detected in backend/routers/admin_users.py (verify) [Iter 0, 2026-08-20T14:14:51.481987Z] <!-- inv:loop_run_log_kind:github_oauth -->
 - `loop_run_log kind='project'` — auto-detected in backend/routers/admin_users.py (verify) [Iter 0, 2026-08-20T15:21:17.825162Z] <!-- inv:loop_run_log_kind:project -->
 - `services/funnel_nudge_cron.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-20T16:02:49.707191Z] <!-- inv:service:services/funnel_nudge_cron.py -->
+
+### Iter 0 · 2026-08-21
+
+- `services/response_confidence.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-21T01:27:08.019951Z] <!-- inv:service:services/response_confidence.py -->

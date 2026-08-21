@@ -2094,6 +2094,13 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
               ...(m?.mode ? { mode: m.mode } : {}),
               ...(typeof m?.thinking_s !== "undefined" ? { thinkingS: m.thinking_s } : {}),
               ...(typeof m?.tool_calls_run !== "undefined" ? { toolCallsRun: m.tool_calls_run } : {}),
+              // 2026-08-21 — Confidence Badge: a response the backend
+              // swapped for the friendly fallback (see
+              // services/response_confidence.py) is flagged here so
+              // MessageBubble can render a subtle "low confidence"
+              // tag — a way to spot cold-start-mismatch recurrences
+              // at a glance without digging through logs.
+              ...(m?.low_confidence ? { lowConfidence: true } : {}),
             };
           }
           return copy;
@@ -4120,6 +4127,38 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                 >
                   📚 ORA recalled {m.councilRecalled} similar past
                   answer{m.councilRecalled === 1 ? "" : "s"}
+                </div>
+              )}
+              {/* 2026-08-21 — Confidence Badge. The backend swapped this
+                  reply for the friendly fallback because it looked like
+                  a mismatched/hallucinated response (see
+                  services/response_confidence.py) — surfaced so the
+                  founder can spot cold-start-mismatch recurrences at a
+                  glance instead of digging through logs. Checks both
+                  the live-stream flag (lowConfidence) and the
+                  persisted/reloaded-from-history flag (low_confidence). */}
+              {m.role === "assistant"
+                && (m.lowConfidence || m.low_confidence) && (
+                <div
+                  data-testid={`low-confidence-badge-${i}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    margin: "4px 0 2px 4px",
+                    padding: "3px 9px",
+                    fontSize: 11,
+                    fontFamily:
+                      "ui-monospace, SFMono-Regular, JetBrains Mono, monospace",
+                    color: "rgba(239,68,68,0.95)",
+                    background: "rgba(239,68,68,0.06)",
+                    border: "1px solid rgba(239,68,68,0.25)",
+                    borderRadius: 999,
+                    letterSpacing: 0.2,
+                  }}
+                  title="ORA suppressed a mismatched response for this turn and showed a fallback instead"
+                >
+                  ⚠ low confidence — response suppressed
                 </div>
               )}
               <MessageBubble
