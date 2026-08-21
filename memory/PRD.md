@@ -3176,3 +3176,64 @@ Founder is holding the actual redeploy until the separate sidebar-dot
 root-cause (previous section) is pinned down, to ship everything in
 one batch.
 
+---
+
+## Sidebar-dot root cause found: not a bug, a scope mismatch (2026-08-20)
+
+Founder confirmed: the "Disconnect" button they used was Settings →
+Integrations → GitHub ("Connected as @RerootsBeauty"), a FULL
+App-level disconnect in their mental model — but tracing the actual
+code (`GitHubCard.jsx` → `DELETE /github/oauth/disconnect`,
+`backend/routers/github_oauth.py`) confirmed this button **only**
+clears the OAuth *login* record (`$unset` on `dev_users.github`) —
+it has never touched GitHub App installations at all. `get_repo_token()`
+(`pat_vault.py`) checks App installation FIRST, unconditionally, for
+any project with `auth_method="github_app"` — completely independent
+of OAuth login state.
+
+**Conclusion**: if "RerootsBeauty/ReRoots-" was connected via the
+GitHub App (the now-default, recommended path — including via
+today's earlier PAT-vs-App onboarding fix), disconnecting OAuth login
+correctly has NO effect on it — the repo genuinely IS still connected,
+via a separate mechanism the user didn't realize was distinct. Not a
+detection bug — a UI/expectations gap: one button labeled "GitHub"
+looked like the single master switch, but only ever governed OAuth.
+Confirmed the actual detection chain (`/connection-status`,
+`repo_heal.py`, sidebar `Dot` tones) is correct by code audit for
+genuinely revoked cases — this was verified separately today via the
+`RevokedRepoBanner` work, which caught a real disconnected project
+(stale OAuth-only preview demo project) correctly on the first poll.
+
+**Fixed — the actual gap**: `GitHubCard.jsx` (Settings → Integrations)
+now: (1) relabels the OAuth card "GitHub login" with copy clarifying
+it's for browsing/picking repos and does NOT affect any project's App
+access; (2) adds a new "GitHub App access" section below it, sourced
+from the real `/github/app/installations` endpoint, listing actual
+installations with repo counts and a genuine "Manage on GitHub ↗"
+link to each installation's real GitHub settings page — the only
+place that actually revokes App-level access. Screenshot-verified:
+both sections render correctly, no console errors.
+
+**Not yet deployed** — final item (13) on the redeploy checklist.
+
+---
+
+## Final deploy-readiness check — 13 items (2026-08-20)
+
+Ran `deployment_agent` across the full session's changes.
+**Status: WARN, no hard blockers.** All findings pre-existing/
+informational, none introduced this session:
+- `CORS_ORIGINS` env var name mismatch vs code's `ALLOWED_ORIGINS` —
+  harmless today (hardcoded default already covers `*.emergent.host`).
+- Custom `backend/Dockerfile`/`frontend/Dockerfile` ports (8002/3001)
+  don't match Emergent's 8001/3000 — pre-existing, unrelated to
+  Emergent's actual supervisor-based deploy (confirmed correct).
+- `.gitignore` claim of missing `test_credentials.md` exclusion was
+  a stale/incorrect scanner finding — verified directly, file IS
+  correctly gitignored (`git check-ignore` confirms).
+- `services/supabase_sweeper.py`'s auto-delete — pre-existing,
+  already safety-gated and previously reviewed, unrelated to this
+  session.
+
+**All 13 items are redeploy-ready.**
+

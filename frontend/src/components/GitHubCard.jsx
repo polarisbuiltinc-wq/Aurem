@@ -1,8 +1,21 @@
 /**
  * GitHubCard.jsx — Connect / Disconnect GitHub OAuth + show repos.
+ *
+ * 2026-08-20 — founder-reported confusion: "Disconnect" here only
+ * ever clears the OAuth *login* (used for browsing/picking repos by
+ * name) — it does NOT touch any GitHub App installation, which is
+ * the actual mechanism granting ORA read/write access to a connected
+ * project's repo. A project connected via the App keeps working
+ * completely unaffected by this button, which looked like a bug
+ * ("I disconnected GitHub but the repo still works everywhere") but
+ * is really a missing distinction in the UI. Added: explicit scope
+ * copy on the OAuth card + a real "GitHub App installations" section
+ * below it, sourced from `/github/app/installations`, with its own
+ * accurate status and a link to GitHub's own management page (the
+ * only place that actually revokes App access).
  */
 import React, { useEffect, useState, useCallback } from "react";
-import { Github, ExternalLink, Plug, Unlink, Lock, FolderGit2 } from "lucide-react";
+import { Github, ExternalLink, Plug, Unlink, Lock, FolderGit2, ShieldCheck } from "lucide-react";
 import { api, API_BASE, getToken } from "../lib/api";
 import { toast } from "./Toast";
 import { trackFunnel, withFunnelParams } from "../lib/githubFunnel";
@@ -11,6 +24,7 @@ export default function GitHubCard() {
   const [status, setStatus] = useState(null);
   const [repos, setRepos] = useState([]);
   const [loadingRepos, setLoadingRepos] = useState(false);
+  const [installs, setInstalls] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -21,8 +35,18 @@ export default function GitHubCard() {
     }
   }, []);
 
+  const refreshInstalls = useCallback(async () => {
+    try {
+      const r = await api.get("/github/app/installations");
+      setInstalls(r.data?.installations || []);
+    } catch {
+      setInstalls([]);
+    }
+  }, []);
+
   useEffect(() => {
     refresh();
+    refreshInstalls();
     // If we arrived from the OAuth callback redirect, surface a toast + clean URL
     const p = new URLSearchParams(window.location.search);
     if (p.get("github") === "connected") {
@@ -32,7 +56,7 @@ export default function GitHubCard() {
       toast({ message: `GitHub connect failed: ${p.get("msg") || "unknown"}`, kind: "error" });
       window.history.replaceState({}, "", "/settings");
     }
-  }, [refresh]);
+  }, [refresh, refreshInstalls]);
 
   function connect() {
     const tok = getToken();
@@ -74,15 +98,16 @@ export default function GitHubCard() {
   if (!status) return null;
 
   return (
+    <>
     <section data-testid="settings-github-oauth" className="card" style={{ gridColumn: "1 / -1" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <Github size={20} style={{ color: "var(--accent-2)", flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="serif" style={{ fontSize: 16 }}>GitHub</div>
+          <div className="serif" style={{ fontSize: 16 }}>GitHub login</div>
           <div style={{ fontSize: 12, color: "var(--text-faint)" }}>
             {status.connected
-              ? `Connected as @${status.login}`
-              : "Connect to push generated projects to your own GitHub."}
+              ? `Connected as @${status.login} — for browsing/picking repos by name. Doesn't affect any project's GitHub App access.`
+              : "Connect to browse and pick your repos by name."}
           </div>
         </div>
         {status.connected ? (
@@ -156,5 +181,63 @@ export default function GitHubCard() {
         </div>
       )}
     </section>
+
+    {/* GitHub App installations — the ACTUAL access grant behind every
+        App-connected project. Separate from the OAuth card above on
+        purpose: disconnecting OAuth never touches this. */}
+    <section data-testid="settings-github-app" className="card" style={{ gridColumn: "1 / -1", marginTop: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <ShieldCheck size={20} style={{ color: "var(--accent-2)", flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="serif" style={{ fontSize: 16 }}>GitHub App access</div>
+          <div style={{ fontSize: 12, color: "var(--text-faint)" }}>
+            This is what actually grants ORA read/write access to your repos —
+            separate from the login above. To fully revoke a repo, manage it here.
+          </div>
+        </div>
+      </div>
+
+      {installs === null ? null : installs.length === 0 ? (
+        <div data-testid="settings-github-app-empty" style={{
+          marginTop: 12, fontSize: 12, color: "var(--text-faint)",
+        }}>
+          No GitHub App installations found — your connected projects are
+          using a Personal Access Token or your GitHub login instead.
+        </div>
+      ) : (
+        <div data-testid="settings-github-app-list" style={{
+          marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border)",
+          display: "grid", gap: 10,
+        }}>
+          {installs.map((inst) => (
+            <div key={inst.installation_id} style={{
+              display: "flex", alignItems: "center", gap: 10,
+              fontSize: 12, color: "var(--text-dim)",
+            }}>
+              <span style={{
+                width: 7, height: 7, borderRadius: "50%",
+                background: "#22c55e", flexShrink: 0,
+              }} title="Active" />
+              <span style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace" }}>
+                @{inst.github_login} — {(inst.repositories || []).length}{" "}
+                repo{(inst.repositories || []).length === 1 ? "" : "s"} granted
+              </span>
+              <a
+                href={`https://github.com/settings/installations/${inst.installation_id}`}
+                target="_blank" rel="noreferrer"
+                data-testid={`settings-github-app-manage-${inst.installation_id}`}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                  fontSize: 11, color: "var(--accent-2, #FF8A2A)",
+                }}
+              >
+                Manage on GitHub <ExternalLink size={10} />
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+    </>
   );
 }
