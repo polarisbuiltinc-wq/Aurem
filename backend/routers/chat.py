@@ -813,6 +813,25 @@ async def chat_send(
     from services.llm import temperature_for
     temperature = temperature_for(mode)
 
+    # 2026-08-21 — cold-start / recall-mismatch mitigation. See
+    # services/response_confidence.py. A response that proposes an
+    # unsolicited code-ship for a message with zero fix/bug intent is
+    # swapped for a friendly fallback BEFORE the user ever sees it —
+    # this also strips the aurem-handoff fence so Ship via CTO can
+    # never render for it.
+    try:
+        from services.response_confidence import (
+            response_seems_mismatched, FALLBACK_MESSAGE,
+        )
+        if response_seems_mismatched(body.prompt or "", content):
+            logger.warning(
+                "chat_send: suppressing mismatched low-confidence response "
+                "(handoff/diagnosis with no fix-intent in user message)",
+            )
+            content = FALLBACK_MESSAGE
+    except Exception as _rce:
+        logger.debug("response_confidence gate skipped (chat_send): %r", _rce)
+
     # Maxx mode: watchdog review (only if we have non-empty content)
     # Iter 161 — same legacy-only gating as the streaming path: skip
     # when the new mode="maxx" pill is set because Claude already wrote
@@ -2935,6 +2954,24 @@ async def chat_stream(
                 "chat_stream: empty content fallback used (tier=%s tool_calls_run=%s iters=%s)",
                 _tier_hint, result.get("tool_calls_run"), result.get("iterations"),
             )
+
+        # 2026-08-21 — cold-start / recall-mismatch mitigation. See
+        # services/response_confidence.py. Must run BEFORE the token
+        # stream loop below so the user never sees the mismatched
+        # content stream in — swapping it after streaming has begun
+        # is too late.
+        try:
+            from services.response_confidence import (
+                response_seems_mismatched, FALLBACK_MESSAGE,
+            )
+            if response_seems_mismatched(body.prompt or "", content):
+                logger.warning(
+                    "chat_stream: suppressing mismatched low-confidence response "
+                    "(handoff/diagnosis with no fix-intent in user message)",
+                )
+                content = FALLBACK_MESSAGE
+        except Exception as _rce:
+            logger.debug("response_confidence gate skipped (chat_stream): %r", _rce)
 
         meta = {"meta": True, "session_id": body.session_id,
                 "provider": provider, "mode": mode, "temperature": temperature,

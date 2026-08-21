@@ -482,3 +482,18 @@ Founder-approved follow-up after the 13-fix production deploy: distinguish App-i
 - **Frontend**: `RevokedRepoBanner.jsx` and `GitHubCard.jsx` (Settings → Integrations) both render a distinct "Reactivate on GitHub" CTA linking straight to `https://github.com/settings/installations/{id}` for suspended installs (defense-in-depth, per founder ask) — deleted/other reasons keep the original popup-based "Reconnect GitHub App" flow.
 - Tested via `testing_agent`: `/app/test_reports/iteration_install_health_2026_08_21.json` — 4/4 backend pytest cases + 3/3 UI flows passed, zero bugs. One cosmetic label nit (deleted vs suspended banner wording) fixed post-report.
 - Status: preview-tested only; needs a founder redeploy to reach production.
+
+## 2026-08-21 — Cold-start mismatch mitigation (safety net) + root-cause still open
+
+Founder reproduced the "cold-start mismatch" bug LIVE IN PRODUCTION after it was previously reported fixed: fresh Pro-mode session, "What is 5+5?" returned an unrelated GitHub-auth "Root cause" diagnosis with an unsolicited Ship via CTO button (aurem-handoff fence) on RerootsBeauty/ReRoots-. Root cause still NOT found (agent could not reproduce again in preview either) — leading suspect remains the ora_council_retriever same-user weak-match band (score just above _MIN_SCORE=0.25) bleeding a past unrelated reply (including its own aurem-handoff fence) into an unrelated new question.
+
+**Shipped as an immediate mitigation** (not the root-cause fix):
+- New `backend/services/response_confidence.py` — `response_seems_mismatched(user_message, final_output)`: if a response proposes a code-ship (`aurem-handoff` fence) or a "Root cause:" diagnosis while the user's OWN message carries zero fix/bug/code intent tokens, it's treated as a mismatch.
+- Wired into BOTH `chat_send` and `chat_stream` in `routers/chat.py`, run BEFORE any content is streamed/returned to the client. On trigger, content is swapped for `"I couldn't find a confident answer to that — try rephrasing, or ask again."` — this also removes the `aurem-handoff` fence so ShipDialog (client-side regex on the fence) can never render.
+- Tested: `backend/tests/test_response_confidence_mismatch_gate.py` (3/3 passed) — mismatched reply → fallback + no fence, in both endpoints; legitimate fix-intent request → diagnosis + Ship button pass through untouched (no over-blocking regression).
+- Live smoke test on preview: "What is 5+5?" → correct "5 + 5 = 10." (council_recalled: 0) — could not reproduce the original bug here, consistent with prior finding.
+- **Root-cause investigation stays OPEN** — this is explicitly a safety net per founder instruction, not a closure of the underlying bug.
+
+**Verification requests founder raised that I could NOT check from preview**:
+- Support ticket admin-visibility (whether the "Contact support" click created a properly source/stage-tagged `cto_support` row) — confirmed the CODE is correct (`OraGuideMascot.jsx` posts `source: "in_app_guide"` + `Stage: {...}` in the body, `routers/support.py` stores both), but I have no access to the PRODUCTION `cto_support` collection to confirm the actual row landed — founder must check the admin Support panel directly.
+- Demo account (`aurem-demo/frontend`, `aurem-demo/backend`) disconnected-repo banner — no access to that production project from preview; needs founder-side test.

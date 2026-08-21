@@ -4,6 +4,9 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## 2026-08-21 — 🔴 Cold-start mismatch mitigation shipped, ROOT CAUSE STILL OPEN (see CHANGELOG.md)
+Founder reproduced the "cold-start / council-recall mismatch" bug LIVE IN PRODUCTION (fresh Pro session, "What is 5+5?" → unrelated GitHub-auth diagnosis + unsolicited Ship via CTO button) — this had previously been reported fixed/verified and was NOT actually fixed. Shipped a mitigation (`services/response_confidence.py`, wired into both `chat_send`/`chat_stream`): any response proposing a code-ship (`aurem-handoff` fence) or "Root cause:" diagnosis with zero fix/bug intent in the user's own message is swapped for a friendly fallback BEFORE streaming — Ship button can never render for it. 3/3 tests passed (`test_response_confidence_mismatch_gate.py`). Root cause NOT found — still could not reproduce in preview. Leading suspect: ora_council_retriever same-user weak-match band bleeding a past reply's own handoff fence into an unrelated question. **Do not report this bug "fixed" again until root cause is actually located and verified** — only a safety net exists today.
+
 ## 2026-08-21 — GitHub App Installation Health Check + App-only Reconnect CTA (see CHANGELOG.md for full detail)
 Founder-approved: distinguishes App installation suspension/removal (fixed via GitHub's own installation settings page) from per-repo access revocation. New `GET /github/app/installations/health` endpoint (local `suspended_at`/`deleted_at` only, no GitHub polling), `connection-status` now returns `installation_suspended`/`installation_deleted` reasons, Settings GitHub App card + RevokedRepoBanner both show a direct "Reactivate on GitHub" link to the specific installation. testing_agent: 4/4 backend + 3/3 UI passed, zero bugs (`iteration_install_health_2026_08_21.json`). Preview-tested only — needs founder redeploy.
 
