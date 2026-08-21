@@ -3,6 +3,73 @@
 **Live URL**: https://auremcto.com
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
+## 2026-08-23 (later same day) — Confirmed today's fix batch IS deployed to production; production security-audit failure root-caused (2 angles confirmed, 1 ruled out); Prompt Starter panel merged into the ORA GUIDE mascot
+
+**#1 Phase 1 deploy status — DEPLOYED.** Checked the PUBLIC production
+health endpoint directly (`https://auremcto.com/api/health`):
+`build_hash=1db511b18718`, `built_at=2026-08-21T22:36:51Z` — this is
+exactly the commit containing today's earlier fix batch (session
+switcher + CitationGuard `bin_ctx` fix + `save_finding` tool +
+`codebase_health.py` admin-gate relaxation + `response_confidence.py`
+audit-token widening + `orchestrator.py` empty-completion retry). The
+founder redeployed after the previous "finish" without saying so —
+worth noting for next time so I check this proactively.
+
+**#2 Production failure ("Check my code for any security problems"
+fails twice, differently) — root-caused with live evidence, already
+fixed & deployed.**
+- Angle (a) CONFIRMED: `response_confidence.py`'s fix-intent gate was
+  missing security/audit vocabulary, so a legitimate security ask
+  could get wrongly flagged as a "mismatch" → the exact
+  "I'm not confident enough…" text. Already fixed (widened token list).
+- Angle (b) RULED OUT: grepped for any separate security-mode/routing
+  path — none exists. Confirmed via `core/intent_gateway.py` — only 3
+  generic tiers (casual/query/agentic), no security-specific branch.
+- Angle (c) CONFIRMED: `orchestrator.py` accepted a genuinely empty
+  LLM completion as a valid final answer instead of retrying — most
+  likely on a heavy multi-file audit's later rounds. Exact text match:
+  "I wasn't able to produce a reply for this agentic request." Already
+  fixed (retries instead of returning blank).
+- Angle (d) explained: the two attempts hit two *different* failure
+  surfaces (confidence-gate mismatch vs. empty-completion) — both now
+  closed, which is why retrying used to produce a different-looking
+  failure each time.
+- Live curl evidence (preview, same deployed code): `/chat/send` with
+  "Check my code for any security problems" + no project → honest
+  "no project connected" reply, `low_confidence:false`,
+  `ship_suppressed:false`. Same prompt + a project with revoked GitHub
+  → honest "GitHub access revoked" reply, same flags. Neither
+  reproduces the old broken pattern. **Could not** fully reproduce
+  end-to-end against a real working 10+-file GitHub repo — no test
+  project in this sandbox has valid GitHub credentials (pre-existing,
+  disclosed limitation, not glossed over).
+
+**#4 Prompt classification investigation (report only, no fix, as
+instructed) — CONFIRMED no security-aware routing exists.**
+`core/intent_gateway.py`'s 3-tier classifier has no security-specific
+tier. In `chat.py`, the "agentic" tier gets `max_iters = min(max(x,4),6)`
+and a flat `_ORCH_BUDGET_S=150` wall-clock — identical for "fix a typo"
+and "audit my whole repo." This is a real, still-open contributing
+factor (a 10+ file audit is far more likely to hit the iteration/time
+ceiling than a 1-file fix) — not fixed yet, per instruction.
+
+**#3 Robot-guide UI consistency — DONE.** `RobotGuide.jsx` now accepts
+an optional `children` prop (falls back to the old `message` HTML path
+— zero impact on NewUserWizard/Projects/Login/Signup). `PromptStarterPanel.jsx`
+now renders its intro + 5 chips + Vanguard note as children inside the
+same "ORA GUIDE" mascot card used in onboarding — one consistent guide
+character across the product instead of two UI patterns.
+
+**testing_agent verified twice today**: (1) session-switcher + citation
+guard batch, 34/34 pass; (2) this mascot UI + final regression pass,
+30/30 backend + full frontend flow, 0 issues. Both reports in
+`/app/test_reports/`.
+
+**Still open / not started**: Rollback flow safety checks, Security
+Pass (both founder-approved, still queued — every turn today got
+preempted by a red-flagged production bug). Phase 2 (continuous nudge
+loop) — explicitly last in priority order, untouched.
+
 ## 2026-08-23 — Chat-session-swap bug FIXED (real repro) + CitationGuard false "files not found" bug FIXED (testing-agent verified 34/34, zero issues)
 
 Founder reported: viewing "Check my code for any security problems" on

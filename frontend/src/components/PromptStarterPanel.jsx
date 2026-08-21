@@ -23,6 +23,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Sparkles, Bug, CheckCircle2, Zap, ShieldCheck } from "lucide-react";
 import { api } from "../lib/api";
+import RobotGuide, { RobotGuideKeyframes } from "./RobotGuide";
 
 const ICONS = { sparkles: Sparkles, bug: Bug, check: CheckCircle2, zap: Zap, shield: ShieldCheck };
 
@@ -104,16 +105,26 @@ export default function PromptStarterPanel({ onPick, projectId, inputEmpty = tru
     swapCard(idx); // instantly replace the just-used card
   };
 
+  const hasPersonalized = visible.some((c) => c.personalized);
+  const introHtml = hasPersonalized
+    ? "Here's what I found in your connected repo — pick one, or just tell me what you want in plain English:"
+    : "Not sure what to ask? Pick one below, or just describe what you want in plain English:";
+
   return (
     <div data-testid="prompt-starter-panel" style={{ marginBottom: 10 }}>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(15.5rem, 1fr))",
-          gap: 8,
-        }}
-      >
-        {visible.map(({ slug, icon_hint, label, example, personalized }, idx) => {
+      <RobotGuideKeyframes />
+      <RobotGuide testid="prompt-starter-guide" kind="info">
+        <p style={{ margin: "0 0 10px", fontSize: 13, color: "#f8fafc", lineHeight: 1.55 }}>
+          {introHtml}
+        </p>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(15.5rem, 1fr))",
+            gap: 8,
+          }}
+        >
+          {visible.map(({ slug, icon_hint, label, example, personalized }, idx) => {
           const Icon = ICONS[icon_hint] || Sparkles;
           return (
             <button
@@ -179,22 +190,23 @@ export default function PromptStarterPanel({ onPick, projectId, inputEmpty = tru
             </button>
           );
         })}
-      </div>
-      <div
-        data-testid="prompt-starter-security-note"
-        style={{
-          display: "flex", alignItems: "center", gap: 6,
-          marginTop: 8, padding: "0 2px",
-          fontSize: 11, color: "var(--text-faint, #6a6f78)",
-        }}
-      >
-        <ShieldCheck size={12} strokeWidth={2} style={{ flexShrink: 0, color: "#4ade80" }} />
-        <span>
-          Don&apos;t worry about phrasing it perfectly — just describe what you want in plain
-          English. AUREM writes secure code by default; every change is scanned by Vanguard
-          before it ships.
-        </span>
-      </div>
+        </div>
+        <div
+          data-testid="prompt-starter-security-note"
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            marginTop: 10, padding: "0 2px",
+            fontSize: 11, color: "var(--text-faint, #9aa0aa)",
+          }}
+        >
+          <ShieldCheck size={12} strokeWidth={2} style={{ flexShrink: 0, color: "#4ade80" }} />
+          <span>
+            Don&apos;t worry about phrasing it perfectly — just describe what you want in plain
+            English. AUREM writes secure code by default; every change is scanned by Vanguard
+            before it ships.
+          </span>
+        </div>
+      </RobotGuide>
     </div>
   );
 }

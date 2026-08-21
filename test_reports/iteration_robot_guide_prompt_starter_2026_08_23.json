@@ -1,0 +1,27 @@
+{
+  "summary": "Verified new ORA GUIDE mascot-wrapped PromptStarterPanel + full backend regression + live /chat/send smoke. Backend: 30/30 tests pass (test_citation_guard_bin_ctx_wiring_2026_08_23, test_iter209_citation_guard_and_tool_executor, test_citation_guard_persist_ordering, test_iter212g_orchestrator_local_ctx_and_openrouter_model, test_session5_item2_orchestrator_silent_catch_lock). Live curl POST /api/aurem-dev/chat/send with prompt 'Check my code for any security problems' and no project returned honest no-project-connected reply with low_confidence=false, ship_suppressed=false — old broken pattern did NOT reproduce. Frontend: on a fresh session (+ New via session-switcher on /dashboard), prompt-starter-panel > prompt-starter-guide (kind=info, amber border rgba(245,158,11,0.25), bg rgba(245,158,11,0.06)) renders with pixel face (prompt-starter-guide-face), body (prompt-starter-guide-body) containing intro line + all 5 chips (prompt-starter-card-build-something-new / somethings-broken / check-everything-working / add-new-feature / security-check) + prompt-starter-security-note ALL as children of the same mascot card. Clicking the security-check chip pre-filled composer with 'Check my code for any security problems' (39 chars), did NOT auto-send (0 user messages), and the clicked chip was swapped in-place for a fresh suggestion (security-check → somethings-broken-alt). Personalization badges = 0 (expected — p_demo_a has revoked GitHub, backend suggestions fallback → generic pool). Login and Signup pages still render RobotGuide in message-mode (guide-msg element present) — the new optional `children` prop does not break message-only call sites.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_citation_guard_bin_ctx_wiring_2026_08_23.py",
+    "/app/backend/tests/test_iter209_citation_guard_and_tool_executor.py",
+    "/app/backend/tests/test_citation_guard_persist_ordering.py",
+    "/app/backend/tests/test_iter212g_orchestrator_local_ctx_and_openrouter_model.py",
+    "/app/backend/tests/test_session5_item2_orchestrator_silent_catch_lock.py",
+    "/app/test_reports/pytest/iter_robot_guide_starter_2026_08_23.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "RobotGuide.jsx: DOMPurify sanitization + optional children prop implemented cleanly; children path bypasses HTML sanitization which is fine since callers provide trusted JSX. No issues.",
+    "PromptStarterPanel.jsx: chip-swap on click + auto-rotate logic preserved inside RobotGuide wrapper. LGTM.",
+    "backend/routers/chat.py still >3800 lines with Pydantic V1 @validator warnings on lines 271, 275 (pre-existing, flagged in prior iteration — no regression)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (30/30)", "frontend": "100% (mascot UI + regression call sites verified)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! — working. Backend prefix /api/aurem-dev/*.",
+  "seed_data_creation": "None — used existing p_demo_a (accessed via dashboard session-switcher + New).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Chat empty-state is reached via /dashboard then session-switcher-btn > session-switcher-new (NOT /project/{id} which is 404). Mascot testids: prompt-starter-panel (wrapper), prompt-starter-guide (RobotGuide root), prompt-starter-guide-face (pixel face), prompt-starter-guide-body (children container holding intro+chips+note), prompt-starter-card-{slug}, prompt-starter-security-note. Chips: build-something-new, somethings-broken, check-everything-working, add-new-feature, security-check + *-alt variants. Personalization badge only appears when backend /findings/starter-suggestions returns items marked personalized=true (requires a project with valid GitHub PAT — not available in sandbox, expected).",
+  "rca_of_the_issue": "N/A — final confirmation pass. Both the security-vocabulary widening in response_confidence.py and the empty-completion retry in orchestrator.py are already deployed; live smoke on preview confirms honest reply (low_confidence=false, ship_suppressed=false) with no-project path. UI change is additive (wrapping existing content in RobotGuide) and does not regress the message-mode call sites."
+}

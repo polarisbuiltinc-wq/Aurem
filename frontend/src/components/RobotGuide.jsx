@@ -22,7 +22,7 @@
 import React from "react";
 import DOMPurify from "dompurify";
 
-export default function RobotGuide({ message, kind = "info", testid = "robot-guide" }) {
+export default function RobotGuide({ message, kind = "info", testid = "robot-guide", children }) {
   const palette = paletteFor(kind);
   // Iter 212m-227 — sanitize incoming HTML with DOMPurify.  Callers
   // pass small trusted snippets (`<strong>`, `<em>`, `<span class="ora-arrow">…</span>`)
@@ -68,10 +68,14 @@ export default function RobotGuide({ message, kind = "info", testid = "robot-gui
         }}>
           {palette.labelText}
         </div>
-        <div data-testid={`${testid}-msg`}
-             style={{ fontSize: 13, color: "#f8fafc", lineHeight: 1.55 }}
-             // eslint-disable-next-line react/no-danger
-             dangerouslySetInnerHTML={{ __html: cleanHtml }} />
+        {children ? (
+          <div data-testid={`${testid}-body`}>{children}</div>
+        ) : (
+          <div data-testid={`${testid}-msg`}
+               style={{ fontSize: 13, color: "#f8fafc", lineHeight: 1.55 }}
+               // eslint-disable-next-line react/no-danger
+               dangerouslySetInnerHTML={{ __html: cleanHtml }} />
+        )}
       </div>
     </div>
   );
