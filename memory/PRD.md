@@ -4,6 +4,9 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## 2026-08-22 — 🔴 Cold-start mismatch: FULL layered defense shipped, ROOT CAUSE STILL NOT FOUND (see CHANGELOG.md)
+Founder escalated to top priority, mandated: (1) verbose real logging + actual reproduction attempts (not code inference), (2) all 4 defense layers — confidence gate, Ship-button structurally impossible on fallback, hard short-message rule, auto-retry-once — (3) rigorous verification (5x "5+5" + 5 other simple prompts, raw log output), (4) honesty if root cause still unfound. All 4 done. Added `ora_council_retriever.recall`/`.no_recall` verbose logs + `chat.confidence_check` logs on every turn; ran 10 live reproduction attempts on preview, all correct, `council_recalled=0` every time — **still could not reproduce**. Added `_regenerate_without_recall()` — one quiet auto-retry with the council block stripped before ever falling back, verified silently self-corrects when possible. Caught + fixed a real regression during testing: initial hard rule wrongly blocked legitimate file-path answers ("who handles billing?") — narrowed to only Root-cause/handoff triggers. 6/6 tests pass. **Root cause remains open** — do not report "fixed" without a genuine RCA; only the guarantee layer exists.
+
 ## 2026-08-21 — Confidence Badge added on top of the mitigation (see CHANGELOG.md). Founder is deploying mismatch-mitigation + GitHub App health check together now; will self-verify 5+5 retest, support ticket tagging, and demo banner directly after deploy. Root-cause hunt stays open as background task. 4 queued suggestions (suspension alert/dashboard banner/health digest) NOT started per founder priority — Confidence Badge was the one approved to build now.
 
 ## 2026-08-21 — 🔴 Cold-start mismatch mitigation shipped, ROOT CAUSE STILL OPEN (see CHANGELOG.md)

@@ -163,5 +163,47 @@ def test_legit_fix_request_keeps_handoff_fence(client_factory):
     assert done is not None and done.get("low_confidence") is False
 
 
+def _make_stateful_chat_with_tools(first_reply, second_reply):
+    """First call returns `first_reply`, every call after returns
+    `second_reply` — simulates the founder's own observation that a
+    manual retry of the SAME question produces the correct answer."""
+    calls = {"n": 0}
+
+    async def _fake(**kwargs):
+        calls["n"] += 1
+        reply = first_reply if calls["n"] == 1 else second_reply
+        return {
+            "content": reply,
+            "provider": "test-provider",
+            "tool_calls": [],
+            "tool_invocations": [],
+            "tool_calls_run": 0,
+            "messages": [{"role": "user", "content": kwargs.get("prompt", "")}],
+        }
+    return _fake, calls
+
+
+def test_mismatch_auto_retry_resolves_silently(monkeypatch, client_factory):
+    """Layer (d): when the retry produces a correct answer, the user
+    should see the CORRECT content, never the mismatched first draft,
+    and low_confidence must be False (self-corrected, not a fallback)."""
+    fake, calls = _make_stateful_chat_with_tools(MISMATCHED_REPLY, "5 + 5 = 10.")
+    client = client_factory("unused")  # placeholder, overridden below
+    monkeypatch.setattr(chat_mod, "chat_with_tools", fake)
+
+    r = client.post(
+        "/api/aurem-dev/chat/send",
+        headers={"Authorization": "Bearer fake"},
+        json={"prompt": "What is 5+5?",
+              "session_id": "test-sess-retry-success",
+              "max_tool_iters": 1},
+    )
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload.get("content") == "5 + 5 = 10."
+    assert payload.get("low_confidence") is False
+    assert calls["n"] == 2, "expected exactly one retry call"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

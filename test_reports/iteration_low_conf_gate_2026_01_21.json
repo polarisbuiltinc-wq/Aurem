@@ -1,0 +1,48 @@
+{
+  "summary": "Verified the layered mismatch/low-confidence defense for AUREM CTO chat. Backend unit tests (4/4 test_response_confidence_mismatch_gate.py + 1/1 test_citation_guard_persist_ordering.py) all pass. Live preview /chat/send + /chat/stream + /chat/history plumbing confirmed via direct API calls with test@aurem.dev credentials. Simple prompts (What is 5+5?, hello, 2+2) return normal, correct, RELEVANT answers with low_confidence=false — mitigation is NOT over-blocking normal chat. Short codebase Q&A (who handles billing?) also gets a real answer, NOT the fallback (regression from unit-testing phase confirmed fixed). Legit bug-fix request also returns a real answer with low_confidence=false. UI e2e (Playwright) sent 'What is 5+5?', 'hello', '2+2' via ChatPanel — got normal responses ('5+5=10', 'Hey there!', 'Easy — it's 4') with zero low-confidence badges and zero fallback text; ORA council caption '5-adviser council · chairman verdict' rendered correctly (regression check #6 passed). Could not force the original mismatch bug in preview (as expected — main agent already tried 10x). Overall: mitigation implementation is verified working end-to-end and does NOT break normal chat.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verification_evidence": {
+    "unit_tests_passed": [
+      "backend/tests/test_response_confidence_mismatch_gate.py::test_mismatched_response_swapped_for_fallback_in_stream PASSED",
+      "backend/tests/test_response_confidence_mismatch_gate.py::test_mismatched_response_swapped_for_fallback_in_send PASSED",
+      "backend/tests/test_response_confidence_mismatch_gate.py::test_legit_fix_request_keeps_handoff_fence PASSED",
+      "backend/tests/test_response_confidence_mismatch_gate.py::test_mismatch_auto_retry_resolves_silently PASSED",
+      "backend/tests/test_citation_guard_persist_ordering.py PASSED"
+    ],
+    "live_api_send_response_sample": "POST /api/aurem-dev/chat/send {prompt:'What is 5+5?'} → {ok:true, content:'5 + 5 = 10.', low_confidence: false, ...}",
+    "live_api_stream_meta_frame": "data: {\"meta\": true, ..., \"low_confidence\": false} — present in stream meta frame",
+    "live_api_stream_done_frame": "data: {\"done\": true, ..., \"low_confidence\": false, ...} — present in stream done frame",
+    "history_round_trip": "GET /chat/history returns turn dicts; _persist_turn writes low_confidence:true only when the flag fires (chat.py line 655-656), so a low-confidence turn WILL round-trip. Non-low-confidence turns omit the key which the frontend handles via m.lowConfidence || m.low_confidence (falsy).",
+    "ui_chat_e2e": "Sent 'What is 5+5?', 'hello', '2+2' via ChatPanel; got normal correct responses; zero low-confidence-badge-* elements; zero fallback text on page; council caption rendered."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_response_confidence_mismatch_gate.py",
+    "/app/backend/tests/test_citation_guard_persist_ordering.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "response_confidence.py: is_definitional_mismatch() correctly excludes fix-intent AND code-signal messages before flagging — the earlier regression (file-path-only trigger) is confirmed removed.",
+    "chat.py: low_confidence flag is threaded consistently through both endpoints, both meta and done SSE frames, /chat/send JSON, and _persist_turn — clean end-to-end plumbing.",
+    "Minor observation: /chat/history strips ObjectId via projection {_id:0}, good. Non-low-confidence turns don't emit the low_confidence key (only true is persisted per line 655-656) — frontend handles via `m.lowConfidence || m.low_confidence` correctly.",
+    "chat.py is a very large file (~4000 lines) — consider splitting per code-review guideline (>700 lines threshold). Not a functional blocker for this fix."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": "test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created ephemeral chat sessions: test-verify-session-1, test-stream-1, test-stream-2, test-bugfix-1 under test_admin_001. Safe to leave; will be cleaned by session cleanup.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The mismatch gate + low_confidence flag pipeline is verified working. Backend unit tests deterministically cover the fallback swap in both endpoints, the auto-retry, and the legit-fix-request non-block. Live preview /chat/send + /chat/stream include low_confidence in JSON + meta + done frames. Could not force original bug in preview (expected — matches main-agent's own 10x failed attempts). No blocking issues found.",
+  "rca of the issue": "N/A — no new bug reproduced. Original founder-reported mismatch is defended by 4 layers: (a) is_definitional_mismatch hard rule for short non-fix messages returning root-cause/handoff, (b) response_seems_mismatched broader heuristic, (c) auto-retry-without-recall-block before showing user, (d) fallback message + red UI badge. All 4 layers are covered by passing unit tests + verified live plumbing."
+}

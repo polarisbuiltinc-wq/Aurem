@@ -561,6 +561,59 @@ async def _maybe_set_title(user_id: str, session_id: str,
         logger.warning("_maybe_set_title failed: %r", e)
 
 
+async def _regenerate_without_recall(
+    *, prompt: str, jwt_token: str, extra_sys_no_council: str,
+    max_iters: int, session_id: Optional[str], user_id: str,
+    project_id: Optional[str], mode: str, task_type: Optional[str],
+    is_founder: bool, bin_ctx,
+) -> tuple[str, str]:
+    """2026-08-21 — layered defense (d): a quiet, single automatic
+    retry BEFORE anything is shown to the user, once a mismatch is
+    detected. Founder observed manually re-asking the SAME question
+    always produces the correct answer — this automates exactly that,
+    with the ORA-Council few-shot block (the leading recall-bleed
+    suspect) stripped out of the system prompt for this attempt.
+
+    Deliberately a PLAIN `chat_with_tools` call — no streaming hooks
+    (step cards / live invocations) — so it's invisible to the user
+    whichever specialized branch (mode D debugger, casual gateway,
+    advisor, etc.) produced the original mismatched turn. Goal is a
+    correct answer to the actual question, not replaying the exact
+    original pipeline.
+
+    Returns (content, provider); NEVER raises — caller treats a
+    failure the same as "retry still mismatched"."""
+    try:
+        result = await chat_with_tools(
+            prompt=prompt,
+            jwt_token=jwt_token,
+            system=(extra_sys_no_council + "\n\n" if extra_sys_no_council else None),
+            max_iters=max_iters,
+            session_id=session_id,
+            mongo_client=None,
+            user_id=user_id,
+            project_id=project_id,
+            mode=mode,
+            task_type=task_type,
+            is_founder=is_founder,
+            bin_ctx=bin_ctx,
+        )
+        return (result.get("content", "") or ""), (result.get("provider", "") or "")
+    except Exception as e:
+        logger.warning("chat.confidence_retry: regeneration call itself failed: %r", e)
+        return "", ""
+
+
+def _strip_council_block(extra_sys: str, council_block: str) -> str:
+    """Best-effort removal of the exact ORA-Council few-shot block
+    from an already-assembled `extra_sys` string, for the retry
+    attempt. Falls back to the original string unchanged if the exact
+    substring isn't found (never raises, never blocks the retry)."""
+    if not council_block:
+        return extra_sys
+    return extra_sys.replace(council_block + "\n\n", "", 1)
+
+
 async def _persist_turn(user_id: str, session_id: str, user_prompt: str,
                         assistant_reply: str, provider: str,
                         watchdog: Optional[dict] = None,
@@ -728,6 +781,7 @@ async def chat_send(
     # Returns (block, recalled_count). Surface count back to caller so
     # the FE can render "📚 ORA recalled N similar past answers".
     _council_recalled = 0
+    _council_block = ""
     try:
         from cto_services.db import get_db as _get_db
         from services.ora_council_retriever import get_council_few_shot
@@ -825,19 +879,57 @@ async def chat_send(
     # unsolicited code-ship for a message with zero fix/bug intent is
     # swapped for a friendly fallback BEFORE the user ever sees it —
     # this also strips the aurem-handoff fence so Ship via CTO can
-    # never render for it.
+    # never render for it. 2026-08-22 — hardened with a quiet auto-
+    # retry (layer d) and verbose real-log observation (founder ask)
+    # before falling back to the canned message.
     _low_confidence = False
     try:
         from services.response_confidence import (
             response_seems_mismatched, FALLBACK_MESSAGE,
         )
-        if response_seems_mismatched(body.prompt or "", content):
+        _mismatch = response_seems_mismatched(body.prompt or "", content)
+        logger.info(
+            "chat.confidence_check surface=chat_send turn=1 prompt=%r "
+            "council_recalled=%s mismatch=%s content_preview=%r",
+            (body.prompt or "")[:160], _council_recalled, _mismatch,
+            (content or "")[:220],
+        )
+        if _mismatch:
             logger.warning(
-                "chat_send: suppressing mismatched low-confidence response "
-                "(handoff/diagnosis with no fix-intent in user message)",
+                "chat_send: mismatch detected on first response — retrying "
+                "once without the ORA-Council recall block before showing "
+                "anything to the user",
             )
-            content = FALLBACK_MESSAGE
-            _low_confidence = True
+            _retry_content, _retry_provider = await _regenerate_without_recall(
+                prompt=body.prompt, jwt_token=jwt_token,
+                extra_sys_no_council=_strip_council_block(extra_sys, _council_block),
+                max_iters=min(body.max_tool_iters, 4),
+                session_id=body.session_id, user_id=user["user_id"],
+                project_id=body.project_id, mode=req_mode,
+                task_type=body.task_type or _infer_task_type(body.prompt),
+                is_founder=_is_fnd, bin_ctx=bin_ctx,
+            )
+            _retry_mismatch = response_seems_mismatched(body.prompt or "", _retry_content)
+            logger.info(
+                "chat.confidence_check surface=chat_send turn=2(retry) "
+                "prompt=%r mismatch=%s content_preview=%r",
+                (body.prompt or "")[:160], _retry_mismatch,
+                (_retry_content or "")[:220],
+            )
+            if _retry_content.strip() and not _retry_mismatch:
+                content = _retry_content
+                provider = _retry_provider or provider
+                logger.info(
+                    "chat_send: retry resolved the mismatch — user never "
+                    "saw the bad first draft",
+                )
+            else:
+                content = FALLBACK_MESSAGE
+                _low_confidence = True
+                logger.warning(
+                    "chat_send: retry ALSO mismatched (or came back empty) "
+                    "— showing fallback message",
+                )
     except Exception as _rce:
         logger.debug("response_confidence gate skipped (chat_send): %r", _rce)
 
@@ -1512,6 +1604,7 @@ async def chat_stream(
     # is closed over by gen() and emitted as an SSE `council` frame
     # BEFORE token streaming begins so the FE can render the caption.
     _council_recalled = 0
+    _council_block = ""
     if not body.ora_panel:
         try:
             from cto_services.db import get_db as _get_db
@@ -2970,19 +3063,66 @@ async def chat_stream(
         # services/response_confidence.py. Must run BEFORE the token
         # stream loop below so the user never sees the mismatched
         # content stream in — swapping it after streaming has begun
-        # is too late.
+        # is too late. 2026-08-22 — hardened with a quiet auto-retry
+        # (layer d) and verbose real-log observation (founder ask)
+        # before falling back to the canned message.
         _low_confidence = False
         try:
             from services.response_confidence import (
                 response_seems_mismatched, FALLBACK_MESSAGE,
             )
-            if response_seems_mismatched(body.prompt or "", content):
+            _mismatch = response_seems_mismatched(body.prompt or "", content)
+            logger.info(
+                "chat.confidence_check surface=chat_stream turn=1 prompt=%r "
+                "council_recalled=%s mismatch=%s content_preview=%r",
+                (body.prompt or "")[:160], _council_recalled, _mismatch,
+                (content or "")[:220],
+            )
+            if _mismatch:
                 logger.warning(
-                    "chat_stream: suppressing mismatched low-confidence response "
-                    "(handoff/diagnosis with no fix-intent in user message)",
+                    "chat_stream: mismatch detected on first response — "
+                    "retrying once without the ORA-Council recall block "
+                    "before showing anything to the user",
                 )
-                content = FALLBACK_MESSAGE
-                _low_confidence = True
+                from services.subscription_tiers import allowed_modes_for_tier
+                from services.usage import is_founder_email as _is_fnd_email_retry
+                _allowed_retry = allowed_modes_for_tier((user or {}).get("tier") or "free")
+                _req_mode_retry = body.mode if (body.mode in _allowed_retry) else _allowed_retry[-1]
+                _is_fnd_retry = bool(
+                    user.get("is_admin") or user.get("is_unlimited")
+                    or (user.get("tier") == "founder")
+                    or _is_fnd_email_retry(user.get("email"))
+                )
+                _retry_content, _retry_provider = await _regenerate_without_recall(
+                    prompt=body.prompt, jwt_token=jwt_token,
+                    extra_sys_no_council=_strip_council_block(extra_sys, _council_block),
+                    max_iters=min(body.max_tool_iters or 2, 4),
+                    session_id=body.session_id, user_id=user.get("user_id"),
+                    project_id=body.project_id, mode=_req_mode_retry,
+                    task_type=body.task_type or _infer_task_type(body.prompt),
+                    is_founder=_is_fnd_retry, bin_ctx=bin_ctx,
+                )
+                _retry_mismatch = response_seems_mismatched(body.prompt or "", _retry_content)
+                logger.info(
+                    "chat.confidence_check surface=chat_stream turn=2(retry) "
+                    "prompt=%r mismatch=%s content_preview=%r",
+                    (body.prompt or "")[:160], _retry_mismatch,
+                    (_retry_content or "")[:220],
+                )
+                if _retry_content.strip() and not _retry_mismatch:
+                    content = _retry_content
+                    provider = _retry_provider or provider
+                    logger.info(
+                        "chat_stream: retry resolved the mismatch — user "
+                        "never saw the bad first draft",
+                    )
+                else:
+                    content = FALLBACK_MESSAGE
+                    _low_confidence = True
+                    logger.warning(
+                        "chat_stream: retry ALSO mismatched (or came back "
+                        "empty) — showing fallback message",
+                    )
         except Exception as _rce:
             logger.debug("response_confidence gate skipped (chat_stream): %r", _rce)
 

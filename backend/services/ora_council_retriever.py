@@ -294,10 +294,19 @@ async def get_council_few_shot(
         return ("", 0)
 
     if _index["row_count"] < _MIN_GLOBAL:
+        logger.debug(
+            "ora_council_retriever.no_recall reason=corpus_below_min_global "
+            "rows=%d query=%r", _index["row_count"], (user_message or "")[:100],
+        )
         return ("", 0)
 
     cand_idx, bucket_label = _candidate_indices(mode, user_id, project_id)
     if not cand_idx:
+        logger.debug(
+            "ora_council_retriever.no_recall reason=%s user_id=%s "
+            "project_id=%s mode=%s query=%r",
+            bucket_label, user_id, project_id, mode, (user_message or "")[:100],
+        )
         return ("", 0)
 
     # Tokenise the live query once and reuse the bag-of-words.
@@ -316,10 +325,26 @@ async def get_council_few_shot(
         if s >= _MIN_SCORE:
             scored.append((s, row))
     if not scored:
+        logger.debug(
+            "ora_council_retriever.no_recall reason=below_min_score "
+            "bucket=%s candidates=%d query=%r",
+            bucket_label, len(cand_idx), (user_message or "")[:100],
+        )
         return ("", 0)
 
     scored.sort(key=lambda x: x[0], reverse=True)
     top = [r for _s, r in scored[:max(1, int(k))]]
+    # 2026-08-22 — verbose recall logging (founder-directed real-log
+    # observation for the still-open cold-start mismatch RCA). Logs
+    # the ACTUAL score + matched past message for every recall, not
+    # just the count, so a reproduction can be diagnosed from logs
+    # instead of inferred from code.
+    logger.info(
+        "ora_council_retriever.recall bucket=%s query=%r top_score=%.3f "
+        "k=%d matched=%r",
+        bucket_label, (user_message or "")[:100], scored[0][0], len(top),
+        [{"score": round(s, 3), "past_msg": r["msg"][:80]} for s, r in scored[:max(1, int(k))]],
+    )
     return (_format_block(top, bucket_label), len(top))
 
 
