@@ -642,7 +642,12 @@ async def stripe_webhook(request: Request) -> dict:
         # flag the user so the frontend can show an in-app "update
         # your card" prompt, (2) fire ONE founder alert email (Resend,
         # reuses the existing G10 `send_founder_alert` — same
-        # dedup/audit-log machinery as every other critical alert).
+        # dedup/audit-log machinery as every other critical alert),
+        # (3) 2026-08-22 · founder priority-1 follow-up — email the
+        # CUSTOMER themselves too (services/payment_recovery_email.py),
+        # with a fresh Stripe-hosted portal link to fix it, deduped
+        # per invoice id so a multi-attempt dunning cycle sends ONE
+        # email, not one per retry.
         # We deliberately do NOT downgrade the tier here — Stripe's
         # own Smart Retries run for up to ~2 weeks first; the existing
         # `customer.subscription.deleted` branch below still owns the
@@ -650,12 +655,13 @@ async def stripe_webhook(request: Request) -> dict:
         obj = event["data"]["object"]
         sub_id = obj.get("subscription")
         cust_id = obj.get("customer")
+        invoice_id = obj.get("id")
         attempt_count = obj.get("attempt_count")
         next_attempt = obj.get("next_payment_attempt")
         amount_due = round((obj.get("amount_due") or 0) / 100, 2)
         if sub_id:
             try:
-                user_row = await db.dev_users.update_one(
+                await db.dev_users.update_one(
                     {"stripe_sub_id": sub_id},
                     {"$set": {
                         "payment_failed": True,
@@ -663,19 +669,19 @@ async def stripe_webhook(request: Request) -> dict:
                     },
                      "$inc": {"payment_failure_count": 1}},
                 )
-                _ = user_row
             except Exception as e:  # noqa: BLE001
                 logger.warning("[webhook] invoice.payment_failed dev_users flag failed: %r", e)
+            user_row = await db.dev_users.find_one(
+                {"stripe_sub_id": sub_id},
+                {"_id": 0, "user_id": 1, "email": 1, "name": 1, "tier": 1},
+            ) or {}
             try:
-                user_row = await db.dev_users.find_one(
-                    {"stripe_sub_id": sub_id}, {"_id": 0, "email": 1, "tier": 1},
-                )
                 from services.founder_alerts import send_founder_alert
                 await send_founder_alert(
                     db,
                     source_key=f"stripe_invoice_failed:{sub_id}",
-                    title=f"Payment failed — {(user_row or {}).get('email', '?')} "
-                          f"({(user_row or {}).get('tier', '?')} plan, ${amount_due})",
+                    title=f"Payment failed — {user_row.get('email', '?')} "
+                          f"({user_row.get('tier', '?')} plan, ${amount_due})",
                     detail=(
                         f"subscription={sub_id} customer={cust_id} "
                         f"attempt_count={attempt_count} "
@@ -687,6 +693,28 @@ async def stripe_webhook(request: Request) -> dict:
                 )
             except Exception as e:  # noqa: BLE001
                 logger.warning("[webhook] invoice.payment_failed founder alert failed: %r", e)
+            # 2026-08-22 — founder ask (priority 1 of 3): the CUSTOMER
+            # must also know their own card failed, not just the
+            # founder. Generates a fresh Stripe-hosted portal link
+            # directly (no authenticated session available inside a
+            # webhook) and fires ONE email, deduped per invoice id.
+            if cust_id and invoice_id:
+                try:
+                    portal = await _stripe_call(
+                        stripe.billing_portal.Session.create,
+                        customer=cust_id,
+                        return_url=(_frontend_url() or "https://auremcto.com") + "/settings",
+                    )
+                    from services.payment_recovery_email import send_payment_recovery_email
+                    await send_payment_recovery_email(
+                        db, user_row,
+                        invoice_id=invoice_id,
+                        plan=user_row.get("tier", "?"),
+                        amount_due=amount_due,
+                        portal_url=portal.url,
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("[webhook] invoice.payment_failed customer email failed: %r", e)
         else:
             logger.warning("[webhook] invoice.payment_failed with no subscription id: %s", obj.get("id"))
     elif etype == "invoice.paid":

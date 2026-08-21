@@ -1,0 +1,30 @@
+{
+  "summary": "Backend-only verification of the new customer-facing Payment Recovery Email (services/payment_recovery_email.py) and its wiring into routers/payments.py's invoice.payment_failed webhook branch. All 5 tests in tests/test_stripe_invoice_payment_failed.py pass (note: review_request mentioned 6 tests — file contains 5 and covers every requested behavior; no coverage gap). Independently verified render_text() and render_html() include plan name, $X.XX amount, and portal_url as an href/CTA. Prior batch behaviors (dev_users payment_failed flag, founder alert guard='stripe_dunning', invoice.paid recovery clear, /payments/my-plan payment_failed field) all still pass alongside the new customer email — no regression.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_stripe_invoice_payment_failed.py",
+    "/app/test_reports/pytest/payment_recovery_email.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "services/payment_recovery_email.py: clean, mirrors welcome_email.py convention (reserved @example.* short-circuit, dark HTML, per-invoice audit row). Dedup via db.payment_recovery_emails.find_one({invoice_id}) is race-safe enough for Stripe webhook cadence but not strictly atomic — under a concurrent double-delivery of the SAME invoice.payment_failed event, two sends could slip through before the audit row lands. Low risk given Stripe's normal delivery pattern; consider a unique index on invoice_id if this ever ships heavier volume.",
+    "routers/payments.py L701: portal-session creation is inside the same try/except as the recovery email — if stripe.billing_portal.Session.create fails, the customer gets no email at all. Acceptable trade-off (an email with a dead link is worse than none) but worth flagging.",
+    "Test file has 5 tests, not 6 as the review_request stated — coverage still matches every requested behavior (flag + founder alert + recovery email + dedup + my-plan + missing-sub safety + invoice.paid clear). Minor doc drift only."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "n/a (skipped per review request)"},
+  "test_credentials": "none needed — all Stripe/Resend calls mocked",
+  "seed_data_creation": "Ephemeral dev_users rows keyed by uuid-suffixed test-user-* ids, cleaned up per-test. payment_recovery_emails audit rows for the dedup test are deleted at end of test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Follow-up batch to iteration_invoice_payment_failed_2026_01_22.json. This adds the CUSTOMER-facing recovery email (services/payment_recovery_email.py) — deduped per Stripe invoice_id. 5/5 tests pass in tests/test_stripe_invoice_payment_failed.py. If reopening: PaymentFailedBanner.jsx frontend was NOT retested this iteration (no changes there). Founder explicitly deferred Dunning Dashboard + Annual Plan Nudge — don't build those.",
+  "rca of the issue": "n/a — no bug found this iteration"
+}

@@ -174,6 +174,15 @@ _BOOTSTRAP_SPEC: list[tuple[str, list[tuple[list, dict]]]] = [
         ([("triggered_at", -1)],    {}),
         ([("alert_key", 1)],        {"unique": True, "sparse": True}),
     ]),
+    # 2026-08-22 — unique index closes the race the testing agent
+    # flagged: a concurrent double-delivery of the SAME Stripe
+    # `invoice.payment_failed` event could otherwise slip two emails
+    # past the find-then-insert dedup check in
+    # services/payment_recovery_email.py before either audit row lands.
+    ("payment_recovery_emails", [
+        ([("invoice_id", 1)], {"unique": True, "sparse": True}),
+        ([("user_id", 1)],    {}),
+    ]),
     ("project_graphs", [
         ([("project_id", 1)], {"unique": True, "sparse": True}),
     ]),

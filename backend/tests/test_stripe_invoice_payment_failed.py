@@ -7,12 +7,17 @@ in routers/payments.py:
 
   1. `invoice.payment_failed` flags the user (`payment_failed=True`,
      `payment_failure_count` incremented) so the frontend can show the
-     "update your card" banner, and fires ONE founder alert (via the
-     existing G10 `services.founder_alerts.send_founder_alert`).
+     "update your card" banner, fires ONE founder alert (via the
+     existing G10 `services.founder_alerts.send_founder_alert`), and
+     fires ONE customer-facing recovery email
+     (`services.payment_recovery_email.send_payment_recovery_email`,
+     with a freshly-generated Stripe portal link).
   2. `invoice.paid` on a previously-flagged subscription clears the
      flag (recovery path — a retry succeeded).
   3. GET /payments/my-plan surfaces `payment_failed` so the frontend
      banner has something to poll.
+  4. `send_payment_recovery_email` itself dedupes per Stripe invoice
+     id — calling it twice for the SAME invoice only sends once.
 
 Bypasses real Stripe signature verification (monkeypatches
 `stripe.Webhook.construct_event`) — this is a pure webhook-payload
@@ -91,6 +96,24 @@ async def test_invoice_payment_failed_flags_user(monkeypatch):
         return {"sent": False, "reason": "test_stub"}
     monkeypatch.setattr("services.founder_alerts.send_founder_alert", _fake_alert)
 
+    # Never hit real Stripe (portal session) or real Resend (customer
+    # email) during a test run — just capture the calls.
+    class _FakePortalSession:
+        url = "https://billing.stripe.com/p/session/test_fake"
+    monkeypatch.setattr(
+        payments_mod.stripe.billing_portal.Session, "create",
+        staticmethod(lambda **kw: _FakePortalSession()),
+    )
+    recovery_calls = []
+
+    async def _fake_recovery_email(db, user, **kwargs):
+        recovery_calls.append({"user": user, **kwargs})
+        return {"ok": True}
+    monkeypatch.setattr(
+        "services.payment_recovery_email.send_payment_recovery_email",
+        _fake_recovery_email,
+    )
+
     await _seed_user(user_id, sub_id)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.post("/api/aurem-dev/payments/webhook", json={})
@@ -101,6 +124,10 @@ async def test_invoice_payment_failed_flags_user(monkeypatch):
     assert row.get("payment_failure_count") == 1
     assert len(alert_calls) == 1, "founder alert must fire exactly once"
     assert alert_calls[0]["guard"] == "stripe_dunning"
+    assert len(recovery_calls) == 1, "customer recovery email must fire exactly once"
+    assert recovery_calls[0]["invoice_id"] == "in_test_1"
+    assert recovery_calls[0]["portal_url"] == "https://billing.stripe.com/p/session/test_fake"
+    assert recovery_calls[0]["amount_due"] == 19.0
     await _cleanup_user(user_id)
 
 
@@ -152,6 +179,41 @@ async def test_my_plan_surfaces_payment_failed(monkeypatch):
     assert r.status_code == 200, r.text
     assert r.json().get("payment_failed") is True
     await _cleanup_user(user_id)
+
+
+@pytest.mark.asyncio
+async def test_payment_recovery_email_dedups_per_invoice(monkeypatch):
+    """Direct unit test of services/payment_recovery_email.py, not via
+    the webhook — calling send_payment_recovery_email TWICE for the
+    SAME invoice_id must only actually send (hit Resend) once."""
+    from services.payment_recovery_email import send_payment_recovery_email
+
+    send_calls = []
+
+    async def _fake_resend_send(to_email, *, text, html):
+        send_calls.append(to_email)
+        return True, None
+    monkeypatch.setattr(
+        "services.payment_recovery_email._resend_send", _fake_resend_send,
+    )
+
+    user = {"user_id": "u_dedup_test", "email": "dedup-test@example.com"}
+    invoice_id = f"in_dedup_{uuid.uuid4().hex[:8]}"
+    db = get_db()
+
+    r1 = await send_payment_recovery_email(
+        db, user, invoice_id=invoice_id, plan="pro", amount_due=19.0,
+        portal_url="https://billing.stripe.com/p/session/test",
+    )
+    r2 = await send_payment_recovery_email(
+        db, user, invoice_id=invoice_id, plan="pro", amount_due=19.0,
+        portal_url="https://billing.stripe.com/p/session/test",
+    )
+    assert r1.get("ok") is True
+    assert r2 == {"ok": True, "skipped": "already_sent"}
+    assert len(send_calls) == 1, "must only actually send once for the same invoice_id"
+
+    await db.payment_recovery_emails.delete_many({"invoice_id": invoice_id})
 
 
 if __name__ == "__main__":
