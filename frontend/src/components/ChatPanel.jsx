@@ -506,7 +506,9 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   // silently send `execution_mode:"loop"` for non-founders.
   const isLoopUnlocked = useMemo(() => {
     const u = (typeof getUser === "function" && getUser()) || null;
-    return !!(u && (u.is_admin || u.is_unlimited || u.tier === "founder"));
+    // 2026-08-21 — also respect `loop_beta_enabled` (see
+    // isLoopUnlockedSync in utils/chatTextUtils.js for rationale).
+    return !!(u && (u.is_admin || u.is_unlimited || u.tier === "founder" || u.loop_beta_enabled));
   }, []);
   const [execMode, setExecMode] = useState(() => {
     const m = loadExecMode();
@@ -1830,10 +1832,19 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
 
     // Iter 42 — drain captured F12 errors at send time. The store self-clears
     // after flush() so we don't double-report old errors on subsequent sends.
-    const f12Payload = (typeof window !== "undefined" && window.__auremF12)
-      ? window.__auremF12.flush()
-      : null;
-    lastF12PayloadRef.current = f12Payload;
+    // 2026-08-21 — bug fix (founder video report): the "Send to ORA" confirm
+    // flow (handleF12ConfirmSend, above) ALREADY calls f12.flush() once to
+    // populate the confirm card, draining window.__auremF12's store and
+    // staging the real payload in lastF12PayloadRef. Flushing AGAIN here
+    // hit an already-empty store, so the backend/model never actually saw
+    // the console/network error data — exactly the "I can't see your
+    // DevTools, paste the HAR manually" symptom. Prefer the staged payload
+    // when one exists; only flush fresh for a normal (non-F12-confirm) send.
+    const f12Payload = lastF12PayloadRef.current
+      || ((typeof window !== "undefined" && window.__auremF12)
+          ? window.__auremF12.flush()
+          : null);
+    lastF12PayloadRef.current = null;
 
     // Iter 212m-19 — fresh floating-card session: clear any leftover
     // steps from the previous turn so the new turn starts at zero.

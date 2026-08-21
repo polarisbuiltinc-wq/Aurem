@@ -4,6 +4,12 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## 2026-08-21 — F12 double-flush FIXED + Loop beta-rollout gap CLOSED, scan admin-gate clarified (see CHANGELOG.md)
+F12 "Send to ORA" double-flush bug confirmed + fixed (real payload was lost before reaching backend). "/scan" 403 is a deliberate admin/founder-only gate, not a bug — awaiting founder decision on ReRootsBeauty test account flag. Loop Mode "SOON" lock: could NOT verify production stuck-loop history myself (no prod DB access) — founder directed to Admin QA Dashboard → Loop Beta panel for live numbers. Found+fixed a real gap: backend's `loop_beta_enabled` per-user rollout mechanism (with kill-switch) was never wired to the frontend lock check — fixed, zero behavior change for existing users, just makes the existing safe rollout mechanism usable. Did NOT blanket-unlock Loop — awaiting founder's dashboard check.
+
+## 2026-08-21 — GitHub "No repositories found" helper hint (founder video report)
+Analyzed founder's screen recording — confirmed the issue is GitHub's OWN "Select repositories" widget glitch (github.com/settings/installations/...), not an AUREM bug. Added a small helper hint below "Continue with GitHub App" in both NewUserWizard.jsx and AddProjectWizard.jsx.
+
 ## 2026-08-22 — 🔴 Cold-start mismatch: FULL layered defense shipped, ROOT CAUSE STILL NOT FOUND (see CHANGELOG.md)
 Founder escalated to top priority, mandated: (1) verbose real logging + actual reproduction attempts (not code inference), (2) all 4 defense layers — confidence gate, Ship-button structurally impossible on fallback, hard short-message rule, auto-retry-once — (3) rigorous verification (5x "5+5" + 5 other simple prompts, raw log output), (4) honesty if root cause still unfound. All 4 done. Added `ora_council_retriever.recall`/`.no_recall` verbose logs + `chat.confidence_check` logs on every turn; ran 10 live reproduction attempts on preview, all correct, `council_recalled=0` every time — **still could not reproduce**. Added `_regenerate_without_recall()` — one quiet auto-retry with the council block stripped before ever falling back, verified silently self-corrects when possible. Caught + fixed a real regression during testing: initial hard rule wrongly blocked legitimate file-path answers ("who handles billing?") — narrowed to only Root-cause/handoff triggers. 6/6 tests pass. **Root cause remains open** — do not report "fixed" without a genuine RCA; only the guarantee layer exists.
 

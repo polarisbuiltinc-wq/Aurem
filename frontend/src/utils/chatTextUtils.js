@@ -17,7 +17,13 @@ import { getUser } from "../lib/api";
 export function isLoopUnlockedSync() {
   try {
     const u = (typeof getUser === "function" && getUser()) || null;
-    return !!(u && (u.is_admin || u.is_unlimited || u.tier === "founder"));
+    // 2026-08-21 — also respect the per-user `loop_beta_enabled` flag
+    // (services/loop_beta.py already gates /loop/start on this for
+    // Pro/Team accounts + has a kill-switch/stuck-loop safety net —
+    // it just never reached the frontend toggle before). Lets the
+    // founder roll Loop out to specific users via the existing admin
+    // toggle without unlocking it for everyone.
+    return !!(u && (u.is_admin || u.is_unlimited || u.tier === "founder" || u.loop_beta_enabled));
   } catch {
     return false;
   }
