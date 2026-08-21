@@ -183,6 +183,10 @@ _BOOTSTRAP_SPEC: list[tuple[str, list[tuple[list, dict]]]] = [
         ([("invoice_id", 1)], {"unique": True, "sparse": True}),
         ([("user_id", 1)],    {}),
     ]),
+    ("payment_recovered_emails", [
+        ([("invoice_id", 1)], {"unique": True, "sparse": True}),
+        ([("user_id", 1)],    {}),
+    ]),
     ("project_graphs", [
         ([("project_id", 1)], {"unique": True, "sparse": True}),
     ]),

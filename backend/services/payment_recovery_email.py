@@ -116,7 +116,7 @@ font-family:'Helvetica Neue',Arial,sans-serif;line-height:1.6;">
 </body></html>"""
 
 
-async def _resend_send(to_email: str, *, text: str, html: str) -> tuple[bool, Optional[str]]:
+async def _resend_send(to_email: str, *, subject: str, text: str, html: str) -> tuple[bool, Optional[str]]:
     """POST to Resend. Returns (ok, error_text). Short-circuits reserved
     @example.com/.org/.net domains so the test suite never fires real
     API calls (same guard as welcome_email.py)."""
@@ -139,7 +139,7 @@ async def _resend_send(to_email: str, *, text: str, html: str) -> tuple[bool, Op
                 json={
                     "from":    sender,
                     "to":      [to_email],
-                    "subject": SUBJECT,
+                    "subject": subject,
                     "text":    text,
                     "html":    html,
                 },
@@ -199,8 +199,117 @@ async def send_payment_recovery_email(
 
     text = render_text(user, plan=plan, amount_due=amount_due, portal_url=portal_url)
     html = render_html(user, plan=plan, amount_due=amount_due, portal_url=portal_url)
-    sent_ok, err = await _resend_send(email, text=text, html=html)
+    sent_ok, err = await _resend_send(email, subject=SUBJECT, text=text, html=html)
     await _record_send(db, user_id, email, invoice_id, sent_ok, err)
     if not sent_ok:
         logger.warning("payment recovery email send failed uid=%s err=%s", user_id, err)
     return {"ok": bool(sent_ok), "error": err}
+
+
+# ---------------------------------------------------------------------------
+# 2026-08-22 — Recovery CONFIRMATION email ("you're all set"). Founder
+# ask: close the loop once a previously-failed subscription's card
+# succeeds again, so the customer isn't left wondering. Separate
+# collection (`payment_recovered_emails`) from the failure email's
+# dedup table — the invoice that finally succeeds is very often the
+# SAME Stripe invoice id that earlier failed, so it can't share a
+# unique index with the failure-email dedup table.
+# ---------------------------------------------------------------------------
+
+RECOVERED_SUBJECT = "You're all set — your AUREM payment went through"
+
+
+def render_recovered_text(user: dict, *, plan: str) -> str:
+    first = _first_name(user)
+    return (
+        f"Hey {first},\n"
+        "\n"
+        f"Good news — your card went through and your AUREM {plan} "
+        "plan is fully active again. No further action needed.\n"
+        "\n"
+        f"{SIGNOFF}\n"
+    )
+
+
+def render_recovered_html(user: dict, *, plan: str) -> str:
+    first = _first_name(user)
+    return f"""<!doctype html>
+<html><body style="margin:0;padding:0;background:#0b0b0b;color:#e8e8e8;
+font-family:'Helvetica Neue',Arial,sans-serif;line-height:1.6;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0"
+         width="100%" style="background:#0b0b0b;padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"
+             width="560" style="max-width:560px;background:#141414;
+                                 border:1px solid rgba(34,197,94,0.25);
+                                 border-radius:12px;padding:32px;">
+        <tr><td style="color:#e8e8e8;font-size:15px;">
+          <div style="font-size:20px;font-weight:700;margin-bottom:8px;
+                       color:#86efac;">
+            You&rsquo;re all set, {first}.
+          </div>
+          <div style="color:#c8c8c8;">
+            Your card went through and your AUREM <b>{plan}</b> plan
+            is fully active again. No further action needed.
+          </div>
+          <div style="border-top:1px solid rgba(255,255,255,0.06);
+                       padding-top:16px;margin-top:20px;color:#aaa;
+                       font-size:13px;">
+            {SIGNOFF}
+          </div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>"""
+
+
+async def _already_sent_recovered(db, invoice_id: str) -> bool:
+    doc = await db.payment_recovered_emails.find_one(
+        {"invoice_id": invoice_id}, {"_id": 1},
+    )
+    return doc is not None
+
+
+async def _record_recovered_send(
+    db, user_id: str, email: str, invoice_id: str, sent_ok: bool,
+    error: Optional[str],
+) -> None:
+    try:
+        await db.payment_recovered_emails.insert_one({
+            "user_id":    user_id,
+            "email":      email,
+            "invoice_id": invoice_id,
+            "sent_at":    datetime.now(timezone.utc),
+            "sent_ok":    bool(sent_ok),
+            "error":      error,
+        })
+    except Exception as e:                              # noqa: BLE001
+        logger.warning("payment_recovered_emails insert failed: %r", e)
+
+
+async def send_payment_recovered_email(
+    db, user: dict, *, invoice_id: str, plan: str,
+) -> dict:
+    """Send the "you're all set" confirmation to the CUSTOMER once a
+    previously-failed subscription's card succeeds again. Only call
+    this when the subscription was ACTUALLY in `payment_failed` state
+    beforehand (caller's job — see routers/payments.py's
+    `invoice.paid` branch) so a normal first-try renewal never gets
+    a pointless "your payment recovered" email."""
+    email = (user.get("email") or "").strip()
+    user_id = user.get("user_id")
+    if not (email and user_id and invoice_id):
+        return {"ok": False, "error": "missing user identity or invoice id"}
+
+    if await _already_sent_recovered(db, invoice_id):
+        return {"ok": True, "skipped": "already_sent"}
+
+    text = render_recovered_text(user, plan=plan)
+    html = render_recovered_html(user, plan=plan)
+    sent_ok, err = await _resend_send(email, subject=RECOVERED_SUBJECT, text=text, html=html)
+    await _record_recovered_send(db, user_id, email, invoice_id, sent_ok, err)
+    if not sent_ok:
+        logger.warning("payment recovered email send failed uid=%s err=%s", user_id, err)
+    return {"ok": bool(sent_ok), "error": err}
+

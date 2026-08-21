@@ -1,0 +1,22 @@
+{
+  "summary": "Verified new recovery-confirmation email addition (send_payment_recovered_email + invoice.paid webhook wiring + payment_recovered_emails collection). All 8 tests in tests/test_stripe_invoice_payment_failed.py pass, including the 2 new scope tests (previously-failed vs normal-renewal) and the new dedup test. Backend boot logs confirm the new payment_recovered_emails collection was created with its unique invoice_id index (indexed=40, errors=0, 'collections created on boot: [payment_recovered_emails]'). No regression on the previously-shipped invoice.payment_failed handling (dev_users flag, founder alert guard=stripe_dunning, customer failure email, my-plan flag surfacing, missing-subscription safe path).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_stripe_invoice_payment_failed.py",
+    "/app/test_reports/pytest/iteration_payment_recovered_confirmation.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routers/payments.py invoice.paid branch: find_one_and_update returns the pre-update document by default (return_document not specified). The filter includes payment_failed=True so `prior` is None for a normal renewal (never flagged) → no confirmation email fires. Correctly scoped, verified by test_invoice_paid_no_confirmation_email_for_normal_renewal.",
+    "services/payment_recovery_email.py: Recovery-confirmation email uses a SEPARATE collection (`payment_recovered_emails`) from the failure-email dedup table (`payment_recovery_emails`). This is required because the invoice_id that finally succeeds is often the SAME id that earlier failed — a shared unique index would block recovery emails. Well-documented in module comment.",
+    "Unique index on payment_recovered_emails.invoice_id closes the concurrent double-delivery race even if two invoice.paid webhooks land simultaneously — good defense-in-depth beyond find-then-insert.",
+    "Minor: In the invoice.paid branch, if `db.dev_users.find_one_and_update` raises inside the try/except, `prior` is set to None so no email fires — but the failure is only logged, not surfaced to Sentry with a stripe_recovery_failed tag. Not a bug for this scope, but a future consistency-with-checkout.session.completed pattern option."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "n/a"},
+  "seed_data_creation": "Tests create + cleanup ephemeral dev_users rows keyed by test-user-<hex> and payment_recovered_emails audit rows keyed by in_recovered_dedup_<hex>. Cleanup runs at test end.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Recovery-confirmation email feature is fully green. 8/8 tests pass in tests/test_stripe_invoice_payment_failed.py. Collection payment_recovered_emails is live with unique invoice_id index. No frontend work in this increment."
+}

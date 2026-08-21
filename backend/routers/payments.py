@@ -721,16 +721,32 @@ async def stripe_webhook(request: Request) -> dict:
         # Recovery path — a later retry (or the very next cycle)
         # succeeded, so clear the "update your card" flag. Only
         # touches subscription invoices (skips one-off/manual invoices).
+        # 2026-08-22 — founder ask: close the loop with a "you're all
+        # set" email, but ONLY when this really was a recovery (i.e.
+        # the sub was actually flagged `payment_failed` beforehand) —
+        # a normal first-try renewal must never get this email.
         obj = event["data"]["object"]
         sub_id = obj.get("subscription")
+        invoice_id = obj.get("id")
         if sub_id:
             try:
-                await db.dev_users.update_one(
+                prior = await db.dev_users.find_one_and_update(
                     {"stripe_sub_id": sub_id, "payment_failed": True},
                     {"$set": {"payment_failed": False}},
                 )
             except Exception as e:  # noqa: BLE001
                 logger.warning("[webhook] invoice.paid clear-flag failed: %r", e)
+                prior = None
+            if prior and invoice_id:
+                try:
+                    from services.payment_recovery_email import send_payment_recovered_email
+                    await send_payment_recovered_email(
+                        db, prior,
+                        invoice_id=invoice_id,
+                        plan=prior.get("tier", "?"),
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("[webhook] invoice.paid recovery confirmation email failed: %r", e)
     elif etype in ("customer.subscription.deleted", "customer.subscription.paused"):
         sub_id = event["data"]["object"]["id"]
         # Find the user first so we know whose Supabase projects to downgrade.
