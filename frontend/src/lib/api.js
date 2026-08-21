@@ -6,8 +6,7 @@ import axios from "axios";
 // Backend base URL: REACT_APP_BACKEND_URL (preview) or VITE_API_URL (local)
 const BACKEND =
   (typeof process !== "undefined" && process.env && process.env.REACT_APP_BACKEND_URL) ||
-  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL) ||
-  "https://auremcto.com";
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL);
 
 export const API_BASE = `${BACKEND}/api/aurem-dev`;
 export const api = axios.create({
