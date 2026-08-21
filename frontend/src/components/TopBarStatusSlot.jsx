@@ -19,9 +19,12 @@
  * Rendered by Dashboard.jsx via TopBar's new `statusSlot` prop.
  */
 import { useEffect, useState } from "react";
-import { ModePill } from "./ChatPanelF12";
+import { useF12Errors, F12Badge, ModePill } from "./ChatPanelF12";
+import { getUser, isAdminOrFounder } from "../lib/api";
 
 export default function TopBarStatusSlot() {
+  const f12 = useF12Errors();
+  const isFounder = isAdminOrFounder(getUser());
   const [detectedMode, setDetectedMode] = useState(null);
   const [serverMode,   setServerMode]   = useState(null);
 
@@ -49,11 +52,10 @@ export default function TopBarStatusSlot() {
         ? { mode: serverMode, color: "#6b7280", label: "Mode " + serverMode }
         : null);
 
-  // 2026-08-21 — founder request: hide the F12 chip from the UI.
-  // F12 error capture itself keeps running in the background
-  // (window.__auremF12 + F12ErrorCapture.js untouched); only the
-  // visible badge is removed. Collapse now depends on modeProp only.
-  if (!modeProp) return null;
+  // 2026-08-21 — founder request: F12 chip is founder/admin-only.
+  // Regular users never see it (background capture still runs for
+  // everyone; only the UI trigger is gated).
+  if (!modeProp && !(isFounder && f12.hasErrors)) return null;
 
   return (
     <div
@@ -66,6 +68,22 @@ export default function TopBarStatusSlot() {
       }}
     >
       <ModePill mode={modeProp} />
+      {isFounder && (
+        <F12Badge
+          errorCount={f12.errorCount}
+          hasErrors={f12.hasErrors}
+          onCopyPayload={() => {
+            try {
+              window.dispatchEvent(new CustomEvent("aurem:f12-copy"));
+            } catch { /* noop */ }
+          }}
+          onSendToORA={() => {
+            try {
+              window.dispatchEvent(new CustomEvent("aurem:f12-send-to-ora"));
+            } catch { /* noop */ }
+          }}
+        />
+      )}
     </div>
   );
 }

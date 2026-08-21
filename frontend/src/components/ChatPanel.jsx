@@ -4464,7 +4464,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           onConfirm={(approved) => approved ? handleShipConfirm() : handleShipCancel()}
         />
       )}
-      {f12ConfirmPayload && (
+      {f12ConfirmPayload && isAdminOrFounder((typeof getUser === "function" && getUser()) || null) && (
         <div
           data-testid="f12-send-confirm-card"
           className="mx-4 mb-2 rounded-lg border border-border bg-card px-4 py-3 text-sm"
