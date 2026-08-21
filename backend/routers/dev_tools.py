@@ -125,7 +125,7 @@ async def podshell_info(
         "allowed_binaries":  sorted(_BASH_ALLOWED),
         "allowed_paths":     list(FOUNDER_POD_ALLOWED_PATHS),
         "blocked_paths":     list(FOUNDER_POD_BLOCKED_PATHS),
-        "chaining_operators_refused": [";", "&&", "||"],
+        "chaining_operators_refused": [";", "&&", "||", "|", "`", "$("],
         "path_traversal_refused":     [".."],
         "usage": (
             "POST /api/aurem-dev/dev-tools/podshell "

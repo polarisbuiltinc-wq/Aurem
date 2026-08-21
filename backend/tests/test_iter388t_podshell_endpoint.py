@@ -43,18 +43,49 @@ async def test_podshell_returns_real_stdout_for_bug20_command(monkeypatch):
         r = await ac.post(
             "/api/aurem-dev/dev-tools/podshell",
             headers={"Authorization": "Bearer x"},
-            json={"command": "ls /app/backend/routers/ | head -20"},
+            json={"command": "ls /app/backend/routers/"},
         )
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ok"] is True, f"podshell refused: {body!r}"
     # Real evidence — the routers directory always contains admin.py
-    # and auth.py inside the first 20 alphabetical entries.
+    # and auth.py.
     assert "admin.py" in body["stdout"]
     assert "auth.py" in body["stdout"]
     # No refusal phrase, no boundary error.
     assert "I work with your repository only" not in body["stdout"]
     assert body.get("error_class") is None
+
+
+@pytest.mark.asyncio
+async def test_podshell_pipe_now_refused(monkeypatch):
+    """SEC-001 fix (2026-01-22): pipes are no longer allowed in
+    founder-pod mode either — they used to be, but the downstream
+    execute_bash() gate now hard-refuses all shell metacharacters and
+    runs via argv-exec (no shell), so the same command must be issued
+    without the pipe (see test above)."""
+    from main import app
+
+    async def fake_admin(authorization=None):
+        return {
+            "user_id":     "founder-uid",
+            "email":       "founder@auremcto.com",
+            "is_admin":    True,
+            "tier":        "founder",
+        }
+
+    monkeypatch.setattr("routers.dev_tools.require_admin", fake_admin)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        r = await ac.post(
+            "/api/aurem-dev/dev-tools/podshell",
+            headers={"Authorization": "Bearer x"},
+            json={"command": "ls /app/backend/routers/ | head -20"},
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is False
+    assert body["error_class"] == "founder_pod_validation"
 
 
 @pytest.mark.asyncio
@@ -193,6 +224,7 @@ async def test_podshell_info_returns_whitelist(monkeypatch):
     assert "cat" in body["allowed_binaries"]
     assert ";" in body["chaining_operators_refused"]
     assert "&&" in body["chaining_operators_refused"]
+    assert "|" in body["chaining_operators_refused"]
     assert ".." in body["path_traversal_refused"]
     # Denylist mentions the .env files founders must NEVER surface.
     joined = "|".join(body["blocked_paths"])

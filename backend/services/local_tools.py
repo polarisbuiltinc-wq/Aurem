@@ -1914,12 +1914,13 @@ async def get_repo_info(ctx: dict, args: dict) -> dict:
 #   - 8 KB stdout / 1 KB stderr cap to prevent context bloat
 #   - No env passthrough required — inherits the worker's env so
 #     paths like /app are reachable but no extra secrets get exposed
-#   - Note: command still runs via `create_subprocess_shell` so the
-#     LLM can use pipes (e.g. `grep -rn pattern dir | head`). The
-#     allowlist gates the FIRST token only — sufficient because
-#     piping a non-allowlisted command (e.g. `cat foo | rm -rf /`)
-#     would still need `rm` in the pipeline, which fails the gate
-#     when the LLM tries to run that as a separate command.
+#   - SEC-001 fix (2026-01-22): runs via `create_subprocess_exec` with
+#     an argv list (NO shell). Any shell metacharacter (`|`,`;`,`&`,
+#     `` ` ``,`$`,`>`,`<`) is hard-rejected before parsing. Pipes/
+#     redirects/chaining/substitution are intentionally NOT supported
+#     — a prior version gated only the first token then ran the full
+#     string via `create_subprocess_shell`, which let a piped/chained
+#     non-allowlisted command (e.g. `cat foo | rm -rf /`) execute.
 _BASH_ALLOWED = {
     "cat", "head", "tail", "grep", "find", "ls", "wc",
     "sed", "awk", "echo", "pwd", "stat", "tree", "file",
@@ -2073,11 +2074,36 @@ async def execute_bash(ctx: dict, args: dict) -> dict:
             }
 
 
+    # SEC-001 fix (audit 2026-01-22) — the old gate only checked the
+    # FIRST token against the allowlist but still ran the WHOLE string
+    # via create_subprocess_shell. `cat foo | rm -rf /` passed the gate
+    # (first token "cat") yet the shell happily executed the piped
+    # `rm`. Same hole for `&&`, `;`, `$(...)`, backticks, `>` redirects.
+    # Fix: (1) hard-reject any shell metacharacter outright — this is
+    # a read-only inspection tool, it never needs pipes/redirects/
+    # substitution/chaining; (2) run via create_subprocess_exec with
+    # an argv list so there is no shell to interpret metacharacters
+    # even if one slipped through.
+    _SHELL_METACHARS = set('|;&`$><\n')
+    if any(ch in cmd for ch in _SHELL_METACHARS):
+        return {
+            "ok": False,
+            "error": (
+                "execute_bash refused: pipes, redirects, command "
+                "chaining (`|`, `;`, `&&`, `>`, `$()`, backticks) are "
+                "not permitted. Run one plain read-only command at a "
+                "time, e.g. `grep -rn pattern dir` (use its own flags "
+                "instead of piping to `head`)."
+            ),
+            "error_class": "shell_metachar_blocked",
+        }
+
     # Parse first token to gate against the allowlist. We use shlex so
     # quoted paths don't trip the parser.
     try:
-        first_word = shlex.split(cmd)[0]
-    except ValueError as e:
+        tokens = shlex.split(cmd)
+        first_word = tokens[0]
+    except (ValueError, IndexError) as e:
         return {"ok": False, "error": f"shell parse error: {e}"}
 
     # Strip a leading path so the LLM can write `/usr/bin/cat …` too.
@@ -2092,8 +2118,8 @@ async def execute_bash(ctx: dict, args: dict) -> dict:
         }
 
     try:
-        proc = await asyncio.create_subprocess_shell(
-            cmd,
+        proc = await asyncio.create_subprocess_exec(
+            *tokens,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

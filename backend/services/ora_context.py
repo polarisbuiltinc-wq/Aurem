@@ -478,9 +478,11 @@ def validate_founder_pod_command(cmd: str) -> tuple[bool, str]:
     The existing binary allowlist in local_tools.py already gates
     the FIRST token; this validator adds three extra rules:
 
-      • No `;`, `&&`, `||` chaining (allow `|` since pipe wiring
-        between allowlisted binaries is a legitimate founder
-        workflow — e.g. `ls /app/backend/ | head -20`).
+      • No `;`, `&&`, `||`, `|`, backtick, or `$(` chaining /
+        substitution (SEC-001 2026-01-22: pipes used to be allowed
+        here but that was inconsistent with the downstream
+        execute_bash() gate, which now hard-rejects all shell
+        metacharacters and runs via argv-exec with no shell).
       • No `..` path traversal in any argument.
       • Every absolute path argument (starts with `/`) must be
         under FOUNDER_POD_ALLOWED_PATHS and NOT match any
@@ -494,13 +496,20 @@ def validate_founder_pod_command(cmd: str) -> tuple[bool, str]:
     if not s:
         return False, "empty command"
 
-    # Rule 1: no command chaining.  We look for the raw operators
-    # OUTSIDE quoted regions — a naive scan is enough because the
-    # allowlisted binaries never legitimately need `;` or `&&` in
-    # their arguments; if they did the founder should invoke them
+    # Rule 1: no command chaining or substitution.  We look for the
+    # raw operators OUTSIDE quoted regions — a naive scan is enough
+    # because the allowlisted binaries never legitimately need these
+    # in their arguments; if they did the founder should invoke them
     # separately.
-    if ";" in s or "&&" in s or "||" in s:
-        return False, "command chaining (;, &&, ||) is refused in founder-pod mode"
+    # SEC-001 fix (2026-01-22): pipes are NO LONGER allowed here either
+    # — the downstream execute_bash() gate in local_tools.py now hard
+    # -rejects any shell metacharacter and runs via argv-exec (no
+    # shell), so allowing `|` past THIS validator only to be blocked
+    # later was inconsistent and this validator alone was previously
+    # the only line of defence for the founder-pod path. Also blocks
+    # backtick / `$(` command substitution, which was never checked.
+    if any(op in s for op in (";", "&&", "||", "|", "`", "$(")):
+        return False, "command chaining/substitution (;, &&, ||, |, `, $()) is refused in founder-pod mode"
 
     # Rule 2: no path traversal.  Any `..` token outside quotes is
     # refused.  Again a scan is sufficient — allowlisted binaries

@@ -1963,11 +1963,14 @@ async def chat_stream(
                         # Persist pending fix (so a "yes fix it" reply triggers Mode C)
                         if d_result.get("can_auto_fix") and body.session_id and db_h is not None:
                             try:
+                                # SEC-002 fix (audit 2026-01-22): scope to the
+                                # authenticated owner and drop upsert=True so a
+                                # caller can't write into / create another
+                                # user's session doc by supplying their id.
                                 await db_h.chat_sessions.update_one(
-                                    {"session_id": body.session_id},
+                                    {"session_id": body.session_id, "user_id": user_id},
                                     {"$set": {"pending_fix_task": d_result["commit_task"],
                                               "pending_fix_set_at": time.time()}},
-                                    upsert=True,
                                 )
                             except Exception:
                                 pass

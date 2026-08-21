@@ -94,14 +94,55 @@ async def test_execute_bash_empty_command_rejected():
 
 
 @pytest.mark.asyncio
-async def test_execute_bash_pipes_with_allowed_first_binary():
-    """Pipes are allowed as long as the FIRST binary passes the
-    allowlist. This is how the LLM will typically chain `grep | head`."""
+async def test_execute_bash_pipes_now_blocked_outright():
+    """SEC-001 fix (2026-01-22): pipes used to be allowed as long as
+    the FIRST binary passed the allowlist, but the whole string still
+    ran via create_subprocess_shell — so `cat foo | rm -rf /` also
+    passed the first-token gate and the shell executed the `rm`.
+    Pipes/redirects/chaining/substitution are now hard-refused before
+    parsing; there is no shell to interpret them at all."""
     from services.local_tools import execute_bash
     r = await execute_bash({"is_founder": True, "user_id": "founder"}, {"command": "echo one two three | head -1"},
     )
-    assert r["ok"] is True
-    assert r["stdout"], "echo | head should produce output"
+    assert r["ok"] is False
+    assert r["error_class"] == "shell_metachar_blocked"
+
+
+@pytest.mark.asyncio
+async def test_execute_bash_pipe_to_dangerous_binary_blocked():
+    """SEC-001 regression — the actual exploit shape: an allowlisted
+    first token piped into a non-allowlisted, destructive binary must
+    never reach a shell. Must be refused outright, not silently no-op.
+    Uses a relative path (no /app,/tmp,/etc,... boundary path) so the
+    earlier ora-boundary guard doesn't mask which check caught it."""
+    from services.local_tools import execute_bash
+    r = await execute_bash(
+        {"is_founder": True, "user_id": "founder"},
+        {"command": "cat ./notes.txt | rm -rf ./should_not_run"},
+    )
+    assert r["ok"] is False
+    assert r["error_class"] == "shell_metachar_blocked"
+
+
+@pytest.mark.asyncio
+async def test_execute_bash_command_substitution_blocked():
+    """SEC-001 regression — `$( )` and backtick command substitution
+    must be refused outright, matching the audit finding."""
+    from services.local_tools import execute_bash
+    r1 = await execute_bash({"is_founder": True, "user_id": "founder"}, {"command": "echo $(whoami)"})
+    r2 = await execute_bash({"is_founder": True, "user_id": "founder"}, {"command": "echo `whoami`"})
+    assert r1["ok"] is False and r1["error_class"] == "shell_metachar_blocked"
+    assert r2["ok"] is False and r2["error_class"] == "shell_metachar_blocked"
+
+
+@pytest.mark.asyncio
+async def test_execute_bash_redirect_blocked():
+    """SEC-001 regression — output redirection must be refused so a
+    supposedly read-only tool can never write/overwrite a file."""
+    from services.local_tools import execute_bash
+    r = await execute_bash({"is_founder": True, "user_id": "founder"}, {"command": "echo hi > ./pwned.txt"})
+    assert r["ok"] is False
+    assert r["error_class"] == "shell_metachar_blocked"
 
 
 @pytest.mark.asyncio
