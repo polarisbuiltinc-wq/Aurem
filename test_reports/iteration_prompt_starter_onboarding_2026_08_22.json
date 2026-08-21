@@ -1,0 +1,34 @@
+{
+  "summary": "Tested new PromptStarterPanel (dynamic personalized+rotating cards) and new onboarding auto-scan on POST /projects/add. Backend: 7/7 pytest passed (auth-required, ownership 403 leak-check, 404 unknown project, personalized-first ordering, generic pad, invalid-repo project-add doesn't 5xx and returns promptly). Frontend: all UI acceptance criteria pass — 5 cards render with correct data-testids, security note present, clicking a card prefills composer exactly ('I want a contact form on my website') without auto-sending, used card is replaced in same slot within ~1s (build-something-new -> build-something-new-alt), auto-rotate confirmed after ~20s wait (18s interval), panel remains visible while user types but not sent, composer toolbar/mode selector/send button regression-clean. No console errors during flow.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_prompt_starter_onboarding.py",
+    "/app/test_reports/pytest/prompt_starter_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PromptStarterPanel `useEffect` fetch swallows the `cancelled` flag correctly BUT the promise's `.then` closure references `cancelled` from the outer scope — fine as-is, no bug, just noting.",
+    "routers/findings.py::starter_suggestions — the finding cursor sorts by ('severity', 1) which puts 'critical' BEFORE 'high' only because 'c' < 'h' alphabetically; this works accidentally but is fragile. Consider explicit severity ordering (e.g., map to numeric weight) so a future severity value like 'crisis' or 'catastrophic' doesn't silently break the ordering contract.",
+    "services/project_onboarding_scan.py — good defensive `try/except`, no PII leaked in log messages. Consider a debug log for the `not (github_token and github_owner and github_repo)` early-return path so silent no-ops are traceable.",
+    "PromptStarterPanel: fallback pool has only 10 items and pool exhaustion path recycles via `FALLBACK_POOL.find(...)` — after repeated clicks with a small backend pool, users may see the same 'alt' slugs cycle predictably. Minor UX polish, not a bug.",
+    "cto_projects.py line 1098 imports run_onboarding_scan inside the try block after the auth_method branch — if get_installation_token throws for github_app path, the onboarding scan is skipped (because it's in the same try). This is acceptable (indexing also skipped) but worth documenting."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_prompt_starter_onboarding.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Preview founder — test@aurem.dev / AuremTest2026! (user_id=test_admin_001, owns project p_demo_a).",
+  "seed_data_creation": "Test suite temporarily inserts+deletes a fake cto_projects doc {project_id:'p_other_user_zzz', user_id:'someone_else_999'} via mongosh to verify the 403 ownership boundary. Cleaned up in the finally block.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "PromptStarterPanel + onboarding auto-scan verified end-to-end on preview. Pytest file at /app/backend/tests/test_prompt_starter_onboarding.py exercises: auth-gate, owned project (200), unowned project (403 not_your_project), unknown project (404 project_not_found), personalized-first ordering, generic pad >=5, POST /projects/add still <25s and non-5xx with a bad PAT (proving the new fire-and-forget onboarding scan doesn't block the response). Frontend UI verified via Playwright: cards render, click prefills exact example string, used-card swap happens instantly, auto-rotate triggers within ~20s. Empty-state gate (`messages.length<=1`) confirmed via 'New run' button on dashboard. No frontend console errors observed.",
+  "rca of the issue": "N/A — feature works as specified, no bugs found."
+}

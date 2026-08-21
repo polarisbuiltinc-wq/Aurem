@@ -1090,6 +1090,16 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
             github_token=_ix_token, github_owner=owner, github_repo=repo,
             branch=body.branch or "main",
         ))
+        # 2026-08-22 — auto background deep-scan so the Prompt Starter
+        # panel has real "FROM YOUR REPO" findings the moment the user
+        # lands on the empty chat, instead of waiting for their first
+        # Ship or a founder-only manual health scan. Fire-and-forget,
+        # same error-swallowing contract as the indexing task above.
+        from services.project_onboarding_scan import run_onboarding_scan
+        asyncio.create_task(run_onboarding_scan(
+            db=db, user_id=me["user_id"], project_id=proj_id,
+            github_token=_ix_token, github_owner=owner, github_repo=repo,
+        ))
     except Exception as _bbe:
         logger.warning("indexing scheduler skipped: %r", _bbe)
 

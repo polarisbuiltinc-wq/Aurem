@@ -34,6 +34,11 @@ Read + control endpoints for the notification-strip backlog.
        last_exposed_at so the once-per-week cadence check works.
        If exposure_count hits 4 → status flips to "aged-out".
 
+  GET  /api/aurem-dev/findings/starter-suggestions?project_id=…
+       Real critical/high findings turned into plain-English example
+       prompts for the empty-chat Prompt Starter panel, padded with
+       generic categories. See PromptStarterPanel.jsx.
+
 Every endpoint is founder-gated via the standard `current_dev` +
 project-ownership check (mirrors codebase_health / security_scan
 patterns). No leaking of another user's findings.
@@ -193,6 +198,89 @@ async def backlog_list(
         "reason":            reason,
         "last_exposure":     last_exposure.isoformat() if last_exposure else None,
     }
+
+
+# ══════════════════════════════════════════════════════════════════════
+# GET /findings/starter-suggestions
+#
+# 2026-08-22 — powers the PromptStarterPanel's rotating/personalized
+# cards. Turns real critical/high `cto_open_findings` rows (the same
+# ones Vanguard/QA scans already wrote) into plain-English example
+# prompts, e.g. "Fix this critical issue: SQL injection risk (in
+# auth.py)". Falls back to generic categories when a project has few
+# or no open findings so the panel is never empty.
+# ══════════════════════════════════════════════════════════════════════
+_GENERIC_FALLBACK_SUGGESTIONS = [
+    {"slug": "build-something-new", "icon_hint": "sparkles",
+     "label": "Build something new", "example": "I want a contact form on my website"},
+    {"slug": "somethings-broken", "icon_hint": "bug",
+     "label": "Something's broken", "example": "The login button doesn't work, please fix it"},
+    {"slug": "check-everything-working", "icon_hint": "check",
+     "label": "Check everything is working", "example": "Check my whole website for any bugs"},
+    {"slug": "add-new-feature", "icon_hint": "zap",
+     "label": "Add a new feature", "example": "Let users upload a profile photo"},
+    {"slug": "security-check", "icon_hint": "shield",
+     "label": "Security check", "example": "Check my code for any security problems"},
+    # 2026-08-22 — extra alternates so the panel still has something to
+    # rotate/swap to even for a fresh project with zero open findings.
+    {"slug": "build-something-new-alt", "icon_hint": "sparkles",
+     "label": "Build something new", "example": "Add a newsletter signup box to my homepage"},
+    {"slug": "somethings-broken-alt", "icon_hint": "bug",
+     "label": "Something's broken", "example": "My site shows an error page, can you fix it?"},
+    {"slug": "check-everything-working-alt", "icon_hint": "check",
+     "label": "Check everything is working", "example": "Scan my project for any broken links or errors"},
+    {"slug": "add-new-feature-alt", "icon_hint": "zap",
+     "label": "Add a new feature", "example": "Add a dark mode toggle to my site"},
+    {"slug": "security-check-alt", "icon_hint": "shield",
+     "label": "Security check", "example": "Make sure my users' passwords are stored safely"},
+]
+
+
+@router.get("/starter-suggestions")
+async def starter_suggestions(
+    project_id: str,
+    limit: int = 12,
+    authorization: Optional[str] = Header(None),
+):
+    """Real (personalized) + generic example prompts for the empty-chat
+    Prompt Starter panel. Real findings first, generic ones pad the
+    rest so the frontend always has a pool to rotate/swap from."""
+    user = await current_dev(authorization)
+    user_id = user["user_id"]
+    db = get_db()
+    await _assert_owns_project(db, user_id, project_id)
+
+    limit = max(5, min(int(limit or 12), 30))
+
+    cursor = db.cto_open_findings.find(
+        {"user_id": user_id, "project_id": project_id, "status": "open",
+         "severity": {"$in": ["critical", "high"]}},
+        {"_id": 0, "finding_id": 1, "severity": 1, "file": 1, "title": 1},
+    ).sort([("severity", 1), ("last_seen_at", -1)]).limit(limit)
+
+    personalized = []
+    async for f in cursor:
+        title = (f.get("title") or "").strip()
+        if not title:
+            continue
+        sev = f.get("severity") or "high"
+        file_ = f.get("file") or ""
+        label = title[:48]
+        example = (
+            f"Fix this {sev} issue: {title}" + (f" (in {file_})" if file_ else "")
+        )
+        personalized.append({
+            "slug":        f"finding-{f.get('finding_id', label)}"[:64],
+            "icon_hint":   "shield" if sev == "critical" else "bug",
+            "label":       label,
+            "example":     example[:200],
+            "personalized": True,
+        })
+
+    suggestions = personalized + [
+        {**s, "personalized": False} for s in _GENERIC_FALLBACK_SUGGESTIONS
+    ]
+    return {"ok": True, "project_id": project_id, "suggestions": suggestions[:limit]}
 
 
 # ══════════════════════════════════════════════════════════════════════

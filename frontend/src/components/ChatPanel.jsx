@@ -4926,7 +4926,11 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
             no extra localStorage flag needed. Replaces the older
             3-pill FirstMessageChips with 5 clearer categories. */}
         {activeProject && activeProject.project_id !== "home" && messages.length <= 1 && (
-          <PromptStarterPanel onPick={(prompt) => setInput(prompt)} />
+          <PromptStarterPanel
+            onPick={(prompt) => setInput(prompt)}
+            projectId={activeProject.project_id}
+            inputEmpty={!input || !input.trim()}
+          />
         )}
 
         {/* Iter 147 — unified composer card: textarea + toolbar share
