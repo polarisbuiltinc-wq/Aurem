@@ -45,6 +45,7 @@ import { isDismissedForSession, dismissForSession } from "../utils/sessionDismis
 import LoopStepBar from "./LoopStepBar";
 import LoopStatusChip from "./LoopStatusChip";        // Iter 309 · Batch-2 aftermath — sticky loop-status chip
 import RevokedRepoBanner from "./RevokedRepoBanner";   // 2026-08-20 — in-chat revoked-access banner
+import PaymentFailedBanner from "./PaymentFailedBanner"; // 2026-08-22 — in-chat "update your card" banner
 import LoopLiveFeed from "./LoopLiveFeed";
 import OperationHistory from "./OperationHistory";
 import PlanApprovalCard from "./PlanApprovalCard";
@@ -3887,6 +3888,10 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           right inside the chat pane, regardless of what else (sidebar
           dot, cleanup banner) also catches it. */}
       <RevokedRepoBanner activeProject={activeProject} />
+
+      {/* 2026-08-22 — Payment-Failed Banner. Same defense-in-depth
+          pattern as above, for a failed recurring Stripe charge. */}
+      <PaymentFailedBanner />
 
       {/* Iter 212m-49 — "⚡ free mode" pill. Surfaces when the most
           recent assistant turn was served by the Groq emergency

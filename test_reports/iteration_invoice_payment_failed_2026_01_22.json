@@ -1,0 +1,23 @@
+{
+  "summary": "Verified new Stripe invoice.payment_failed / invoice.paid webhook handling + PaymentFailedBanner frontend integration. All 4 new pytest cases pass (flags user + fires exactly one founder alert with guard='stripe_dunning', recovery clears the flag, missing subscription no-ops without 500, my-plan surfaces payment_failed). Ran webhook-adjacent regression suites (test_iter388ae_stripe_webhook_compat.py + test_iter212m240_tier3_tier4_billing_gate.py, incl. test_stripe_webhook_triggers_supabase_downgrade) — 32/32 pass, confirming no regression from adding the two new elif branches inside stripe_webhook(). Frontend loads without console errors; PaymentFailedBanner correctly hidden for a normal (unauthenticated / payment_failed=false) session — component is properly mounted in ChatPanel.jsx right after RevokedRepoBanner and uses api.get('/payments/my-plan') + api.post('/payments/portal') matching the existing 'Manage billing' flow. Per agent_to_agent_context_note we did NOT touch Stripe live account and did NOT flip payment_failed=true on any real prod-linked user row.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_stripe_invoice_payment_failed.py",
+    "/app/test_reports/pytest/pytest_invoice_payment_failed.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "payments.py webhook branch is safely additive — extractor uses obj.get('subscription') and logs a warning when missing (verified by test_invoice_payment_failed_missing_subscription_does_not_crash).",
+    "Founder alert reuses G10 send_founder_alert with guard='stripe_dunning' — inherits existing 6h dedup so a Stripe retry storm on the same invoice won't spam the founder inbox.",
+    "PaymentFailedBanner polls every 60s only when document.visibilityState==='visible' — good (no background hammering). Silently swallows /payments/my-plan errors which is acceptable for a non-critical polling banner.",
+    "my-plan projection now includes payment_failed:1 and coerces via bool(row.get('payment_failed')) — safe against missing field on legacy rows."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (4/4 new + 32/32 regression)", "frontend": "100% smoke (banner correctly absent, no console errors)"},
+  "test_credentials": "Used /app/memory/test_credentials.md preview account test@aurem.dev — landing page loaded, no auth-gated interaction required for banner-absence verification.",
+  "seed_data_creation": "Backend tests self-create + clean up synthetic test-user-* dev_users rows via _seed_user / _cleanup_user. No leftover fixtures.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature ready to ship. If the founder later flips a synthetic dev-user row's payment_failed=true in Mongo to visually smoke-test the banner in the ChatPanel, remember to clean up the row after — never modify a row with a real stripe_sub_id tied to the live Stripe account."
+}

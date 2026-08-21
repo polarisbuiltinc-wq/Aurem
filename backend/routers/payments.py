@@ -633,6 +633,76 @@ async def stripe_webhook(request: Request) -> dict:
             )
         except Exception as e:                              # noqa: BLE001
             logger.warning("[webhook] expired-session sync failed: %r", e)
+    elif etype == "invoice.payment_failed":
+        # 2026-08-22 — founder ask (billing gap): Stripe already sends
+        # us this event (confirmed live against the account's own
+        # webhook config) but nothing reacted to it — a failed renewal
+        # charge was completely invisible until Stripe eventually
+        # cancelled the subscription (if it ever did). We now: (1)
+        # flag the user so the frontend can show an in-app "update
+        # your card" prompt, (2) fire ONE founder alert email (Resend,
+        # reuses the existing G10 `send_founder_alert` — same
+        # dedup/audit-log machinery as every other critical alert).
+        # We deliberately do NOT downgrade the tier here — Stripe's
+        # own Smart Retries run for up to ~2 weeks first; the existing
+        # `customer.subscription.deleted` branch below still owns the
+        # final downgrade if retries exhaust.
+        obj = event["data"]["object"]
+        sub_id = obj.get("subscription")
+        cust_id = obj.get("customer")
+        attempt_count = obj.get("attempt_count")
+        next_attempt = obj.get("next_payment_attempt")
+        amount_due = round((obj.get("amount_due") or 0) / 100, 2)
+        if sub_id:
+            try:
+                user_row = await db.dev_users.update_one(
+                    {"stripe_sub_id": sub_id},
+                    {"$set": {
+                        "payment_failed": True,
+                        "payment_failed_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                     "$inc": {"payment_failure_count": 1}},
+                )
+                _ = user_row
+            except Exception as e:  # noqa: BLE001
+                logger.warning("[webhook] invoice.payment_failed dev_users flag failed: %r", e)
+            try:
+                user_row = await db.dev_users.find_one(
+                    {"stripe_sub_id": sub_id}, {"_id": 0, "email": 1, "tier": 1},
+                )
+                from services.founder_alerts import send_founder_alert
+                await send_founder_alert(
+                    db,
+                    source_key=f"stripe_invoice_failed:{sub_id}",
+                    title=f"Payment failed — {(user_row or {}).get('email', '?')} "
+                          f"({(user_row or {}).get('tier', '?')} plan, ${amount_due})",
+                    detail=(
+                        f"subscription={sub_id} customer={cust_id} "
+                        f"attempt_count={attempt_count} "
+                        f"next_payment_attempt="
+                        f"{datetime.fromtimestamp(next_attempt, tz=timezone.utc).isoformat() if next_attempt else 'none (retries exhausted)'}"
+                    ),
+                    level="critical",
+                    guard="stripe_dunning",
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.warning("[webhook] invoice.payment_failed founder alert failed: %r", e)
+        else:
+            logger.warning("[webhook] invoice.payment_failed with no subscription id: %s", obj.get("id"))
+    elif etype == "invoice.paid":
+        # Recovery path — a later retry (or the very next cycle)
+        # succeeded, so clear the "update your card" flag. Only
+        # touches subscription invoices (skips one-off/manual invoices).
+        obj = event["data"]["object"]
+        sub_id = obj.get("subscription")
+        if sub_id:
+            try:
+                await db.dev_users.update_one(
+                    {"stripe_sub_id": sub_id, "payment_failed": True},
+                    {"$set": {"payment_failed": False}},
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.warning("[webhook] invoice.paid clear-flag failed: %r", e)
     elif etype in ("customer.subscription.deleted", "customer.subscription.paused"):
         sub_id = event["data"]["object"]["id"]
         # Find the user first so we know whose Supabase projects to downgrade.
@@ -689,7 +759,7 @@ async def my_plan(authorization: Optional[str] = Header(None)) -> dict:
     db = require_db()
     row = await db.dev_users.find_one(
         {"user_id": user.get("user_id")},
-        {"tier": 1, "stripe_sub_id": 1, "_id": 0},
+        {"tier": 1, "stripe_sub_id": 1, "payment_failed": 1, "_id": 0},
     ) or {}
     tier_str = row.get("tier") or "free"
     tier_enum = _coerce(tier_str)
@@ -697,6 +767,10 @@ async def my_plan(authorization: Optional[str] = Header(None)) -> dict:
         "tier":   tier_str,
         "limits": TIER_LIMITS[tier_enum],
         "sub_id": row.get("stripe_sub_id"),
+        # 2026-08-22 — drives the in-app "update your card" banner
+        # (see components/PaymentFailedBanner.jsx). Cleared by the
+        # webhook's `invoice.paid` branch once a retry succeeds.
+        "payment_failed": bool(row.get("payment_failed")),
     }
 
 
