@@ -570,6 +570,24 @@ export default function NewUserWizard({ onComplete }) {
                             Opens in a popup. This wizard picks up automatically
                             once you finish installing.
                           </div>
+                          {/* 2026-08-21 — founder-reported: GitHub's own
+                              "Select repositories" search widget can briefly
+                              show "No repositories found" right after
+                              authorizing — a GitHub-side glitch, not an
+                              AUREM bug. Nudge users past it instead of
+                              letting them think the connection failed. */}
+                          <div data-testid="wizard-app-github-glitch-hint" style={{
+                            fontSize: 10.5, color: "var(--text-faint)",
+                            marginTop: 6, padding: "6px 8px",
+                            background: "rgba(255,255,255,0.03)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 4, lineHeight: 1.5,
+                          }}>
+                            💡 If GitHub shows "No repositories found" while
+                            picking repos, just type your repo's name in that
+                            search box (or wait a second and reopen it) —
+                            it's a GitHub-side hiccup, your repos are there.
+                          </div>
                         </>
                       )}
                       {appPickerActive && appInstalls.length > 0 && (

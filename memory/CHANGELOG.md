@@ -521,3 +521,10 @@ Founder escalated to highest priority after reproducing again in production, and
 **3. Verification** — 5/5 "5+5" attempts + 5/5 other simple prompts correct on live preview (raw logs shown, not summarized). 6/6 pytest cases pass (`test_response_confidence_mismatch_gate.py`), including the new retry-success test and a full regression pass — caught and fixed a real over-blocking bug against `test_citation_guard_persist_ordering.py` in the process. Two OTHER pre-existing test failures found during the regression sweep (`test_iter212m169_bin_context_isolation.py`, `test_iter212m152_prompt_mode_gaps.py`) are unrelated to this change (error-message wording drift / admin_analytics tool_router mention) — not touched, flagged for a separate pass.
 
 **4. Honesty** — root cause is still NOT identified. Per founder's explicit instruction ("a user-invisible bug is acceptable; a user-visible one is not"), the guarantee layer (2) now stands regardless: even if the underlying cause is never found, a mismatched response should no longer be user-visible, and Ship via CTO can never attach to one.
+
+## 2026-08-21 — GitHub "No repositories found" helper hint (founder video report)
+
+Founder uploaded a screen recording (analyzed via analyze_file_tool) showing that GitHub's OWN "Select repositories" widget (on github.com/settings/installations/...) sometimes shows "No repositories found" right after authorizing the AUREM DevOps App — this is a GitHub-side UI glitch, NOT an AUREM bug (confirmed: retrying the same flow / typing the repo name in the search box resolves it, and the AUREM app's own chat interface loaded correctly once GitHub's side was past it).
+
+- Added a small helper hint below the "Continue with GitHub App" button in both `NewUserWizard.jsx` (`data-testid="wizard-app-github-glitch-hint"`) and `AddProjectWizard.jsx` (`data-testid="add-wizard-github-glitch-hint"`), telling users to type the repo name in GitHub's search box or wait/reopen if they see "No repositories found".
+- Text-only UI addition, no logic change. Verified clean compile (no new frontend errors), matches existing style conventions in both files.
