@@ -22,12 +22,20 @@
  *   - `cta_link = "stripe:<tier>"` opens checkout in one click.
  */
 import { useEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
 import { api } from "../lib/api";
+import { isDismissedForSession, dismissForSession } from "../utils/sessionDismiss";
+
+const DISMISS_KEY = "aurem_thinking_hint_dismissed_token";
 
 export default function ThinkingHint({ busy }) {
   const [hint, setHint] = useState(null);
   const [show, setShow] = useState(false);
   const [paying, setPaying] = useState(false);
+  // 2026-08-21 — founder: dismiss should stick for the rest of THIS
+  // login (survives tab close/reopen) but come back on a fresh login
+  // (new token) — see sessionDismiss.js.
+  const [dismissed, setDismissed] = useState(() => isDismissedForSession(DISMISS_KEY));
   const fetchedRef = useRef(false);
   const timerRef = useRef(null);
 
@@ -38,7 +46,7 @@ export default function ThinkingHint({ busy }) {
       fetchedRef.current = false;
       return;
     }
-    if (fetchedRef.current) return;
+    if (dismissed || fetchedRef.current) return;
     fetchedRef.current = true;
     let cancelled = false;
     (async () => {
@@ -57,7 +65,12 @@ export default function ThinkingHint({ busy }) {
     return () => { cancelled = true; clearTimeout(timerRef.current); };
   }, [busy]);
 
-  if (!busy || !hint || !show) return null;
+  if (!busy || !hint || !show || dismissed) return null;
+
+  function handleDismiss() {
+    setDismissed(true);
+    dismissForSession(DISMISS_KEY);
+  }
 
   const isStripeCta = (hint.cta_link || "").startsWith("stripe:");
   const stripeTier = isStripeCta
@@ -163,6 +176,24 @@ export default function ThinkingHint({ busy }) {
           {paying ? "…" : hint.cta_text}
         </a>
       )}
+      <button
+        type="button"
+        data-testid="thinking-hint-dismiss"
+        onClick={handleDismiss}
+        aria-label="Dismiss"
+        title="Dismiss — won't show again until you log in again"
+        style={{
+          flexShrink: 0,
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          width: 16, height: 16, marginLeft: 2,
+          borderRadius: "50%", border: "none", background: "transparent",
+          color: "var(--text-faint, #6a6f78)", cursor: "pointer", padding: 0,
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = "#fff"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-faint, #6a6f78)"; }}
+      >
+        <X size={11} strokeWidth={2.5} />
+      </button>
       <style>{`
         @keyframes thinkingHintIn {
           from { opacity: 0; transform: translateY(3px); }

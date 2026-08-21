@@ -14,7 +14,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   Send, Loader2, Square, Paperclip, Github, Zap,
-  Eye, EyeOff, Trash2, ShieldCheck, History,
+  Eye, EyeOff, Trash2, ShieldCheck, History, X,
 } from "lucide-react";
 import { api, streamChat, API_BASE, getToken, getUser, isAdminOrFounder } from "../lib/api";
 import { toast, dismissToast } from "./Toast";
@@ -41,6 +41,7 @@ import {
 } from "./LoopModeToggle";
 import IntentTierIndicator from "./IntentTierIndicator";
 import ModeLoopPill from "./ModeLoopPill";
+import { isDismissedForSession, dismissForSession } from "../utils/sessionDismiss";
 import LoopStepBar from "./LoopStepBar";
 import LoopStatusChip from "./LoopStatusChip";        // Iter 309 · Batch-2 aftermath — sticky loop-status chip
 import RevokedRepoBanner from "./RevokedRepoBanner";   // 2026-08-20 — in-chat revoked-access banner
@@ -168,6 +169,14 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     try { localStorage.setItem("aurem_chat_mode", chatMode); }
     catch { /* ignore */ }
   }, [chatMode]);
+
+  // 2026-08-21 — founder: "Scope: owner/repo@branch" chip gets a
+  // dismiss (×) toggle too — same "sticks for this login, reappears
+  // on next fresh login" behaviour as the thinking-hint strip.
+  const SCOPE_CHIP_DISMISS_KEY = "aurem_scope_chip_dismissed_token";
+  const [scopeChipDismissed, setScopeChipDismissed] = useState(
+    () => isDismissedForSession(SCOPE_CHIP_DISMISS_KEY)
+  );
 
   const [clearingChat, setClearingChat] = useState(false);
   // Iter 212m-30 PR-2 — Founder welcome chat-bg tint. The amber wash
@@ -4716,14 +4725,14 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
             single persistent chip above the composer keeps the scope
             visible without cluttering the message list. Hidden when
             no active project (home mode). */}
-        {activeProject && activeProject.project_id !== "home" && (
+        {activeProject && activeProject.project_id !== "home" && !scopeChipDismissed && (
           <div
             data-testid="active-project-chip"
             style={{
               display:       "inline-flex",
               alignItems:    "center",
               gap:           6,
-              padding:       "5px 10px 5px 8px",
+              padding:       "5px 8px 5px 8px",
               marginBottom:  8,
               background:    "var(--panel-2, rgba(255,255,255,0.03))",
               border:        "1px solid var(--border, rgba(255,255,255,0.09))",
@@ -4764,6 +4773,26 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
               {activeProject.github_owner}/{activeProject.github_repo}
               @{activeProject.branch}
             </span>
+            <button
+              type="button"
+              data-testid="active-project-chip-dismiss"
+              onClick={(e) => {
+                e.stopPropagation();
+                setScopeChipDismissed(true);
+                dismissForSession(SCOPE_CHIP_DISMISS_KEY);
+              }}
+              aria-label="Dismiss"
+              title="Dismiss — won't show again until you log in again"
+              style={{
+                flexShrink: 0,
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 16, height: 16, marginLeft: 2,
+                borderRadius: "50%", border: "none", background: "transparent",
+                color: "var(--text-faint, #6a6f78)", cursor: "pointer", padding: 0,
+              }}
+            >
+              <X size={11} strokeWidth={2.5} />
+            </button>
           </div>
         )}
 
