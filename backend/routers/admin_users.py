@@ -10,6 +10,8 @@ Contains 20 handler(s)/helper(s):
   POST /admin/users/{user_id}/suspend
   POST /admin/users/email-offer
   GET  /admin/funnel                 GET  /admin/insights/activation-funnel
+  GET  /admin/insights/activation-funnel/stage-users
+  GET  /admin/insights/first-message-sample
   GET  /admin/insights/user-patterns
   POST /admin/dev-users/backfill-created-at
   GET  /admin/dev-users/created-at-health
@@ -1005,6 +1007,70 @@ async def activation_funnel_stage_users(
     not a hot path)."""
     await _require_admin(authorization)
     return await _compute_stage_users(stage)
+
+
+@router.get("/insights/first-message-sample")
+async def first_message_sample(
+    limit: int = 15,
+    authorization: Optional[str] = Header(None),
+):
+    """2026-08-22 — one-off investigation endpoint: for real (non-test)
+    users who HAVE sent at least one chat message, what did their very
+    first message (across all their sessions) look like? Answers "do
+    users know what to type, or do they send vague 1-word messages?"
+
+    Not cached (on-demand, low-traffic diagnostic, not a hot path)."""
+    await _require_admin(authorization)
+    db = require_db()
+    from services.test_accounts import is_test_email as is_test
+
+    limit = max(1, min(int(limit or 15), 100))
+
+    real_ids = [
+        u["user_id"]
+        async for u in db.dev_users.find(
+            {}, {"_id": 0, "user_id": 1, "email": 1},
+        )
+        if not is_test(u.get("email")) and u.get("user_id")
+    ]
+    if not real_ids:
+        return {"ok": True, "count": 0, "stats": {}, "samples": []}
+
+    rows = await db.chat_sessions.aggregate([
+        {"$match": {"user_id": {"$in": real_ids}, "turns.0": {"$exists": True}}},
+        {"$unwind": "$turns"},
+        {"$match": {"turns.role": "user"}},
+        {"$sort": {"user_id": 1, "turns.ts": 1}},
+        {"$group": {
+            "_id": "$user_id",
+            "first_ts":      {"$first": "$turns.ts"},
+            "first_content": {"$first": "$turns.content"},
+        }},
+    ]).to_list(5000)
+
+    lengths = sorted(len((r.get("first_content") or "")) for r in rows)
+    n = len(lengths)
+    stats = {}
+    if n:
+        short_le_15 = sum(1 for l in lengths if l <= 15)
+        stats = {
+            "count":        n,
+            "min_len":      lengths[0],
+            "max_len":      lengths[-1],
+            "median_len":   lengths[n // 2],
+            "mean_len":     round(sum(lengths) / n, 1),
+            "short_le_15_count": short_le_15,
+            "short_le_15_pct":   round(100.0 * short_le_15 / n, 1),
+        }
+
+    rows.sort(key=lambda r: r.get("first_ts") or 0, reverse=True)
+    samples = [
+        {"length": len(r.get("first_content") or ""),
+         "content": (r.get("first_content") or "")[:300]}
+        for r in rows[:limit]
+    ]
+
+    return {"ok": True, "stats": stats, "samples": samples}
 
 
 @router.get("/insights/user-patterns")
