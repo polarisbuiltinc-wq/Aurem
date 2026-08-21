@@ -5053,11 +5053,17 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
               consistent without giving them the engine. */}
           <IntentTierIndicator liveText={input} lastTier={lastIntentTier} />
           <CharCounter value={input} max={20000} style={{ marginRight: 8 }} />
-          <LoopModeToggle
-            value={execMode}
-            onChange={handleExecModeChange}
-            locked={!isLoopUnlocked}
-          />
+          {/* 2026-08-21 — founder request: Loop is a Pro/Maxx-only
+              review depth, so the toggle itself only shows up once
+              the user has picked Pro or Maxx mode — Swift stays a
+              clean, no-loop surface. */}
+          {chatMode !== "swift" && (
+            <LoopModeToggle
+              value={execMode}
+              onChange={handleExecModeChange}
+              locked={!isLoopUnlocked}
+            />
+          )}
 
           {busy ? (
             <>
