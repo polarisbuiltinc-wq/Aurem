@@ -43,7 +43,6 @@ import IntentTierIndicator from "./IntentTierIndicator";
 import LoopStepBar from "./LoopStepBar";
 import LoopStatusChip from "./LoopStatusChip";        // Iter 309 · Batch-2 aftermath — sticky loop-status chip
 import RevokedRepoBanner from "./RevokedRepoBanner";   // 2026-08-20 — in-chat revoked-access banner
-import AgentStatusBar from "./AgentStatusBar";
 import LoopLiveFeed from "./LoopLiveFeed";
 import OperationHistory from "./OperationHistory";
 import PlanApprovalCard from "./PlanApprovalCard";
@@ -4580,29 +4579,11 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         onReviewFindings={() => window.location.assign("/codebase-health")}
       />
 
-      {/* Iter 284/288 — "N queued · Agent is running" caption row.
-          Iter 295 — extracted to AgentStatusBar.jsx so it's testable
-          in isolation. Behaviour identical: renders only while
-          `busy` is true, disappears the instant it flips false. */}
-      {/* Iter 309 · Item D — Hide AgentStatusBar during an active
-          loop. LoopStatusChip (sticky top-of-pane) already conveys
-          "agent is running" + the phase, and LoopStepBar's active-step
-          ECG pulse is a third redundant "still working" signal. Three
-          pulsing dots at once was a UX regression per the audit.
-          Guard: hide when a loop is active. Kept fully unchanged for
-          non-loop chat turns (its actual purpose). */}
-      {(() => {
-        const isLoopActive =
-          execMode === EXEC_MODES.LOOP &&
-          loopPhase &&
-          loopPhase !== "idle" &&
-          loopPhase !== "completed" &&
-          loopPhase !== "failed" &&
-          loopPhase !== "aborted" &&
-          loopPhase !== "expired";
-        if (isLoopActive) return null;
-        return <AgentStatusBar busy={busy} queuedCount={queuedCount} />;
-      })()}
+      {/* 2026-08-21 — founder request: hide the "Agent is running…"
+          caption bar entirely (redundant with the thinking bubble /
+          progress bar already shown inline on the streaming message).
+          AgentStatusBar.jsx kept intact/unused in case it's wanted
+          back later — just not rendered here. */}
 
       <form
         data-testid="chat-form"
