@@ -1645,6 +1645,7 @@ class UpdateProject(BaseModel):
     branch: Optional[str] = None
     tech_stack: Optional[str] = None
     preview_url: Optional[str] = None
+    installation_id: Optional[int] = None
 
 
 @router.patch("/projects/{project_id}")
@@ -1663,6 +1664,12 @@ async def update_project(
     # this; the PATCH path was storing it plaintext).
     if "github_token" in updates and updates["github_token"]:
         updates["github_token"] = await _encrypt_pat(me["user_id"], updates["github_token"])
+    # 2026-08-20 — Auto-Reconnect Prompt. Re-attaching a project to a
+    # fresh GitHub App installation (after the user revoked/reinstalled
+    # it) takes over as the auth method, same precedence rule as
+    # `add_project` (installation_id wins over any stored PAT).
+    if "installation_id" in updates:
+        updates["auth_method"] = "github_app"
     r = await db.cto_projects.update_one(
         {"project_id": project_id, "user_id": me["user_id"]},
         {"$set": updates},
@@ -1673,6 +1680,14 @@ async def update_project(
     try:
         from services.repo_context import invalidate_repo_context
         await invalidate_repo_context(project_id)
+    except Exception:
+        pass
+    # 2026-08-20 — drop the short-TTL connection-status cache too so the
+    # banner's next poll reflects the reconnect immediately instead of
+    # waiting out the 8 s cache window.
+    try:
+        from routers.repo_status import _CACHE as _conn_cache
+        _conn_cache.pop(project_id, None)
     except Exception:
         pass
     return {"ok": True, "updated_fields": list(updates.keys())}

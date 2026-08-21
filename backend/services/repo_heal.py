@@ -212,7 +212,7 @@ async def heal_project(*, db, user_id: str, project_id: str,
                                      reason="no_token_for_retry")
                 ok, r, e = await _try_with_retries(
                     lambda: _gh_get(
-                        client, f"https://api.github.com/repos/{owner}/{repo}", token,
+                        client, f"https://api.github.com/repos/{owner}/{repo}/contents/", token,
                     ),
                 )
                 if ok and r is not None and 200 <= r.status_code < 300:
@@ -230,7 +230,7 @@ async def heal_project(*, db, user_id: str, project_id: str,
                 # BEFORE we mark the project as healed — don't trade
                 # one broken state for another.
                 r = await _gh_get(
-                    client, f"https://api.github.com/repos/{owner}/{repo}", oauth,
+                    client, f"https://api.github.com/repos/{owner}/{repo}/contents/", oauth,
                 )
                 if 200 <= r.status_code < 300:
                     # Project row already has user OAuth implicitly;
@@ -251,7 +251,7 @@ async def heal_project(*, db, user_id: str, project_id: str,
                         continue  # already failed with this one
                     tried.append(label)
                     r = await _gh_get(
-                        client, f"https://api.github.com/repos/{owner}/{repo}", tok,
+                        client, f"https://api.github.com/repos/{owner}/{repo}/contents/", tok,
                     )
                     if 200 <= r.status_code < 300:
                         # Mark the OLD token as revoked so the
@@ -333,7 +333,7 @@ async def heal_project(*, db, user_id: str, project_id: str,
                 return await _finalise(db, project_id, success=False,
                                        reason=f"unknown_error:{err}")
             r = await _gh_get(
-                client, f"https://api.github.com/repos/{owner}/{repo}", token,
+                client, f"https://api.github.com/repos/{owner}/{repo}/contents/", token,
             )
             if 200 <= r.status_code < 300:
                 return await _finalise(db, project_id, success=True,

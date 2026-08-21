@@ -3083,3 +3083,96 @@ Screenshot-verified: firing the event opens the modal correctly.
 
 **Not yet deployed** — add to the redeploy checklist (item 10).
 
+---
+
+## GitHub-access-revoked: wrong chat diagnosis fixed; sidebar/header needs your input (2026-08-20)
+
+Founder reported (production): after revoking GitHub access to a
+connected repo, sidebar/header/chat all still act like it's fine, and
+chat gives a wrong diagnosis instead of "repo access revoked."
+
+**Root cause found + FIXED — the actual bug**: `repo_context.py`'s
+`_fetch_file()` (used by `read_repo_file`/`read_repo_files`) and
+`list_repo_files()`'s own tree fetch both caught 401/403 (access
+revoked) and 404 (file genuinely missing) with the SAME broad
+`except Exception → return None` / generic string, indistinguishable
+from each other. So the model got told "file not found, stop
+guessing, call list_repo_files to discover paths" when the REAL cause
+was revoked access — `list_repo_files` then fails the same way, and
+with zero real signal the model hallucinates (matches the screenshot:
+blamed "admin credentials for auremcto.com API" instead of GitHub).
+Fix: added `GithubAuthError` (repo_context.py) raised specifically on
+401/403, distinct from the 404/network-error `None` path. All 3
+GitHub-fetching tools (`read_repo_file`, `read_repo_files`,
+`list_repo_files`) now catch it and return an unambiguous message:
+"GitHub access revoked... reconnect this repo... do not guess at file
+paths or blame an unrelated API." Verified directly (fake project ctx
++ a garbage token against a real public repo → real GitHub 401 →
+confirmed all 3 tools now return the correct diagnosis instead of
+"file not found").
+
+**Also fixed, confirmed real but separate**: `repo_heal.py`'s
+auto-heal used the OLD metadata-only `GET /repos/{owner}/{repo}`
+endpoint (returns 200 even when contents access is denied) in 4
+places, inconsistent with `repo_status.py`'s already-corrected
+`/repos/{owner}/{repo}/contents/` check. Could cause the heal job to
+claim false "token works" success. Fixed all 4 to match.
+
+**Still open — sidebar dot / header not showing red, need your input.**
+Traced the full detection chain (`repo_status.py`'s `/connection-
+status`, the sidebar's `Dot` tone mapping, `RepoCleanupBanner.jsx`) —
+this infrastructure already exists and, per code, SHOULD flip the
+dot red and surface the cleanup banner within ~30s of a genuine
+401/403. Checked your screenshots: GitHub OAuth is disconnected on
+that account (Settings shows "Connect GitHub"), so there's no OAuth
+fallback masking it either. Could not find the gap by static reading
+alone — need one of:
+  - which project/repo exactly, so a live poll can be inspected, or
+  - confirm whether you fully uninstalled the GitHub App vs. just
+    deselected this one repo from an App with other repos still granted
+This is the one open item from this round — not closing it as fixed.
+
+**Not yet deployed** — add to the redeploy checklist (item 11).
+
+---
+
+## Revoked-Repo Banner + Auto-Reconnect (2026-08-20)
+
+Founder approved 2 defense-in-depth features while still verifying
+the separate sidebar-dot investigation:
+
+**Revoked-Repo Banner**: new `RevokedRepoBanner.jsx`, mounted in
+`ChatPanel.jsx` right after `LoopStatusChip`. Polls the same
+`/cto/projects/connection-status` the sidebar uses (backend
+8s-caches, safe to double-poll), filtered to the active project.
+Shows a persistent red banner ("GitHub access revoked for
+{owner}/{repo} ({reason}) — reconnect to keep chatting.") whenever
+status ≠ connected — regardless of whether the sidebar dot or
+cleanup banner also catch it, per founder's explicit "defense in
+depth" ask.
+
+**Auto-Reconnect Prompt**: banner's "Reconnect GitHub App" button
+opens the same App-install popup used in onboarding, polls
+`/github/app/installations` for a match on the project's owner/repo,
+then `PATCH /cto/projects/{id}` with the found `installation_id` —
+new field on that endpoint, sets `auth_method='github_app'` and
+invalidates the repo-context cache + connection-status cache so the
+banner disappears on the next 30s poll without waiting out any TTL.
+
+**Verified real, not synthetic**: while building this, discovered
+the founder's own preview demo projects (`aurem-demo/frontend`,
+`aurem-demo/backend`) are genuinely disconnected right now
+(placeholder OAuth token, 401) — confirmed the banner correctly
+surfaces this on real account data, not a contrived test case.
+
+**Tested**: `testing_agent` — 100% backend (5/5 pytest, including
+PATCH installation_id persistence) + 100% frontend (banner renders
+with correct text, reconnect button opens popup with 0 console
+errors), zero bugs.
+(`/app/test_reports/iteration_revoked_repo_banner_2026_08_20.json`)
+
+**Not yet deployed** — add to the redeploy checklist (item 12).
+Founder is holding the actual redeploy until the separate sidebar-dot
+root-cause (previous section) is pinned down, to ship everything in
+one batch.
+

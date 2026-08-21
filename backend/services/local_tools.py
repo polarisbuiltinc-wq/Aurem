@@ -27,6 +27,31 @@ from typing import Optional
 
 from cto_services.db import get_db
 from .repo_context import _fetch_file as _gh_fetch_file
+from .repo_context import GithubAuthError
+
+# 2026-08-20 — shared error for the 3 tools that talk to GitHub
+# directly. Gives the model an unambiguous, correct diagnosis instead
+# of letting it guess ("file not found", "invalid query") when the
+# real cause is a revoked App install / deleted PAT / expired OAuth.
+def _github_access_revoked_error(owner: str, repo: str, status_code: int) -> dict:
+    return {
+        "ok": False,
+        "error": (
+            f"❌ GITHUB ACCESS REVOKED (HTTP {status_code}) for "
+            f"{owner}/{repo}. This is NOT a missing file and NOT an "
+            f"AUREM/auremcto.com API problem — GitHub itself rejected "
+            f"the request. The user (or someone on their GitHub org) "
+            f"has revoked the GitHub App installation, removed this "
+            f"repo from it, deleted the Personal Access Token, or the "
+            f"OAuth/PAT token expired. STOP calling repo tools — they "
+            f"will all fail the same way until access is restored. "
+            f"Tell the user clearly: 'GitHub access to {owner}/{repo} "
+            f"was revoked — reconnect this repo from the project "
+            f"settings (reinstall/grant the GitHub App, or add a new "
+            f"token) to keep working.' Do not guess at file paths or "
+            f"blame an unrelated API."
+        ),
+    }
 
 # SEC-005 fix (2026-08-19) — a permissive path check (only blocking a
 # leading `/` and `..`) let a filename containing shell metacharacters
@@ -541,7 +566,10 @@ async def read_repo_file(ctx: dict, args: dict) -> dict:
     if not owner or not repo:
         return {"ok": False, "error": "Project has no resolved github_owner/repo"}
 
-    content = await _gh_fetch_file(owner, repo, path, branch, token)
+    try:
+        content = await _gh_fetch_file(owner, repo, path, branch, token)
+    except GithubAuthError as e:
+        return _github_access_revoked_error(owner, repo, e.status_code)
     if content is None:
         # Iter 37: LOUD failure with concrete next-step. Previously the AI
         # would see this 404 and IGNORE it, plowing ahead with fabricated
@@ -634,6 +662,8 @@ async def read_repo_files(ctx: dict, args: dict) -> dict:
                 return {"ok": False, "path": path, "error": f"`{path}` not found on {branch}"}
             content, truncated = _slice_content(content, line_range, MAX_FILE_CHARS)
             return {"ok": True, "path": path, "content": content, "truncated": truncated}
+        except GithubAuthError as e:
+            return {**_github_access_revoked_error(owner, repo, e.status_code), "path": path}
         except Exception as e:
             return {"ok": False, "path": path, "error": str(e)}
 
@@ -1096,6 +1126,10 @@ async def list_repo_files(ctx: dict, args: dict) -> dict:
             r = await c.get(url, headers=headers)
             r.raise_for_status()
             data = r.json()
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code in (401, 403):
+            return _github_access_revoked_error(owner, repo, e.response.status_code)
+        return {"ok": False, "error": f"GitHub tree fetch failed: {e}"}
     except Exception as e:
         return {"ok": False, "error": f"GitHub tree fetch failed: {e}"}
 

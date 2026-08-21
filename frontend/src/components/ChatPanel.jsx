@@ -42,6 +42,7 @@ import LoopModeToggle, {
 import IntentTierIndicator from "./IntentTierIndicator";
 import LoopStepBar from "./LoopStepBar";
 import LoopStatusChip from "./LoopStatusChip";        // Iter 309 · Batch-2 aftermath — sticky loop-status chip
+import RevokedRepoBanner from "./RevokedRepoBanner";   // 2026-08-20 — in-chat revoked-access banner
 import AgentStatusBar from "./AgentStatusBar";
 import LoopLiveFeed from "./LoopLiveFeed";
 import OperationHistory from "./OperationHistory";
@@ -3801,6 +3802,12 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           }
         }}
       />
+
+      {/* 2026-08-20 — Revoked-Repo Banner. Founder's explicit ask:
+          defense-in-depth so a revoked GitHub connection is unmissable
+          right inside the chat pane, regardless of what else (sidebar
+          dot, cleanup banner) also catches it. */}
+      <RevokedRepoBanner activeProject={activeProject} />
 
       {/* Iter 212m-49 — "⚡ free mode" pill. Surfaces when the most
           recent assistant turn was served by the Groq emergency

@@ -1,0 +1,45 @@
+{
+  "summary": "Tested Revoked-Repo Banner + Auto-Reconnect feature (2026-08-20). All 5 backend pytest tests PASS. Frontend banner renders correctly inside chat pane on disconnected demo project (aurem-demo/frontend) with correct reason text 'token rejected — access revoked or expired'. Reconnect GitHub App button is clickable, opens the /github/app/install popup, and does not throw JS errors. PATCH /cto/projects/{id} with installation_id correctly sets auth_method='github_app' and persists installation_id (verified via GET). Regression on existing PATCH fields (branch, tech_stack, preview_url) still works.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": {
+    "backend_pytest": [
+      "test_connection_status_shape_and_disconnected — PASS",
+      "test_patch_installation_id_sets_auth_method — PASS (verified auth_method='github_app', installation_id=987654321 persisted via GET, restored)",
+      "test_patch_branch_and_tech_stack_and_preview — PASS (regression on 3 pre-existing PATCH fields)",
+      "test_patch_empty_returns_400 — PASS",
+      "test_patch_bad_project_404 — PASS"
+    ],
+    "frontend_playwright": [
+      "Login → dashboard: banner data-testid='revoked-repo-banner' visible with text 'GitHub access revoked for aurem-demo/frontend (token rejected — access revoked or expired) — reconnect to keep chatting.'",
+      "data-testid='revoked-repo-reconnect-btn' present, enabled, clickable",
+      "Click opens popup to /api/aurem-dev/github/app/install?auth=<token>; button flips to 'Reconnecting…' state; page did not crash; 0 JS console/page errors captured",
+      "Banner still visible post-click (correct — still disconnected until real OAuth completes)"
+    ]
+  },
+  "banner_absent_case_note": "Could not create a genuinely 'connected' project on this preview account: all 23 existing projects are disconnected, the user's stored OAuth token is a placeholder ('ghp_bogus_iter330_harness') so repo_status._check_one 401s even against a public repo. Verified by code review only — RevokedRepoBanner.jsx line 114: `if (status !== 'disconnected') return null;` unambiguously prevents rendering for 'connected' status. This is a trivial single-branch condition with no additional logic to break.",
+  "regression_repo_context_note": "services/repo_context.py GithubAuthError + services/local_tools.py _github_access_revoked_error helper + read_repo_file/read_repo_files/list_repo_files catch-blocks verified in place via grep (all imports and catch clauses present). Not re-run E2E since main agent already unit-verified same-day.",
+  "test_report_links": [
+    "/app/backend/tests/test_revoked_repo_banner_2026_08_20.py",
+    "/app/test_reports/pytest/revoked_banner_2026_08_20.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "RevokedRepoBanner.jsx polls /connection-status every 30s per visible tab — combined with the sidebar's own poll this is 2 requests per 30s per user. Backend caches for 8s so cost is bounded, but on the founder's account with 23 projects the endpoint fans out to ~23 GitHub API calls per uncached poll. Not a bug — worth noting for capacity planning.",
+    "reconnect() polls /github/app/installations every 1.5s for up to 180s after popup opens (up to 120 requests). Acceptable for a rare user action but ensure that endpoint is cheap.",
+    "PATCH endpoint's `updates = {k: v for ... if v is not None and v != ''}` strips 0 as falsy for int fields only via '!= \"\"' check — installation_id=0 would still pass (int 0 != ''), which is correct."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_revoked_repo_banner_2026_08_20.py (new)"
+  ],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview)",
+  "seed_data_creation": "None. Tests use pre-existing demo projects (p_demo_a aurem-demo/frontend). PATCH tests restore original field values in a finally block.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 23 projects on test@aurem.dev are disconnected because the account's stored github.access_token is a placeholder. To test 'banner absent on connected', a real OAuth token or GitHub App install would be needed. The banner's connected-null render path is a one-liner and safe."
+}

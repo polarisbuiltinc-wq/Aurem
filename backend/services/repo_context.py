@@ -40,6 +40,17 @@ from cto_services.db import get_db
 
 logger = logging.getLogger(__name__)
 
+# 2026-08-20 — bug fix: `_fetch_file` used to collapse EVERY failure
+# (404 file-not-found, 401/403 access-revoked, network errors) into a
+# single `None`, so a revoked GitHub App install / deleted PAT looked
+# identical to a typo'd path. The model told users "file not found,
+# try a different path" instead of "GitHub access was revoked". Tool
+# callers catch this specifically to give the correct diagnosis.
+class GithubAuthError(Exception):
+    def __init__(self, status_code: int):
+        self.status_code = status_code
+        super().__init__(f"GitHub returned {status_code} — access revoked or token invalid")
+
 # ── Tunables ─────────────────────────────────────────────────────────────
 CACHE_TTL_SECONDS = 30 * 60       # 30 min — refetch if older
 MAX_FILES = 10                    # at most 10 file-contents inlined
@@ -175,6 +186,11 @@ async def _fetch_file(owner: str, repo: str, path: str, branch: str,
             decoded = raw.decode("utf-8", errors="replace")
             set_file(ck, decoded)
             return decoded
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code in (401, 403):
+            raise GithubAuthError(e.response.status_code)
+        logger.debug(f"fetch_file failed for {path}: {e!r}")
+        return None
     except Exception as e:
         logger.debug(f"fetch_file failed for {path}: {e!r}")
         return None
