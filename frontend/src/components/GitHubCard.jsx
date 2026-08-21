@@ -37,8 +37,12 @@ export default function GitHubCard() {
 
   const refreshInstalls = useCallback(async () => {
     try {
-      const r = await api.get("/github/app/installations");
-      setInstalls(r.data?.installations || []);
+      // 2026-08-20 — health endpoint (not the active-only list the
+      // wizards use) so a suspended installation still shows up here
+      // with an accurate status + reconnect CTA instead of silently
+      // vanishing from Settings and looking like "never installed".
+      const r = await api.get("/github/app/installations/health");
+      setInstalls((r.data?.installations || []).filter((i) => i.status !== "deleted"));
     } catch {
       setInstalls([]);
     }
@@ -209,32 +213,44 @@ export default function GitHubCard() {
           marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border)",
           display: "grid", gap: 10,
         }}>
-          {installs.map((inst) => (
-            <div key={inst.installation_id} style={{
-              display: "flex", alignItems: "center", gap: 10,
-              fontSize: 12, color: "var(--text-dim)",
-            }}>
-              <span style={{
-                width: 7, height: 7, borderRadius: "50%",
-                background: "#22c55e", flexShrink: 0,
-              }} title="Active" />
-              <span style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace" }}>
-                @{inst.github_login} — {(inst.repositories || []).length}{" "}
-                repo{(inst.repositories || []).length === 1 ? "" : "s"} granted
-              </span>
-              <a
-                href={`https://github.com/settings/installations/${inst.installation_id}`}
-                target="_blank" rel="noreferrer"
-                data-testid={`settings-github-app-manage-${inst.installation_id}`}
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: 4,
-                  fontSize: 11, color: "var(--accent-2, #FF8A2A)",
-                }}
-              >
-                Manage on GitHub <ExternalLink size={10} />
-              </a>
-            </div>
-          ))}
+          {installs.map((inst) => {
+            const suspended = inst.status === "suspended";
+            return (
+              <div key={inst.installation_id} style={{
+                display: "flex", alignItems: "center", gap: 10,
+                fontSize: 12, color: "var(--text-dim)",
+              }}>
+                <span style={{
+                  width: 7, height: 7, borderRadius: "50%",
+                  background: suspended ? "#ef4444" : "#22c55e", flexShrink: 0,
+                }} title={suspended ? "Suspended" : "Active"} />
+                <span style={{ flex: 1 }}>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                    @{inst.github_login} — {inst.repo_count}{" "}
+                    repo{inst.repo_count === 1 ? "" : "s"} granted
+                  </span>
+                  {suspended && (
+                    <div data-testid={`settings-github-app-suspended-${inst.installation_id}`}
+                         style={{ color: "#fca5a5", marginTop: 2 }}>
+                      Suspended — an org admin paused this installation on GitHub.
+                    </div>
+                  )}
+                </span>
+                <a
+                  href={`https://github.com/settings/installations/${inst.installation_id}`}
+                  target="_blank" rel="noreferrer"
+                  data-testid={`settings-github-app-manage-${inst.installation_id}`}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                    fontSize: 11, fontWeight: suspended ? 600 : 400,
+                    color: suspended ? "var(--accent-2, #FF8A2A)" : "var(--accent-2, #FF8A2A)",
+                  }}
+                >
+                  {suspended ? "Reactivate on GitHub" : "Manage on GitHub"} <ExternalLink size={10} />
+                </a>
+              </div>
+            );
+          })}
         </div>
       )}
     </section>

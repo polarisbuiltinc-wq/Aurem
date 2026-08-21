@@ -154,6 +154,27 @@ async def connection_status(authorization: str = Header(None)) -> dict:
     )
     oauth_token = ((me or {}).get("github") or {}).get("access_token") or None
 
+    # 2026-08-20 — installation health pre-check. A GitHub-App-installed
+    # project whose installation was suspended/removed used to fall
+    # through to a generic `no_token`/`github_rejected` (the token mint
+    # in get_repo_token() just silently returns None), which the chat
+    # model then mis-diagnosed as a repo/credential problem instead of
+    # "the App installation itself was paused". Reading the local
+    # `suspended_at`/`deleted_at` the webhook already maintains — no
+    # extra GitHub API call — lets us surface the real reason and skip
+    # the doomed token-mint attempt entirely.
+    app_iids = {
+        p.get("installation_id") for p in projs
+        if (p.get("auth_method") or "").lower() == "github_app" and p.get("installation_id")
+    }
+    install_health: dict = {}
+    if app_iids:
+        health_rows = await db.github_installations.find(
+            {"installation_id": {"$in": list(app_iids)}},
+            {"_id": 0, "installation_id": 1, "suspended_at": 1, "deleted_at": 1},
+        ).to_list(100)
+        install_health = {r["installation_id"]: r for r in health_rows}
+
     now = time.time()
     tasks: list = []
     no_check: list[dict] = []          # rows with no creds at all
@@ -161,11 +182,28 @@ async def connection_status(authorization: str = Header(None)) -> dict:
         pid    = p.get("project_id")
         owner  = (p.get("github_owner") or "").strip()
         repo   = (p.get("github_repo")  or "").strip()
+        iid    = p.get("installation_id")
         # Coalesce duplicate polls per project.
         cached = _CACHE.get(pid)
         if cached and now - cached["checked_at"] < _CACHE_TTL_S:
             tasks.append(cached)            # dict — runner short-circuits
             continue
+        if (p.get("auth_method") or "").lower() == "github_app" and iid:
+            health = install_health.get(iid)
+            if health and health.get("deleted_at"):
+                no_check.append({"project_id": pid, "status": "disconnected",
+                                 "http_code": 0, "checked_at": now,
+                                 "auth": "none", "owner": owner, "repo": repo,
+                                 "installation_id": iid,
+                                 "error": "installation_deleted"})
+                continue
+            if health and health.get("suspended_at"):
+                no_check.append({"project_id": pid, "status": "disconnected",
+                                 "http_code": 0, "checked_at": now,
+                                 "auth": "none", "owner": owner, "repo": repo,
+                                 "installation_id": iid,
+                                 "error": "installation_suspended"})
+                continue
         if not (owner and repo):
             no_check.append({"project_id": pid, "status": "disconnected",
                              "http_code": 0, "checked_at": now,

@@ -751,6 +751,53 @@ async def list_my_installations(
 
 
 # ═════════════════════════════════════════════════════════════════════
+# 4b. GET /installations/health — Settings + revoked-banner CTA
+# ═════════════════════════════════════════════════════════════════════
+#
+# 2026-08-20 — founder-approved: distinguish "App installation
+# suspended/removed" (whole-App-level, fixed on GitHub's own settings
+# page) from "per-repo access revoked" (fixed by the wizard's
+# reconnect flow). Unlike `list_my_installations` above — which stays
+# `active: True`-only on purpose so the wizard/repo-picker flows never
+# regress — this returns EVERY installation row for the user,
+# including suspended/deleted ones, so the UI can render an accurate
+# status. Reads the `suspended_at`/`deleted_at` fields the webhook
+# handler already maintains (installation/suspend, /unsuspend,
+# /deleted events) — no live GitHub API polling.
+@router.get("/installations/health")
+async def installations_health(
+    authorization: Optional[str] = Header(None),
+):
+    user = await current_dev(authorization)
+    db = require_db()
+
+    rows = await db.github_installations.find(
+        {"user_id": user["user_id"]},
+    ).sort("updated_at", -1).to_list(length=100)
+
+    def _status(row: dict) -> str:
+        if row.get("deleted_at"):
+            return "deleted"
+        if row.get("suspended_at"):
+            return "suspended"
+        return "active"
+
+    return {
+        "installations": [
+            {
+                "installation_id": row.get("installation_id"),
+                "github_login":    row.get("github_login"),
+                "status":          _status(row),
+                "suspended_at":    row.get("suspended_at"),
+                "deleted_at":      row.get("deleted_at"),
+                "repo_count":      len(row.get("repositories") or []),
+            }
+            for row in rows
+        ],
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════
 # 5. DELETE /installations/{id} — user disconnect
 # ═════════════════════════════════════════════════════════════════════
 

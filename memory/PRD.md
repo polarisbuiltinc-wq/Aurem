@@ -3,6 +3,10 @@
 **Live URL**: https://auremcto.com
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
+
+## 2026-08-21 — GitHub App Installation Health Check + App-only Reconnect CTA (see CHANGELOG.md for full detail)
+Founder-approved: distinguishes App installation suspension/removal (fixed via GitHub's own installation settings page) from per-repo access revocation. New `GET /github/app/installations/health` endpoint (local `suspended_at`/`deleted_at` only, no GitHub polling), `connection-status` now returns `installation_suspended`/`installation_deleted` reasons, Settings GitHub App card + RevokedRepoBanner both show a direct "Reactivate on GitHub" link to the specific installation. testing_agent: 4/4 backend + 3/3 UI passed, zero bugs (`iteration_install_health_2026_08_21.json`). Preview-tested only — needs founder redeploy.
+
 ## ⚠️ Ongoing Maintenance / Time-Bomb Items
 - **GitHub Actions PAT expires Sep 18, 2026** — fine-grained tokens can't
   auto-renew. Founder must generate a new token and update

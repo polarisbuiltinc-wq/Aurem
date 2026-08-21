@@ -472,3 +472,13 @@ founder-only action), decide on history scrub (founder decision), CI
 wiring gap for G4/G15/G18 (agreed as separate low-risk follow-up, not
 urgent), G20's 41 open incidents (flagged for a manual triage pass).
 
+
+## 2026-08-21 — GitHub App Installation Health Check + App-only Reconnect CTA
+
+Founder-approved follow-up after the 13-fix production deploy: distinguish App-installation-level suspension/removal from per-repo access revocation, and give an App-specific reconnect path (no OAuth/PAT confusion).
+
+- **Backend**: new `GET /api/aurem-dev/github/app/installations/health` returns ALL of a user's `github_installations` rows (active/suspended/deleted computed status) — reads existing `suspended_at`/`deleted_at` fields the webhook already maintains, zero live GitHub polling. Existing `GET /installations` (active-only, used by wizards/repo-pickers) left untouched to avoid any regression there.
+- `cto/projects/connection-status` now short-circuits App-installed projects whose linked installation is suspended/deleted to `error: "installation_suspended"` / `"installation_deleted"` + `installation_id`, before attempting a doomed token mint — replaces the old generic `no_token`/`github_rejected` misdiagnosis.
+- **Frontend**: `RevokedRepoBanner.jsx` and `GitHubCard.jsx` (Settings → Integrations) both render a distinct "Reactivate on GitHub" CTA linking straight to `https://github.com/settings/installations/{id}` for suspended installs (defense-in-depth, per founder ask) — deleted/other reasons keep the original popup-based "Reconnect GitHub App" flow.
+- Tested via `testing_agent`: `/app/test_reports/iteration_install_health_2026_08_21.json` — 4/4 backend pytest cases + 3/3 UI flows passed, zero bugs. One cosmetic label nit (deleted vs suspended banner wording) fixed post-report.
+- Status: preview-tested only; needs a founder redeploy to reach production.

@@ -16,14 +16,22 @@ import { AlertTriangle, Github, Loader2 } from "lucide-react";
 import { api, getToken, API_BASE } from "../lib/api";
 
 const REASON_LABEL = {
-  github_rejected: "token rejected — access revoked or expired",
-  no_token:        "no GitHub credential on file",
-  repo_not_found:  "repo not found — renamed, deleted, or access removed",
+  github_rejected:        "token rejected — access revoked or expired",
+  no_token:               "no GitHub credential on file",
+  repo_not_found:         "repo not found — renamed, deleted, or access removed",
+  installation_suspended: "GitHub App installation suspended — an org admin paused it",
+  installation_deleted:   "GitHub App installation removed — reinstall to reconnect",
 };
+
+// App-level states fixed on GitHub's OWN settings page (unsuspend) or
+// via a fresh install — the wizard's per-repo "Reconnect GitHub App"
+// popup can't fix these, so they get a distinct CTA below.
+const APP_LEVEL_REASONS = new Set(["installation_suspended", "installation_deleted"]);
 
 export default function RevokedRepoBanner({ activeProject }) {
   const [status, setStatus]     = useState(null); // null | "connected" | "disconnected"
   const [reason, setReason]     = useState(null);
+  const [installationId, setInstallationId] = useState(null);
   const [reconnecting, setReconnecting] = useState(false);
   const popupRef = useRef(null);
 
@@ -45,6 +53,7 @@ export default function RevokedRepoBanner({ activeProject }) {
         if (!cancelled && mine) {
           setStatus(mine.status === "connected" ? "connected" : "disconnected");
           setReason(mine.error || null);
+          setInstallationId(mine.installation_id || null);
         }
       } catch { /* leave last known state on a transient blip */ }
     };
@@ -113,6 +122,9 @@ export default function RevokedRepoBanner({ activeProject }) {
 
   if (status !== "disconnected") return null;
 
+  const appLevel = APP_LEVEL_REASONS.has(reason);
+  const suspended = reason === "installation_suspended";
+
   return (
     <div
       data-testid="revoked-repo-banner"
@@ -126,29 +138,53 @@ export default function RevokedRepoBanner({ activeProject }) {
     >
       <AlertTriangle size={16} style={{ flexShrink: 0, color: "#ef4444" }} />
       <span style={{ flex: 1, lineHeight: 1.4 }}>
-        <strong style={{ color: "#fff" }}>GitHub access revoked</strong> for{" "}
+        <strong style={{ color: "#fff" }}>
+          {suspended
+            ? "GitHub App access paused"
+            : appLevel
+              ? "GitHub App installation removed"
+              : "GitHub access revoked"}
+        </strong>{" "}
+        for{" "}
         <code>{activeProject?.github_owner}/{activeProject?.github_repo}</code>
         {reason ? ` (${REASON_LABEL[reason] || reason})` : ""} — reconnect to keep chatting.
       </span>
-      <button
-        type="button"
-        data-testid="revoked-repo-reconnect-btn"
-        onClick={reconnect}
-        disabled={reconnecting}
-        style={{
-          display: "inline-flex", alignItems: "center", gap: 6,
-          padding: "6px 12px", fontSize: 12, fontWeight: 600,
-          background: reconnecting ? "rgba(255,255,255,0.08)" : "var(--accent-2, #FF8A2A)",
-          color: reconnecting ? "#94a3b8" : "#fff",
-          border: "none", borderRadius: 6,
-          cursor: reconnecting ? "default" : "pointer",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {reconnecting
-          ? <><Loader2 size={12} className="animate-spin" /> Reconnecting…</>
-          : <><Github size={12} /> Reconnect GitHub App</>}
-      </button>
+      {suspended && installationId ? (
+        <a
+          data-testid="revoked-repo-reconnect-suspended-link"
+          href={`https://github.com/settings/installations/${installationId}`}
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "6px 12px", fontSize: 12, fontWeight: 600,
+            background: "var(--accent-2, #FF8A2A)", color: "#fff",
+            borderRadius: 6, textDecoration: "none", whiteSpace: "nowrap",
+          }}
+        >
+          <Github size={12} /> Reactivate on GitHub
+        </a>
+      ) : (
+        <button
+          type="button"
+          data-testid="revoked-repo-reconnect-btn"
+          onClick={reconnect}
+          disabled={reconnecting}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "6px 12px", fontSize: 12, fontWeight: 600,
+            background: reconnecting ? "rgba(255,255,255,0.08)" : "var(--accent-2, #FF8A2A)",
+            color: reconnecting ? "#94a3b8" : "#fff",
+            border: "none", borderRadius: 6,
+            cursor: reconnecting ? "default" : "pointer",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {reconnecting
+            ? <><Loader2 size={12} className="animate-spin" /> Reconnecting…</>
+            : <><Github size={12} /> Reconnect GitHub App</>}
+        </button>
+      )}
     </div>
   );
 }

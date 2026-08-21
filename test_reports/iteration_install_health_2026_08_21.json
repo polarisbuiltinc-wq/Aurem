@@ -1,0 +1,23 @@
+{
+  "summary": "Verified new GitHub App installation-health check + App-only reconnect CTA. All 4 backend pytest cases pass and all 3 UI flows (Settings card suspended install, in-chat banner suspended, in-chat banner deleted) render exactly per spec. Regression check confirmed: /github/app/installations still filters active=true only, so wizards/repo-pickers are unaffected.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_installation_health.py",
+    "/app/test_reports/pytest/install_health.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GitHubCard 'GitHub login' subtext currently reads 'Connected as @null' when the OAuth `login` field is null but `connected` is true — cosmetic pre-existing bug, not part of this changeset.",
+    "RevokedRepoBanner: When reason='installation_deleted', banner strong-text still reads 'GitHub App access paused' (via APP_LEVEL_REASONS set). Deleted is semantically closer to 'removed/uninstalled' than 'paused'. Consider a distinct label for the deleted case (nit; functional behaviour is correct).",
+    "repo_status.installation_id field is added inline to short-circuit no_check rows but is NOT set on the healthy `_check_one` path — banner will only see installation_id when the project is disconnected via installation_suspended/deleted. That is exactly what the frontend needs, so this is fine; noting for future readers."
+  ],
+  "updated_files": ["/app/backend/tests/test_installation_health.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (user_id=test_admin_001)",
+  "seed_data_creation": "Seeded 2 github_installations rows (iid 999999042=suspended, 999999043=deleted) + 2 matching cto_projects rows (test_suspended_proj_042, test_deleted_proj_043). All 4 rows deleted after tests — final verify count=0.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All installation-health / reconnect-CTA branches verified. Suspended → direct link to https://github.com/settings/installations/{id}. Deleted → still uses ORIGINAL popup-based reconnect button. Settings card correctly filters out deleted installs. Regression: /github/app/installations still active-only. Fixtures cleaned up.",
+  "rca of the issue": "N/A — feature implementation is correct."
+}
