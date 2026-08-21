@@ -151,10 +151,12 @@ async def test_total_budget_exceeded_stamps_resume_reason():
     ({"tier": "founder"},                 True,  ""),
     ({"is_admin": True, "tier": "free"},  True,  ""),
     ({"is_unlimited": True},              True,  ""),
-    ({"tier": "pro",   "loop_beta_enabled": True},  True,  ""),
-    ({"tier": "team",  "loop_beta_enabled": True},  True,  ""),
-    ({"tier": "pro",   "loop_beta_enabled": False}, False, "beta_not_enabled"),
-    ({"tier": "team"},                              False, "beta_not_enabled"),
+    # 2026-08-21 — founder decision (after checking Admin QA Dashboard
+    # Loop Beta panel: healthy kill-switch, 0 stuck loops): Pro/Team
+    # unlocked for everyone now, `loop_beta_enabled` no longer required.
+    ({"tier": "pro"},                                True,  ""),
+    ({"tier": "team"},                               True,  ""),
+    ({"tier": "pro",   "loop_beta_enabled": False},  True,  ""),
     ({"tier": "starter", "loop_beta_enabled": True},False, "tier_locked"),
     ({"tier": "free",    "loop_beta_enabled": True},False, "tier_locked"),
     ({},                                            False, "no_user"),

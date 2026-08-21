@@ -112,10 +112,14 @@ async def set_kill_switch(db, on: bool, reason: str = "") -> None:
 # ── Per-user gate ────────────────────────────────────────────────────
 
 def is_user_allowed(user_doc: dict) -> tuple[bool, str]:
-    """Decide if a user can hit /loop/start based on tier + beta flag.
+    """Decide if a user can hit /loop/start based on tier.
 
     Founder / admin / unlimited bypass everything.
-    Pro / Team need loop_beta_enabled=True in dev_users.
+    Pro / Team unlocked for everyone as of 2026-08-21 (founder decision,
+    made after checking the Admin QA Dashboard's Loop Beta panel showed
+    a healthy kill-switch with 0 stuck loops — `loop_beta_enabled` is no
+    longer required, though the field/toggle still exists for any future
+    staged rollout need).
     Free / Starter locked (paid-tier differentiator + protects infra
     cost against the still-open free-tier abuse hole).
     """
@@ -130,9 +134,7 @@ def is_user_allowed(user_doc: dict) -> tuple[bool, str]:
         return True, ""
     tier = (user_doc.get("tier") or "").lower()
     if tier in ("pro", "team"):
-        if bool(user_doc.get("loop_beta_enabled")):
-            return True, ""
-        return False, "beta_not_enabled"
+        return True, ""
     return False, "tier_locked"
 
 

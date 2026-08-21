@@ -506,9 +506,12 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   // silently send `execution_mode:"loop"` for non-founders.
   const isLoopUnlocked = useMemo(() => {
     const u = (typeof getUser === "function" && getUser()) || null;
-    // 2026-08-21 — also respect `loop_beta_enabled` (see
+    // 2026-08-21 — unlocked for all Pro/Team tier (see
     // isLoopUnlockedSync in utils/chatTextUtils.js for rationale).
-    return !!(u && (u.is_admin || u.is_unlimited || u.tier === "founder" || u.loop_beta_enabled));
+    return !!(u && (
+      u.is_admin || u.is_unlimited || u.tier === "founder"
+      || u.tier === "pro" || u.tier === "team"
+    ));
   }, []);
   const [execMode, setExecMode] = useState(() => {
     const m = loadExecMode();

@@ -4,6 +4,9 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## 2026-08-21 — Loop Mode UNLOCKED for all Pro/Team tier (founder decision, see CHANGELOG.md)
+After checking Admin QA Dashboard (0 beta users, 0 stuck, kill-switch healthy), founder chose to skip the recommended small-pilot and directly unlock Loop Mode for ALL Pro/Team users now (not just admin/founder or a beta flag). `loop_beta.py.is_user_allowed()` + frontend `isLoopUnlocked` checks updated; Free/Starter still locked. All existing safety nets (concurrency cap, wall-clock budget, kill-switch, auto-trip-if-stuck) remain fully active and unchanged. 21/21 tests pass (updated matrix), verified live in preview.
+
 ## 2026-08-21 — F12 double-flush FIXED + Loop beta-rollout gap CLOSED, scan admin-gate clarified (see CHANGELOG.md)
 F12 "Send to ORA" double-flush bug confirmed + fixed (real payload was lost before reaching backend). "/scan" 403 is a deliberate admin/founder-only gate, not a bug — awaiting founder decision on ReRootsBeauty test account flag. Loop Mode "SOON" lock: could NOT verify production stuck-loop history myself (no prod DB access) — founder directed to Admin QA Dashboard → Loop Beta panel for live numbers. Found+fixed a real gap: backend's `loop_beta_enabled` per-user rollout mechanism (with kill-switch) was never wired to the frontend lock check — fixed, zero behavior change for existing users, just makes the existing safe rollout mechanism usable. Did NOT blanket-unlock Loop — awaiting founder's dashboard check.
 

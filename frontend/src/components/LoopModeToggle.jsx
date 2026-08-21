@@ -50,7 +50,7 @@ export default function LoopModeToggle({ value, onChange, locked = false }) {
   if (locked) {
     return (
       <HoverTip
-        content="Loop mode auto-runs the full Plan → Execute → Verify → Scan → Ship pipeline. Currently in hardening — available to admin/founder accounts only."
+        content="Loop mode auto-runs the full Plan → Execute → Verify → Scan → Ship pipeline. Available on Pro/Team plans — upgrade to unlock."
         placement="top"
         maxWidth={280}
       >
