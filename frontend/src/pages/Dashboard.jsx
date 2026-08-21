@@ -134,6 +134,30 @@ function DashboardV2Body() {
       }));
     } catch { /* ignore */ }
   };
+  // 2026-08-21 — Loop execution mode bridge (same pattern as `mode`
+  // above). TopBar's Pro/Maxx → Prompt/Loop sub-choice lives here so
+  // the pill can show the right highlight without prop-drilling
+  // through ChatPanel.
+  const [execMode, setExecMode] = useState(() => {
+    try { return localStorage.getItem("ora_execution_mode") === "loop" ? "loop" : "prompt"; }
+    catch { return "prompt"; }
+  });
+  useEffect(() => {
+    const onChanged = (e) => {
+      const m = e?.detail?.mode;
+      if (m && m !== execMode) setExecMode(m);
+    };
+    window.addEventListener("aurem:exec-mode-changed", onChanged);
+    return () => window.removeEventListener("aurem:exec-mode-changed", onChanged);
+  }, [execMode]);
+  const handleExecModeChange = (m) => {
+    setExecMode(m);
+    try {
+      window.dispatchEvent(new CustomEvent("aurem:set-exec-mode", {
+        detail: { mode: m },
+      }));
+    } catch { /* ignore */ }
+  };
   const [sidebarPinned,    setSidebarPinned]    = useState(false);
   const [sidebarHovered,   setSidebarHovered]   = useState(false);
 
@@ -622,6 +646,8 @@ function DashboardV2Body() {
             }}
             mode={mode}
             onModeChange={handleModeChange}
+            execMode={execMode}
+            onExecModeChange={handleExecModeChange}
             hidden={false}
             onNewRun={handleNewRun}
             breadcrumb={activeProject ? {

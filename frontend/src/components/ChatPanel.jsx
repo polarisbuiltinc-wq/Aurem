@@ -36,7 +36,7 @@ import SecurityScanDrawer from "./SecurityScanDrawer";      // Iter 212m-55 1-cl
 import { getScanSeverityCounts, onScanUpdated, setCachedScan } from "../lib/securityScanCache";  // Iter 212m-56
 // Iter 212m-58 — Prompt / Loop execution-mode switcher + ancillary
 // step bar and plan-approval card.
-import LoopModeToggle, {
+import {
   EXEC_MODES, loadExecMode, saveExecMode,
 } from "./LoopModeToggle";
 import IntentTierIndicator from "./IntentTierIndicator";
@@ -525,8 +525,37 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       try { saveExecMode(EXEC_MODES.PROMPT); } catch { /* ignore */ }
       return EXEC_MODES.PROMPT;
     }
+    // Swift never runs Loop (per spec) — reconcile a stale
+    // swift+loop combo left over from before the TopBar-only Loop
+    // picker existed.
+    if (m === EXEC_MODES.LOOP && chatMode === "swift") {
+      try { saveExecMode(EXEC_MODES.PROMPT); } catch { /* ignore */ }
+      return EXEC_MODES.PROMPT;
+    }
     return m;
   });
+  // 2026-08-21 — execMode bridge to the TopBar's mode dropdown
+  // (Pro/Maxx → Prompt/Loop sub-choice). Same pattern as the
+  // chatMode bridge above: broadcast on change, listen for the
+  // TopBar's pick. The standalone composer LoopModeToggle is gone —
+  // this is now the ONLY way execMode changes from the UI.
+  useEffect(() => {
+    try {
+      window.dispatchEvent(new CustomEvent("aurem:exec-mode-changed", {
+        detail: { mode: execMode },
+      }));
+    } catch { /* ignore */ }
+  }, [execMode]);
+  useEffect(() => {
+    const onSet = (e) => {
+      const m = e?.detail?.mode;
+      if (m && [EXEC_MODES.PROMPT, EXEC_MODES.LOOP].includes(m) && m !== execMode) {
+        handleExecModeChange(m);
+      }
+    };
+    window.addEventListener("aurem:set-exec-mode", onSet);
+    return () => window.removeEventListener("aurem:set-exec-mode", onSet);
+  }, [execMode]);
   // Loop pipeline state. `phase` drives the LoopStepBar and decides
   // whether to render the PlanApprovalCard. `retryCount` is reserved
   // for future verify-loop auto-retry UX (max 3).
@@ -5042,28 +5071,18 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
               ))}
             </select>
           )}
-          {/* Iter 212m-149 → 212m-163 — Intent Tier Indicator + Loop
-              toggle BOTH live here.  The Intent Gateway still
-              auto-routes every message (casual / query / agentic /
-              clarify); the Loop pill is a manual override for
-              founder/admin/unlimited users who want to force the full
-              Plan → Execute → Verify → Ship pipeline regardless of
-              the Gateway's tier pick.  Free / paid non-admin users
-              see a locked "Loop · soon" variant so the surface stays
-              consistent without giving them the engine. */}
+          {/* Iter 212m-149 → 212m-163 — Intent Tier Indicator. */}
           <IntentTierIndicator liveText={input} lastTier={lastIntentTier} />
           <CharCounter value={input} max={20000} style={{ marginRight: 8 }} />
-          {/* 2026-08-21 — founder request: Loop is a Pro/Maxx-only
-              review depth, so the toggle itself only shows up once
-              the user has picked Pro or Maxx mode — Swift stays a
-              clean, no-loop surface. */}
-          {chatMode !== "swift" && (
-            <LoopModeToggle
-              value={execMode}
-              onChange={handleExecModeChange}
-              locked={!isLoopUnlocked}
-            />
-          )}
+          {/* 2026-08-21 — founder request: standalone Loop toggle
+              removed from the composer entirely. Loop selection now
+              lives ONLY in the TopBar's mode dropdown — picking Pro
+              or Maxx there shows a Prompt/Loop sub-choice before the
+              mode is finalised (see TopBar.jsx). `execMode` itself
+              is still owned here and bridged to the TopBar via the
+              aurem:set-exec-mode / aurem:exec-mode-changed events
+              below (same pattern as the chatMode bridge above). */}
+
 
           {busy ? (
             <>

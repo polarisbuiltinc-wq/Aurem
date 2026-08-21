@@ -3,7 +3,9 @@
  */
 import React, { useEffect, useState } from "react";
 import { cn } from "./cn";
-import { MessagesSquare, MonitorPlay, Workflow, ChevronRight, ChevronDown, Zap, Gauge, Crown, Plus } from "lucide-react";
+import { MessagesSquare, MonitorPlay, Workflow, ChevronRight, ChevronDown, ChevronLeft, Zap, Gauge, Crown, Plus, RefreshCw, Lock } from "lucide-react";
+import { EXEC_MODES } from "../../LoopModeToggle";
+import { isLoopUnlockedSync } from "../../../utils/chatTextUtils";
 
 const TABS = [
   { id: "Chat",    icon: MessagesSquare },
@@ -15,6 +17,10 @@ const MODES = [
   { id: "pro",   label: "Pro",   icon: Gauge },
   { id: "maxx",  label: "Maxx",  icon: Crown },
 ];
+// 2026-08-21 — Pro/Maxx now carry a Prompt-vs-Loop sub-choice, asked
+// right in this dropdown before the mode is finalised (see the
+// `step` state below). Swift never offers Loop (per spec).
+const LOOP_ELIGIBLE = new Set(["pro", "maxx"]);
 
 function HealthRing({ score = 87 }) {
   const r = 13;
@@ -78,6 +84,8 @@ function HealthRingSkeleton() {
 
 export function TopBar({
   tab, onTabChange, mode, onModeChange,
+  // 2026-08-21 — Loop execution mode now lives in this dropdown.
+  execMode = EXEC_MODES.PROMPT, onExecModeChange,
   hidden = false, onNewRun,
   // Iter 212m-191 — NO hardcoded repo fallback: an empty breadcrumb
   // renders "No repo connected" instead of leaking a placeholder
@@ -138,9 +146,59 @@ export function TopBar({
   // Iter 339i — founder: mode pill is COLLAPSED by default, showing
   // only the active mode. Click it → expand all modes; pick one →
   // select + collapse back.
+  // 2026-08-21 — Pro/Maxx now need a 2nd step (Prompt vs Loop) before
+  // the pick is final. `step` drives which row renders inside the
+  // pill: 'mode' = Swift/Pro/Maxx, 'exec' = Prompt/Loop. `pendingMode`
+  // holds the Pro/Maxx choice while the user is on the 'exec' step.
   const [modesOpen, setModesOpen] = useState(false);
+  const [step, setStep] = useState("mode");
+  const [pendingMode, setPendingMode] = useState(null);
   const activeMode = MODES.find((m) => m.id === mode) || MODES[0];
   const ActiveModeIcon = activeMode.icon;
+  const loopUnlocked = isLoopUnlockedSync();
+
+  function openPill() {
+    // Reopening while already on Pro/Maxx jumps straight to the
+    // Prompt/Loop choice (mode is already decided); Swift always
+    // reopens on the mode row since it has no exec sub-choice.
+    if (LOOP_ELIGIBLE.has(mode)) {
+      setPendingMode(mode);
+      setStep("exec");
+    } else {
+      setStep("mode");
+      setPendingMode(null);
+    }
+    setModesOpen(true);
+  }
+
+  function pickMode(id) {
+    if (id === "swift") {
+      // Swift never runs Loop — finalise both in one shot.
+      onModeChange(id);
+      onExecModeChange?.(EXEC_MODES.PROMPT);
+      setModesOpen(false);
+      return;
+    }
+    setPendingMode(id);
+    setStep("exec");
+  }
+
+  function pickExec(target) {
+    if (target === EXEC_MODES.LOOP && !loopUnlocked) {
+      try {
+        window.dispatchEvent(new CustomEvent("aurem:loop-coming-soon"));
+      } catch { /* ignore */ }
+      return;
+    }
+    onModeChange(pendingMode);
+    onExecModeChange?.(target);
+    setModesOpen(false);
+  }
+
+  // Highlight reflects the REAL current execMode only when the
+  // pending mode matches the mode that's actually active — otherwise
+  // (first time picking Pro/Maxx) nothing should look pre-selected.
+  const execActive = pendingMode === mode ? execMode : null;
 
   return (
     <header data-testid="ds2-topbar" className={cn(
@@ -170,11 +228,11 @@ export function TopBar({
         </nav>
 
         <div className="flex items-center gap-[2px] rounded-full border border-border bg-[#111111] p-[3px]"
-             data-testid="ds2-mode-pill" data-modes-open={modesOpen ? "true" : "false"}>
-          {modesOpen ? (
+             data-testid="ds2-mode-pill" data-modes-open={modesOpen ? "true" : "false"} data-mode-step={step}>
+          {modesOpen && step === "mode" && (
             MODES.map(({ id, label, icon: Icon }) => (
               <button key={id}
-                onClick={() => { onModeChange(id); setModesOpen(false); }}
+                onClick={() => pickMode(id)}
                 data-testid={`ds2-mode-${id}`}
                 className={cn("flex items-center gap-1.5 rounded-full px-3 py-[5px] text-[11px] font-semibold transition-all duration-150",
                   mode === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}>
@@ -182,9 +240,42 @@ export function TopBar({
                 {label}
               </button>
             ))
-          ) : (
+          )}
+          {modesOpen && step === "exec" && (
+            <>
+              <button
+                onClick={() => { setStep("mode"); setPendingMode(null); }}
+                data-testid="ds2-mode-back"
+                title="Change mode"
+                className="flex items-center justify-center rounded-full px-1.5 py-[5px] text-muted-foreground hover:text-foreground transition-colors duration-150">
+                <ChevronLeft className="size-[12px] shrink-0" strokeWidth={2.5} />
+              </button>
+              <button
+                onClick={() => pickExec(EXEC_MODES.PROMPT)}
+                data-testid="ds2-exec-prompt"
+                className={cn("flex items-center gap-1.5 rounded-full px-3 py-[5px] text-[11px] font-semibold transition-all duration-150",
+                  execActive === EXEC_MODES.PROMPT ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}>
+                Prompt
+              </button>
+              <button
+                onClick={() => pickExec(EXEC_MODES.LOOP)}
+                data-testid="ds2-exec-loop"
+                data-locked={loopUnlocked ? "0" : "1"}
+                title={loopUnlocked ? "" : "Loop unlocks on Pro/Team plans"}
+                className={cn("flex items-center gap-1.5 rounded-full px-3 py-[5px] text-[11px] font-semibold transition-all duration-150",
+                  !loopUnlocked
+                    ? "text-muted-foreground/50 cursor-not-allowed"
+                    : execActive === EXEC_MODES.LOOP
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground")}>
+                {loopUnlocked ? <RefreshCw className="size-[11px] shrink-0" strokeWidth={2.5} /> : <Lock className="size-[10px] shrink-0" strokeWidth={2.5} />}
+                Loop
+              </button>
+            </>
+          )}
+          {!modesOpen && (
             <button
-              onClick={() => setModesOpen(true)}
+              onClick={openPill}
               data-testid="ds2-mode-collapsed"
               title="Change mode"
               className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-[5px] text-[11px] font-semibold text-primary-foreground transition-all duration-150">
