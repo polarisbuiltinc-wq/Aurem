@@ -41,6 +41,14 @@ LEGIT_FIX_REPLY = (
     '{"title": "Fix checkout null check", "files": ["checkout.py"]}\n'
     "```"
 )
+# Mismatched, but with NO aurem-handoff fence — a bare "Root cause:"
+# diagnosis never renders a Ship via CTO button on its own (see
+# MessageBubble.jsx), so this must flag low_confidence but NOT
+# ship_suppressed.
+MISMATCHED_NO_FENCE_REPLY = (
+    "Root cause: The API endpoint requires admin access but the "
+    "request is being made without proper authentication/authorization."
+)
 
 
 def _test_user():
@@ -203,6 +211,100 @@ def test_mismatch_auto_retry_resolves_silently(monkeypatch, client_factory):
     assert payload.get("content") == "5 + 5 = 10."
     assert payload.get("low_confidence") is False
     assert calls["n"] == 2, "expected exactly one retry call"
+
+
+def test_normal_qa_never_shows_ship_suppressed_note(client_factory):
+    """A normal, non-fix question (founder's own '5+5' example) must
+    never flag ship_suppressed — there was never a Ship suggestion to
+    suppress in the first place."""
+    client = client_factory("5 + 5 = 10.")
+    r = client.post(
+        "/api/aurem-dev/chat/send",
+        headers={"Authorization": "Bearer fake"},
+        json={"prompt": "What is 5+5?",
+              "session_id": "test-sess-ship-suppressed-normal",
+              "max_tool_iters": 1},
+    )
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload.get("low_confidence") is False
+    assert payload.get("ship_suppressed") is False
+
+
+def test_mismatch_with_handoff_fence_flags_ship_suppressed_send(client_factory):
+    """A mismatched reply that DOES carry a real ```aurem-handoff fence
+    (i.e. a Ship via CTO button would have rendered) must flag
+    ship_suppressed=True once the guard swaps it for the fallback."""
+    client = client_factory(MISMATCHED_REPLY)
+    r = client.post(
+        "/api/aurem-dev/chat/send",
+        headers={"Authorization": "Bearer fake"},
+        json={"prompt": "What is 5+5?",
+              "session_id": "test-sess-ship-suppressed-fence-send",
+              "max_tool_iters": 1},
+    )
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload.get("low_confidence") is True
+    assert payload.get("ship_suppressed") is True
+    assert "aurem-handoff" not in payload.get("content", ""), (
+        "Ship button must never render for a ship_suppressed turn"
+    )
+
+
+def test_mismatch_with_handoff_fence_flags_ship_suppressed_stream(client_factory):
+    client = client_factory(MISMATCHED_REPLY)
+    r = client.post(
+        "/api/aurem-dev/chat/stream",
+        headers={"Authorization": "Bearer fake"},
+        json={"prompt": "What is 5+5?",
+              "session_id": "test-sess-ship-suppressed-fence-stream",
+              "max_tool_iters": 1},
+    )
+    assert r.status_code == 200, r.text
+    events = [json.loads(line[len("data: "):])
+              for line in r.text.splitlines() if line.startswith("data: ")]
+    meta = next((e for e in events if e.get("meta") and "ship_suppressed" in e), None)
+    done = next((e for e in events if e.get("done")), None)
+    assert meta is not None and meta.get("ship_suppressed") is True
+    assert done is not None and done.get("ship_suppressed") is True
+
+
+def test_mismatch_without_handoff_fence_does_not_flag_ship_suppressed(client_factory):
+    """Mismatched (bare "Root cause:" text, no fence) → low_confidence
+    True, but ship_suppressed must stay False since no Ship button was
+    ever going to render — nothing code-change-shaped was suppressed."""
+    client = client_factory(MISMATCHED_NO_FENCE_REPLY)
+    r = client.post(
+        "/api/aurem-dev/chat/send",
+        headers={"Authorization": "Bearer fake"},
+        json={"prompt": "What is 5+5?",
+              "session_id": "test-sess-ship-suppressed-no-fence",
+              "max_tool_iters": 1},
+    )
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload.get("low_confidence") is True
+    assert payload.get("ship_suppressed") is False
+
+
+def test_legit_fix_request_no_ship_suppressed(client_factory):
+    """No over-flagging: a legitimate fix-intent request that KEEPS
+    its handoff fence must never flag ship_suppressed (nothing was
+    suppressed — it went through)."""
+    client = client_factory(LEGIT_FIX_REPLY)
+    r = client.post(
+        "/api/aurem-dev/chat/stream",
+        headers={"Authorization": "Bearer fake"},
+        json={"prompt": "Please add a fix for the checkout button not working",
+              "session_id": "test-sess-ship-suppressed-legit",
+              "max_tool_iters": 1},
+    )
+    assert r.status_code == 200, r.text
+    events = [json.loads(line[len("data: "):])
+              for line in r.text.splitlines() if line.startswith("data: ")]
+    done = next((e for e in events if e.get("done")), None)
+    assert done is not None and done.get("ship_suppressed") is False
 
 
 if __name__ == "__main__":

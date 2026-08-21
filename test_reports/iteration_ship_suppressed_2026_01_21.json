@@ -1,0 +1,22 @@
+{
+  "summary": "Verified new ship_suppressed differentiation feature. Ran 9/9 backend tests in test_response_confidence_mismatch_gate.py — ALL PASS (covers: normal Q&A not flagged, mismatch WITH handoff fence flags ship_suppressed in both send + stream, mismatch WITHOUT fence does NOT flag ship_suppressed, legit fix request keeps its fence and is not suppressed, base retry/fallback still works). Frontend code review of ChatPanel.jsx confirms: (1) two mutually-exclusive render blocks at lines 4215-4269 with correct guards — old badge `low-confidence-badge-{i}` only when NOT shipSuppressed, new note `ship-suppressed-note-{i}` only when shipSuppressed; (2) exact spec wording matches: \"I'm not confident enough in this response to suggest a code change — try rephrasing or asking again.\"; (3) history reload map at line 1263 correctly hydrates `ship_suppressed` (and `low_confidence`) from GET /chat/history payload; (4) onMeta handler at line 2148 sets shipSuppressed from live SSE meta frame's ship_suppressed field. Live smoke test of the site: page loads, title 'ORA by Aurem — developers choice', ZERO console errors. Full end-to-end frontend reproduction of the ship_suppressed SSE payload not feasible without mocking (as noted in review request) — coverage relied on backend unit tests + DOM/code-path review + smoke.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_response_confidence_mismatch_gate.py",
+    "/app/test_reports/pytest/ship_suppressed_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ChatPanel.jsx is 5389 lines — over the 700-line guideline; consider splitting message-rendering, streaming, and history-reload logic into separate modules for maintainability (pre-existing, not introduced by this change).",
+    "Render guards support BOTH camelCase (shipSuppressed / lowConfidence) and snake_case (ship_suppressed / low_confidence) forms — this correctly handles both live-stream and reload-from-history paths but a small helper (e.g. isShipSuppressed(m)) would DRY it up."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (9/9 unit tests)", "frontend": "code-review + smoke only (per review request note — live SSE mismatch payload not naturally reproducible without mock)"},
+  "test_credentials": "N/A — backend tests use pytest fixtures with mocked auth; frontend smoke was unauthenticated landing page.",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The ship_suppressed feature is fully covered by test_response_confidence_mismatch_gate.py (9 tests, all pass). Frontend rendering was verified via code review — two mutually-exclusive blocks in ChatPanel.jsx at lines 4215-4269 with correct guards, reload map at 1263, onMeta at 2148. If a future testing agent wants true end-to-end UI coverage, they'll need to mock the SSE stream (e.g. via Playwright route interception) to feed a payload with ship_suppressed=true and assert on data-testid=ship-suppressed-note-{i}.",
+  "rca of the issue": "N/A — this was a feature-verification pass, no defects found."
+}

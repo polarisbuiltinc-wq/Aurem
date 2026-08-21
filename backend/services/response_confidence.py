@@ -90,6 +90,16 @@ def _response_has_fix_signal(final_output: str) -> bool:
     )
 
 
+def has_ship_suggestion(final_output: str) -> bool:
+    """True iff `final_output` carries an actual ```aurem-handoff fence
+    — i.e. the ONE thing that renders a "Ship via CTO" button on the
+    frontend (see MessageBubble.jsx). Deliberately narrower than
+    `_response_has_fix_signal`: a bare "Root cause:" sentence with no
+    fence never shows a Ship button, so suppressing it isn't a
+    suppressed *ship suggestion* — just a suppressed diagnosis."""
+    return bool(_HANDOFF_FENCE_RE.search(final_output or ""))
+
+
 def is_definitional_mismatch(user_message: str, final_output: str) -> bool:
     """HARD rule — a short/plain question can never legitimately get a
     "Root cause:" diagnosis or an aurem-handoff ship-proposal back.

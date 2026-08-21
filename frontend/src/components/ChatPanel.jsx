@@ -1255,6 +1255,12 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
             // page refresh instead of vanishing (MessageBubble already
             // renders `m.steps` via <StepCards/> when non-empty).
             steps: Array.isArray(t.steps) && t.steps.length > 0 ? t.steps : undefined,
+            // 2026-08-22 — these were missing from the reload map, so
+            // the low-confidence badge / ship-suppressed note (both
+            // rendered off these two flags) silently disappeared on a
+            // page refresh even though they were persisted server-side.
+            low_confidence: t.low_confidence || false,
+            ship_suppressed: t.ship_suppressed || false,
           })));
           // Iter 212m-44 — the user has prior turns in this session
           // (reloaded mid-conversation), so the chrome (top tabs +
@@ -1825,10 +1831,12 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     }
     // Show what the user actually typed PLUS a small attachment summary
     // so the bubble doesn't dump 60KB of markdown on screen.
+    // 2026-08-21 — same underscore+emoji markdown bug as the loop
+    // redirect note below: swapped to asterisk emphasis.
     const displayContent = readyAttachments.length
-      ? `${text || ""}${text ? "\n\n" : ""}_📎 ${readyAttachments.length} attachment${
+      ? `${text || ""}${text ? "\n\n" : ""}*📎 ${readyAttachments.length} attachment${
           readyAttachments.length > 1 ? "s" : ""}: ${
-          readyAttachments.map((a) => a.name).join(", ")}_`
+          readyAttachments.map((a) => a.name).join(", ")}*`
       : text;
     setMessages((m) => [
       ...m,
@@ -2133,6 +2141,11 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
               // tag — a way to spot cold-start-mismatch recurrences
               // at a glance without digging through logs.
               ...(m?.low_confidence ? { lowConfidence: true } : {}),
+              // 2026-08-22 — Ship-suppressed note: narrower than
+              // lowConfidence — only true when a REAL ```aurem-handoff
+              // fence (the thing that renders "Ship via CTO") was the
+              // thing suppressed, not just a bare "Root cause:" text.
+              ...(m?.ship_suppressed ? { shipSuppressed: true } : {}),
             };
           }
           return copy;
@@ -2690,9 +2703,9 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       ? `${attachmentBlock}\n\n${userBody}`
       : userBody;
     const displayContent = (readyAttachments || []).length
-      ? `${userText || ""}${userText ? "\n\n" : ""}_📎 ${readyAttachments.length} attachment${
+      ? `${userText || ""}${userText ? "\n\n" : ""}*📎 ${readyAttachments.length} attachment${
           readyAttachments.length > 1 ? "s" : ""}: ${
-          readyAttachments.map((a) => a.name).join(", ")}_`
+          readyAttachments.map((a) => a.name).join(", ")}*`
       : userText;
 
     setMessages((m) => [
@@ -2729,6 +2742,24 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         setBusy(false);
         setLoopPhase("idle");
         setLoopId(null);
+        // 2026-08-21 — bug fix (founder production report): this
+        // internal send() re-invocation was being silently DROPPED
+        // by the duplicate-send guard at the top of send() — the
+        // outer send() call (the one that led here via the Loop
+        // branch) had set `sendInFlightRef.current = true` and never
+        // got a `busy: true → false` render transition to clear it
+        // (its own setBusy(true) never fired; runLoopPlan owns that),
+        // so this call read a stale `true` and bailed out before ever
+        // reaching the network. Console proof: "[send] dropped rapid
+        // duplicate send while previous is still in flight". Since
+        // THIS call is an intentional continuation of the same
+        // logical turn (not a real duplicate), clear the lock
+        // ourselves right before calling it.
+        sendInFlightRef.current = false;
+        if (sendLockTimeoutRef.current) {
+          clearTimeout(sendLockTimeoutRef.current);
+          sendLockTimeoutRef.current = null;
+        }
         await send(null, {
           promptOverride: userText,
           forceChat: true,
@@ -2738,7 +2769,13 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           role: "assistant",
           streaming: false,
           intentRedirect: true,
-          content: "_⚡ Ye simple/read-only query lagi, isliye seedha jawab de diya (Loop Mode skip — koi credits burn nahi). Agar full Loop (plan → execute → verify → ship) chahiye tha, bolo **\"run this as a loop\"**._",
+          // 2026-08-21 — markdown bug fix: underscore-emphasis
+          // immediately touching an emoji (⚡) fails CommonMark's
+          // left/right-flanking delimiter rule, so `_text_` rendered
+          // as literal underscores instead of italics. Asterisk
+          // emphasis doesn't have that intraword/punctuation
+          // restriction — swapped `_..._` → `*...*`.
+          content: "*⚡ Ye simple/read-only query lagi, isliye seedha jawab de diya (Loop Mode skip — koi credits burn nahi). Agar full Loop (plan → execute → verify → ship) chahiye tha, bolo **\"run this as a loop\"**.*",
         }]));
         return;
       }
@@ -4171,9 +4208,13 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                   founder can spot cold-start-mismatch recurrences at a
                   glance instead of digging through logs. Checks both
                   the live-stream flag (lowConfidence) and the
-                  persisted/reloaded-from-history flag (low_confidence). */}
+                  persisted/reloaded-from-history flag (low_confidence).
+                  2026-08-22 — only shown when it's NOT the narrower
+                  ship-suppressed case below (that gets its own, more
+                  specific note instead — no need to show both). */}
               {m.role === "assistant"
-                && (m.lowConfidence || m.low_confidence) && (
+                && (m.lowConfidence || m.low_confidence)
+                && !(m.shipSuppressed || m.ship_suppressed) && (
                 <div
                   data-testid={`low-confidence-badge-${i}`}
                   style={{
@@ -4194,6 +4235,36 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                   title="ORA suppressed a mismatched response for this turn and showed a fallback instead"
                 >
                   ⚠ low confidence — response suppressed
+                </div>
+              )}
+              {/* 2026-08-22 — Ship-suppressed note. Narrower than the
+                  badge above: only fires when a REAL ```aurem-handoff
+                  fence (the one thing that renders a "Ship via CTO"
+                  button, see MessageBubble.jsx) was suppressed by the
+                  confidence gate — never for a normal Q&A turn like
+                  "what is 5+5?" (no fence was ever going to appear). */}
+              {m.role === "assistant"
+                && (m.shipSuppressed || m.ship_suppressed) && (
+                <div
+                  data-testid={`ship-suppressed-note-${i}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    margin: "4px 0 2px 4px",
+                    padding: "3px 9px",
+                    fontSize: 11,
+                    fontFamily:
+                      "ui-monospace, SFMono-Regular, JetBrains Mono, monospace",
+                    color: "rgba(239,68,68,0.95)",
+                    background: "rgba(239,68,68,0.06)",
+                    border: "1px solid rgba(239,68,68,0.25)",
+                    borderRadius: 999,
+                    letterSpacing: 0.2,
+                  }}
+                  title="A Ship via CTO suggestion was withheld because ORA wasn't confident enough in it"
+                >
+                  I'm not confident enough in this response to suggest a code change — try rephrasing or asking again.
                 </div>
               )}
               <MessageBubble

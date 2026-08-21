@@ -620,7 +620,8 @@ async def _persist_turn(user_id: str, session_id: str, user_prompt: str,
                         project_id: Optional[str] = None,
                         shipped_task_id: Optional[str] = None,
                         steps: Optional[list] = None,
-                        low_confidence: bool = False) -> None:
+                        low_confidence: bool = False,
+                        ship_suppressed: bool = False) -> None:
     """Append user+assistant turns to db.chat_sessions, capped at 40 turns.
     Tags the session with the project it belongs to (None == Home/global).
     Iter 51 — when `shipped_task_id` is set (e.g. Mode D→C auto-handoff),
@@ -654,6 +655,12 @@ async def _persist_turn(user_id: str, session_id: str, user_prompt: str,
     # — a way to spot recurrences of the cold-start mismatch at a glance).
     if low_confidence:
         assistant_turn["low_confidence"] = True
+    # 2026-08-22 — Ship-suppressed note: pinned only when a REAL
+    # ```aurem-handoff fence (the thing that renders "Ship via CTO")
+    # was suppressed by the confidence gate — narrower than the
+    # generic low_confidence flag, see services/response_confidence.py.
+    if ship_suppressed:
+        assistant_turn["ship_suppressed"] = True
     set_on_insert = {
         "session_id": session_id,
         "user_id": user_id,
@@ -883,9 +890,10 @@ async def chat_send(
     # retry (layer d) and verbose real-log observation (founder ask)
     # before falling back to the canned message.
     _low_confidence = False
+    _ship_suppressed = False
     try:
         from services.response_confidence import (
-            response_seems_mismatched, FALLBACK_MESSAGE,
+            response_seems_mismatched, has_ship_suggestion, FALLBACK_MESSAGE,
         )
         _mismatch = response_seems_mismatched(body.prompt or "", content)
         logger.info(
@@ -924,6 +932,9 @@ async def chat_send(
                     "saw the bad first draft",
                 )
             else:
+                _ship_suppressed = (
+                    has_ship_suggestion(content) or has_ship_suggestion(_retry_content)
+                )
                 content = FALLBACK_MESSAGE
                 _low_confidence = True
                 logger.warning(
@@ -972,7 +983,8 @@ async def chat_send(
     await _persist_turn(user["user_id"], body.session_id or "",
                         body.prompt, content, provider, watchdog=watchdog,
                         project_id=body.project_id,
-                        low_confidence=_low_confidence)
+                        low_confidence=_low_confidence,
+                        ship_suppressed=_ship_suppressed)
     if body.session_id:
         asyncio.create_task(
             _maybe_set_title(user["user_id"], body.session_id, body.prompt)
@@ -1042,6 +1054,7 @@ async def chat_send(
         "user_id": user.get("user_id"),
         "tokens_remaining": tokens_remaining,
         "low_confidence": _low_confidence,
+        "ship_suppressed": _ship_suppressed,
         # Iter 212m-78 — Council self-learning indicator. FE renders
         # "📚 ORA recalled N similar past answers" above the bubble
         # when this is > 0.
@@ -1739,6 +1752,19 @@ async def chat_stream(
         # ticker copies it into every tick frame.
         activity = {"label": "thinking…"}
 
+        # 2026-08-19/2026-08-21 P0 fix — `_sys_for_advisor` used to be
+        # assigned ONLY inside `_worker()` (a nested async function)
+        # and read back at the outer-scope cost-tracking call near the
+        # end of `chat_stream`. Since it was never declared `nonlocal`,
+        # every assignment inside `_worker()` created a variable local
+        # to THAT function — it never actually reached the outer
+        # scope. Result: the outer reference raised a silent
+        # `NameError` (caught + logged as a warning) on literally
+        # every /chat/stream turn, quietly breaking customer LLM
+        # cost-tracking. Declaring it here + `nonlocal` inside
+        # `_worker()` makes the assignments actually propagate.
+        _sys_for_advisor = ""
+
         async def _ticker():
             while True:
                 try:
@@ -1758,6 +1784,7 @@ async def chat_stream(
                     })
 
         async def _worker():
+            nonlocal _sys_for_advisor
             # Iter 212m-21 — promote `_step` from the post-fast-path
             # block to top-of-worker scope so the agent="ora" GLM
             # branch can emit phase frames (🤔 / ✅) without an
@@ -2347,6 +2374,7 @@ async def chat_stream(
                             "pipelines, agents, or technical systems. Keep your\n"
                             "reply under 2 sentences."
                         )
+                        _sys_for_advisor = _casual_system
                         _casual_reply = await _call_llm(
                             [{"role": "user", "content": body.prompt or ""}],
                             system=_casual_system,
@@ -3067,9 +3095,10 @@ async def chat_stream(
         # (layer d) and verbose real-log observation (founder ask)
         # before falling back to the canned message.
         _low_confidence = False
+        _ship_suppressed = False
         try:
             from services.response_confidence import (
-                response_seems_mismatched, FALLBACK_MESSAGE,
+                response_seems_mismatched, has_ship_suggestion, FALLBACK_MESSAGE,
             )
             _mismatch = response_seems_mismatched(body.prompt or "", content)
             logger.info(
@@ -3117,6 +3146,9 @@ async def chat_stream(
                         "never saw the bad first draft",
                     )
                 else:
+                    _ship_suppressed = (
+                        has_ship_suggestion(content) or has_ship_suggestion(_retry_content)
+                    )
                     content = FALLBACK_MESSAGE
                     _low_confidence = True
                     logger.warning(
@@ -3130,7 +3162,8 @@ async def chat_stream(
                 "provider": provider, "mode": mode, "temperature": temperature,
                 "thinking_s": round(_t.monotonic() - t_start, 1),
                 "tool_calls_run": result.get("tool_calls_run", 0),
-                "low_confidence": _low_confidence}
+                "low_confidence": _low_confidence,
+                "ship_suppressed": _ship_suppressed}
         yield f"data: {json.dumps(meta)}\n\n"
 
         CHUNK = 6
@@ -3366,7 +3399,8 @@ async def chat_stream(
                             project_id=body.project_id,
                             shipped_task_id=handoff_task_id,
                             steps=collected_steps,
-                            low_confidence=_low_confidence)
+                            low_confidence=_low_confidence,
+                            ship_suppressed=_ship_suppressed)
 
         # Fire-and-forget audit row — never block the response.
         try:
@@ -3397,6 +3431,7 @@ async def chat_stream(
             "tokens_remaining": tokens_remaining,
             "council": bool(result.get("council")),
             "low_confidence": _low_confidence,
+            "ship_suppressed": _ship_suppressed,
             # Iter 212m-171 — Scope Badge echo (see /chat/send).
             "repo_owner": getattr(bin_ctx, "repo_owner", None) if bin_ctx else None,
             "repo_name":  getattr(bin_ctx, "repo_name", None)  if bin_ctx else None,
