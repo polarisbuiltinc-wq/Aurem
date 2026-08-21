@@ -1345,14 +1345,13 @@ class LoopEngine:
                     MAX_PARALLEL_GENS, PER_FILE_TIMEOUT_S,
                 )
                 from services.github_api_writer import fetch_file
-                import httpx as _httpx
                 sem = asyncio.Semaphore(MAX_PARALLEL_GENS)
                 plan_bullets = "\n".join(
                     f"- {b}" for b in (plan.get("bullets") or [])[:12]
                 )
                 plan_title = plan.get("title", "")
 
-                async def _gen_via_parliament(client, path):
+                async def _gen_via_parliament(path):
                     async with sem:
                         # Iter 276 — emit a REAL per-file event before
                         # entering the Parliament call so the frontend
@@ -1377,7 +1376,7 @@ class LoopEngine:
                         )
                         try:
                             current = await fetch_file(
-                                client, owner, repo, path, branch, token,
+                                owner, repo, path, branch, token,
                             ) or ""
                         except Exception as e:                # noqa: BLE001
                             logger.warning(
@@ -1715,9 +1714,8 @@ class LoopEngine:
                         )
                         return None
 
-                async with _httpx.AsyncClient(timeout=20.0) as _client:
-                    _tasks = [_gen_via_parliament(_client, p) for p in paths]
-                    _results = await asyncio.gather(*_tasks, return_exceptions=False)
+                _tasks = [_gen_via_parliament(p) for p in paths]
+                _results = await asyncio.gather(*_tasks, return_exceptions=False)
                 generated = [r for r in _results if r]
                 logger.info(
                     "[parliament] EXECUTE generated %d/%d files",
@@ -4211,7 +4209,6 @@ async def _run_diff_security_scan(
     from services.vanguard_verify_agent import (
         changed_lines_for_file, filter_findings_to_changed_lines,
     )
-    import httpx
 
     owner  = proj.get("github_owner") or ""
     repo   = proj.get("github_repo")  or ""
@@ -4228,25 +4225,22 @@ async def _run_diff_security_scan(
     line_map: dict[str, set[int]] = {}
     findings: list[dict] = []
     skipped_preexisting = 0
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        for f in submitted_files:
-            path = f.get("path") or ""
-            new_content = f.get("content") or ""
-            if not path or not new_content:
-                continue
-            try:
-                base_content = await gh_fetch(
-                    client, owner, repo, path, branch, pat,
-                )
-            except Exception as e:                       # noqa: BLE001
-                logger.debug("diff scan base fetch failed %s: %r", path, e)
-                base_content = None
-            base = base_content or ""
-            # Compute changed-line set.
-            line_map[path] = changed_lines_for_file(base, new_content)
-            # Run the regex scan on the NEW content.
-            raw = _scan_text(path, new_content)
-            findings.extend(raw)
+    for f in submitted_files:
+        path = f.get("path") or ""
+        new_content = f.get("content") or ""
+        if not path or not new_content:
+            continue
+        try:
+            base_content = await gh_fetch(owner, repo, path, branch, pat)
+        except Exception as e:                       # noqa: BLE001
+            logger.debug("diff scan base fetch failed %s: %r", path, e)
+            base_content = None
+        base = base_content or ""
+        # Compute changed-line set.
+        line_map[path] = changed_lines_for_file(base, new_content)
+        # Run the regex scan on the NEW content.
+        raw = _scan_text(path, new_content)
+        findings.extend(raw)
 
     # Drop pre-existing findings.
     kept, dropped = filter_findings_to_changed_lines(findings, line_map)

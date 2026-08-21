@@ -1619,10 +1619,8 @@ async def get_project_file(
     if not path or path.startswith("/") or ".." in path.split("/"):
         raise HTTPException(400, "Invalid path")
 
-    import httpx
     try:
-        async with httpx.AsyncClient(timeout=15.0) as c:
-            content = await gh_api_fetch_file(c, owner, repo, path, branch, gh_token)
+        content = await gh_api_fetch_file(owner, repo, path, branch, gh_token)
     except Exception as e:
         logger.warning(f"[file] fetch failed for {path}: {e!r}")
         raise HTTPException(502, f"GitHub API error: {e}")
@@ -2649,11 +2647,10 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
                 "src/App.jsx", "src/main.jsx", "pages/index.js",
                 "README.md",
             ]
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            fetched = await asyncio.gather(*[
-                gh_api_fetch_file(client, owner, repo, f, branch, user_token)
-                for f in target_files[:8]
-            ])
+        fetched = await asyncio.gather(*[
+            gh_api_fetch_file(owner, repo, f, branch, user_token)
+            for f in target_files[:8]
+        ])
         contents: dict = {}
         for path, body in zip(target_files[:8], fetched):
             if body is not None:
@@ -3487,10 +3484,9 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
         await _log(task_id, f"🔎 Verifying {len(edits)} file(s) on remote @ {sha}…")
 
         async def _verify_one(path: str, expected: str) -> tuple[str, bool, str]:
-            async with httpx.AsyncClient(timeout=20.0) as vc:
-                remote = await gh_api_fetch_file(
-                    vc, owner, repo, path, commit_full_sha, user_token,
-                )
+            remote = await gh_api_fetch_file(
+                owner, repo, path, commit_full_sha, user_token,
+            )
             if remote is None:
                 return path, False, "remote returned 404"
             # Iter 212m-6 — Normalise line endings (CRLF/CR → LF) and

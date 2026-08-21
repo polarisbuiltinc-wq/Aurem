@@ -106,7 +106,15 @@ class TestFileEndpoint(unittest.TestCase):
         client, _ = _client_with_seeded_project()
         from routers import cto_projects as cp
 
-        async def fake_fetch_file(_c, _o, _r, path, _b, _t):
+        # 2026-08-22 — bugfix: gh_api_fetch_file (services.github_api_writer
+        # .fetch_file) takes 5 args (owner, repo, path, ref, token) — it opens
+        # its OWN httpx client internally, no `client` param. The route used
+        # to pass an extra client arg, which raised a TypeError on every
+        # real call (caught + converted to a clean HTTP 502 that Cloudflare
+        # then replaced with its own generic error page — see the bug
+        # report this fixed). This mock's signature now matches the real
+        # (fixed) call site instead of the old broken one.
+        async def fake_fetch_file(_o, _r, path, _b, _t):
             return f"# content of {path}\nprint('hi')\n"
 
         with patch.object(cp, "gh_api_fetch_file", side_effect=fake_fetch_file):
@@ -118,6 +126,38 @@ class TestFileEndpoint(unittest.TestCase):
         data = r.json()
         self.assertIn("content of src/app.py", data["content"])
         self.assertFalse(data["truncated"])
+
+    def test_file_happy_path_exercises_real_fetch_file(self):
+        """2026-08-22 — regression for a real production bug: the route
+        called `gh_api_fetch_file(client, owner, repo, path, branch, token)`
+        (6 args) but the real function only takes 5 (owner, repo, path,
+        ref, token) — it opens its own internal http client. Every real
+        call raised TypeError, caught and turned into a clean 502, which
+        Cloudflare then replaced with its own generic error page. Unlike
+        `test_file_happy_path` above (which mocks gh_api_fetch_file
+        itself and so can't catch a signature mismatch), this test mocks
+        only the raw GitHub HTTP response and lets the REAL fetch_file
+        run, so a signature regression here fails loudly."""
+        client, _ = _client_with_seeded_project()
+        import base64
+
+        async def fake_get(self, url, headers=None):  # noqa: ARG001
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.raise_for_status = lambda: None
+            resp.json = lambda: {
+                "encoding": "base64",
+                "content": base64.b64encode(b"# real README\n").decode(),
+            }
+            return resp
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            r = client.get(
+                "/api/aurem-dev/cto/projects/p_test/file?path=README.md",
+                headers={"Authorization": "Bearer x"},
+            )
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertIn("real README", r.json()["content"])
 
     def test_file_path_traversal_rejected(self):
         client, _ = _client_with_seeded_project()

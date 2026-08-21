@@ -307,5 +307,45 @@ def test_legit_fix_request_no_ship_suppressed(client_factory):
     assert done is not None and done.get("ship_suppressed") is False
 
 
+def test_descriptive_question_mentioning_file_or_api_still_gets_caught():
+    """2026-08-22 — regression for the founder-reported INTERMITTENT
+    recurrence: a plain descriptive question like "what does the
+    payment api do?" or "where's the config file for auth?" mentions
+    a word ("api", "file", "config") that used to be in
+    _FIX_INTENT_TOKENS purely because it's ALSO a word a real fix
+    request might use — but these are read-only, informational
+    questions, not fix requests. If the LLM ever returns an unrelated
+    diagnosis + Ship proposal for one of these, it must still be
+    caught as a mismatch, not waved through just because the question
+    happened to mention "api"/"file"/"config"."""
+    from services.response_confidence import response_seems_mismatched
+
+    assert response_seems_mismatched(
+        "what does the payment api do?", MISMATCHED_REPLY,
+    ) is True
+    assert response_seems_mismatched(
+        "where's the config file for auth?", MISMATCHED_REPLY,
+    ) is True
+    assert response_seems_mismatched(
+        "can you explain how the test suite is organized?", MISMATCHED_REPLY,
+    ) is True
+
+
+def test_legit_fix_request_with_real_action_verb_still_passes_through():
+    """Regression guard for the narrowed token set: genuine fix/change
+    requests using the RETAINED action verbs must still sail through
+    untouched — the narrowing must not have collateral-damaged the
+    core "Ship via CTO" flow for legitimate requests."""
+    from services.response_confidence import response_seems_mismatched
+
+    for prompt in [
+        "please fix the checkout button, it's broken",
+        "can you add a dark mode toggle to settings",
+        "the login endpoint is crashing, can you debug it",
+        "refactor the payment handler to remove the old code path",
+    ]:
+        assert response_seems_mismatched(prompt, LEGIT_FIX_REPLY) is False, prompt
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

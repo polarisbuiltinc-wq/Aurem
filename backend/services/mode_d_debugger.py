@@ -22,9 +22,6 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from services.llm import call_llm_with_meta
 from services.ora_council_logger import log_conversational
 from services.github_api_writer import fetch_file as _gh_fetch_file
-import httpx
-
-from services.http import ext_client
 
 
 async def read_file(repo_owner: str, repo_name: str, path: str,
@@ -33,13 +30,9 @@ async def read_file(repo_owner: str, repo_name: str, path: str,
     if not (repo_owner and repo_name and github_pat):
         return None
     try:
-        async with ext_client(
-            "github",
-            timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
-        ) as c:
-            return await _gh_fetch_file(
-                c, repo_owner, repo_name, path, "HEAD", github_pat,
-            )
+        return await _gh_fetch_file(
+            repo_owner, repo_name, path, "HEAD", github_pat,
+        )
     except Exception:
         return None
 

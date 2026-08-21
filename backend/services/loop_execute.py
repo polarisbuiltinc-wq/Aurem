@@ -225,7 +225,7 @@ async def _generate_one_inner(
     logger.info("[execute] %d/%d fetching %s", idx, total, path)
     current = ""
     try:
-        current = await fetch_file(client, owner, repo, path, token) or ""
+        current = await fetch_file(owner, repo, path, branch, token) or ""
     except Exception as e:                              # noqa: BLE001
         logger.warning("[execute] fetch_file failed for %s: %r (treating as new file)", path, e)
         current = ""

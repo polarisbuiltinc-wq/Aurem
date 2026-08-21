@@ -49,18 +49,35 @@ _CODE_SIGNAL_RE = re.compile(
 
 # Any of these present in the user's own message means they DO want
 # a code/bug-fix answer — a diagnosis + Ship button is legitimate.
+# 2026-08-22 — MORE AGGRESSIVE (founder-directed, after an intermittent
+# recurrence of the cold-start mismatch on a re-test): deliberately
+# dropped the purely DESCRIPTIVE nouns that used to live here (file,
+# files, code, api, route, component, function, endpoint, config,
+# repo, repository, test, tests) — a plain "what does the payment api
+# do?" or "where's the config file?" contains one of those words but
+# is NOT a fix request, and having them here meant an unrelated
+# diagnosis+Ship response could slip past this gate completely
+# untouched just because the user's question happened to mention a
+# file/api/route. Keeping only unambiguous problem-report or
+# change-request signals (verbs/states, not descriptive nouns) closes
+# that gap — accepting that a genuinely good response occasionally
+# gets the fallback treatment is the intended tradeoff here.
 _FIX_INTENT_TOKENS = {
     "fix", "fixes", "fixed", "bug", "bugs", "error", "errors", "broken",
     "crash", "crashes", "fail", "fails", "failing", "failed", "issue",
     "issues", "debug", "add", "implement", "build", "create", "update",
-    "change", "refactor", "feature", "ship", "deploy", "commit", "code",
-    "function", "endpoint", "api", "route", "component", "file", "files",
-    "test", "tests", "write", "install", "upgrade", "migrate", "optimize",
-    "improve", "remove", "delete", "repo", "repository", "revert",
-    "rollback", "config",
+    "change", "refactor", "feature", "ship", "deploy", "commit",
+    "write", "install", "upgrade", "migrate", "optimize",
+    "improve", "remove", "delete", "revert",
+    "rollback",
 }
 
-_SIMPLE_WORD_LIMIT = 10
+# 2026-08-22 — raised from 10: widens the coverage of the STRICT,
+# deterministic `is_definitional_mismatch` hard rule (below), which
+# doesn't rely on the token heuristic at all — a longer plain
+# question with no genuine fix intent still can't legitimately come
+# back with a diagnosis + Ship proposal.
+_SIMPLE_WORD_LIMIT = 20
 
 FALLBACK_MESSAGE = (
     "I couldn't find a confident answer to that — try rephrasing, or ask again."

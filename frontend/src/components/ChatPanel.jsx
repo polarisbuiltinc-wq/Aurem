@@ -93,6 +93,7 @@ import {
   extractSuggestions,
   extractCodeBlocks,
   estimateTokenCount,
+  detectsLoopOptIn,
 } from "../utils/chatTextUtils";
 
 const WELCOME = {
@@ -1756,6 +1757,42 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     }
 
     // ──────────────────────────────────────────────────────────────
+    // 2026-08-22 — founder bug report: typing "run this as a loop"
+    // in a normal chat message silently did nothing useful — no
+    // PLAN/EXECUTE/VERIFY/SCAN/SHIP bar appeared, it just fell
+    // through to a slow, single-shot `/chat/stream` request that
+    // often got stuck retrying for 120+s. Detects the SAME opt-in
+    // phrase the backend's `services/loop_intent.py` already
+    // recognizes and, if the account is actually entitled to Loop
+    // (Pro/Team/founder/admin — see `isLoopUnlockedSync`), switches
+    // modes and starts the real Loop pipeline instead of silently
+    // ignoring the request. If not entitled, tells the user plainly
+    // instead of leaving them guessing why nothing happened.
+    // ──────────────────────────────────────────────────────────────
+    if (
+      execMode !== EXEC_MODES.LOOP && !opts.loopPhase && !opts.forceChat
+      && detectsLoopOptIn(text)
+    ) {
+      if (isLoopUnlockedSync()) {
+        handleExecModeChange(EXEC_MODES.LOOP);
+        import("sonner").then(({ toast }) => {
+          toast.info("Detected \u201crun as a loop\u201d \u2014 switching to Loop mode", {
+            id: "loop-opt-in-auto-switch",
+          });
+        }).catch(() => {});
+        await runLoopPlan(text, readyAttachments, opts);
+        return;
+      }
+      import("sonner").then(({ toast }) => {
+        toast.warning(
+          "Loop mode needs Pro or Maxx \u2014 switch above to run this as a guided pipeline. Continuing as a normal chat message for now.",
+          { id: "loop-opt-in-not-entitled", duration: 6000 },
+        );
+      }).catch(() => {});
+      // not entitled — fall through to the normal chat path below
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // Iter 212m-65 — Loop Mode fresh-turn fork.
     // In Loop mode, the FIRST user turn no longer streams through
     // `/chat/stream` with a `LOOP_PHASE:plan` suffix; it kicks off
@@ -3381,7 +3418,14 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         window.dispatchEvent(new CustomEvent("aurem:open-ship-modal", {
           detail: {
             kind: "failed",
-            error: data?.error || ev.message || "Ship failed",
+            // 2026-08-22 — founder ask: "Ship failed" alone gave zero
+            // useful info. Check every field the backend might have
+            // populated (`_fail_ship` sets `error`; the more generic
+            // `_fail` helper used by other phases sets `reason`)
+            // before falling back to a message that at least points
+            // the founder somewhere useful.
+            error: data?.error || data?.reason || ev.message
+              || "Ship failed — no error detail was returned by the backend (check server logs for this loop_id)",
           },
         }));
       } catch { /* noop */ }

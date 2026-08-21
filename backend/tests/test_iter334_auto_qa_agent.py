@@ -92,8 +92,11 @@ class TestVerifyPassIsReal:
         """DONE-criterion (negative case): claimed SHIPPED but head sha
         unchanged → genuinely_verified must be False. GitHub layer is
         monkeypatched because the Section-0 sandbox repo + PAT are
-        founder-blocked — stated openly, verify logic itself is real."""
-        async def fake_head(client, owner, repo, branch, token):
+        founder-blocked — stated openly, verify logic itself is real.
+        2026-08-22 — mock signature fixed to match the real (bugfixed)
+        `_get_branch_head(owner, repo, branch, token)` call, which no
+        longer takes a `client` arg (see qa_matrix.py fix)."""
+        async def fake_head(owner, repo, branch, token):
             return "same_sha_123"
         monkeypatch.setattr(
             "services.github_api_writer._get_branch_head", fake_head)
@@ -104,7 +107,7 @@ class TestVerifyPassIsReal:
         assert out["genuinely_verified"] is False
 
     async def test_shipped_positive_case_new_commit(self, monkeypatch):
-        async def fake_head(client, owner, repo, branch, token):
+        async def fake_head(owner, repo, branch, token):
             return "NEW_sha_456"
         monkeypatch.setattr(
             "services.github_api_writer._get_branch_head", fake_head)

@@ -875,26 +875,27 @@ async def verify_pass_is_real(claimed_state: str, *, owner: str,
                               baseline_content: str = None,
                               response_payload=None,
                               response_source: str = "") -> dict:
-    """Independent PASS verification, using the EXISTING github_api_writer
-    client. Iter 338: ALWAYS runs the secret-leak scanner on
-    `response_payload` when provided — a leaked credential fails the
-    check and self-logs a regression. Empty checks → verified=None."""
-    import httpx as _hx
-    from services.github_api_writer import _get_branch_head, fetch_file
+    """Independent PASS verification, using the self-contained
+    github_api_writer functions (they open their own HTTP client
+    internally — 2026-08-22: fixed a call-signature bug here that
+    used to pass an extra client arg and crash every call with a
+    TypeError, same class of bug fixed across cto_projects.py,
+    loop_engine.py, loop_execute.py and mode_d_debugger.py). Iter 338:
+    ALWAYS runs the secret-leak scanner on `response_payload` when
+    provided — a leaked credential fails the check and self-logs a
+    regression. Empty checks → verified=None."""
     checks = {}
-    async with _hx.AsyncClient(timeout=20.0) as client:
-        if claimed_state == "SHIPPED":
-            latest_sha = await _get_branch_head(
-                client, owner, repo, branch, token)
-            checks["github_commit_exists"] = (
-                bool(latest_sha) and latest_sha != pre_state_sha)
-        if claimed_state == "ROLLBACK_FINISHED":
-            current = await fetch_file(
-                client, owner, repo, marker_path, branch, token)
-            checks["file_content_reverted"] = (
-                current == (baseline_content
-                             if baseline_content is not None
-                             else PRE_SHIP_BASELINE_CONTENT))
+    from services.github_api_writer import _get_branch_head, fetch_file
+    if claimed_state == "SHIPPED":
+        latest_sha = await _get_branch_head(owner, repo, branch, token)
+        checks["github_commit_exists"] = (
+            bool(latest_sha) and latest_sha != pre_state_sha)
+    if claimed_state == "ROLLBACK_FINISHED":
+        current = await fetch_file(owner, repo, marker_path, branch, token)
+        checks["file_content_reverted"] = (
+            current == (baseline_content
+                         if baseline_content is not None
+                         else PRE_SHIP_BASELINE_CONTENT))
 
     # Iter 338 — secret-leak scan on the captured response, always.
     leaked = []

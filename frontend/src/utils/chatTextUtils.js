@@ -31,6 +31,22 @@ export function isLoopUnlockedSync() {
   }
 }
 
+// ── Natural-language Loop opt-in detector ────────────────────────────
+// 2026-08-22 — founder bug report: typing "run this as a loop" in a
+// normal chat message did NOT trigger the actual Loop pipeline (no
+// PLAN/EXECUTE/VERIFY/SCAN/SHIP bar) — it silently fell through to a
+// slow, single-shot chat request instead. Mirrors the backend's own
+// `_LOOP_OPT_IN` regex (services/loop_intent.py) so both sides agree
+// on what counts as "the user explicitly asked for Loop mode in
+// plain English/Hinglish". Used by ChatPanel's send() to actually
+// switch into Loop mode (if entitled) instead of ignoring the phrase.
+export const LOOP_OPT_IN_RE =
+  /\b(as a loop|loop mode|run (this |it )?as a loop|loop chala|loop mein|loop me\b)/i;
+
+export function detectsLoopOptIn(text) {
+  return LOOP_OPT_IN_RE.test(text || "");
+}
+
 
 // ── Code block extractor ─────────────────────────────────────────────
 // Finds every ```lang\n...``` block in a markdown body.  Returns
