@@ -2001,9 +2001,14 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
             phase: "reconnecting", silentFor: Math.floor(idleFor / 1000),
             retryEtaSec: 3,
           });
-          // Reset the streaming bubble so the retry starts clean and
-          // the user sees a subtle "retrying…" hint instead of a
-          // dead bubble.  Iter 388q — reset UNCONDITIONALLY (even
+          // Reset the streaming bubble so the retry starts clean.
+          // 2026-08-22 — no longer sets a literal "Retrying…" /
+          // "Reconnecting…" activity string (and dropped the
+          // manual/auto distinction entirely — there's no manual
+          // retry surface anymore). Leaving `activity` unset lets
+          // MessageBubble's own friendly rotating phrase take over,
+          // so a retry is invisible to the user instead of announced.
+          // Iter 388q — reset UNCONDITIONALLY (even
           // if the previous streaming flag flipped false during the
           // race), so a late-arriving onToken from the aborted stream
           // can't stack on top of the retry's fresh tokens.
@@ -2015,7 +2020,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                 ...last,
                 content: "",
                 streaming: true,
-                activity: manual ? "Retrying… (manual)" : "Reconnecting… (auto-recovery)",
+                activity: undefined,
                 progressPct: 0,
                 seenActivities: [],
                 invocations: [],
@@ -4339,13 +4344,6 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                 <StreamHealthPill
                   compact
                   state={streamHealth}
-                  onRetry={() => {
-                    if (manualRetryRef.current) {
-                      manualRetryRef.current();
-                    } else {
-                      try { abortRef.current?.abort(); } catch { /* ignore */ }
-                    }
-                  }}
                 />
               )}
               {suggestions.length > 0 && (

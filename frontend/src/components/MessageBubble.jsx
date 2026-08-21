@@ -33,6 +33,7 @@ import PatRequiredCTA from "./PatRequiredCTA";
 import SystemSignalBanner from "./SystemSignalBanner";
 import StepCards from "./StepCards";   // Iter 212m-19 — live step cards
 import { brandProvider } from "../lib/providerLabel";
+import { useFriendlyStatusPhrase } from "../hooks/useFriendlyStatusPhrase";
 
 // ---- Helpers (only used here) ----------------------------------------------
 
@@ -396,6 +397,10 @@ export default function MessageBubble({
     typeof m.elapsedS === "number" ? m.elapsedS : 0,
     localElapsedS,
   );
+  // 2026-08-22 — reassuring, slowly-progressing narrative used
+  // instead of any raw "· Ns" ticking counter, wherever the bubble
+  // has nothing concrete (steps/tokens) to show yet.
+  const friendlyPhrase = useFriendlyStatusPhrase(!!m.streaming);
 
   // Iter 51 — when the server emits `task_handoff` mid-stream the parent
   // patches m.shipped_task_id but shipState was frozen at mount. Sync
@@ -879,12 +884,13 @@ export default function MessageBubble({
                 fontFamily: "'JetBrains Mono', monospace",
               }}>
                 <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />
-                {/* iter 35/36: live elapsed + activity label so the user
-                    always sees WHAT AUREM is doing, not just THAT it is */}
-                <span>
-                  {m.activity || "thinking"}
-                  {` · ${displayElapsedS.toFixed(1)}s`}
-                </span>
+                {/* 2026-08-22 — dropped the raw "· 205.0s" ticking
+                    counter and the literal "Retrying…"/"Reconnecting…"
+                    labels (both make the system visibly look slow).
+                    Now a reassuring narrative phrase that slowly
+                    progresses instead — the smooth colour progress
+                    bar above still carries the real % signal. */}
+                <span>{friendlyPhrase}</span>
               </span>
               {/* Iter 149 — Live tool invocation chips. Surfaces the
                   raw tool-call activity from the orchestrator (e.g.
@@ -937,23 +943,12 @@ export default function MessageBubble({
             </div>
           )}
           {m.streaming && m.content && (
-            <>
-              <span data-testid="chat-cursor" style={{
-                display: "inline-block", width: 7, height: 14,
-                marginLeft: 2, background: "var(--accent-2)",
-                verticalAlign: "middle",
-                animation: "blink 0.9s steps(1) infinite",
-              }} />
-              {displayElapsedS > 1.5 && (
-                <div style={{
-                  marginTop: 6, fontSize: 10,
-                  color: "var(--text-faint)",
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}>
-                  · {displayElapsedS.toFixed(1)}s
-                </div>
-              )}
-            </>
+            <span data-testid="chat-cursor" style={{
+              display: "inline-block", width: 7, height: 14,
+              marginLeft: 2, background: "var(--accent-2)",
+              verticalAlign: "middle",
+              animation: "blink 0.9s steps(1) infinite",
+            }} />
           )}
           {m.provider && m.provider !== "system" && !m.streaming && m.maxxMode && (
             <div style={{

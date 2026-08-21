@@ -4,18 +4,23 @@
  * (Originally Iter 212m-57.)
  *
  * Tiny inline status pill that sits above the composer when the SSE
- * chat stream stalls.  Driven by `streamHealth` state in ChatPanel:
- *   • phase === 'slow'         → amber dot + "Slow response… {n}s of
- *                                 silence — will auto-retry in {m}s"
- *   • phase === 'reconnecting' → red dot + "Reconnecting…"
- *   • phase === 'idle'         → renders nothing (null)
- * No close button — auto-clears on next token / done / error / Stop.
+ * chat stream stalls.  Driven by `streamHealth` state in ChatPanel.
+ *
+ * 2026-08-22 — no longer exposes HOW slow things are. No "Slow
+ * response" label, no "Ns silent" / "auto-retry in Ms" countdown, and
+ * no manual "Retry now" button — retries are fully automatic and
+ * invisible to the user now. Shows a reassuring, slowly-progressing
+ * narrative phrase instead (same pool used by MessageBubble's
+ * thinking indicator, via useFriendlyStatusPhrase).
  */
 import React from "react";
 import { Zap } from "lucide-react";
+import { useFriendlyStatusPhrase } from "../../hooks/useFriendlyStatusPhrase";
 
-export default function StreamHealthPill({ state, onRetry, compact }) {
-  if (!state || state.phase === "idle") return null;
+export default function StreamHealthPill({ state, compact }) {
+  const active = !!state && state.phase !== "idle";
+  const phrase = useFriendlyStatusPhrase(active);
+  if (!active) return null;
   const isReconnect = state.phase === "reconnecting";
   const accent = isReconnect ? "#EF4444" : "#FF6608";
   return (
@@ -38,41 +43,20 @@ export default function StreamHealthPill({ state, onRetry, compact }) {
         color: "#E5E5E5",
         fontFamily: "'JetBrains Mono', monospace",
         fontSize: compact ? 10.5 : 12,
-        animation: isReconnect ? "pillPulse 1.2s ease-in-out infinite" : "none",
+        animation: "pillPulse 1.6s ease-in-out infinite",
       }}
     >
       <Zap size={compact ? 11 : 14} strokeWidth={2.5} style={{ color: accent, flexShrink: 0 }} />
-      <span style={{ flex: 1, minWidth: 0,
-                     display: "inline-flex", alignItems: "baseline", gap: 6 }}>
-        <strong style={{ color: accent, fontWeight: 700 }}>
-          {isReconnect ? "Reconnecting" : "Slow response"}
-        </strong>
-        <span style={{ color: "#9AA3B2" }}>
-          · {state.silentFor}s silent
-          {!isReconnect && state.retryEtaSec != null && (
-            <> · auto-retry in {state.retryEtaSec}s</>
-          )}
-        </span>
+      <span
+        data-testid="chat-stream-health-phrase"
+        style={{ flex: 1, minWidth: 0, color: "#E5E5E5" }}
+      >
+        {phrase}
       </span>
-      {onRetry && (
-        <button
-          type="button"
-          data-testid="chat-stream-retry-now"
-          onClick={onRetry}
-          style={{
-            background: "transparent", border: "none",
-            color: "#E5E5E5", fontSize: compact ? 10.5 : 12, fontWeight: 600,
-            cursor: "pointer", padding: compact ? "2px 6px" : "4px 8px",
-            fontFamily: "inherit", flexShrink: 0,
-          }}
-        >
-          Retry now
-        </button>
-      )}
       <style>{`
         @keyframes pillPulse {
           0%, 100% { opacity: 1; }
-          50%      { opacity: 0.65; }
+          50%      { opacity: 0.75; }
         }
       `}</style>
     </div>

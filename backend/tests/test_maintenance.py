@@ -1,6 +1,7 @@
 """Backend tests for System Maintenance / Outage Tracker (2026-08)."""
 import os
 import time
+import subprocess
 import pytest
 import requests
 
@@ -143,3 +144,78 @@ def test_zzz_final_ensure_manual_off(admin_headers):
                   headers=admin_headers, json={"manual_enabled": False}, timeout=10)
     pub = requests.get(f"{BASE_URL}/api/aurem-dev/maintenance/status", timeout=10).json()
     assert pub["manual_enabled"] is False
+
+
+# -------- Boot-gap detection: real restart regression --------
+# 2026-08-22 — fixed a race condition where the boot-gap-detection
+# block (in main.py's lifespan startup) ran AFTER `_loop_housekeeping`
+# was scheduled. That task's first tick (no initial sleep) also calls
+# `write_heartbeat`, and any `await` in the boot-gap block let it run
+# first and stamp a FRESH heartbeat — so the "gap since last beat"
+# always read ~0s and outages were silently never logged, no matter
+# how long the backend was actually down. This test backdates the
+# heartbeat, forces a REAL supervisor restart, and asserts a new
+# incident with a plausible duration appears — the only way to catch
+# this class of race condition (unit tests on the functions alone
+# can't see task-scheduling order).
+class TestBootGapRealRestart:
+    def test_real_restart_logs_outage_with_correct_duration(self, admin_headers):
+        try:
+            from motor.motor_asyncio import AsyncIOMotorClient
+        except ImportError:
+            pytest.skip("motor not importable from this test runner")
+        mongo_url = os.environ.get("MONGO_URL")
+        if not mongo_url:
+            pytest.skip("MONGO_URL not set in this test runner's env")
+
+        import asyncio
+        db_name = os.environ.get("DB_NAME", "aurem_dev")
+
+        async def _prep():
+            client = AsyncIOMotorClient(mongo_url)
+            db = client[db_name]
+            before_ids = {d["incident_id"] async for d in db.outage_incidents.find({}, {"incident_id": 1})}
+            simulated_gap_s = 40
+            backdated_ts = time.time() - simulated_gap_s
+            await db.system_heartbeat.update_one(
+                {"_id": "singleton"}, {"$set": {"last_beat_ts": backdated_ts}})
+            return before_ids, simulated_gap_s
+
+        before_ids, simulated_gap_s = asyncio.get_event_loop().run_until_complete(_prep())
+
+        # Ensure threshold is well below the simulated gap so it must fire.
+        r = requests.post(f"{BASE_URL}/api/aurem-dev/admin/maintenance/settings",
+                          headers=admin_headers, json={"outage_threshold_s": 20}, timeout=10)
+        assert r.status_code == 200
+
+        subprocess.run(["sudo", "supervisorctl", "restart", "backend"],
+                        check=True, capture_output=True, timeout=30)
+
+        # Wait for the restarted backend to come back up.
+        deadline = time.time() + 30
+        up = False
+        while time.time() < deadline:
+            try:
+                if requests.get(f"{BASE_URL}/api/health", timeout=3).status_code == 200:
+                    up = True
+                    break
+            except requests.RequestException:
+                pass
+            time.sleep(1)
+        assert up, "backend did not come back up after restart"
+
+        r2 = requests.get(f"{BASE_URL}/api/aurem-dev/admin/maintenance/incidents",
+                          headers=admin_headers, timeout=10)
+        assert r2.status_code == 200
+        new_incidents = [i for i in r2.json()["incidents"] if i["incident_id"] not in before_ids]
+        assert len(new_incidents) == 1, \
+            f"expected exactly 1 new outage incident after a real restart with a {simulated_gap_s}s backdated gap, got {new_incidents}"
+        assert new_incidents[0]["duration_s"] >= simulated_gap_s - 2, \
+            "logged duration should be at least the simulated gap"
+
+        async def _cleanup(incident_id):
+            client = AsyncIOMotorClient(mongo_url)
+            db = client[db_name]
+            await db.outage_incidents.delete_one({"incident_id": incident_id})
+
+        asyncio.get_event_loop().run_until_complete(_cleanup(new_incidents[0]["incident_id"]))

@@ -528,24 +528,6 @@ async def lifespan(app: FastAPI):
                 logger.warning("[maintenance] heartbeat write failed: %r", _e)
             _first_run = False
             await _asyncio.sleep(60)
-    app.state.loop_housekeeping_task = _supervise(
-        _loop_housekeeping(),
-        name="loop_housekeeping",
-        db_getter=lambda: app.state.db,
-        long_lived=True,
-    )
-
-    # Iter 362 · Guard 19 — record this boot + detect restart loops.
-    try:
-        from services.process_recovery import record_boot as _g19_record
-        _g19_boot = await _g19_record(app.state.db)
-        if _g19_boot.get("loop_detected"):
-            logger.error("[G19] boot recorded INSIDE a restart loop: %s", _g19_boot)
-        else:
-            logger.info("[G19] boot recorded: %s", _g19_boot)
-    except Exception as _e:                                  # noqa: BLE001
-        logger.warning("[G19] record_boot failed: %r", _e)
-
     # 2026-08 — System Maintenance / Outage Tracker.
     # Hydrate the manual-maintenance cache, then compare the last
     # persisted heartbeat (bumped every 60s by loop_housekeeping,
@@ -556,6 +538,15 @@ async def lifespan(app: FastAPI):
     # without needing an external monitor. Write a fresh heartbeat
     # immediately after so a crash-loop before the next 60s tick
     # doesn't compound the same gap twice.
+    #
+    # 2026-08-22 fix — this MUST run (and finish its heartbeat write)
+    # BEFORE `_loop_housekeeping()` is scheduled below. That task's
+    # very first tick runs immediately (no initial sleep) and also
+    # calls `write_heartbeat`, so scheduling it first created a race:
+    # any `await` in this block (G19 record_boot, etc.) let the
+    # housekeeping task's first tick run first and stamp a FRESH
+    # heartbeat, making the "gap" always read ~0s regardless of the
+    # real downtime — outages were silently never detected.
     try:
         from services.maintenance import (
             load_maintenance_state as _maint_load,
@@ -581,6 +572,23 @@ async def lifespan(app: FastAPI):
     except Exception as _e:                                  # noqa: BLE001
         logger.warning("[maintenance] boot-gap detection failed: %r", _e)
 
+    app.state.loop_housekeeping_task = _supervise(
+        _loop_housekeeping(),
+        name="loop_housekeeping",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
+    )
+
+    # Iter 362 · Guard 19 — record this boot + detect restart loops.
+    try:
+        from services.process_recovery import record_boot as _g19_record
+        _g19_boot = await _g19_record(app.state.db)
+        if _g19_boot.get("loop_detected"):
+            logger.error("[G19] boot recorded INSIDE a restart loop: %s", _g19_boot)
+        else:
+            logger.info("[G19] boot recorded: %s", _g19_boot)
+    except Exception as _e:                                  # noqa: BLE001
+        logger.warning("[G19] record_boot failed: %r", _e)
 
     # G6 · Iter 366 — DB dedup unique indexes. Central + idempotent.
     try:
