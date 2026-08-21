@@ -26,6 +26,10 @@ from services.health_registry import (
 
 logger = logging.getLogger(__name__)
 
+# 2026-08-21 — see _check_g18_timeout_audit() below for rationale.
+_G18_CACHE: dict = {"result": None, "computed_at": 0.0}
+_G18_CACHE_TTL_S = 300
+
 
 # ═══════════════════════════════════════════════════════════════
 # GUARD ADAPTERS — proof-of-pattern batch (G1, G7, G10, G17)
@@ -291,6 +295,28 @@ async def _check_g18_timeout_audit() -> dict:
     # spamming logs and causing g18 to always be gray. Use `len()` on
     # the list — or `total_call_sites - covered`, both give the same
     # number and are safe regardless of shape.
+    #
+    # 2026-08-21 · founder-reported flapping fix — the health-notifier
+    # polls every check every 45s (services/health_notifier.py) with
+    # an 8s hard timeout per check (health_registry.run_check_safely).
+    # A full-codebase file-I/O + regex scan doesn't NEED to re-run
+    # every 45s to stay meaningful (the codebase doesn't change that
+    # fast), and under any transient CPU/thread-pool contention it can
+    # occasionally cross 8s, timeout → red, then finish comfortably
+    # under budget on the very next 45s tick → green. That green→red→
+    # green flap fires TWO founder-alert notifications (see
+    # health_notifier._tick_once) every time it happens — exactly the
+    # "bell spam" reported. Fix: cache a SUCCESSFUL result (only a
+    # result that actually finished — a cancelled/timed-out attempt
+    # never reaches the cache-write below) for 5 minutes, so repeated
+    # 45s polls serve the cached verdict instantly instead of
+    # re-running the expensive scan and re-risking the timeout.
+    import time as _time
+    now = _time.time()
+    cached = _G18_CACHE.get("result")
+    if cached and (now - _G18_CACHE.get("computed_at", 0)) < _G18_CACHE_TTL_S:
+        return cached
+
     import asyncio
     from scripts.timeout_audit import run_audit
     r = (await asyncio.to_thread(run_audit)) or {}
@@ -305,8 +331,12 @@ async def _check_g18_timeout_audit() -> dict:
     else:
         unbounded = len(violations)
     if unbounded > 0:
-        return result_red(f"{unbounded} unbounded I/O sites detected")
-    return result_green("all I/O sites have a timeout budget")
+        out = result_red(f"{unbounded} unbounded I/O sites detected")
+    else:
+        out = result_green("all I/O sites have a timeout budget")
+    _G18_CACHE["result"] = out
+    _G18_CACHE["computed_at"] = now
+    return out
 
 
 async def _check_g19_recovery() -> dict:

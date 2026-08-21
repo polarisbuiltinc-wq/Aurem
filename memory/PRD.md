@@ -4,6 +4,9 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 **Language for agent internal work**: Hinglish (per founder instruction)
 
+## 2026-08-21 — G18 flapping / bell-spam FIXED (founder-reported, root cause found & reproduced — see CHANGELOG.md)
+Root cause: G18 re-ran a full codebase scan on every 45s health poll under an 8s hard timeout — under production contention (thread pool + real traffic) it could occasionally cross 8s → red, then finish fine next poll → green, firing 2 alerts per flap. Fixed with 2 layers: (1) 5-min result cache on G18's scan so repeated polls don't re-risk the timeout, (2) health_notifier now requires 2 consecutive confirmed ticks before firing ANY transition (general flap-dampening for all guards, not just G18). New regression test `test_tick_flap_single_blip_never_fires` added; 33/34 backend tests pass (1 unrelated pre-existing failure — a hardcoded call-site-count threshold that naturally drifts as the codebase grows, unrelated to this fix).
+
 ## 2026-08-21 — Loop Mode UNLOCKED for all Pro/Team tier (founder decision, see CHANGELOG.md)
 After checking Admin QA Dashboard (0 beta users, 0 stuck, kill-switch healthy), founder chose to skip the recommended small-pilot and directly unlock Loop Mode for ALL Pro/Team users now (not just admin/founder or a beta flag). `loop_beta.py.is_user_allowed()` + frontend `isLoopUnlocked` checks updated; Free/Starter still locked. All existing safety nets (concurrency cap, wall-clock budget, kill-switch, auto-trip-if-stuck) remain fully active and unchanged. 21/21 tests pass (updated matrix), verified live in preview.
 

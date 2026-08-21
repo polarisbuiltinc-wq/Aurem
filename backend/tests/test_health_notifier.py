@@ -190,6 +190,8 @@ async def test_fire_recovery_uses_info_level(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_tick_fires_on_green_to_red(monkeypatch):
+    """2026-08-21 — a transition only fires once CONFIRMED on
+    hn._CONFIRM_TICKS (2) consecutive ticks — see test_tick_flap_..."""
     db = _FakeDB()
     # Seed prior state: baseline green.
     db.health_check_state.rows["c1"] = {
@@ -212,21 +214,56 @@ async def test_tick_fires_on_green_to_red(monkeypatch):
         fired["kw"] = kw
     monkeypatch.setattr("services.founder_alerts.send_founder_alert", _fake_send)
 
+    # Tick 1: red observed for the first time — NOT confirmed yet, no fire.
     await hn._tick_once()
+    assert db.health_notifications.inserted == []
+    assert db.health_check_state.rows["c1"]["last_known"] == "green"
 
-    # Notification written with correct transition.
+    # Tick 2: red confirmed (2 consecutive) — fires now.
+    await hn._tick_once()
     assert len(db.health_notifications.inserted) == 1
     row = db.health_notifications.inserted[0]
     assert row["from_state"] == "green"
     assert row["to_state"] == "red"
-    # last_known was updated to red.
     assert db.health_check_state.rows["c1"]["last_known"] == "red"
+
+
+@pytest.mark.asyncio
+async def test_tick_flap_single_blip_never_fires(monkeypatch):
+    """2026-08-21 — founder-reported bell-spam fix: a status that
+    goes red for exactly ONE tick then back to green (the exact G18
+    "timeout, then fine again" pattern) must NEVER fire a
+    notification — it's absorbed as noise, not a real transition."""
+    db = _FakeDB()
+    db.health_check_state.rows["c1"] = {"_id": "c1", "last_known": "green"}
+
+    from services.health_registry import HealthCheck
+
+    state = {"status": "red"}
+
+    async def _flaky():
+        return {"status": state["status"], "detail": "x", "checked_at": "t"}
+
+    check = HealthCheck(id="c1", name="C1", category="guard", check_fn=_flaky)
+    monkeypatch.setattr("services.health_registry.all_checks", lambda: [check])
+    monkeypatch.setattr("cto_services.db.get_db", lambda: db)
+
+    async def _fake_send(**kw):
+        raise AssertionError("a single-tick flap must NEVER fire a notification")
+    monkeypatch.setattr("services.founder_alerts.send_founder_alert", _fake_send)
+
+    await hn._tick_once()          # tick 1: red (candidate, not confirmed)
+    state["status"] = "green"
+    await hn._tick_once()          # tick 2: back to green — flap absorbed
+
+    assert db.health_notifications.inserted == []
+    assert db.health_check_state.rows["c1"]["last_known"] == "green"
 
 
 @pytest.mark.asyncio
 async def test_tick_does_not_fire_on_green_to_gray(monkeypatch):
     """Config disappearing (green→gray) MUST NOT fire — it's not
-    a failure. Founder spec bullet 3."""
+    a failure. Founder spec bullet 3. (Confirmed over 2 ticks.)"""
     db = _FakeDB()
     db.health_check_state.rows["c1"] = {
         "_id": "c1", "last_known": "green",
@@ -246,6 +283,7 @@ async def test_tick_does_not_fire_on_green_to_gray(monkeypatch):
     monkeypatch.setattr("services.founder_alerts.send_founder_alert", _fake_send)
 
     await hn._tick_once()
+    await hn._tick_once()   # confirm on 2nd consecutive tick
     assert db.health_notifications.inserted == []
     # But last_known still updated so next tick has fresh baseline.
     assert db.health_check_state.rows["c1"]["last_known"] == "gray"
@@ -273,15 +311,17 @@ async def test_tick_respects_ack(monkeypatch):
     monkeypatch.setattr("services.founder_alerts.send_founder_alert", _fake_send)
 
     await hn._tick_once()
+    await hn._tick_once()   # confirm on 2nd consecutive tick
     assert db.health_notifications.inserted == []
 
 
 @pytest.mark.asyncio
 async def test_tick_baseline_red_does_not_fire(monkeypatch):
-    """A red observed on the first-ever tick (no last_known + no
-    last_alert_at) MUST NOT fire. The initial cockpit-bell rollout
-    hit this exact bug — spammed founder with 'still red' alerts
-    for every pre-existing incident row at pod boot."""
+    """A red observed on the first-ever (confirmed) tick (no
+    last_known + no last_alert_at) MUST NOT fire. The initial
+    cockpit-bell rollout hit this exact bug — spammed founder with
+    'still red' alerts for every pre-existing incident row at pod
+    boot. (Confirmed over 2 ticks.)"""
     db = _FakeDB()   # no state rows for "c1" — first observation
     from services.health_registry import HealthCheck
 
@@ -298,6 +338,7 @@ async def test_tick_baseline_red_does_not_fire(monkeypatch):
     monkeypatch.setattr("services.founder_alerts.send_founder_alert", _fake_send)
 
     await hn._tick_once()
+    await hn._tick_once()   # confirm on 2nd consecutive tick
     assert db.health_notifications.inserted == []
     # But last_known was recorded for future ticks.
     assert db.health_check_state.rows["c1"]["last_known"] == "red"

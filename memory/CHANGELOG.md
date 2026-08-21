@@ -549,3 +549,17 @@ Founder checked the Admin QA Dashboard's Loop Beta panel as recommended: 0 beta 
 - Backend's existing safety nets are UNCHANGED and still fully active regardless of tier: per-user concurrency cap, total wall-clock budget, kill-switch (env + DB), and `auto_trip_kill_switch_if_stuck()` (auto-disables Loop for everyone if stuck-loop rate exceeds threshold in a 10-min window).
 - `test_iter364_loop_beta_rollout.py`'s tiered-gate matrix updated to match the new intended behavior (pro/team always True now) — 21/21 tests pass. Verified live in preview: a simulated Pro-tier account now sees the unlocked toggle instead of the "LOOP · SOON" pill.
 - `loop_beta_enabled` field/admin-toggle endpoint left intact (unused for Pro/Team now, but available if a future staged-rollout need comes up, e.g. for Free/Starter).
+
+## 2026-08-21 — G18 flapping / bell-spam fix (founder-reported, reproduced with evidence)
+
+Founder: "G18 ka timeout bohot jaldi ho jata hai aur phir theek ho jata hai, iski wajah se notifications/bell bohot hoti hai — ek baar green hone ke baad dobara red nahi hona chahiye."
+
+**Root cause (found, not guessed)**: `services/health_checks.py._check_g18_timeout_audit()` re-runs a FULL codebase file-I/O + regex scan (`scripts/timeout_audit.run_audit()`) on EVERY health-notifier poll (every 45s, `services/health_notifier.py`), wrapped in an 8s hard `asyncio.wait_for` (`health_registry.run_check_safely`). Timed in preview: ~1-2.8s under light/concurrent load — comfortably under 8s here, but under real production contention (thread-pool/CPU competing with G21's scan + the ci-vs-local drift check + real request traffic, all also on `asyncio.to_thread`), it can occasionally cross the 8s budget → timeout → red, then finish fine on the very next poll → green. Each such flap fired TWO founder-alert notifications back-to-back (green→red, then red→green) — exactly the reported "bell spam".
+
+**Fix, two layers**:
+1. **`_check_g18_timeout_audit()` now caches a successful scan result for 5 minutes** (`_G18_CACHE`) — repeated 45s polls serve the cached verdict instantly instead of re-running the expensive scan and re-risking the 8s timeout on every single tick. A timed-out attempt is never cached (the coroutine gets cancelled before reaching the cache-write), so it self-heals immediately on the next poll if it keeps failing. Manual admin-triggered scans (`GET /admin/qa/guard18-timeout-audit`) are UNCHANGED — always fresh, not affected by this cache.
+2. **`services/health_notifier.py` now requires a status change to be observed on 2 CONSECUTIVE polls (`_CONFIRM_TICKS`, ~90s) before treating it as a real transition** (`_advance_candidate()`). A single-tick blip that reverts on the very next poll is now silently absorbed — no notification fires for it at all, for G18 or any other guard. This is a general flap-dampening backstop on top of the G18-specific cache fix.
+
+**Testing**: `test_health_notifier.py` — added `test_tick_flap_single_blip_never_fires` (directly covers the reported pattern), updated the 4 existing transition tests for the new 2-tick-confirm semantics, all pass. `test_iter364_loop_beta_rollout.py` unaffected. Verified the G18 cache empirically: first call ~1s, second call within the 5-min window ~0ms (instant, cached).
+
+**Honesty note**: could not directly measure PRODUCTION flapping frequency (no prod DB/log access) — the fix is grounded in the exact reproducible mechanism (8s timeout vs. an expensive full-scan re-run every 45s + thread contention), not a guess about the symptom itself.

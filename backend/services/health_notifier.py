@@ -9,6 +9,14 @@ real notification ONLY on:
     green → red   (new real failure)     ← PRIMARY case
     red   → green (recovery, calmer tone)
 
+A status change must FIRST be observed on `HEALTH_CONFIRM_TICKS`
+(default 2) consecutive ticks before it's treated as a real
+transition — see `_advance_candidate()`. This absorbs single-tick
+flaps (e.g. a heavy scan occasionally crossing its timeout budget
+under transient load, then finishing fine on the very next poll)
+instead of firing a "went red" + "recovered" notification pair for
+noise that self-resolved within one polling interval.
+
 Explicit NON-firing rules (per founder spec):
 
     ✗ green → gray  (config change, not a failure)
@@ -41,6 +49,13 @@ logger = logging.getLogger(__name__)
 _INTERVAL_S = int(os.environ.get("HEALTH_NOTIFIER_INTERVAL_S", "45"))
 # Max 1 red-still-red re-alert per (check, 30 min).
 _RE_ALERT_COOLDOWN_S = int(os.environ.get("HEALTH_RE_ALERT_COOLDOWN_S", "1800"))
+# 2026-08-21 · founder-reported bell-spam fix — a status change must be
+# observed on this many CONSECUTIVE ticks before it's treated as real
+# and alerted on. A single-tick blip (e.g. G18's codebase scan briefly
+# crossing its timeout budget under transient load, then finishing fine
+# on the very next poll) no longer fires a "went red" + "recovered"
+# notification pair — it just gets silently absorbed as noise.
+_CONFIRM_TICKS = int(os.environ.get("HEALTH_CONFIRM_TICKS", "2"))
 
 
 def _iso_now() -> str:
@@ -56,14 +71,6 @@ def _ack_active(acked_until: Optional[str]) -> bool:
     except Exception:  # noqa: BLE001
         return False
 
-
-async def _persist_last_known(db, check_id: str, status: str) -> None:
-    await db.health_check_state.update_one(
-        {"_id": check_id},
-        {"$set": {"last_known": status,
-                  "last_known_at": _iso_now()}},
-        upsert=True,
-    )
 
 
 async def _fire_notification(db, check_id: str, name: str, category: str,
@@ -156,6 +163,27 @@ async def _should_fire(state_row: dict, new: str) -> bool:
         > timedelta(seconds=_RE_ALERT_COOLDOWN_S)
 
 
+def _advance_candidate(state_row: dict, last_known: Optional[str],
+                        new_status: str) -> tuple:
+    """2026-08-21 — bell-spam fix. `new_status` only becomes a
+    CONFIRMED transition once it's been observed on `_CONFIRM_TICKS`
+    consecutive ticks. Returns (confirmed_status_or_None, fields_to_
+    persist). `confirmed_status` is None on every tick until then —
+    caller must skip firing/last_known updates while it's None."""
+    if new_status == last_known:
+        return None, {"candidate_status": None, "candidate_count": 0}
+    candidate_status = state_row.get("candidate_status")
+    candidate_count = int(state_row.get("candidate_count") or 0)
+    if candidate_status == new_status:
+        candidate_count += 1
+    else:
+        candidate_status = new_status
+        candidate_count = 1
+    if candidate_count >= _CONFIRM_TICKS:
+        return new_status, {"candidate_status": None, "candidate_count": 0}
+    return None, {"candidate_status": candidate_status, "candidate_count": candidate_count}
+
+
 async def _tick_once() -> None:
     """One diff-and-fire cycle. Runs every _INTERVAL_S."""
     from services.health_registry import all_checks, run_check_safely
@@ -177,35 +205,52 @@ async def _tick_once() -> None:
     for check, res in zip(checks, results):
         new_status = res["status"]
 
-        # Load prior state (last_known + acked_until).
+        # Load prior state (last_known + acked_until + candidate tracking).
         state_row = await db.health_check_state.find_one({"_id": check.id}) or {}
         last_known  = state_row.get("last_known")
         acked_until = state_row.get("acked_until")
+
+        confirmed_status, candidate_fields = _advance_candidate(
+            state_row, last_known, new_status,
+        )
+        if confirmed_status is None:
+            # Not yet confirmed (or back to baseline) — persist candidate
+            # tracking only, no fire, no last_known change this tick.
+            if (candidate_fields.get("candidate_status") != state_row.get("candidate_status")
+                    or candidate_fields.get("candidate_count") != state_row.get("candidate_count")):
+                await db.health_check_state.update_one(
+                    {"_id": check.id}, {"$set": candidate_fields}, upsert=True,
+                )
+            continue
 
         # Fire logic. See module docstring for the truth table.
         should_notify = False
         if _ack_active(acked_until):
             should_notify = False    # acked, stay silent
-        elif last_known == "green" and new_status == "red":
+        elif last_known == "green" and confirmed_status == "red":
             should_notify = True     # primary case
-        elif last_known == "red" and new_status == "green":
+        elif last_known == "red" and confirmed_status == "green":
             should_notify = True     # recovery
-        elif last_known == "red" and new_status == "red":
+        elif last_known == "red" and confirmed_status == "red":
             # Cooldown-gated re-alert while staying red.
-            should_notify = await _should_fire(state_row, new_status)
+            should_notify = await _should_fire(state_row, confirmed_status)
         # green↔gray, gray↔green, gray↔red, red↔gray → NO fire
 
         if should_notify:
             await _fire_notification(
                 db, check.id, check.name, check.category,
                 old=last_known or "unknown",
-                new=new_status,
+                new=confirmed_status,
                 detail=res.get("detail", ""),
             )
 
-        # Always update last_known so the next tick has fresh baseline.
-        if last_known != new_status:
-            await _persist_last_known(db, check.id, new_status)
+        # Persist the now-confirmed baseline + clear candidate tracking.
+        update_fields = dict(candidate_fields)
+        update_fields["last_known"] = confirmed_status
+        update_fields["last_known_at"] = _iso_now()
+        await db.health_check_state.update_one(
+            {"_id": check.id}, {"$set": update_fields}, upsert=True,
+        )
 
 
 async def notifier_loop() -> None:
