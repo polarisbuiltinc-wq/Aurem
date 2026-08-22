@@ -25,20 +25,23 @@ UTILS    = pathlib.Path("/app/frontend/src/utils/chatTextUtils.js")
 
 
 def test_loop_mode_toggle_jsx_invoked_in_composer():
+    """2026-08-21 founder request — the standalone <LoopModeToggle> was
+    replaced by <ModeLoopPill> (Swift/Pro/Maxx + Loop sub-choice) in the
+    composer toolbar. Same contract: execMode-driven, same spot."""
     src = CHATPANE.read_text()
-    # The JSX tag must exist (not just the import).
     import re
-    m = re.search(r"<LoopModeToggle\s+value=\{execMode\}", src)
-    assert m is not None, "<LoopModeToggle value={execMode}…> missing from ChatPanel"
+    m = re.search(r"<ModeLoopPill\s", src)
+    assert m is not None, "<ModeLoopPill…> missing from ChatPanel"
+    assert "execMode={execMode}" in src, "ModeLoopPill must be driven by execMode"
 
 
 def test_loop_mode_toggle_inside_composer_toolbar():
-    """The toggle must sit AFTER the composer-toolbar opener and
+    """The pill must sit AFTER the composer-toolbar opener and
     BEFORE the chat-send button (preserves Iter 212m-103 layout)."""
     src = CHATPANE.read_text()
     import re
     toolbar = src.find('<div className="composer-toolbar">')
-    m = re.search(r"<LoopModeToggle\s+value=\{execMode\}", src)
+    m = re.search(r"<ModeLoopPill\s", src)
     send    = src.find('data-testid="chat-send"')
     assert toolbar < m.start() < send
 
@@ -52,11 +55,12 @@ def test_intent_tier_indicator_still_rendered_alongside_toggle():
 
 
 def test_loop_mode_toggle_uses_islooptest_unlocked():
-    """The `locked` prop must be driven by `isLoopUnlocked` so the
-    pill auto-swaps between the orange unlocked and the dashed amber
-    locked variants based on the user's tier/admin flags."""
-    src = CHATPANE.read_text()
-    assert "locked={!isLoopUnlocked}" in src
+    """The locked/unlocked variant must be driven by isLoopUnlockedSync —
+    now inside ModeLoopPill.jsx (2026-08-21 replacement of the standalone
+    toggle), so tier/admin gating still auto-swaps the pill."""
+    pill = pathlib.Path("/app/frontend/src/components/ModeLoopPill.jsx").read_text()
+    assert "isLoopUnlockedSync" in pill
+    assert "data-locked=" in pill
 
 
 def test_isloopt_unlocked_keys_on_admin_unlimited_founder():

@@ -178,7 +178,11 @@ async def score_bug_density(db) -> dict:
         return result
     open_ = stats.get("open") or 0
     resolved_30d = stats.get("resolved_30d") or 0
-    score = max(0, 100 - open_ * 15 - resolved_30d * 3)
+    # 2026-08-24 — founder-approved recalibration: resolving incidents is
+    # near-neutral (capped), only OPEN incidents drive the score down.
+    # Old coefficients floored a healthy production (0 open, 50 resolved)
+    # at 0. Reference healthy profile scores 90.
+    score = max(0, 100 - open_ * 10 - min(20, resolved_30d * 0.2))
     result = _scored(score, evidence, _iso_now(), live=True)
     result["caveat"] = _RELIABILITY_BUG_DENSITY_CAVEAT
     return result
@@ -207,13 +211,16 @@ async def score_reliability(db) -> dict:
 
     loop_trips = g19.get("loop_trips_7d") or 0
     restarts = g19.get("restarts_7d") or 0
-    # Allow a baseline of restarts/week from normal deploys/hot-reload
-    # before penalising — only excess restarts count against the score.
-    g19_score = max(0, 100 - loop_trips * 50 - max(0, restarts - 5) * 3)
+    # 2026-08-24 — founder-approved recalibration against real production
+    # data (138 restarts/7d, 6 loop-trips/7d, healthy): allow 1 deploy-
+    # burst trip/day and 30 restarts/day of normal platform churn before
+    # penalising. Old coefficients (trips×50, (restarts−5)×3) floored a
+    # healthy production at 0. A true crash-loop day still floors.
+    g19_score = max(0, 100 - max(0, loop_trips - 7) * 15 - max(0, restarts - 210) * 0.5)
 
     open_incidents = g20.get("open") or 0
     resolved_30d = g20.get("resolved_30d") or 0
-    g20_score = max(0, 100 - open_incidents * 25 - resolved_30d * 2)
+    g20_score = max(0, 100 - open_incidents * 20 - min(15, resolved_30d * 0.2))
 
     score = 0.35 * g17_score + 0.30 * g19_score + 0.35 * g20_score
 

@@ -4,7 +4,15 @@ import time
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL").rstrip("/")
+BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or "").rstrip("/")
+if not BASE_URL:
+    try:
+        for _ln in open("/app/frontend/.env"):
+            if _ln.strip().startswith("REACT_APP_BACKEND_URL="):
+                BASE_URL = _ln.split("=", 1)[1].strip().rstrip("/")
+                break
+    except FileNotFoundError:
+        pass
 API = f"{BASE_URL}/api/aurem-dev"
 
 EMAIL = "test@aurem.dev"

@@ -57,6 +57,46 @@ def _git_sha() -> str:
         return os.getenv("BUILD_HASH", "unknown")
 
 
+async def _classify_boot_reason(db, sha: str) -> str:
+    """2026-08-24 · founder-approved cause attribution. All boots were
+    previously one undifferentiated 'supervisor_start' bucket, making
+    restart-rate diagnosis impossible. Classification (best-effort):
+      • deploy_new_code   — git sha changed since the previous boot
+      • clean_restart     — previous process wrote its shutdown marker
+                            (supervisor/platform-managed restart)
+      • crash_or_kill     — previous process died without the marker
+                            (crash, OOM, SIGKILL, platform pod eviction)
+      • first_boot        — no previous boot on record
+    """
+    try:
+        prev = await db.process_boots.find_one({}, sort=[("ts", -1)])
+        if not prev:
+            return "first_boot"
+        if sha and prev.get("sha") and sha != prev["sha"]:
+            return "deploy_new_code"
+        marker = await db.process_shutdown_marker.find_one({"_id": "last_clean_shutdown"})
+        if marker and float(marker.get("ts") or 0) >= float(prev.get("ts") or 0):
+            return "clean_restart"
+        return "crash_or_kill"
+    except Exception:
+        return "unclassified"
+
+
+async def mark_clean_shutdown(db) -> None:
+    """Called from the lifespan shutdown hook — proof the previous
+    process exited gracefully (vs crash/OOM/SIGKILL)."""
+    if db is None:
+        return
+    try:
+        await db.process_shutdown_marker.update_one(
+            {"_id": "last_clean_shutdown"},
+            {"$set": {"ts": time.time(), "pid": os.getpid(), "sha": _git_sha()}},
+            upsert=True,
+        )
+    except Exception:
+        pass
+
+
 async def record_boot(db, *, reason: str = "supervisor_start") -> dict:
     """Record this boot + detect a restart loop. Returns a summary dict.
     Called once from the FastAPI lifespan startup."""
@@ -66,11 +106,15 @@ async def record_boot(db, *, reason: str = "supervisor_start") -> dict:
     if db is None:
         return summary
     try:
+        sha = _git_sha()
+        if reason == "supervisor_start":
+            # Caller left the legacy default — attribute the real cause.
+            reason = await _classify_boot_reason(db, sha)
         doc = {
             "boot_id": f"boot_{uuid.uuid4().hex[:10]}",
             "ts": now,
             "ts_iso": datetime.fromtimestamp(now, tz=timezone.utc).isoformat(),
-            "sha": _git_sha(),
+            "sha": sha,
             "reason": reason,
             "pid": os.getpid(),
         }

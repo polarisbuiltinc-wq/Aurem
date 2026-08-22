@@ -55,6 +55,7 @@ from routers.admin_ops_config import router as admin_ops_config_router  # 2026-0
 from routers.admin_analytics import router as admin_analytics_router  # 2026-02-11 — Phase 2 split: /admin/dashboard, /audit, /loop-metrics, /council, /skills
 from routers.admin_bi import router as admin_bi_router  # Slice A · BI Cockpit — /admin/bi/{stripe,inference,summary}
 from routers.admin_health_score import router as admin_health_score_router  # 2026-08-23 — Codebase Health Score widget
+from routers.admin_deploy_readiness import router as admin_deploy_readiness_router  # 2026-08-24 — Deploy Readiness card (Option A)
 from routers.founder_summary import router as founder_summary_router  # 2026-08-24 — Pillar 6, founder-language translation layer
 from routers.rollback_v2 import router as rollback_v2_router  # 2026-06 — Pillar 1, snapshot-based two-phase rollback + drill
 from routers.github_auth_migration import router as github_auth_migration_router  # 2026-06 — PAT→App migration
@@ -1576,6 +1577,15 @@ async def lifespan(app: FastAPI):
         # Iter 309 — legacy attr; guarded so a fork of prior main.py
         # doesn't crash shutdown. Merged into loop_housekeeping_task.
         app.state.loop_expiry_task.cancel()
+    # 2026-08-24 — G19 boot-cause attribution: leave a clean-shutdown
+    # marker so the NEXT boot can distinguish graceful restart from
+    # crash/OOM/pod-kill. Must run before the Mongo client closes.
+    try:
+        from services.process_recovery import mark_clean_shutdown
+        from cto_services.db import get_db as _get_db_shutdown
+        await mark_clean_shutdown(_get_db_shutdown())
+    except Exception:
+        pass
     if app.state.mongo:
         app.state.mongo.close()
     logger.info("AUREM shutdown")
@@ -3089,6 +3099,7 @@ app.include_router(admin_ops_config_router,     prefix="/api/aurem-dev")  # 2026
 app.include_router(admin_analytics_router,      prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split
 app.include_router(admin_bi_router,             prefix="/api/aurem-dev")  # Slice A · BI Cockpit
 app.include_router(admin_health_score_router,   prefix="/api/aurem-dev")  # 2026-08-23 — Codebase Health Score
+app.include_router(admin_deploy_readiness_router, prefix="/api/aurem-dev")  # 2026-08-24 — Deploy Readiness (Option A)
 app.include_router(founder_summary_router,      prefix="/api/aurem-dev")  # 2026-08-24 — Pillar 6
 app.include_router(rollback_v2_router,          prefix="/api/aurem-dev")  # 2026-06 — Pillar 1
 app.include_router(github_auth_migration_router, prefix="/api/aurem-dev")  # 2026-06 — PAT→App migration

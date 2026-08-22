@@ -21,8 +21,13 @@ pytestmark = pytest.mark.asyncio
 
 
 def _db():
+    # 2026-08-24 — isolation fix: the guard aggregates the ENTIRE
+    # ora_chat_usage collection over a real 1h window, so running against
+    # the shared preview DB made results depend on unrelated live chat
+    # activity (confirmed flake root cause, Step 3 CI triage). A throwaway
+    # DB gives a deterministic empty window without touching the guard.
     return AsyncIOMotorClient(os.environ["MONGO_URL"])[
-        os.environ.get("DB_NAME", "aurem_dev")
+        os.environ.get("DB_NAME", "aurem_dev") + "_g22iso"
     ]
 
 
@@ -30,9 +35,11 @@ def _db():
 async def _clean_usage():
     db = _db()
     marker = f"g22test_{int(time.time())}"
+    await db.ora_chat_usage.delete_many({})
+    await db.incidents.delete_many({})
     yield db, marker
-    await db.ora_chat_usage.delete_many({"session_id": marker})
-    await db.incidents.delete_one({"source_key": "idle_llm_spend_window"})
+    await db.ora_chat_usage.delete_many({})
+    await db.incidents.delete_many({})
 
 
 async def test_no_activity_at_all_is_not_flagged(_clean_usage):

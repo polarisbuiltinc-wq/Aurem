@@ -1,0 +1,56 @@
+# live_env_quarantine.txt — 2026-08-24 Step 3 CI triage (founder-approved lane)
+#
+# Every entry here is a LIVE-URL test: it talks to the running deployment
+# resolved from REACT_APP_BACKEND_URL (committed frontend/.env). In GitHub
+# Actions there is NO live server — the committed URL points at a stale
+# preview host, so these fail with ingress "404 page not found" or
+# connection-refused. That is an ENVIRONMENT gap, not a code bug.
+#
+# Mechanism (tests/conftest.py): entries get @pytest.mark.live_env; when the
+# resolved {BASE}/api/health probe does NOT return 200, they are SKIPPED with
+# an explicit reason. Locally (server running) they run and BLOCK as normal.
+# Classification evidence: CI run 32603078500 @ ab791b8 (2026-08-22), failure
+# text 69x "404 page not found" + 79x ConnectError/refused + 3x env KeyError,
+# minus 5 false-positive nodes in 3 TestClient-only files (verified by grep:
+# every file below reads REACT_APP_BACKEND_URL / localhost:8001).
+#
+# A line WITHOUT "::" quarantines the whole file (used for module-level
+# live-URL fixtures that would crash at collection on a dead URL).
+tests/test_codebase_health_score.py
+tests/test_pillars_2345_2026_08_24.py
+tests/test_aurem_backend.py
+tests/test_aurem_chat_persistence.py
+tests/test_aurem_p0_bugs.py
+tests/test_founder_and_admin_resilience.py
+tests/test_github_funnel_telemetry.py
+tests/test_iter123_dev_skills.py
+tests/test_iter123b_skill_usage_analytics.py
+tests/test_iter123d_code_surface_live.py
+tests/test_iter123g_performance_optimization.py
+tests/test_iter157_cold_start_fixes.py
+tests/test_iter182_oauth_pkce.py
+tests/test_iter212m120_vanguard_ci_live_http.py
+tests/test_iter212m179_api_cap.py
+tests/test_iter212m190_scan_fix_quota.py
+tests/test_iter212m5_verify_pat_security.py
+tests/test_iter337_auth_me_no_secrets.py
+tests/test_iter339k_null_turn_prompt_mode.py
+tests/test_iter341_predeploy.py
+tests/test_iter369_restore_drill_and_ad_attribution.py
+tests/test_iter78_automations.py
+tests/test_iter78_code_surface.py
+tests/test_iter79_web_skills.py
+tests/test_iter82_oauth_signup.py
+tests/test_iter86_architecture_health.py
+tests/test_iter89_ship_button_no_reappear.py
+tests/test_magic_login_2026_08_20.py
+tests/test_pat_removal_full_2026_01.py
+tests/test_promo_first50.py
+tests/test_promo_first50_verification.py
+tests/test_promo_first50_waitlist.py
+tests/test_revoked_repo_banner_2026_08_20.py
+tests/test_rollback_v2_pillar1.py
+tests/test_ship_turn_index.py
+tests/test_token_enforcement.py
+tests/test_welcome_email.py
+tests/test_session6_item5_developers_metric.py::test_public_stats_exposes_real_developers_field

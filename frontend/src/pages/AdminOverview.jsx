@@ -11,6 +11,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { api, getToken } from "../lib/api";
 import { LLMCreditMonitor } from "./AdminLLMCredits";       // Iter 212m-171
 import { BoundaryProbesTile } from "../components/BoundaryProbesTile";  // Iter 212m-171
+import { DeployReadinessCard } from "../components/DeployReadinessCard"; // 2026-08-24 — Option A
 
 export default function AdminOverview() {
   const [health,  setHealth]  = useState(null);
@@ -31,6 +32,7 @@ export default function AdminOverview() {
   const [nudgeStages, setNudgeStages] = useState(null); // 2026-08-20 — stage-aware nudge visibility
   const [backupStatus, setBackupStatus] = useState(null); // 2026-08-20 — nightly backup health
   const [drillHistory, setDrillHistory] = useState(null); // 2026-08-20 — recurring restore-drill health
+  const [deployReadiness, setDeployReadiness] = useState(null); // 2026-08-24 — Option A advisory card
   const [refreshingHealth, setRefreshingHealth] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -38,7 +40,7 @@ export default function AdminOverview() {
     const h = { Authorization: `Bearer ${getToken()}` };
     const HEALTH_URL = `${process.env.REACT_APP_BACKEND_URL}/api/health`;
     try {
-      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes, ghFunnelRes, nudgeStagesRes, backupStatusRes, drillHistoryRes] =
+      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes, ghFunnelRes, nudgeStagesRes, backupStatusRes, drillHistoryRes, deployReadinessRes] =
         await Promise.allSettled([
           fetch(HEALTH_URL, { signal: AbortSignal.timeout(10000) }).then((r) => r.json()),
           api.get("/usage/public/stats"),
@@ -58,6 +60,7 @@ export default function AdminOverview() {
           api.get("/admin/funnel", { headers: h }),          // 2026-08-20 — stage-aware nudge stats
           api.get("/admin/backups/status", { headers: h }),        // 2026-08-20 — backup health
           api.get("/admin/backups/drill-history", { headers: h }), // 2026-08-20 — restore-drill health
+          api.get("/admin/deploy-readiness", { headers: h }),      // 2026-08-24 — Option A advisory card
         ]);
       if (healthRes.status   === "fulfilled") setHealth(healthRes.value);
       if (statsRes.status    === "fulfilled") setStats(statsRes.value.data);
@@ -77,6 +80,7 @@ export default function AdminOverview() {
       if (nudgeStagesRes.status === "fulfilled") setNudgeStages(nudgeStagesRes.value.data);
       if (backupStatusRes.status === "fulfilled") setBackupStatus(backupStatusRes.value.data);
       if (drillHistoryRes.status === "fulfilled") setDrillHistory(drillHistoryRes.value.data);
+      if (deployReadinessRes.status === "fulfilled") setDeployReadiness(deployReadinessRes.value.data);
     } catch { /* silent */ }
     finally { setLoading(false); }
   }, []);
@@ -261,6 +265,9 @@ export default function AdminOverview() {
           )}
         </div>
       )}
+
+      {/* ── 2026-08-24 · Option A — Deploy Readiness (advisory, Rule C) ── */}
+      <DeployReadinessCard data={deployReadiness} />
 
       {/* ── Iter 212m-17 — Top-up Alerts banner ────────────────── */}
       <TopupAlertsBanner

@@ -4912,3 +4912,42 @@ All queried live from the GitHub API (`GITHUB_ACTIONS_TOKEN`, HTTP 200):
 - Tests: test_ui_batch_6 + test_iter212m5 5/5 pass. Vite build clean.
 ### Testing reports: /app/test_reports/iteration_ui_batch_6_2026_08_24.json (all pass)
 ### PENDING (fork-carry): Step 1.5 pt2 (post-deploy funnel monitoring), Step 1.6 (onboarding design proposal delivered, awaiting founder scope OK), Step 3 (CI triage/quarantine: ~460 failures = ~171 env + ~107 stale + ~230 uncertain needing per-test inspection; genuine-bug candidates g22 idle-spend, AdminOverview lazy-load, LoopModeToggle mount), Step 4 (Pillar 3 heartbeat route info), Step 5 (single Save-to-GitHub push — remote still at bda2214, local f712850+worktree unpushed), Step 6 (prod deploy + PAT migration dry-run + TJSNDHU App coverage check — UNVERIFIED), Step 7 (build 1.6 features if evidence supports), Step 8 (Pillar 6 founder-summary frontend).
+
+---
+## 2026-08-24 — DEPLOY DISCIPLINE RULE (founder-approved, effective immediately)
+**RULE C:** Production deploys via the Emergent "Deploy" button are permitted ONLY when at least one of:
+1. The latest Save-to-GitHub SHA is CI + Quality Gate GREEN on GitHub Actions, OR
+2. A full `testing_agent` verification report exists for the exact workspace state being deployed.
+Context: Emergent Deploy is a manual UI action with no gate/API/webhook (platform-confirmed 2026-08-24). Pillar 2's CI gate is a verification SIGNAL, not a mechanical interlock — enforcement is this documented discipline until: (A) Deploy Readiness admin card ships (sequenced after Step 3 CI triage), (B) Emergent adds platform-side conditional deploys (support request drafted).
+
+## 2026-08-24 — Reliability/Bug-Density recalibration + boot attribution (founder-approved, SHIPPED preview)
+- g19: `100 − max(0,trips−7)×15 − max(0,restarts−210)×0.5`; g20: `100 − open×20 − min(15,resolved×0.2)`; bug_density: `100 − open×10 − min(20,resolved×0.2)` (services/health_score.py)
+- Production hand-verified: reliability ≈96 (was 35), bug_density 90 (was 0). Preview still floors correctly (36 open incidents, 1015 trips = genuinely sick).
+- `record_boot` now classifies causes: first_boot / deploy_new_code / clean_restart / crash_or_kill (marker written in lifespan shutdown, main.py). Verified live: clean_restart attributed on graceful restart.
+- Production restart diagnostic dispatched to deployer (job 08e48f95) — findings pending.
+- Rollback-penalty v2-ledger fix + performance SLA exclusion shipped earlier same day (penalty 25→0, DataHandling 5→30, Performance 79→89 — preview live-verified).
+
+---
+## 2026-08-24 (fork) — Restart diagnostic result + recalibration mismatch RESOLVED + Step 3 CI triage + Deploy Readiness Card (Option A)
+### Production restart diagnostic (deployer RCA, run 28a3240e) — CONFIRMED
+- NO crash loop: both live pods restart_count=0, no OOMKilled/CrashLoopBackOff/evictions.
+- 138 boots/7d = platform lifecycle: 2 fixed replicas × each redeploy (5 redeploys on 08-22 alone, mostly agentic auto-redeploys) + VPA pod recreations. 138÷2 ≈ 69 pod events/7d. The 6 "bursts" match rollout signatures.
+- Caveat: hard 0-restart negatives only for currently-live workload (K8s events expire ~1h); volume reconciliation is consistent.
+### Recalibration "mismatch" — RESOLVED, code was correct all along
+- Preview 35/0 is CORRECT under the new formulas: preview DB has restarts_7d=1186, loop_trips_7d=1027, open incidents=37 → g19=0, g20=0, g17=100 → 0.35×100=35 exactly. Earlier hand-calc used PRODUCTION inputs (138/6/0/50 → g19=100, g20=90, bug_density=90). Apples/oranges — no bug. Production readback after next deploy expected reliability ≥61.5, bug_density 90.
+### Step 3 CI triage — DONE (founder-approved scope)
+- 3 genuine-bug candidates individually inspected — ALL NOT product bugs:
+  1. g22 idle-spend: test isolation gap (guard queries shared ora_chat_usage over real 1h window; 12 real rows present). FIXED test: throwaway `${DB_NAME}_g22iso` DB — hermetic, 5/5 pass.
+  2. AdminOverview lazy-load: stale test — AdminOverview lives inside the lazy Admin chunk since Feb 2026 (stronger split). Test updated to assert the new contract.
+  3. LoopModeToggle mount: stale test — replaced by ModeLoopPill (founder request 2026-08-21), same execMode/isLoopUnlockedSync contract. 3 assertions updated.
+- live_env lane built: tests/live_env_quarantine.txt (35 pure-live files + 2 collection-crash files + 1 mixed file's nodes) + conftest probe of {BASE}/api/health — SKIP with reason when unreachable (CI), run+block normally locally. Covers 158 of 500 CI failures @ ab791b8 (classified from downloaded CI artifact: 69×ingress-404 + 79×conn-refused + 3×env-key + same-file live nodes; 5 false positives excluded by grep verification). Root cause of CI 404s: committed frontend/.env bakes a stale preview URL.
+- Verified: CI-simulation (dead URL) → 47 skipped 0 failed; local (live server) → tests run and pass. Fixed files 17 passed.
+- HONEST STATUS: ~342 CI failures remain red (~171 also fail locally — stale/uncertain pool, NOT bulk-quarantined per founder rule). CI will NOT be green after next push; Rule C path (b) (testing_agent report) remains the deploy justification.
+### Deploy Readiness Card (Option A) — BUILT + preview-verified
+- Backend: services/deploy_readiness.py + routers/admin_deploy_readiness.py → GET /api/aurem-dev/admin/deploy-readiness (admin-gated, 60s cache): workspace SHA/branch/dirty vs GitHub main SHA + CI/QG conclusions for that exact SHA, verdict ready/not_ready + reasons + Rule C + advisory note (cannot block Deploy button — platform constraint).
+- Frontend: components/DeployReadinessCard.jsx rendered in AdminOverview below build banner (data-testids: deploy-readiness-card/-verdict/-reasons/-chip-*). Screenshot-verified: NOT DEPLOY-READY with 4 honest reasons.
+### Side-find FIXED: GitHub repo was RENAMED (auremdev → Aurem) → 301s
+- Guard 8 (github_sync) was critically blind: httpx doesn't follow redirects (requests did — why direct tests passed). Fixed: GITHUB_REPO=polarisbuiltinc-wq/Aurem in backend/.env, follow_redirects=True in github_sync.py + deploy_readiness.py, deploy_logger.py fallback updated. Verified: Guard 8 now honest "behind, 1 commit".
+### Option B email draft — CREATED for founder review (NOT sent)
+- /app/memory/emergent_support_ticket_deploy_gates_2026-08-24.md (conditional Deploy button with required checks / pre-deploy hook / deploy API). Rule C confirmed present in PRD above.
+### Save-to-GitHub readiness (Step 5): disk 2.0GB free (80%), no git locks, pack 55MB, local 1 commit + session worktree ahead of remote ab791b8. READY for founder's single Save to GitHub click.

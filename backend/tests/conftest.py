@@ -78,13 +78,70 @@ def _load_legacy_nodeids():
     return ids
 
 
+# ── 2026-08-24 Step 3 CI triage — live-URL test lane ─────────────────
+# Tests in tests/live_env_quarantine.txt hit the LIVE deployment at
+# REACT_APP_BACKEND_URL. In GitHub Actions no server exists (the
+# committed frontend/.env URL is a stale preview host → ingress 404 /
+# connection refused). Probe {BASE}/api/health once; when unreachable,
+# SKIP those tests with an explicit reason instead of failing.
+# Locally (server up) they run and block exactly as before.
+_LIVE_ENV_LIST = Path(__file__).parent / "live_env_quarantine.txt"
+
+
+def _load_live_env_entries():
+    files, nodes = set(), set()
+    try:
+        text = _LIVE_ENV_LIST.read_text()
+    except FileNotFoundError:
+        return files, nodes
+    for ln in text.splitlines():
+        s = ln.split("#", 1)[0].strip()
+        if not s:
+            continue
+        (nodes if "::" in s else files).add(s)
+    return files, nodes
+
+
+def _resolve_live_base() -> str:
+    base = (os.environ.get("REACT_APP_BACKEND_URL") or "").strip()
+    if not base:
+        envf = Path("/app/frontend/.env")
+        if envf.is_file():
+            for ln in envf.read_text().splitlines():
+                if ln.strip().startswith("REACT_APP_BACKEND_URL="):
+                    base = ln.split("=", 1)[1].strip()
+                    break
+    return base.rstrip("/")
+
+
+def _live_server_reachable() -> bool:
+    base = _resolve_live_base()
+    if not base:
+        return False
+    try:
+        import requests
+        return requests.get(f"{base}/api/health", timeout=5).status_code == 200
+    except Exception:
+        return False
+
+
 def pytest_collection_modifyitems(config, items):
     legacy = _load_legacy_nodeids()
-    if not legacy:
-        return
+    live_files, live_nodes = _load_live_env_entries()
+    live_items = []
     for item in items:
         if item.nodeid in legacy:
             item.add_marker(_pytest.mark.legacy)
+        if item.nodeid in live_nodes or item.nodeid.split("::", 1)[0] in live_files:
+            item.add_marker(_pytest.mark.live_env)
+            live_items.append(item)
+    if live_items and not _live_server_reachable():
+        base = _resolve_live_base() or "<unset>"
+        skip = _pytest.mark.skip(
+            reason=f"live_env: {base}/api/health unreachable — no live "
+                   "deployment in this environment (see tests/live_env_quarantine.txt)")
+        for item in live_items:
+            item.add_marker(skip)
 
 
 # ── Iter 367 · Session 5 Item 4 · Signup rate-limit test isolation ────

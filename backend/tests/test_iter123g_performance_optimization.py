@@ -84,15 +84,24 @@ def test_app_jsx_uses_react_lazy_for_non_critical_routes():
     # React.lazy + Suspense must both be imported
     assert "lazy," in src and "Suspense" in src, \
         "App.jsx missing lazy/Suspense imports"
-    # Specific heavy routes must be lazy-loaded
+    # Specific heavy routes must be lazy-loaded.
+    # Feb 2026 — AdminOverview is no longer imported by App.jsx at all:
+    # /admin/overview renders INSIDE the (lazy) Admin chunk, which is an
+    # even stronger split. Assert that contract instead.
     for component in (
-        "Dashboard", "Admin", "AdminOverview", "AdminFinancials",
+        "Dashboard", "Admin", "AdminFinancials",
         "AdminVanguard", "AdminIntegrations", "Projects", "BrainDump",
     ):
         # Either `const Component = lazy(() => import(...))` pattern
         pattern = rf'const\s+{component}\s+=\s+lazy\(\(\)\s*=>\s*import\("\./pages/{component}"\)\)'
         assert re.search(pattern, src), \
             f"{component} is not lazy-loaded — defeats code-splitting"
+    assert not re.search(r'^import\s+AdminOverview\b', src, re.M), \
+        "AdminOverview must not be eagerly imported by App.jsx"
+    with open("/app/frontend/src/pages/Admin.jsx") as f:
+        admin_src = f.read()
+    assert 'import AdminOverview from "./AdminOverview"' in admin_src, \
+        "AdminOverview must live inside the lazy Admin chunk"
 
 
 def test_app_jsx_keeps_landing_eager():

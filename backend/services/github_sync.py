@@ -71,7 +71,7 @@ def _local_commits_behind(github_head_sha: str) -> int | None:
 async def _compute(token: str, repo: str, build_sha: str, built_at: str) -> dict:
     headers = {"Authorization": f"Bearer {token}",
                "Accept": "application/vnd.github+json"}
-    async with httpx.AsyncClient(timeout=8) as client:
+    async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
         r = await client.get(f"{_GH_API}/repos/{repo}/commits/main",
                              headers=headers)
         r.raise_for_status()
