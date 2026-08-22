@@ -4295,6 +4295,32 @@ a real, honest number and the evidence is visible right below it.
 logged by a human yet (category currently scores on the automated
 half only) — intentional, per no-fabrication policy.
 
+**Update 2026-08-23, cont'd 7** — founder follow-ups actioned:
+- **Real architecture review logged** (not filler): reviewer
+  `main-agent-2026-08-23`, `coupling: 65, spof: 60`, grounded in real
+  evidence — 0 circular imports, but 5 genuine `service-imports-
+  router` layering violations (`services/integration_health.py`,
+  `rollback_manager.py`, `project_onboarding_scan.py`,
+  `loop_engine.py`, `health_checks.py` all reach back into `routers/`
+  for helper functions), plus `cto_services/db.py` (117 importers) /
+  `cto_services/auth.py` (78 importers) flagged as real SPOFs by
+  fan-in depth with zero redundancy/circuit-breaking around either.
+- **Overall-score display fixed** so partial coverage can't be
+  mis-read as a full score: the big number now always shows an
+  inline "at only X% coverage" badge next to it, plus an explicit
+  sentence ("This is N/100 scored across the X% of weight that has
+  fresh evidence — NOT N/100 overall"). Verified via screenshot.
+- **TTL test fixed to match the 365-day retention decision**
+  (`tests/test_release_it_patterns_iter282.py::test_invariant_loop_
+  collections_have_ttl_indexes` — `loop_sessions` expectation changed
+  30d → 365d). Turns out this was never actually ambiguous: `scripts/
+  init_prod_collections.py` (lines 271-275) already documents this
+  as a deliberate 2026-08-20 fix ("Task history: 12 months rolling"
+  per Privacy Policy §8, corrected from a wrong 30d default) — the
+  invariant test was simply never updated after that. Founder's
+  "keep more data" call matches what was already the live, intended
+  policy. Test confirmed passing after the fix.
+
 ---
 
 ### Two side-findings from the audit — investigated separately per
@@ -4553,4 +4579,84 @@ an isolated run. **No fixes applied yet** — reported per instruction,
 awaiting direction before touching anything (including the
 `auto_deploy.yml` name-mismatch fix, which stays parked until this
 job's real pass/fail state is settled).
+
+---
+
+### PRODUCTION INCIDENT — sign-in + GitHub-connect fully broken
+(2026-08-23, cont'd 8). **FIXED in preview, awaiting founder
+redeploy** — I cannot deploy to auremcto.com myself.
+
+**Root cause — CONFIRMED, live-reproduced twice** (real curl against
+production, then a real local rebuild replicating the exact bug):
+`frontend/src/lib/api.js` builds the shared `API_BASE`/axios
+`baseURL` as `` `${BACKEND}/api/aurem-dev` `` where `BACKEND` chains
+`process.env.REACT_APP_BACKEND_URL || import.meta.env.VITE_API_URL`
+with **no final fallback**. On whatever build is currently live on
+auremcto.com, neither resolved to a real value, so `BACKEND`
+evaluated to the literal JS `undefined`, baking `API_BASE` in as the
+string `"undefined/api/aurem-dev"` — a Vite build-time defect (env
+vars are inlined statically), so **100% consistent for every user**
+on that build, not a race condition, not account/browser-specific.
+- Live evidence: `curl -X POST https://auremcto.com/undefined/api/
+  aurem-dev/auth/login` → HTTP 200 but `content-type: text/html` —
+  the body is the SPA's `index.html` shell, not a real login
+  response. Same mechanism explains the reported GitHub-install 404
+  (`/undefined/api/aurem-dev/github/app/install`) — **CONFIRMED same
+  root cause**, not two separate bugs.
+- Full-surface check (per founder's explicit ask before redeploying):
+  traced every consumer of backend-URL env vars across the frontend.
+  Only 4 files chain `process.env.REACT_APP_BACKEND_URL ||
+  import.meta.env.VITE_API_URL` (the vulnerable pattern) —
+  `lib/api.js`, `hooks/useORAPanel.js`, `components/FixJobContext.jsx`,
+  `components/dashboard/v2/SidebarBound.jsx`. Only `lib/api.js`
+  actually lacked a final `|| ""` fallback (the other 3 already had
+  one). The other ~10 files that reference `process.env.REACT_APP_
+  BACKEND_URL` alone (no `import.meta.env` chain) degrade safely to
+  `""` → a valid same-origin relative path (`/api/aurem-dev/...`) —
+  confirmed via a real local rebuild + inspecting the compiled output
+  directly, not guessed.
+- **Fix applied** (defense-in-depth, two layers):
+  1. `frontend/.env.production` created — `VITE_API_URL=https://
+     auremcto.com` + `REACT_APP_BACKEND_URL=https://auremcto.com`.
+     Vite auto-loads this on every `vite build --mode production`
+     regardless of which external CI/deploy pipeline runs it.
+  2. `frontend/src/lib/api.js`'s `BACKEND` chain given a final
+     `|| ""` fallback, matching the pattern the other 3 at-risk files
+     already had — so even in a total env-var outage, `API_BASE`
+     degrades to a safe relative path instead of the literal string
+     `"undefined"`, permanently closing this exact failure class.
+  3. **Critical catch before it mattered**: `frontend/.env.production`
+     matched the repo's `.gitignore` (`.env.*`) and would have been
+     silently excluded from every commit — same failure class this
+     incident already came from. Added `!frontend/.env.production`
+     exception to `.gitignore`, confirmed via `git check-ignore`
+     (now correctly un-ignored) — without this the whole fix would
+     have been a no-op on redeploy.
+- **Verification**: real local production-mode rebuild (`vite build
+  --mode production`, backend URL env vars explicitly unset to match
+  the broken production scenario) — inspected the compiled output
+  directly: `baseURL` now resolves to `https://auremcto.com/api/
+  aurem-dev`, zero `void 0`/`undefined` residue anywhere near the
+  API construction. Preview itself (dev-mode `vite`, unaffected by
+  `.env.production`) confirmed still serving 200 after the change.
+- **Not yet verified**: end-to-end against the ACTUAL redeployed
+  production site — that requires the founder to redeploy; I have no
+  production deploy access. Founder to confirm after redeploy.
+- **Follow-up investigation item (flagged by founder, non-blocking,
+  logged for later)**: WHY did the external env-var injection
+  (whatever CI/deploy pipeline sets `REACT_APP_BACKEND_URL`/
+  `VITE_API_URL` for production builds) fail or go missing on this
+  build in the first place? Not investigated this pass — this fix
+  makes the frontend self-sufficient regardless of that pipeline,
+  but the pipeline gap itself is still unexplained and could recur
+  for other build-time values. `.github/workflows/ci.yml`'s own
+  `frontend-build` job separately hardcodes a stale domain
+  (`REACT_APP_BACKEND_URL: https://aurem.live`, not `auremcto.com`)
+  — noted as a related but unconfirmed-relevance leftover from a
+  past rebrand; not proven to be what actually builds/deploys
+  production.
+- Could NOT verify: how many signups/logins silently failed at this
+  URL before today, or exactly when this started — no production
+  log/analytics access from this environment.
+
 

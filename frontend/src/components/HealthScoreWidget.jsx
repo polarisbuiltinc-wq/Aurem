@@ -201,19 +201,24 @@ export default function HealthScoreWidget() {
 
       {data && (
         <>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
             <div data-testid="health-score-overall"
                  style={{ fontSize: 34, fontWeight: 700, color: scoreColor(data.overall_score),
                           fontFamily: C.mono }}>
               {data.overall_score != null ? `${data.overall_score}/100` : "—"}
             </div>
-            <div style={{ fontSize: 11, color: C.faint, maxWidth: 340 }}>
-              based on <b style={{ color: C.dim }}>{data.weight_scored_pct}%</b> of total
-              weight — <b style={{ color: C.amber }}>{data.unscored_categories
-                .map(k => LABELS[k]).join(", ")}</b> unscored
-              ({data.weight_unscored_pct}% of weight has no fresh evidence).
-              Never renormalized to hide the gap.
+            <div data-testid="health-score-coverage-badge"
+                 style={{ fontSize: 13, fontWeight: 700, color: C.amber, fontFamily: C.mono,
+                          border: `1px solid ${C.amber}55`, borderRadius: 6, padding: "2px 8px" }}>
+              at only {data.weight_scored_pct}% coverage
             </div>
+          </div>
+          <div style={{ fontSize: 11, color: C.faint, maxWidth: 460, marginBottom: 16 }}>
+            This is <b style={{ color: C.dim }}>{data.overall_score}/100 scored across the
+            {" "}{data.weight_scored_pct}% of weight that has fresh evidence</b> — NOT
+            {" "}{data.overall_score}/100 overall. <b style={{ color: C.amber }}>{data.unscored_categories
+              .map(k => LABELS[k]).join(", ")}</b> ({data.weight_unscored_pct}% of weight)
+            has no fresh evidence and is excluded, never renormalized to hide the gap.
           </div>
 
           {Object.keys(LABELS).map((id) => (

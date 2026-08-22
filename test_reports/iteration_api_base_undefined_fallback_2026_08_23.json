@@ -1,0 +1,26 @@
+{
+  "summary": "PREVIEW regression check for the shared frontend/src/lib/api.js BACKEND resolution fix (added `|| \"\"` third fallback + new frontend/.env.production + .gitignore negation for it). Verified: (1) preview login (test@aurem.dev / AuremTest2026!) succeeds and redirects to /dashboard, (2) admin cockpit (/admin/cockpit) loads cleanly, (3) zero network failures on /api/* calls, (4) zero 'undefined/api' occurrences anywhere in console or network, (5) only benign React Router future-flag warnings + WebP/font preload hints in console. Code review confirms lib/api.js lines 7-10 have 3 fallback levels ending in \"\", frontend/.env.production exists with both VITE_API_URL and REACT_APP_BACKEND_URL pinned to https://auremcto.com, and .gitignore line 121 has `!frontend/.env.production` negation — `git status --porcelain` shows `?? frontend/.env.production` (visible/untracked, not silently ignored). No regression in preview.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/screenshots/iter_api_regression_cockpit.jpeg"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "lib/api.js BACKEND fallback chain is correct: process.env.REACT_APP_BACKEND_URL || import.meta.env.VITE_API_URL || \"\". Empty-string final fallback is the right safe degradation (relative /api/... paths beat the literal string 'undefined').",
+    "frontend/.env.production correctly pins both VITE_API_URL and REACT_APP_BACKEND_URL to https://auremcto.com so CRA and Vite builds both resolve at build time.",
+    ".gitignore negation `!frontend/.env.production` at line 121 is placed correctly right after `!frontend/.env`; git confirms the file is visible to git (?? untracked)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only change)", "frontend": "100%"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview)",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "This was a preview-only regression check for a production incident hotfix touching frontend/src/lib/api.js. The actual production incident cannot be validated from this environment (no prod deploy access) — founder must redeploy production and separately verify auremcto.com login. Preview is unaffected.",
+  "rca of the issue": "Root cause of the production incident: in production builds, both process.env.REACT_APP_BACKEND_URL (CRA-style, only injected by react-scripts) and import.meta.env.VITE_API_URL (Vite-style) were undefined because neither build system had the corresponding env var configured for the prod deploy. JS `undefined || undefined` short-circuits to `undefined` which then gets template-literal-coerced into the literal string 'undefined', producing API_BASE=`undefined/api/aurem-dev`. All axios/fetch calls in the app then hit `undefined/api/...` (a relative URL treated as same-origin path), which 404'd. Mitigation: (a) append `|| \"\"` as final fallback in the BACKEND chain so it degrades to a same-origin relative /api/... which at least works if the SPA is served from the same origin as the API, (b) create frontend/.env.production pinning both env var names to https://auremcto.com so the build always bakes in a real absolute URL, (c) fix .gitignore so frontend/.env.production is actually committed (negation pattern added). Reproduction: build the frontend with both env vars unset and inspect API_BASE at runtime — pre-fix it would be `undefined/api/aurem-dev`, post-fix it is `/api/aurem-dev` (relative)."
+}

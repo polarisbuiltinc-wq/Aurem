@@ -112,6 +112,13 @@ credentials.json
 .env.*
 *.env
 !frontend/.env
+# 2026-08-23 — frontend/.env.production pins VITE_API_URL/
+# REACT_APP_BACKEND_URL to https://auremcto.com so any production
+# build (regardless of external CI/deploy env-var injection) never
+# falls back to the JS `undefined` value baked into API_BASE — this
+# caused a full production sign-in + GitHub-connect outage. Must stay
+# committed, same reasoning as the !frontend/.env exception above.
+!frontend/.env.production
 
 # Iter 212m-179b — repo snapshot cache for search_repo (never commit)
 .aurem_cache/

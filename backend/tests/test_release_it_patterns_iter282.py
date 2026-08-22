@@ -115,15 +115,17 @@ async def test_invariant_loop_collections_have_ttl_indexes(db):
     anti-pattern Release It! warns about.
 
     Retention tiers (documented in init_prod_collections.py):
-      • 7 d   — loop_events, loop_locks, loop_failures  (ephemeral)
-      • 30 d  — loop_sessions                            (audit)
-      • 90 d  — loop_verification_log, loop_run_log      (analytics)
+      • 7 d    — loop_events, loop_locks, loop_failures  (ephemeral)
+      • 365 d  — loop_sessions                           (audit — founder
+                 decision 2026-08-23: err toward more retention, not
+                 less, until there's a specific reason to shorten it)
+      • 90 d   — loop_verification_log, loop_run_log     (analytics)
     """
     expected = {
         "loop_events":            (7,  "created_at"),
         "loop_locks":             (7,  "acquired_at"),
         "loop_failures":          (7,  "occurred_at"),
-        "loop_sessions":          (30, "updated_at"),
+        "loop_sessions":          (365, "updated_at"),
         "loop_verification_log":  (90, "created_at"),
         "loop_run_log":           (90, "created_at"),
     }
