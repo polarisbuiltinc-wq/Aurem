@@ -3473,3 +3473,106 @@ informational, none introduced this session:
 - Testing: `/app/test_reports/iteration_friendly_status_masking_2026_08_22.json` — 100% frontend pass, zero bugs. Unit tests: `StreamHealthPill.test.jsx` 4/4 pass (rewritten), broader frontend suite 387/388 pass (1 pre-existing unrelated failure confirmed via git-stash).
 - Minor non-blocking note from testing_agent: `manualRetryRef` in `ChatPanel.jsx` is now dead code (assigned, no UI trigger) — safe to leave, could be removed in a future cleanup pass.
 
+
+
+## 2026-08-23 — Findings-to-Fix Bridge, Phase 1 of 2 (backend + teaser strip + Fix All reuse)
+
+Founder-approved brief: connect ORA chat's `save_finding` calls to the
+existing bulk-fix machinery via ONE new component (`FindingsTeaserStrip`),
+reusing `BulkFixConfirmModal` / `FixProgressDrawer` / `/fix-pipeline/bulk`
+unchanged. Founder decisions locked in: (1) inline expansion inside the
+strip itself, no separate findings-list page; (2) GitHub real-commit E2E
+expected BLOCKED in preview (no working connected repo) — founder tests
+that on production; (3) split into 2 phases, each fully tested; (4)
+proceed now, independent of the still-unconfirmed upstream chat-audit
+reliability dependency (see 2026-08-22/23 entries above on citation
+guard / raw tool-call leakage).
+
+**Backend (all in `routers/findings.py::backlog_list`):**
+- `GET /findings/backlog?project_id=&ids=a,b,c` now also returns
+  `matched` (full finding docs: id, finding_id, file, line, severity,
+  rule_id, title, message, fix_hint) for the requested ids, plus
+  `teaser_batch_id`/`teaser_dismissed`. `rule_id` is the key addition —
+  the lightweight chat-stream `findings_saved` payload never carried it,
+  but the bulk-fix pipeline's LLM re-validation step needs it.
+  Backward-compatible: unchanged response shape when `ids` isn't passed.
+  Ownership-gated by the SAME pre-existing `_assert_owns_project` used
+  by the rest of the endpoint (404 no project, 403 wrong owner).
+- `matched` only includes docs with `status == "open"` — externally
+  resolved findings drop out automatically (`tracked_status` reports
+  them as `"resolved"`), which is what makes the strip shrink/disappear
+  for fixes applied via ANY surface (chat, CodebaseHealth, etc.).
+- New test file `backend/tests/test_findings_teaser_bridge_2026_08_23.py`
+  — 4/4 pass: matched-field shape + rule_id, IDOR 403 (wrong owner),
+  IDOR 404 (nonexistent project), resolved-finding exclusion.
+
+**Frontend:**
+- New component `frontend/src/components/FindingsTeaserStrip.jsx` (the
+  ONE new component). Props: `projectId`, `newFindings` (array from
+  the chat stream's `done` payload). Merges/dedupes by `finding_id`
+  (never stacks two strips), re-verifies staleness against
+  `/findings/backlog` on every new batch + a 30s safety poll, and
+  listens for the global `aurem:finding-fixed` window event (fired by
+  the pre-existing `FixJobContext` regardless of which UI started the
+  fix job) for an instant drop. "Review & fix →" toggles an INLINE
+  expanded list (no new drawer/page, per founder decision) with a
+  "Fix all (N)" button that opens the EXISTING, unmodified
+  `BulkFixConfirmModal`. "Later" optimistically hides + persists a 24h
+  dismiss via the existing `/findings/dismiss` endpoint. Wrapped in its
+  own error boundary so a crash here can never blank the chat reply
+  above it. Full `data-testid` set: `findings-teaser-strip`,
+  `findings-teaser-review-btn`, `findings-teaser-later-btn`,
+  `findings-teaser-expanded-panel`, `findings-teaser-row-<id>`,
+  `findings-teaser-collapse-btn`, `findings-teaser-fix-all-btn`.
+- `ChatPanel.jsx`: mounts `<FindingsTeaserStrip key={sessionId} .../>`
+  just above the pre-existing `ScanStatusStrip`, and now resets
+  `findingsThisSession=[]` on session switch (previously only `input`
+  was reset) so a new chat can never inherit a stale finding count.
+
+**Testing — backend fully proven, frontend partially blocked:**
+- `testing_agent` report `/app/test_reports/iteration_findings_teaser_bridge_2026_08_23.json`:
+  backend 8/8 pass (4 pytest + 4 live-HTTP against the running preview),
+  frontend regression clean (no strip when no findings, ScanStatusStrip
+  intact, zero console errors), full code review passed with no bugs
+  found. E2E trigger (chat → save_finding → strip) could not be
+  exercised because ORA didn't invoke the tool for the agent's test
+  prompt.
+- Main agent follow-up (`mode: "pro"` via direct `POST /chat/send`
+  curl, project `p_demo_a`): **confirmed working end-to-end with real
+  LLM output** — 4 real findings saved (3 critical, 1 high) with
+  correct `findings_saved` shape, and `GET /findings/backlog?ids=...`
+  correctly returned all 4 in `matched` with `rule_id` populated. This
+  is the authoritative proof the backend contract works with actual
+  LLM tool-calls, not just synthetic pytest fixtures.
+- Main agent browser attempts (3x, same prompt style) to visually
+  confirm the strip: **could not reproduce in-browser.** Root cause
+  found (not a bug in this feature) — the browser's default flow for
+  audit-style prompts on this test project routes through a
+  multi-adviser "Council / chairman-verdict" mode, and in that mode
+  the model repeatedly *narrated* "Saving this finding now" /
+  "Calling save_finding for this issue" as prose WITHOUT actually
+  invoking the tool (confirmed via `cto_open_findings` count staying
+  at 8 before/after). The same prompt via direct `mode: "pro"` API
+  call DID invoke the tool correctly. This is the same class of issue
+  as the already-flagged "Step 0" upstream chat-reliability gap
+  (contradictory/unreliable tool-calling in certain modes), NOT a
+  defect in `FindingsTeaserStrip`/`ChatPanel`/`findings.py` — those
+  are proven correct against real tool output. **Visual/live
+  confirmation of the strip rendering in a browser is the one Phase 1
+  acceptance item still open.**
+
+**Phase 1 status: backend done + proven, frontend built + code-reviewed
++ regression-tested, but NOT yet visually confirmed live due to the
+Council-mode tool-execution gap above.** Recommend either (a) founder
+retests on production where tool-calling has historically been more
+reliable, or (b) a follow-up fix specifically for Council/chairman-
+verdict mode's tool-execution reliability (new finding, separate from
+this bridge's scope) before Phase 2.
+
+**Phase 2 (not started, scope confirmed with founder):** timeout UX
+(hard 3-min `[Keep waiting]`/`[Cancel]`), partial-failure UX, GitHub
+commit-verification tri-state + retry UX polish on top of the
+`fix_pipeline.py`/`fix_job_manager.py` changes already made in this
+session (tri-state verify + retry endpoint exist but not yet
+frontend-wired or tested).
+

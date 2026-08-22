@@ -2466,6 +2466,11 @@ async def chat_with_tools(
                 # calls (consumed by SystemSignalBanner + CitationGuard).
                 "system_signals": local_ctx.get("system_signals") or [],
                 "tool_calls":     local_ctx.get("tool_calls") or [],
+                # 2026-08-23 — findings-to-fix bridge. critical/high
+                # `save_finding` saves this turn, so chat can surface a
+                # reliable teaser instead of depending on the fragile
+                # aurem-handoff fence to bundle+offer a fix.
+                "findings_saved_this_turn": local_ctx.get("findings_saved_this_turn") or [],
                 **agent_meta,
             }
 
@@ -2594,6 +2599,25 @@ async def chat_with_tools(
                 project_id=project_id,
                 session_id=session_id,
             )
+            # 2026-08-23 — findings-to-fix bridge. Capture critical/high
+            # save_finding results (raw, not the trimmed LLM-facing
+            # copy above) so chat.py can surface a reliable "N issues
+            # found" teaser instead of depending on the fragile
+            # aurem-handoff fence. Per founder decision: only
+            # critical/high count toward the teaser (that's what
+            # `persist_findings_to_backlog` actually stores/what the
+            # bulk-fix pipeline can act on).
+            if (tool_name == "save_finding" and isinstance(res, dict)
+                    and res.get("ok") and res.get("severity") in ("critical", "high")):
+                local_ctx.setdefault("findings_saved_this_turn", []).append({
+                    "finding_id": res.get("finding_id"),
+                    "severity":   res.get("severity"),
+                    "file":       res.get("file"),
+                    "line":       res.get("line"),
+                    "title":      res.get("title"),
+                    "message":    res.get("message"),
+                    "fix_hint":   res.get("fix_hint"),
+                })
             return {"tool": tool_name, "result": res}
 
         results_for_llm = await asyncio.gather(*[_run_one(c) for c in calls])
@@ -2697,4 +2721,5 @@ async def chat_with_tools(
         # the typed banner instead of a generic timeout.
         "system_signals": local_ctx.get("system_signals") or [],
         "tool_calls":     local_ctx.get("tool_calls") or [],
+        "findings_saved_this_turn": local_ctx.get("findings_saved_this_turn") or [],
     }

@@ -86,6 +86,7 @@ import ToolButton        from "./chat/ToolButton";
 import StreamHealthPill  from "./chat/StreamHealthPill";
 import RepoHelpDialog    from "./chat/RepoHelpDialog";
 import ScanStatusStrip, { markScanJustCompleted } from "./ScanStatusStrip";        // Iter 212m-190 · Session 3
+import FindingsTeaserStrip from "./FindingsTeaserStrip";                            // 2026-08-23 · Findings-to-fix bridge
 import SlashCommandMenu, { matchSlashCommands } from "./SlashCommandMenu";         // Iter 212m-190 · Session 3
 import CharCounter from "./CharCounter";                                             // Iter 388f — live char counter for 20k cap
 import {
@@ -142,7 +143,10 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashIdx, setSlashIdx]   = useState(0);
   const [scanState, setScanState] = useState("idle");
-  // Iter 212m-149 — Intent Gateway last-known tier for the indicator.
+  // 2026-08-23 — findings-to-fix bridge. Critical/high `save_finding`
+  // results accumulated across this chat session (deduped by
+  // finding_id), fed to <FindingsTeaserStrip/>.
+  const [findingsThisSession, setFindingsThisSession] = useState([]);  // Iter 212m-149 — Intent Gateway last-known tier for the indicator.
   // Updated when an SSE `intent` frame arrives during a chat turn.
   const [lastIntentTier, setLastIntentTier] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -382,6 +386,10 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     // messages list but the user's last unsent draft lingered in the
     // input area, making the button look non-responsive.
     setInput("");
+    // 2026-08-23 — findings-to-fix bridge. Session-scoped accumulator
+    // must not leak into a freshly-switched chat (a different repo
+    // audit's findings appearing in the new session's teaser).
+    setFindingsThisSession([]);
     try { window.dispatchEvent(new CustomEvent("aurem:chat-session-reset")); }
     catch { /* ignore */ }
   }, [sessionId]);
@@ -2343,6 +2351,23 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       },
       onDone: (d) => {
         clearIdleWatchdog();
+        // 2026-08-23 — findings-to-fix bridge. Merge this turn's
+        // critical/high save_finding results into the session-level
+        // tracker, deduped by finding_id — this is what feeds the
+        // teaser strip's count.
+        if (Array.isArray(d.findings_saved) && d.findings_saved.length) {
+          setFindingsThisSession((cur) => {
+            const seen = new Set(cur.map((f) => f.finding_id));
+            const merged = cur.slice();
+            for (const f of d.findings_saved) {
+              if (f?.finding_id && !seen.has(f.finding_id)) {
+                seen.add(f.finding_id);
+                merged.push(f);
+              }
+            }
+            return merged;
+          });
+        }
         // Iter 212m-19 — mark the floating card done so it can
         // auto-close 3s later, and finalise its model+token footer.
         setLiveStepCard((cur) => {
@@ -4685,6 +4710,16 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           below the streaming assistant bubble (see the messages.map
           loop above) instead of a full-width bar here — smaller,
           and anchored to the specific task it's about. */}
+
+      {/* 2026-08-23 — Findings-to-fix bridge. Single chat-native
+          teaser, keyed by session so its internal dedup/expand state
+          resets cleanly on a session switch instead of leaking a
+          previous chat's findings into a new one. */}
+      <FindingsTeaserStrip
+        key={sessionId || "no-session"}
+        projectId={activeProject?.project_id}
+        newFindings={findingsThisSession}
+      />
 
       {/* Iter 212m-190 · Session 3 — Chat-native scan strip. Sits
           just above the composer form so scan lifecycle events

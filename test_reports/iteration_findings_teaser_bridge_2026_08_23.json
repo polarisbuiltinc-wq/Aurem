@@ -1,0 +1,54 @@
+{
+  "summary": "Phase 1 Findings-to-Fix Bridge tested. Backend: 8/8 pass (4 pytest unit + 4 live-HTTP via preview URL, covering matched-field contract, IDOR 403/404, resolved-finding exclusion, and /findings/dismiss). Additional in-browser call to GET /findings/backlog?project_id=p_demo_a returned 200 with proper shape. Frontend regression clean: no teaser strip appears when no findings, ScanStatusStrip still renders, no console errors on normal chat. Code review of FindingsTeaserStrip.jsx + ChatPanel wiring confirms all data-testids, error boundary, dedup (Set by finding_id), session reset via key={sessionId}, aurem:finding-fixed listener, 30s staleness poll, 24h dismiss (optimistic + server persist), and BulkFixConfirmModal reuse are wired per spec. FULL E2E teaser trigger (chat->save_finding->strip appears) was BLOCKED in this preview: ORA responded with an audit-formatted reply but did not actually invoke the save_finding tool despite an explicit prompt containing a hardcoded JWT secret and 'call save_finding for each critical issue' instruction. Per founder brief this LLM behavior is a pre-existing, separately-verified capability and out-of-scope for this Phase 1 pass, so the E2E teaser UI (expand/collapse, Fix All modal open, Later dismiss, dedup across turns, session-switch isolation, aurem:finding-fixed staleness) could not be exercised end-to-end here.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Chat->save_finding->FindingsTeaserStrip",
+        "issue": "In preview environment, sending a prompt with a hardcoded JWT secret + AWS key and explicit 'call save_finding for each critical issue' did NOT cause ORA to invoke the save_finding tool. The reply was a formatted audit only (no findings_saved payload in the SSE done event), so the teaser strip could not be triggered E2E. This is called out as expected/out-of-scope by the founder brief (LLM tool-call behavior is a pre-existing separately-verified capability), but it prevented direct verification of every interactive teaser behavior (expand, Fix All modal, Later dismiss, dedup across turns, session isolation, aurem:finding-fixed staleness).",
+        "affected_selectors": [
+          "findings-teaser-strip",
+          "findings-teaser-review-btn",
+          "findings-teaser-expanded-panel",
+          "findings-teaser-fix-all-btn",
+          "findings-teaser-later-btn",
+          "findings-teaser-collapse-btn"
+        ]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_findings_teaser_bridge_2026_08_23.py",
+    "/app/backend/tests/test_findings_teaser_bridge_live_http.py",
+    "/app/test_reports/pytest/findings_teaser_bridge.xml"
+  ],
+  "action_items": [
+    "OPTIONAL / not blocking Phase 1: to fully exercise the teaser UI end-to-end in an automated way (given ORA sometimes chooses not to fire save_finding in preview), consider adding a lightweight test-only hook or a 'seed_findings_and_broadcast' dev endpoint that pushes a synthetic findings_saved payload into the active chat session — this would unblock automated coverage of expand/collapse/Fix All modal open/Later dismiss/dedup/session-isolation/aurem:finding-fixed staleness in CI without depending on non-deterministic LLM tool-calling.",
+    "Founder should manually validate the interactive teaser flow (expand -> Fix all -> BulkFixConfirmModal -> real /fix-pipeline/bulk + FixProgressDrawer + real GitHub commit) on production against tjsandhu/aurem, since the preview account's connected repo has revoked GitHub access and cannot commit."
+  ],
+  "critical_code_review_comments": [
+    "FindingsTeaserStrip.jsx is well-structured: internal error boundary (FindingsTeaserBoundary) properly isolates render failures from the chat above; dedup by finding_id via Set is correct; useMemo(ids) uses ids.join(',') to keep effect deps stable; 24h dismiss is optimistic then server-persisted; 30s staleness poll only runs while dismissed=false and ids.length>0 which is correct.",
+    "ChatPanel mounts <FindingsTeaserStrip key={sessionId || 'no-session'}/> which cleanly resets on session switch as required.",
+    "routers/findings.py backlog_list correctly gates on _assert_owns_project BEFORE any read (raises 404 for missing project, 403 for wrong owner), and the `matched` array is only appended when `ids` is provided, preserving backward compatibility for callers that don't pass ids.",
+    "tracked_status correctly maps requested ids to open/resolved by set-membership against findings_all (open, non-fixed) — externally-resolved findings appear as 'resolved' so the frontend can drop them and shrink/hide the strip.",
+    "matched rows include rule_id, which the chat-stream findings_saved payload does NOT carry — this is exactly what the bulk-fix pipeline needs, closing the gap between the lightweight streaming payload and the fix pipeline's requirements.",
+    "No hardcoded values, all env-driven (MONGO_URL, DB_NAME, REACT_APP_BACKEND_URL). No _id leakage in responses.",
+    "Minor nit (not a bug): the useEffect that merges newFindings sets dismissed=false unconditionally on any newFindings arrival; this is intentional per the JSX comment ('a genuinely new finding arriving means the user is auditing again') and matches the spec — noting it here so future refactors don't remove it as apparent dead logic."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (8/8 pass — 4 unit + 4 live-HTTP)",
+    "frontend": "Regression 100% (no strip when no findings, ScanStatusStrip intact, no console errors). Interactive teaser flows not exercised E2E due to LLM not firing save_finding in preview — code-review pass only for those paths."
+  },
+  "test_credentials": "Preview test@aurem.dev / AuremTest2026! (worked, dashboard reached, active project = p_demo_a). GitHub token for aurem-demo/frontend is revoked in preview (unrelated to this feature).",
+  "seed_data_creation": "Live-HTTP pytest fixture seeded temporary project + critical open finding into cto_open_findings scoped to the authenticated user, then cleaned up in the fixture teardown. IDOR-403 test seeded a project owned by 'someone_else_totally' and cleaned up. No leftover test data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend contract for GET /api/aurem-dev/findings/backlog (matched field, tracked_status resolved semantics, IDOR 403/404) and POST /api/aurem-dev/findings/dismiss are green. If you need to exercise the FindingsTeaserStrip UI E2E in preview and ORA still won't call save_finding via a text prompt, either (a) use the CodebaseHealth scanner path to persist findings then trigger the bridge, (b) directly seed cto_open_findings + call the live findings_saved SSE payload injection (would need a dev-only hook), or (c) ask the main agent to expose a debug 'inject teaser findings into current chat session' helper. Do NOT block Phase 1 on GitHub-side commit E2E — founder validates that on production.",
+  "rca of the issue": "N/A — no bug identified in Phase 1 scope. The one integration gap (chat->save_finding->teaser could not be triggered E2E in preview) is explicitly out of scope per the review request; the underlying LLM tool-calling capability is separately verified in test_save_finding_tool.py, and the strip's `newFindings` prop pipeline in ChatPanel.onDone is code-reviewed as correct."
+}

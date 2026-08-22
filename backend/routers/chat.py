@@ -1071,6 +1071,7 @@ async def chat_send(
         "repo_owner": getattr(bin_ctx, "repo_owner", None) if bin_ctx else None,
         "repo_name":  getattr(bin_ctx, "repo_name", None)  if bin_ctx else None,
         "branch":     getattr(bin_ctx, "branch", None)     if bin_ctx else None,
+        "findings_saved": result.get("findings_saved_this_turn") or [],
     }
 
 
@@ -3478,6 +3479,11 @@ async def chat_stream(
             # still surface the caption even if the client missed the
             # early `council` frame.
             "council_recalled":        int(_council_recalled or 0),
+            # 2026-08-23 — findings-to-fix bridge. Critical/high
+            # `save_finding` calls made this turn — lets the frontend
+            # show a reliable "N issues found" teaser instead of
+            # depending on the aurem-handoff fence to bundle them.
+            "findings_saved": result.get("findings_saved_this_turn") or [],
         }
         yield f"data: {json.dumps(done_payload)}\n\n"
 

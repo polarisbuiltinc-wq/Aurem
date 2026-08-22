@@ -156,9 +156,13 @@ def emit(job_id: str, phase: str, **payload) -> None:
                 "finding_id": fid,
                 "ok":         True,
                 "commit_sha": payload.get("commit_sha"),
+                "full_sha":   payload.get("full_sha"),
                 "html_url":   payload.get("html_url"),
                 "file":       payload.get("file"),
                 "rule_id":    payload.get("rule_id"),
+                # 2026-08-23 — tri-state: True/False/None. See
+                # _verify_commit_exists docstring in fix_pipeline.py.
+                "verified":   payload.get("verified"),
             })
         else:
             j["failed"] += 1
@@ -196,6 +200,53 @@ async def persist_event(db, job_id: str) -> None:
         "completed_ids":       sorted(j["completed_ids"]),
         "failed_terminal_ids": sorted(j["failed_terminal_ids"]),
     })
+
+
+async def update_result_verified(db, job_id: str, finding_id: str,
+                                  verified: Optional[bool]) -> bool:
+    """2026-08-23 — manual "Check now" retry support. Patches a single
+    result row's `verified` field in-memory + Mongo, and pushes a live
+    event if the job's SSE stream is still open. Returns True if a
+    matching row was found and updated."""
+    j = _JOBS.get(job_id)
+    found = False
+    if j:
+        for row in j["results"]:
+            if row.get("finding_id") == finding_id and row.get("ok"):
+                row["verified"] = verified
+                found = True
+                break
+        if found:
+            try:
+                j["queue"].put_nowait({
+                    "phase": "verify-updated", "ts": time.time(),
+                    "finding_id": finding_id, "verified": verified,
+                })
+            except Exception:
+                pass
+            await _persist(db, job_id, {"results": j["results"]})
+            return True
+    # Fall back to patching the persisted-only row (job no longer in
+    # memory but still on disk, e.g. after a pod restart).
+    if db is None:
+        return False
+    try:
+        doc = await db.fix_jobs.find_one({"job_id": job_id}, {"_id": 0, "results": 1})
+        if not doc:
+            return False
+        results = doc.get("results") or []
+        changed = False
+        for row in results:
+            if row.get("finding_id") == finding_id and row.get("ok"):
+                row["verified"] = verified
+                changed = True
+                break
+        if changed:
+            await _persist(db, job_id, {"results": results})
+        return changed
+    except Exception as e:                                # noqa: BLE001
+        logger.warning("update_result_verified failed job=%s err=%r", job_id, e)
+        return False
 
 
 async def close(db, job_id: str, *, ok: bool = True,
@@ -312,6 +363,7 @@ def get_summary(job_id: str) -> Optional[dict]:
     return {
         "job_id":     j["job_id"],
         "user_id":    j.get("user_id"),
+        "project_id": j.get("project_id"),
         "kind":       j["kind"],
         "total":      j["total"],
         "completed":  j["completed"],

@@ -108,6 +108,7 @@ def _batch_id_for(findings: list[dict]) -> str:
 @router.get("/backlog")
 async def backlog_list(
     project_id: str,
+    ids: Optional[str] = None,
     authorization: Optional[str] = Header(None),
 ):
     user = await current_dev(authorization)
@@ -185,6 +186,43 @@ async def backlog_list(
         else "unknown"
     )
 
+    # 2026-08-23 — teaser-specific dismissal check (separate batch_id
+    # scoped to exactly the ids the caller is tracking, not the 30-day
+    # "eligible" batch above).
+    teaser_dismissed = False
+    teaser_batch_id_val = None
+    matched: list[dict] = []
+    if ids:
+        wanted = {i.strip() for i in ids.split(",") if i.strip()}
+        tracked_findings = [f for f in findings_all if f.get("finding_id") in wanted]
+        teaser_batch_id_val = _batch_id_for(tracked_findings)
+        td = await db.cto_notification_dismissals.find_one({
+            "user_id": user_id, "project_id": project_id,
+            "finding_batch_id": teaser_batch_id_val,
+        })
+        teaser_dismissed = bool(td and (_as_utc(td.get("expires_at")) or now) > now)
+        # 2026-08-23 — findings-to-fix bridge. `newFindings` payloads
+        # off the chat stream only carry finding_id/severity/file/line/
+        # title/message/fix_hint (no rule_id — the LLM-facing tool
+        # result never exposed it). The bulk-fix pipeline needs
+        # rule_id to generate + re-validate a real patch, so the
+        # teaser strip fetches the FULL persisted doc here (same
+        # collection, same ownership-checked query as the rest of
+        # this endpoint) and re-shapes it into what
+        # BulkFixConfirmModal → /fix-pipeline/bulk → apply_finding_fix
+        # already expects from the CodebaseHealth scanner path.
+        matched = [{
+            "id":         f.get("finding_id"),
+            "finding_id": f.get("finding_id"),
+            "file":       f.get("file"),
+            "line":       f.get("line"),
+            "severity":   f.get("severity"),
+            "rule_id":    f.get("rule_id"),
+            "title":      f.get("title"),
+            "message":    f.get("message"),
+            "fix_hint":   f.get("fix_hint"),
+        } for f in tracked_findings]
+
     return {
         "ok":                True,
         "project_id":        project_id,
@@ -197,6 +235,21 @@ async def backlog_list(
         "should_show_strip": should_show,
         "reason":            reason,
         "last_exposure":     last_exposure.isoformat() if last_exposure else None,
+        # 2026-08-23 — findings-to-fix bridge teaser staleness check.
+        # Pass ?ids=a,b,c (the finding_ids a chat-sourced teaser is
+        # currently tracking) to learn which are STILL open right now
+        # — regardless of the 30-day-idle "eligible" gate above, which
+        # only applies to the slow backlog-reminder nudge, not this.
+        **({
+            "tracked_status": {
+                fid: ("open" if fid in {f.get("finding_id") for f in findings_all}
+                      else "resolved")
+                for fid in [i.strip() for i in ids.split(",") if i.strip()]
+            },
+            "teaser_batch_id": teaser_batch_id_val,
+            "teaser_dismissed": teaser_dismissed,
+            "matched": matched,
+        } if ids else {}),
     }
 
 

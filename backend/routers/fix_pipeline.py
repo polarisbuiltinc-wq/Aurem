@@ -497,6 +497,13 @@ async def _run_bulk_job(*, job_id: str, db, user: dict, project_id: str,
                          rule_id=res.get("rule_id"),
                          fix_index=global_idx,
                          fix_total=len(ordered),
+                         # 2026-08-23 — tri-state, not a bool: True=
+                         # confirmed on GitHub, False=confirmed absent
+                         # (rare, real problem), None=check itself was
+                         # inconclusive (rate limit/network) — the
+                         # commit may well be fine, just unconfirmed.
+                         # The drawer must show a "Check now" retry for
+                         # None, not silently treat it like False.
                          verified=verified)
                 await fjm.persist_event(db, job_id)
                 fixes_summary.append({
@@ -633,11 +640,18 @@ def _interleave_by_severity(findings: list[dict]) -> list[dict]:
 
 
 async def _verify_commit_exists(*, db, user: dict, project_id: str,
-                                full_sha: Optional[str]) -> bool:
+                                full_sha: Optional[str]) -> Optional[bool]:
     """Hit GET /repos/{owner}/{repo}/commits/{sha} to confirm the
     commit landed on GitHub.  No `True` shortcut without a real
     HTTP 200 + non-empty parents list — the user explicitly asked
-    for proof, not optimism."""
+    for proof, not optimism.
+
+    2026-08-23 — returns `None` (not `False`) when the CHECK ITSELF
+    is inconclusive (network error, rate limit, timeout) rather than
+    when the commit is confirmed absent. Callers must not treat these
+    the same: `False` is a real "commit missing" signal, `None` means
+    "try the check again," never "the fix failed."
+    """
     if not full_sha:
         return False
     try:
@@ -647,7 +661,7 @@ async def _verify_commit_exists(*, db, user: dict, project_id: str,
              "auth_method": 1, "installation_id": 1, "user_id": 1},
         )
         if not proj:
-            return False
+            return None
         owner = proj.get("github_owner")
         repo  = proj.get("github_repo")
         # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token dispatches on
@@ -663,7 +677,7 @@ async def _verify_commit_exists(*, db, user: dict, project_id: str,
             except Exception:
                 token = None
         if not (owner and repo and token):
-            return False
+            return None
         import httpx
         from services.http import ext_client
         async with ext_client("github", timeout=httpx.Timeout(10.0)) as cx:
@@ -673,14 +687,16 @@ async def _verify_commit_exists(*, db, user: dict, project_id: str,
                          "Accept": "application/vnd.github+json",
                          "User-Agent": "aurem-fix-verifier"},
             )
+            if r.status_code == 404:
+                return False  # genuinely confirmed absent — rare, real
             if r.status_code != 200:
-                return False
+                return None   # rate limit / 5xx / other — inconclusive, retry-able
             data = r.json() or {}
             # A real commit always carries an `html_url` and a `sha`.
             return bool(data.get("sha") == full_sha and data.get("html_url"))
     except Exception as e:                                    # noqa: BLE001
-        logger.warning("verify_commit_exists soft-failed: %r", e)
-        return False
+        logger.warning("verify_commit_exists soft-failed (inconclusive): %r", e)
+        return None
 
 
 # ─── SSE stream ────────────────────────────────────────────────────────
@@ -758,6 +774,32 @@ async def get_job_summary(job_id: str,
             and not user.get("is_admin"):
         raise HTTPException(404, "Job not found")
     return {"ok": True, **s}
+
+
+# ─── 2026-08-23 — manual "Check now" retry for inconclusive verify ────
+@router.get("/verify-commit")
+async def retry_verify_commit(job_id: str, finding_id: str,
+                               authorization: Optional[str] = Header(None)) -> dict:
+    """The commit-exists check can itself fail (rate limit, network)
+    independent of whether the fix succeeded. This lets the UI ask
+    "check again" without re-running the whole fix."""
+    user = await current_dev(authorization)
+    db = get_db()
+    s = fjm.get_summary(job_id) or await fjm.get_persisted(db, job_id, user["user_id"])
+    if not s:
+        raise HTTPException(404, "Job not found")
+    if s.get("user_id") and s["user_id"] != user["user_id"] and not user.get("is_admin"):
+        raise HTTPException(404, "Job not found")
+    project_id = s.get("project_id")
+    row = next((r for r in (s.get("results") or [])
+                if r.get("finding_id") == finding_id and r.get("ok")), None)
+    if not row:
+        raise HTTPException(404, "Finding not found in this job")
+    verified = await _verify_commit_exists(
+        db=db, user=user, project_id=project_id, full_sha=row.get("full_sha"),
+    )
+    await fjm.update_result_verified(db, job_id, finding_id, verified)
+    return {"ok": True, "finding_id": finding_id, "verified": verified}
 
 
 # ─── Iter 212m-128 — List user's recent jobs ──────────────────────────

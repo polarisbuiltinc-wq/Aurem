@@ -1968,6 +1968,17 @@ async def save_finding(ctx: dict, args: dict) -> dict:
         "ok":       True,
         "saved":    written > 0,
         "severity": severity,
+        # 2026-08-23 — findings-to-fix bridge. Same deterministic id
+        # formula as persist_findings_to_backlog (loop_full_scan.py)
+        # so orchestrator.py can track this finding and, later, the
+        # fix pipeline can write back "resolved" against the exact
+        # same row.
+        "finding_id": f"ora_chat_audit::{file_}:{line_}:{rule_slug}",
+        "file":     file_,
+        "line":     line_,
+        "title":    finding["title"],
+        "message":  finding["message"],
+        "fix_hint": finding["fix_hint"],
         "note": (
             "Saved to the user's findings backlog — it will surface in "
             "their reminder strip and personalized suggestions."

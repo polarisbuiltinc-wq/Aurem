@@ -39,6 +39,27 @@ from services.http import ext_client
 logger = logging.getLogger("aurem-dev.finding_fix_applier")
 
 
+async def _mark_finding_resolved_if_tracked(
+    db, *, user_id: str, project_id: str, finding_id: str,
+) -> None:
+    """2026-08-23 — staleness write-back. If this finding also exists
+    in the real findings backlog (cto_open_findings — e.g. it came
+    from a conversational `save_finding` audit), mark it resolved so
+    any teaser/reminder built on that backlog stops counting it. A
+    plain no-op (matches zero docs) for findings that never entered
+    that collection at all (automated-scanner-only findings)."""
+    if not finding_id:
+        return
+    try:
+        import time as _time
+        await db.cto_open_findings.update_one(
+            {"user_id": user_id, "project_id": project_id, "finding_id": finding_id},
+            {"$set": {"status": "fixed", "resolved_at": _time.time()}},
+        )
+    except Exception as e:                                  # noqa: BLE001
+        logger.warning("finding backlog write-back failed (non-fatal): %r", e)
+
+
 # ─── 1. Fetch current file from GitHub ────────────────────────────────
 async def _fetch_file_content(
     owner: str, repo: str, branch: str, path: str, token: str,
@@ -431,6 +452,16 @@ async def apply_finding_fix(
         })
     except Exception as e:                                # noqa: BLE001
         logger.warning("fix history persist failed: %r", e)
+
+    # 2026-08-23 — staleness write-back (approved decision #2). Uses
+    # `finding.get("id")` — callers that source findings from
+    # `save_finding` (chat) pass the real `cto_open_findings.finding_id`
+    # here; automated-scanner findings pass their own rule id, which
+    # simply won't match any doc (safe no-op).
+    await _mark_finding_resolved_if_tracked(
+        db, user_id=user_id, project_id=project_id,
+        finding_id=finding.get("id") or "",
+    )
 
     logger.info(
         "FIX APPLIED — user=%s project=%s rule=%s file=%s sha=%s "
