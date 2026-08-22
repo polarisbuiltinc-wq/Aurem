@@ -19,6 +19,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import LiveBusinessIntelligence from "../components/LiveBusinessIntelligence";
+import HealthScoreWidget from "../components/HealthScoreWidget";
 
 const C = {
   bg:     "#0a0a0a",
@@ -501,6 +502,12 @@ export default function AdminCockpit() {
             cockpit and the (former) financials page can no longer
             disagree on MRR / active-subs / Stripe status. */}
         <LiveBusinessIntelligence />
+
+        {/* 2026-08-23 — Codebase Health Score. Deliberately its own
+            section, not folded into the guard-check donut above: this
+            scores AUREM's OWN codebase (security/coverage/perf/etc),
+            not live production checks. */}
+        <HealthScoreWidget />
       </div>
     </div>
   );

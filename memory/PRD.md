@@ -4229,3 +4229,328 @@ looked. Still **zero implementation code written**.
   breakdown before writing any pipeline/schema/widget code, per
   explicit instruction.
 
+---
+
+### Codebase Health Score — SHIPPED (2026-08-23, cont'd 6)
+
+Built and tested per the founder-approved plan: instrumentation +
+admin widget, real evidence only, no fabricated scores.
+
+**Backend** (`services/health_score.py`, `services/health_coverage_
+scan.py`, `routers/admin_health_score.py`, `main.py` middleware +
+startup indexes):
+- 9 categories computed live on every `GET /admin/health-score` call.
+  Security, Bug Density, Reliability are **permanently/currently
+  UNSCORED** with a disclosed reason (matches the agreed policy).
+- Code Quality + Architecture (automated half): **LIVE**, re-run
+  `services/architecture_health.py::run_health_report()` fresh every
+  call. First real read: Code Quality 9/100 (172/679 files over the
+  300-line limit, 446 CC>10 hits — real, harsh, correct, not a bug).
+- DevOps/Infra: **LIVE** real GitHub Actions API pull (`ci.yml`,
+  30-day window) — confirmed 0% pass rate matches the known-broken
+  CI state from the earlier investigation.
+- Data Handling: reads real `backup_history`/`restore_drill_history`
+  + `rollback_manager.rollback_status()` for the shared "rollback
+  unverified" penalty (25-pt deduction, zero positive evidence on
+  record).
+- Test Coverage: new on-demand `POST .../test-coverage/run` —
+  fire-and-forget (`asyncio.create_task`, avoids the ~60s ingress
+  timeout), runs a keyword-filtered critical-path subset (auth/chat/
+  findings/fix_pipeline/payment tests) with real `--cov`, persists to
+  `health_test_coverage_runs`. **Scoped deliberately** — the full
+  ~5,300-test suite with `--cov` was tried first and didn't complete
+  in 600s; evidence always discloses `scope` is a subset, not
+  whole-repo. First real run: 27.6% coverage over the subset, all 5
+  critical modules confirmed to have real integration-test coverage.
+- Performance: passive middleware samples every `/api/` request into
+  `health_endpoint_latency` (BSON-date TTL, 14d); shows UNSCORED
+  until 200+ samples/7d window accumulate (by design — accumulates
+  from real traffic going forward).
+- Architecture (qualitative half): new `architecture_review_log` +
+  `POST/GET .../architecture-review` — empty until someone logs a
+  real review; no auto-seeded/fabricated rubric.
+- Overall score = weighted average over SCORED categories only, with
+  `weight_scored_pct`/`unscored_categories` always shown alongside —
+  never renormalized to look complete. First real overall: **36/100
+  at 45% weight scored** (once test-coverage was first run).
+
+**Frontend** (`components/HealthScoreWidget.jsx`, wired into
+`pages/AdminCockpit.jsx` below Live Business Intelligence): per-
+category bars with weight/score/LIVE badge/last-verified age,
+click-to-expand raw evidence JSON, run-coverage button (polls after
+firing), architecture-review notes input + submit (disabled when
+empty, no default rubric).
+
+**Tested** — `testing_agent` (`/app/test_reports/iteration_
+codebase_health_score_2026_08_23.json`): 12/12 backend tests pass,
+frontend Playwright pass (widget renders, expand/collapse, buttons,
+no regression to the rest of the cockpit page). Zero critical issues.
+Two OPTIONAL suggestions only (not applied): (1) short in-memory
+cache for the ~7-10s GET latency (real GitHub API + AST scan cost,
+not a bug) if polled aggressively; (2) reconsider Code Quality
+penalty coefficients if 9/100 feels alarming — left as-is since it's
+a real, honest number and the evidence is visible right below it.
+
+**Not yet done / open**: no qualitative architecture review has been
+logged by a human yet (category currently scores on the automated
+half only) — intentional, per no-fabrication policy.
+
+---
+
+### Two side-findings from the audit — investigated separately per
+founder's explicit instruction NOT to fold these into Health Score
+work (2026-08-23, cont'd 4). No fixes applied yet — report only.
+
+**Finding A — "Quality Gate: failure" / "CI Build+Test: cancelled"
+on the latest commit. Is this expected or a real problem?**
+
+- **CONFIRMED, long-standing, NOT a fresh regression from this
+  session or this commit.** Pulled real job-level history from the
+  live GitHub Actions API (not cached) for `quality-gate.yml`, both
+  the newest samples and a page from a month prior:
+    - Every sampled push run from **2026-07-27 through 2026-08-22**
+      (a full month, both the oldest and newest pages checked) shows
+      the SAME 3 jobs failing: `Fitness-function invariants`,
+      `Vitest (RTL state-sync + axe component a11y)`, `Visual
+      regression (Playwright chromium)`. `Lighthouse CI` mostly
+      passes (5/6 sampled). `Auto-QA agent` is always `skipped`
+      because it `needs: [invariants, frontend-vitest,
+      visual-regression]` and those never all pass.
+    - `invariants` runs a keyword-filtered pytest subset
+      (`-k "regression or invariant or iter309 or ..."`) — the same
+      family of tests already documented as containing hundreds of
+      pre-existing stale failures (the 233/228-failure investigation
+      earlier in this file). **LIKELY** (not separately re-verified
+      here) the same root causes apply; not re-triaged individually
+      in this pass.
+  - `ci.yml`'s "AUREM CI — Build + Test Guard" (the `Backend — pytest`
+    job) — **CONFIRMED** cancellation, not failure, root cause:
+    `concurrency: group: ci-${{ github.ref }}, cancel-in-progress:
+    true` combined with very frequent successive pushes to the same
+    ref (commits minutes apart in the sampled window) — a new push
+    cancels the prior run before its ~10-minute pytest job finishes.
+    Last 100 `ci.yml` push runs: **74 failure, 26 cancelled, 0
+    success** (`total_count: 932` runs ever on this workflow).
+- **What this means for production — the more important finding,
+  found while tracing "does this block deploys?":** **CONFIRMED real
+  bug**, distinct from the two gates above. `auto_deploy.yml`'s
+  `gate-on-ci` job is supposed to block deploy until `ci.yml` reports
+  success on the same commit. It polls the GitHub API for a workflow
+  literally named `"AUREM CI — Test Suite"` — but the actual
+  workflow's `name:` (in `ci.yml`, line 1) is `"AUREM CI — Build +
+  Test Guard"`. **These strings never match.** Every poll finds zero
+  matching runs, the loop always exhausts its 12-minute deadline, and
+  the job falls through to `echo "::warning::CI did not complete
+  within 12min — allowing deploy (manual override)"` — a **success**,
+  not a block. Net effect: **the deploy gate has been silently
+  no-op'ing on every single push for as long as this name mismatch
+  has existed** — it has never actually blocked a deploy for a CI
+  failure, regardless of what `ci.yml` or `quality-gate.yml` report.
+  This independently explains why `AUREM Auto-Deploy` shows
+  `success` on commits where `ci.yml` is cancelled/failing and
+  `quality-gate.yml` has been red for a month straight — confirmed by
+  directly comparing all 3 workflows' results for the same commit
+  (`622f1a6`): CI=cancelled, Quality Gate=failure, Auto-Deploy=success.
+  **Not fixed** — this is a deploy-pipeline behavior change (once
+  fixed, deploys would actually start blocking on `ci.yml`'s current
+  0%-success rate), flagged for founder decision rather than
+  silently applied.
+
+**Finding B — dependency/security scan only persisted 9 times across
+4,270 deploys. Why, and what's exposed?**
+
+- **CONFIRMED root cause, and it is good news on the "what's
+  exposed" question**: the scan ITSELF has been running and gating
+  correctly on nearly every push — job-level history shows `Security
+  — Dependency audit (G15)` and `Security — Secret scan (trufflehog)`
+  as `success` in **9 of 9** sampled `ci.yml` runs (2026-08-19 through
+  2026-08-22), meaning pip-audit/yarn-audit and trufflehog genuinely
+  executed and found nothing that would hard-fail the gate (both
+  steps are blocking — no `continue-on-error` — so a real
+  HIGH/CRITICAL unallowlisted finding would have failed that job,
+  and none of the sampled runs show that). **The scan is not being
+  skipped on real pushes.**
+- The reason **only 9 rows ever exist in Mongo** is a separate,
+  confirmed **ingestion-pipeline break, not a scan-execution break**:
+  direct probe against production (`https://auremcto.com`) with the
+  real preview `AUREM_CI_INGEST_TOKEN` value returned **HTTP 503
+  `"CI ingest disabled — AUREM_CI_INGEST_TOKEN not configured"`** on
+  both `/admin/synthetic-checks/ingest` and `/vanguard/ci-findings`.
+  **CONFIRMED: production's backend does not have
+  `AUREM_CI_INGEST_TOKEN` set at all.** Every real CI run's POST to
+  persist its findings has been hitting a hard 503 on production —
+  and because both `g15_dependency_scan.py::_persist_result()` and
+  the trufflehog dashboard-POST step in `ci.yml` wrap this in a
+  try/except that only prints a warning (by design, so a dashboard
+  hiccup never blocks a real deploy), the CI job itself still reports
+  `success` even though the persistence silently fails every time.
+  The 9 real rows that DO exist (dated exactly 2026-08-19/2026-08-20)
+  match this session's own manual verification of the g15 ingest-fix
+  code, run against the PREVIEW pod directly — not real GitHub Actions
+  CI traffic into production.
+- **Direct answer to "how many deploys shipped without a real
+  dependency scan": zero — every sampled deploy DID get a real,
+  gating dependency + secret scan.** What's actually missing is
+  **visibility**: there is no queryable history of any of those scan
+  results after 2026-08-20, so today's dependency-CVE posture cannot
+  be shown with a trustworthy "as of now" timestamp — only "as of the
+  last manual test, 2026-08-20" — which is exactly why Security stays
+  UNSCORED in the Health Score. **Not fixed** — the fix (set
+  `AUREM_CI_INGEST_TOKEN` on production) is outside this preview
+  agent's reach (production env vars are not editable from here) and
+  is flagged for the founder / whoever manages production config.
+
+**Neither finding has been fixed.** Both are reported per the
+explicit "don't fold into Health Score, report separately" and "no
+implementation until reviewed" instructions.
+
+**Finding B — env-var fix ownership**: founder will set
+`AUREM_CI_INGEST_TOKEN` on production themselves (correctly — that's
+a production secret, out of reach from this preview agent). **Known
+gap, documented, not yet fixed**: dependency/secret-scan RESULTS have
+been silently dropping (HTTP 503 on ingest) since at least
+2026-08-20 (last real persisted row). The scan itself has been
+running and gating correctly on every sampled push (9/9 job-level
+`success`, no `continue-on-error`) — **zero deploys shipped without a
+real scan** — but there is no queryable history of any scan's
+findings after 2026-08-20 until the token is set on production.
+
+---
+
+### Deep-dive: the 3 long-standing failing quality-gate.yml jobs
+(2026-08-23, cont'd 5) — per founder's explicit instruction to
+classify EACH as CONFIRMED real bug / CONFIRMED stale-or-misconfigured
+test / UNCERTAIN, BEFORE touching the `auto_deploy.yml` workflow-name
+fix. Reproduced locally (not just read) wherever possible.
+
+**Job 1 — "Fitness-function invariants (always green on main)"**
+
+- **CONFIRMED CI-config bug (root cause of 100% failure)**: the
+  step's pytest invocation in `quality-gate.yml` is missing
+  `--continue-on-collection-errors` (present in `ci.yml`'s
+  equivalent step, absent here). 3 test files hard-crash at
+  collection with `KeyError: 'REACT_APP_BACKEND_URL'`
+  (`test_iter369_restore_drill_and_ad_attribution.py`,
+  `test_magic_login_2026_08_20.py`,
+  `test_revoked_repo_banner_2026_08_20.py` — all do
+  `os.environ["REACT_APP_BACKEND_URL"]`, a **frontend-only** env var,
+  with no `.get()`/default, and `quality-gate.yml`'s env block only
+  sets `MONGO_URL`/`DB_NAME`). Without the flag, pytest aborts the
+  ENTIRE job on those 3 collection errors — **so none of the real
+  invariant tests have executed in this job for at least a month**.
+  **CONFIRMED test-file bug** (wrong env-var access pattern) +
+  **CONFIRMED CI-config bug** (missing flag), not a product defect.
+  A 4th, separate collection/setup error:
+  `test_iter363_phase3b_github_app_dispatch.py::test_loop_rollback_app_installed`
+  fails with `requests.exceptions.MissingSchema` — its `auth_headers`
+  fixture builds a URL from an `APP_URL`-style var that isn't set in
+  `quality-gate.yml`'s env block either (present in `ci.yml`'s
+  `backend-tests` env, absent here) — same class of CI-env-gap bug.
+- Re-ran locally with the flag added to see what's UNDER those
+  errors: **20 failed, 538 passed, 3 skipped** (real numbers, not
+  fabricated). Deep-dived 6 of the 20 with full tracebacks:
+    - `test_regression_aws_access_key_still_fires` — **CONFIRMED
+      stale/corrupted test fixture**, not a scanner regression. The
+      test's own input string is literally `'***REDACTED_AWS_KEY***'`
+      — a placeholder, not an AWS-key-shaped string — so the real
+      regex (`services/vanguard_scanner.py` line 28, confirmed intact
+      and correct: `(?:A3T[A-Z0-9]|AKIA|...)[A-Z0-9]{16}`) correctly
+      finds nothing. The fixture itself was almost certainly
+      auto-redacted by a secret-scrubbing pass that didn't know this
+      was an intentional test fixture. The scanner rule is fine.
+    - `test_activation_funnel_uses_swr_cache` — **CONFIRMED stale
+      test**, points at dead code. It greps `routers/admin.py` for a
+      `mongo_swr_cache(` call site — but the REAL
+      `/admin/insights/activation-funnel` route (with its real
+      `mongo_swr_cache(` call, confirmed present) now lives in
+      `routers/admin_users.py` (line 971/990). `admin.py`'s
+      `_compute_activation_funnel()` is orphaned dead code, never
+      called from anywhere (confirmed via repo-wide grep) — a
+      leftover from a prior refactor. Real caching works; test
+      checks the wrong (now-dead) file.
+    - `test_invariant_catch_all_logs_warning_and_swallows` —
+      **CONFIRMED stale exact-string test**. Expects the log message
+      to contain literal `"ora_learning.py"`; the real code correctly
+      logs `"[silent-catch] ora_learning.maybe_log_ora_escalation
+      shadow-logging invariant caught unexpected error: ..."` — MORE
+      informative (qualified function name) than the test's
+      expectation, not less correct. The actual invariant being
+      tested (warn, don't re-raise) already passes.
+    - `test_self_heal_exhausted_pauses_for_user` — **UNCERTAIN,
+      leaning stale-mock**. Expected `PAUSED_FOR_USER`, got `FAILED`,
+      with captured warnings all being the test's OWN mock `_DB`
+      object throwing `TypeError("'_DB' object is not subscriptable")`
+      / `AttributeError(...)` on collection access — i.e. the test's
+      fake DB double doesn't support the access pattern the current
+      `loop_engine`/`loop_safety`/`loop_beta` code actually uses, so
+      the self-heal-exhaustion path hits unexpected exceptions and
+      falls through to `FAILED` instead of `PAUSED_FOR_USER`. Most
+      likely the mock is stale (real Motor DB wouldn't throw these
+      specific errors) — but this doesn't fully rule out a genuine
+      gap in how gracefully the self-heal-exhaustion path handles AN
+      unexpected exception in general. Not re-triaged further this
+      pass; flagged, not fixed.
+    - `test_invariant_loop_collections_have_ttl_indexes` —
+      **UNCERTAIN, needs a founder call, not a code investigation**.
+      The index exists, is on the right field (`updated_at`), and is
+      named correctly (`ttl_updated_at`) — it just has
+      `expireAfterSeconds=31536000` (365 days) where the test expects
+      `2592000` (30 days). Could be a genuine, undocumented retention
+      policy change (test just wasn't updated) or real drift from an
+      intended 30-day policy (real cost/storage impact either way is
+      "loop_sessions is retained 12× longer than the test says it
+      should be" — worth a deliberate decision, not something to
+      silently pick a side on).
+    - Remaining 14/20 not individually triaged this pass (same
+      "sample, don't claim exhaustive" discipline as the earlier
+      233-failure investigation).
+
+**Job 2 — "Vitest (RTL state-sync + axe component a11y)"**
+
+- **CONFIRMED stale test**, both failures. Ran `yarn test --run`
+  locally: **3 failed / 477 passed** (2 files). Both failures are in
+  `metaPixel.iter388ag.noConsentGate.test.js`, checking for the exact
+  regex `fbq\('init', '1571887197933821'\)` (space after comma). The
+  real code (post "Iter 391 · Deferred Meta Pixel bootstrap" refactor,
+  confirmed by reading the actual received source in the test output)
+  writes `fbq('init','1571887197933821')` — **no space** — because it
+  was rewritten as a compact deferred-bootstrap IIFE. Functionally
+  identical (pixel still inits, still tracks PageView, just now
+  wrapped in `requestIdleCallback`) — purely a whitespace-in-regex
+  staleness from the Iter 391 formatting change. Not a real tracking
+  regression.
+
+**Job 3 — "Visual regression (Playwright chromium)"**
+
+- **UNCERTAIN — not reproduced this pass, honestly disclosed.**
+  Installed Playwright chromium locally and built the frontend
+  successfully (`yarn build` — 0 errors, confirms the app itself
+  compiles cleanly, consistent with `Lighthouse CI` passing 5/6
+  sampled runs on the same commits). But could not safely run the
+  actual pixel-diff suite: it needs its own dev server on :3000,
+  which is already occupied by this pod's live supervisor-managed
+  frontend — starting a second `yarn start` failed cleanly with
+  "Port 3000 already in use" (confirmed no disruption to the live
+  app: supervisor still shows `frontend RUNNING`, undisturbed).
+  Running this properly needs an isolated port/container, not
+  attempted here to avoid any risk to the live preview. **LIKELY**
+  (not confirmed) candidate explanation given the pattern of the
+  other 2 jobs: pixel-diff tests are a well-known flaky category
+  (font-rendering/OS differences between the GH-hosted runner and
+  whatever machine generated the committed baseline PNGs), but this
+  is a plausibility argument, not verified evidence — genuinely
+  UNCERTAIN until run in an isolated environment.
+
+**Net read for the founder's actual question ("fix tests or fix
+code?"):** overwhelmingly **fix the tests/CI config**, not the
+product code, for jobs 1 and 2 — every failure individually traced
+this pass was a stale fixture/assertion/CI-env-gap, not a real
+defect, EXCEPT: (a) the TTL-retention value (30d vs 365d) is a real
+open question needing a founder decision, not a test bug to silently
+"fix", and (b) the self-heal-exhaustion mock issue and the un-sampled
+14/20 remain open/unverified. Job 3 remains genuinely unknown pending
+an isolated run. **No fixes applied yet** — reported per instruction,
+awaiting direction before touching anything (including the
+`auto_deploy.yml` name-mismatch fix, which stays parked until this
+job's real pass/fail state is settled).
+

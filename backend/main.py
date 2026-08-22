@@ -54,6 +54,7 @@ from routers.admin_projects_brain import router as admin_projects_brain_router  
 from routers.admin_ops_config import router as admin_ops_config_router  # 2026-02-11 — Phase 2 split: /admin/cache, /feature-flags, /integrations, /settings, /github-app-config
 from routers.admin_analytics import router as admin_analytics_router  # 2026-02-11 — Phase 2 split: /admin/dashboard, /audit, /loop-metrics, /council, /skills
 from routers.admin_bi import router as admin_bi_router  # Slice A · BI Cockpit — /admin/bi/{stripe,inference,summary}
+from routers.admin_health_score import router as admin_health_score_router  # 2026-08-23 — Codebase Health Score widget
 from routers.support import router as support_router
 from routers.payments import router as payments_router
 from routers.stripe_webhook_compat import router as stripe_webhook_compat_router  # Iter 388-ae — legacy /api/stripe/webhook alias (see Payments $0 root-cause memo)
@@ -982,6 +983,24 @@ async def lifespan(app: FastAPI):
             logger.warning("restore drill cron not started: %r", e)
     else:
         app.state.restore_drill_task = None
+
+    # 2026-08-23 — Health Score indexes. TTL on health_endpoint_latency
+    # so the Performance-category sampler (added above) never grows
+    # unbounded; plain indexes on the other two new collections so
+    # services/health_score.py's "latest doc" lookups stay cheap.
+    try:
+        _asyncio.create_task(app.state.db.health_endpoint_latency.create_index(
+            "ts", expireAfterSeconds=14 * 86400,
+        ))
+        _asyncio.create_task(app.state.db.health_test_coverage_runs.create_index(
+            "generated_at",
+        ))
+        _asyncio.create_task(app.state.db.architecture_review_log.create_index(
+            "date",
+        ))
+    except Exception as e:
+        logger.warning("health-score index creation not started: %r", e)
+
 
     # Iter 264 Fix D — nightly ORA grounding canary (default OFF).
     # Turn on ONLY after acceptance criteria pass — a warning system
@@ -2277,6 +2296,50 @@ async def _global_rate_limit_guard(request, call_next):
         )
 
 
+# 2026-08-23 — Health Score: Performance category instrumentation.
+# Passive, fire-and-forget endpoint-latency sampler. Never adds
+# latency to the response itself (the insert is a detached task) and
+# never blocks/fails the request if Mongo is slow/down. Feeds
+# `health_endpoint_latency`, read by services/health_score.py's
+# rolling p50/p95/p99. TTL-indexed (14d) at startup so this never
+# grows unbounded.
+_HEALTH_LATENCY_SKIP_PREFIXES = _GLOBAL_RL_SKIP_PREFIXES
+
+
+@app.middleware("http")
+async def _health_latency_sampler_mw(request, call_next):
+    path = request.url.path or ""
+    skip = (
+        request.method == "OPTIONS"
+        or not path.startswith("/api/")
+        or path.endswith("/stream")
+        or path.endswith("/events")
+        or any(path.startswith(p) for p in _HEALTH_LATENCY_SKIP_PREFIXES)
+    )
+    if skip:
+        return await call_next(request)
+    t0 = time.monotonic()
+    response = await call_next(request)
+    elapsed_ms = (time.monotonic() - t0) * 1000
+    try:
+        db = getattr(app.state, "db", None)
+        if db is not None:
+            from datetime import datetime as _dt, timezone as _tz
+            asyncio.create_task(db.health_endpoint_latency.insert_one({
+                "path": path,
+                "method": request.method,
+                "status_code": response.status_code,
+                "elapsed_ms": round(elapsed_ms, 1),
+                # Real datetime (BSON Date), not epoch float/ISO string —
+                # required for the TTL index created at startup to work.
+                "ts": _dt.now(_tz.utc),
+            }))
+    except Exception:
+        pass
+    return response
+
+
+
 # ── Iter 44 — Global exception handler ──
 # Never leak stack traces. Log full error internally, return a stable
 # 500 envelope to the caller.
@@ -2970,6 +3033,7 @@ app.include_router(admin_projects_brain_router, prefix="/api/aurem-dev")  # 2026
 app.include_router(admin_ops_config_router,     prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split
 app.include_router(admin_analytics_router,      prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split
 app.include_router(admin_bi_router,             prefix="/api/aurem-dev")  # Slice A · BI Cockpit
+app.include_router(admin_health_score_router,   prefix="/api/aurem-dev")  # 2026-08-23 — Codebase Health Score
 app.include_router(support_router,       prefix="/api/aurem-dev")
 app.include_router(payments_router,      prefix="/api/aurem-dev")
 # Iter 388-ae · legacy Stripe dashboard path compatibility. Prod logs
