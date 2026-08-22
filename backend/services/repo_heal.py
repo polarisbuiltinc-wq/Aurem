@@ -119,13 +119,6 @@ def _allowed(project_id: str) -> bool:
     return (time.time() - last) >= _HEAL_COOLDOWN_S
 
 
-async def _decrypt_pat(user_id: str, ct: Optional[str]) -> Optional[str]:
-    if not ct:
-        return None
-    try:
-        return await decrypt(user_id, ct, kind="github_token")
-    except Exception:
-        return None
 
 
 async def _gh_get(client: httpx.AsyncClient, url: str, token: str) -> httpx.Response:
@@ -185,14 +178,12 @@ async def heal_project(*, db, user_id: str, project_id: str,
         repo  = (proj.get("github_repo")  or "").strip()
         err   = (prior_status or {}).get("error") or ""
 
-        me = await db.dev_users.find_one(
-            {"user_id": user_id}, {"_id": 0, "github": 1},
-        )
-        oauth = ((me or {}).get("github") or {}).get("access_token") or None
+        # 2026-06 PAT-removal — OAuth no longer used for repo auth.
+        oauth = None
         # 2026-02-11 · Phase 3b (Bug 2 fix) — use unified get_repo_token so
         # App-installed projects (installation_id, no PAT) also work.
-        from services.pat_vault import get_repo_token
-        pat   = await get_repo_token(proj)
+        from services.pat_vault import get_repo_token_or_error
+        pat, _auth_err, _ = await get_repo_token_or_error(proj)
 
         # ── Strategy router ──────────────────────────────────────────
         if err == "repo_not_set":
@@ -221,52 +212,27 @@ async def heal_project(*, db, user_id: str, project_id: str,
                 return await _finalise(db, project_id, success=False,
                                        reason=f"network_retry_exhausted: {e or (r and r.status_code)}")
 
-            # 2) No token at all — attach OAuth fallback if we have one.
-            if err == "no_token":
-                if not oauth:
+            # 2) No token — App-only world: auto-heal can't mint auth;
+            #    the user must (re)install the GitHub App on this repo.
+            if err in ("no_token", "app_installation_missing",
+                       "app_installation_revoked"):
+                return await _finalise(db, project_id, success=False,
+                                       reason="app_reinstall_required")
+
+            # 3) Token rejected — App-only world: retry once with a
+            #    FRESH installation token (a stale mint can expire).
+            if err == "github_rejected":
+                if not pat:
                     return await _finalise(db, project_id, success=False,
-                                           reason="no_oauth_to_attach")
-                # Verify the OAuth token actually authorises the repo
-                # BEFORE we mark the project as healed — don't trade
-                # one broken state for another.
+                                           reason="app_reinstall_required")
                 r = await _gh_get(
-                    client, f"https://api.github.com/repos/{owner}/{repo}/contents/", oauth,
+                    client, f"https://api.github.com/repos/{owner}/{repo}/contents/", pat,
                 )
                 if 200 <= r.status_code < 300:
-                    # Project row already has user OAuth implicitly;
-                    # nothing to mutate, just succeed.
                     return await _finalise(db, project_id, success=True,
-                                           reason="oauth_fallback_works")
+                                           reason="fresh_app_token_works")
                 return await _finalise(db, project_id, success=False,
-                                       reason=f"oauth_also_failed: {r.status_code}")
-
-            # 3) Token rejected — swap PAT → OAuth or vice versa.
-            if err == "github_rejected":
-                # Try the OTHER token first.
-                tried = []
-                for label, tok in (("oauth", oauth), ("pat", pat)):
-                    if not tok:
-                        continue
-                    if (prior_status or {}).get("auth") == label:
-                        continue  # already failed with this one
-                    tried.append(label)
-                    r = await _gh_get(
-                        client, f"https://api.github.com/repos/{owner}/{repo}/contents/", tok,
-                    )
-                    if 200 <= r.status_code < 300:
-                        # Mark the OLD token as revoked so the
-                        # connection-status endpoint picks the working
-                        # one on the next poll.
-                        if (prior_status or {}).get("auth") == "pat":
-                            await db.cto_projects.update_one(
-                                {"project_id": project_id, "user_id": user_id},
-                                {"$set": {"github_token": None,
-                                          "github_token_revoked_at": time.time()}},
-                            )
-                        return await _finalise(db, project_id, success=True,
-                                               reason=f"{label}_token_works")
-                return await _finalise(db, project_id, success=False,
-                                       reason=f"all_tokens_failed (tried: {','.join(tried) or 'none'})")
+                                       reason=f"app_token_rejected: {r.status_code}")
 
             # 4) 404 — rename / transfer detection.
             if err == "repo_not_found":

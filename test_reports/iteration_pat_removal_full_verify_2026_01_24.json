@@ -1,0 +1,39 @@
+{
+  "summary": "Full adversarial verification of the PAT-removal directive (10-item review). All 10 items PASS on preview. Backend live tests + direct-service call + real GitHub App drill against the disposable testbed all green. No live PAT-helper references remain in backend routers/ or services/. Frontend RevokedRepoBanner.jsx renders the distinct amber 'unreachable' state with data-testid='github-unreachable-banner' before the red revoked banner.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_pat_removal_full_2026_01.py",
+    "/app/backend/tests/test_pat_removal_rollback_typed_error.py",
+    "/app/test_reports/pytest/pat_removal_2026_01.xml"
+  ],
+  "results_per_item": {
+    "1_verify_pat_endpoint": "PASS — authed → 200 {ok:false,error:'pat_not_supported', detail mentions AUREM GitHub App}; unauthed → 401/403",
+    "2_add_project_pat_rejected": "PASS — POST /cto/projects/add with github_token=ghp_… → HTTP 400 {error:'pat_not_supported'} (via HTTPException detail wrapper)",
+    "3_patch_project_pat_rejected": "PASS — PATCH /cto/projects/{id} with github_token=ghp_… → 400 'PATs are no longer supported. Connect via the AUREM GitHub App instead.'",
+    "4_typed_fail_closed_rollback": "PASS — synthetic rows (p_ta_pat / l_ta_pat / outcome sha eeee…) → execute_rollback returns {ok:false, reason:'app_installation_missing', hint mentions GitHub App, no PAT/preflight wording}. Rows cleaned up.",
+    "5_pat_inventory": "PASS — admin → 200 with coverable_by_app, not_covered_by_app (~46 legacy rows on preview), users_with_stored_oauth_token int; non-admin → 401/403",
+    "6_migrate_dry_run": "PASS — {execute:false} → dry_run:true, flipped=0, marked_auth_required=0; sample not-covered row's auth_method unchanged after the call",
+    "7_connection_status_honesty": "PASS — HTTP 200, all entries carry status ∈ {connected,disconnected,unreachable}; no 'no_token' error strings; no 500s",
+    "8_static_grep_clean": "PASS — the only surviving mentions of _user_gh_token / _decrypt_pat / _encrypt_pat / get_user_gh_token in backend/routers|services are in inert docstrings/comments in routers/admin_bin.py (module docstring 'Reuse:' block), routers/security_scan.py (removal note), routers/cto_projects.py (removal-note comments), services/finding_fix_applier.py (module docstring), and services/pat_vault.py (module docstring). Zero live code references.",
+    "9_revoked_repo_banner": "PASS (code review) — RevokedRepoBanner.jsx L130-147 renders amber 'unreachable' banner (data-testid='github-unreachable-banner') with an early return before the red revoked branch. Red banner gated on status==='disconnected' only. Network timeouts in the polling loop leave the last-known state intact (no 'revoked' misdiagnosis).",
+    "10_rollback2_drill_regression": "PASS — POST /api/aurem-dev/admin/rollback2/drill returned {result:'passed'} in 13.8s against polarisbuiltinc-wq/aurem-rollback-testbed. All 8 steps ok, byte-exact restore verified (sha256 794c0544…), attempt rba_379f2f8ae8284758."
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "cto_projects.py is 3804 lines — split into smaller modules (repo verify, project CRUD, tasks, chat handoff) at some point; not blocking for this directive.",
+    "AddProject.github_token field is still in the request Pydantic model (line 132) — kept intentionally so the router can return an honest 400 instead of silently ignoring an unknown field. OK; consider adding a Field(deprecated=True) description for OpenAPI clarity.",
+    "The GitHub App runtime config hydration on cold-start is async and can race the first admin call after boot (observed one initial 499 on /pat-inventory ~2s after supervisor restart, resolved on retry). Consider `await`ing hydration in the startup path before opening the port, or an internal readiness probe."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_pat_removal_full_2026_01.py (new)",
+    "/app/backend/tests/test_pat_removal_rollback_typed_error.py (new)"
+  ],
+  "success_rate": {"backend": "100% (10/10 items, 10/10 pytest tests)", "frontend": "n/a — backend-only per request; code review of RevokedRepoBanner.jsx passed"},
+  "test_credentials": "admin: test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Synthetic Mongo rows (cto_projects/p_ta_pat, loop_sessions/l_ta_pat, loop_outcomes for sha eeee…) inserted and deleted within the same test via try/finally. No residual test data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "PAT-removal is fully verified end-to-end. If regressing, rerun `pytest /app/backend/tests/test_pat_removal_full_2026_01.py /app/backend/tests/test_pat_removal_rollback_typed_error.py -v`. The rollback2/drill regression command is a single curl against /api/aurem-dev/admin/rollback2/drill (allow ~15s, real GitHub commits into the disposable testbed).",
+  "rca of the issue": "n/a — no failures found"
+}

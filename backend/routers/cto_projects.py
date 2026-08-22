@@ -160,38 +160,11 @@ def _parse_repo(url: str) -> tuple[str, str]:
     return p[0], p[1]
 
 
-async def _user_gh_token(user_id: str) -> Optional[str]:
-    # Iter 212m-230 — Canonical implementation now lives in
-    # services/pat_vault.py.  Re-exported here so existing call-sites
-    # (`from routers.cto_projects import _user_gh_token`) keep working
-    # while the dependency direction is now correct
-    # (routers → services, not services → routers).
-    from services.pat_vault import _user_gh_token as _svc_user_gh_token
-    return await _svc_user_gh_token(user_id)
-
-
-# ── Iter 43 — PAT encryption helpers ──────────────────────────────────
-# Tokens stored in cto_projects.github_token are encrypted at rest via
-# services.vault (per-customer HKDF-Fernet, v1:-prefixed ciphertext).
-# Legacy rows persisted before this migration may still hold plaintext
-# tokens — the decrypt helper transparently passes those through so the
-# pipeline keeps working until migrations/002_encrypt_pats.py is run.
-#
-# Iter 212m-230 — Actual implementations relocated to
-# services/pat_vault.py so services/ callers no longer create a
-# circular import back to this router.  These two wrappers exist only
-# to preserve the legacy `_encrypt_pat` / `_decrypt_pat` symbols on
-# this module (~40+ call-sites still reference them via
-# `from routers.cto_projects import _decrypt_pat`).
-
-async def _encrypt_pat(user_id: str, token: Optional[str]) -> Optional[str]:
-    from services.pat_vault import _encrypt_pat as _svc_encrypt_pat
-    return await _svc_encrypt_pat(user_id, token)
-
-
-async def _decrypt_pat(user_id: str, token: Optional[str]) -> Optional[str]:
-    from services.pat_vault import _decrypt_pat as _svc_decrypt_pat
-    return await _svc_decrypt_pat(user_id, token)
+# 2026-06 · PAT-removal directive — the legacy `_user_gh_token`,
+# `_encrypt_pat`, `_decrypt_pat` wrappers that lived here are GONE.
+# GitHub App installation tokens (services/pat_vault.get_repo_token)
+# are the ONLY repo-auth method. OAuth tokens remain for sign-in
+# identity only, never repo access.
 
 
 # 2026-02-10 · Phase 3a — dual-auth repo-token resolver.
@@ -230,8 +203,10 @@ async def build_project_brain(
     if not proj:
         raise HTTPException(404, "Project not found")
 
-    gh_token = await get_repo_token(proj) \
-        or await _user_gh_token(user_id)
+    from services.pat_vault import get_repo_token_or_error
+    gh_token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
+    if _auth_err:
+        raise HTTPException(403, f"GitHub App auth failed ({_auth_err}): {_auth_detail}")
     gh_owner = proj.get("github_owner") or ""
     gh_repo  = proj.get("github_repo") or ""
     branch   = proj.get("branch") or "main"
@@ -307,8 +282,10 @@ async def warm_start_project(
     if not proj:
         raise HTTPException(404, "Project not found")
 
-    gh_token = await get_repo_token(proj) \
-        or await _user_gh_token(user_id)
+    from services.pat_vault import get_repo_token_or_error
+    gh_token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
+    if _auth_err:
+        raise HTTPException(403, f"GitHub App auth failed ({_auth_err}): {_auth_detail}")
     gh_owner = proj.get("github_owner") or ""
     gh_repo  = proj.get("github_repo") or ""
     branch   = proj.get("branch") or "main"
@@ -567,8 +544,10 @@ async def build_project_graph(
     )
     if not proj:
         raise HTTPException(404, "Project not found")
-    gh_token = await get_repo_token(proj) \
-        or await _user_gh_token(user_id)
+    from services.pat_vault import get_repo_token_or_error
+    gh_token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
+    if _auth_err:
+        raise HTTPException(403, f"GitHub App auth failed ({_auth_err}): {_auth_detail}")
     gh_owner = proj.get("github_owner") or ""
     gh_repo  = proj.get("github_repo") or ""
     if not (gh_token and gh_owner and gh_repo):
@@ -821,10 +800,11 @@ async def check_project_pat(
     )
     if not proj:
         raise HTTPException(404, "project not found")
-    token = await get_repo_token(proj) \
-        or await _user_gh_token(user_id)
+    from services.pat_vault import get_repo_token_or_error
+    token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
     if not token:
-        return {"ok": True, "state": "missing", "message": "No PAT configured"}
+        return {"ok": True, "state": "missing",
+                "message": f"GitHub App auth unavailable ({_auth_err})"}
     try:
         import httpx
         async with httpx.AsyncClient(timeout=8.0) as cx:
@@ -976,74 +956,27 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
         encrypted_token     = None   # never stored — token minted per-request
         installation_active = True
 
-    # ── Branch B: PAT (unchanged from prior behavior) ───────────────
+    # ── Branch B: PAT — REMOVED (founder directive 2026-06) ─────────
+    # PATs are no longer accepted as an auth method, ever — not as
+    # primary, not as fallback. Reject explicitly with an honest error
+    # instead of silently ignoring the field.
     elif pat:
-        if not (pat.startswith("ghp_") or pat.startswith("github_pat_")):
-            await _fail(
-                400,
-                "That doesn't look like a GitHub PAT — should start with "
-                "ghp_ (classic) or github_pat_ (fine-grained).",
-                "pat_malformed",
-            )
-        # Iter 211 — atomic verify: hit GitHub /repos/{owner}/{repo}
-        # with the PAT BEFORE writing the project doc. Same code as
-        # before Phase 3a — semantics unchanged for the PAT branch.
-        # (Session G · Item 1 scoped test-mode bypass preserved.)
-        _test_bypass = (
-            os.getenv("AUREM_TEST_MODE") == "1"
-            and pat.startswith("github_pat_TEST_")
-        )
-        if not _test_bypass:
-            try:
-                async with _httpx.AsyncClient(timeout=10.0) as _c:
-                    _r = await _c.get(
-                        f"https://api.github.com/repos/{owner}/{repo}",
-                        headers={
-                            "Accept":              "application/vnd.github+json",
-                            "Authorization":       f"Bearer {pat}",
-                            "X-GitHub-Api-Version": "2022-11-28",
-                        },
-                    )
-            except _httpx.RequestError as _e:
-                await _fail(
-                    502,
-                    f"Couldn't reach GitHub to verify the token ({type(_e).__name__}). "
-                    "Try again in a moment.",
-                    "pat_probe_request_error",
-                )
-            if _r.status_code in (401, 403):
-                await _fail(
-                    400,
-                    "GitHub rejected the PAT (401/403). Regenerate it with "
-                    "Contents: Read and write for this repo, then try again.",
-                    "pat_rejected",
-                )
-            if _r.status_code == 404:
-                await _fail(
-                    400,
-                    f"Repo not found at github.com/{owner}/{repo} via this PAT. "
-                    "The repo may not be in the token's scope — re-pick it when "
-                    "generating a fine-grained PAT.",
-                    "pat_repo_not_found",
-                )
-            if _r.status_code != 200:
-                await _fail(
-                    502,
-                    f"GitHub returned HTTP {_r.status_code} during verification. "
-                    "Try a fresh token.",
-                    "pat_probe_bad_status",
-                )
-        auth_method     = "pat"
-        encrypted_token = await _encrypt_pat(me["user_id"], pat)
+        await _fail(400, {
+            "error":   "pat_not_supported",
+            "message": (
+                "Personal Access Tokens are no longer supported. "
+                "Connect this repo via the AUREM GitHub App instead — "
+                "it's the only supported auth method."
+            ),
+        }, "pat_not_supported")
 
     # ── Neither provided ────────────────────────────────────────────
     else:
         await _fail(400, {
             "error": "auth_required",
             "message": (
-                "Connect via the GitHub App (recommended) or paste a "
-                "Personal Access Token. Both options are available in "
-                "the connect-repo wizard."
+                "Connect this repo via the AUREM GitHub App — the only "
+                "supported auth method (PAT support was removed)."
             ),
         }, "auth_required")
 
@@ -1210,149 +1143,17 @@ async def verify_pat(
     body: VerifyPatBody,
     authorization: str = Header(None),
 ) -> dict:
-    """Stateless PAT verification against a specific GitHub repo.
-
-    Returns a uniform JSON shape so the frontend can render inline
-    pills without branching on HTTP status:
-
-      {ok: true,  scopes: ["repo", "read:org"], private: bool, full_name: "…"}
-      {ok: false, error: "invalid_token",    detail: "…"}
-      {ok: false, error: "missing_scope",    has_scopes: [...]}
-      {ok: false, error: "repo_not_found",   detail: "…"}
-      {ok: false, error: "network_error",    detail: "…"}
-
-    HTTP status is always 200 — error is encoded in `ok`.
-    """
-    # Auth: must be a logged-in builder (PATs are user-scoped).
+    """2026-06 PAT-removal — PAT validation is permanently retired.
+    Kept as an honest 200-shaped rejection (not a confusing 404) for
+    any stale UI/API caller."""
     await current_dev(authorization)
-
-    repo = (body.repo or "").strip().lstrip("/")
-    pat  = (body.pat  or "").strip()
-    if "/" not in repo:
-        return {"ok": False, "error": "bad_repo",
-                "detail": "Repo must be in 'owner/name' format."}
-    if not (pat.startswith("ghp_") or pat.startswith("github_pat_")):
-        return {"ok": False, "error": "bad_format",
-                "detail": "PAT must start with ghp_ or github_pat_."}
-
-    import httpx
-    url = f"https://api.github.com/repos/{repo}"
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "Authorization": f"Bearer {pat}",
-        "X-GitHub-Api-Version": "2022-11-28",
+    return {
+        "ok": False,
+        "error": "pat_not_supported",
+        "detail": ("Personal Access Tokens are no longer supported. "
+                   "Connect this repo via the AUREM GitHub App — the "
+                   "only supported auth method."),
     }
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as c:
-            r = await c.get(url, headers=headers)
-    except httpx.RequestError as e:
-        logger.warning("verify-pat: network error for %s: %r", repo, e)
-        return {"ok": False, "error": "network_error",
-                "detail": f"Couldn't reach GitHub ({type(e).__name__})."}
-
-    # GitHub returns granted scopes via X-OAuth-Scopes (classic PATs).
-    # Fine-grained PATs return X-Accepted-OAuth-Scopes instead with a
-    # different model — we treat HTTP 200 as proof-of-access for those.
-    scopes_hdr = (r.headers.get("X-OAuth-Scopes") or "").strip()
-    scopes = [s.strip() for s in scopes_hdr.split(",") if s.strip()]
-
-    if r.status_code == 200:
-        try:
-            data = r.json() or {}
-        except Exception:  # noqa: BLE001
-            data = {}
-        # Classic PATs: enforce `repo` scope. Fine-grained PATs send no
-        # scope header so we trust the 200 (they're scoped at creation).
-        if scopes and "repo" not in scopes and not any(
-            s.startswith("repo:") for s in scopes
-        ):
-            return {
-                "ok": False, "error": "missing_scope",
-                "has_scopes": scopes,
-                "detail": "Token is missing the `repo` scope. Regenerate "
-                          "with **repo** checked (or, for fine-grained, "
-                          "**Contents: Read and write**).",
-            }
-
-        # Iter 212m-176 — WRITE capability check. GitHub's /repos/{repo}
-        # response includes `permissions.push` for the authenticated
-        # token (works for classic AND fine-grained). A fine-grained
-        # PAT with Contents: Read-only passes the 200 check but every
-        # ship/commit later 403s at git/blobs — catch it here instead.
-        perms = data.get("permissions") or {}
-        if perms and not perms.get("push"):
-            return {
-                "ok": False, "error": "missing_write",
-                "has_scopes": scopes,
-                "detail": "Token can READ this repo but cannot WRITE "
-                          "(push=false). Fine-grained PAT: set "
-                          "**Contents: Read and write**. Classic PAT: "
-                          "check the **repo** scope.",
-            }
-
-        # Iter 212m-5 — multi-project security check.
-        # Probe `/user/repos?per_page=1` and use the `Link: …; rel="last"`
-        # header (page index) to derive total accessible-repo count
-        # cheaply. If the PAT can see > 1 repo while we're scoping it to
-        # ONE project, surface a `warning` so the UI can show an amber
-        # over-scoped pill. We don't fail the verification — user can
-        # still proceed with a classic PAT, but they get an honest
-        # signal that a per-repo fine-grained PAT would be safer.
-        total_accessible = None
-        try:
-            async with httpx.AsyncClient(timeout=8.0) as c:
-                ur = await c.get(
-                    "https://api.github.com/user/repos",
-                    headers=headers,
-                    params={"per_page": 1, "affiliation": "owner,collaborator"},
-                )
-            if ur.status_code == 200:
-                link = ur.headers.get("Link") or ""
-                # Parse `…page=N>; rel="last"` to derive total.
-                import re as _re
-                m = _re.search(r'[?&]page=(\d+)>;\s*rel="last"', link)
-                if m:
-                    total_accessible = int(m.group(1))
-                else:
-                    # No `last` link = ≤ 1 page; count directly.
-                    body = ur.json() or []
-                    total_accessible = len(body) if isinstance(body, list) else None
-        except Exception as e:  # noqa: BLE001
-            logger.debug("verify-pat: total-repo probe skipped: %r", e)
-
-        warning = None
-        if total_accessible is not None and total_accessible > 1:
-            warning = (
-                f"This token has access to {total_accessible} repos, "
-                "not just this one. For tighter security consider a "
-                "fine-grained PAT scoped to only this repo."
-            )
-
-        return {
-            "ok":        True,
-            "full_name": data.get("full_name") or repo,
-            "private":   bool(data.get("private", False)),
-            "scopes":    scopes,  # may be [] for fine-grained PATs
-            "total_accessible_repos": total_accessible,
-            "warning":   warning,
-            "fine_grained": not bool(scopes),
-        }
-    if r.status_code == 401:
-        return {"ok": False, "error": "invalid_token",
-                "detail": "Token invalid or expired — generate a new one."}
-    if r.status_code == 403:
-        return {"ok": False, "error": "missing_scope",
-                "has_scopes": scopes,
-                "detail": "Missing repo scope — regenerate with `repo` checked."}
-    if r.status_code == 404:
-        return {"ok": False, "error": "repo_not_found",
-                "detail": f"Repo not found at github.com/{repo} — check the "
-                          "URL, or for a fine-grained PAT make sure this "
-                          "repo is in the token's allow-list."}
-    return {"ok": False, "error": "github_error",
-            "detail": f"GitHub returned HTTP {r.status_code}."}
-
-
 
 
 @router.get("/projects/list")
@@ -1462,8 +1263,10 @@ async def test_project_pat(
     if not (owner and repo):
         return {"ok": False, "error": "Project has no repo configured."}
 
-    gh_token = await get_repo_token(proj) \
-        or await _user_gh_token(user_id)
+    from services.pat_vault import get_repo_token_or_error
+    gh_token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
+    if _auth_err:
+        raise HTTPException(403, f"GitHub App auth failed ({_auth_err}): {_auth_detail}")
     if not gh_token:
         return {
             "ok": False,
@@ -1537,8 +1340,10 @@ async def get_project_tree(
     )
     if not proj:
         raise HTTPException(404, "Project not found")
-    gh_token = await get_repo_token(proj) \
-        or await _user_gh_token(user_id)
+    from services.pat_vault import get_repo_token_or_error
+    gh_token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
+    if _auth_err:
+        raise HTTPException(403, f"GitHub App auth failed ({_auth_err}): {_auth_detail}")
     owner = proj.get("github_owner") or ""
     repo  = proj.get("github_repo") or ""
     branch = proj.get("branch") or "main"
@@ -1619,8 +1424,10 @@ async def get_project_file(
     )
     if not proj:
         raise HTTPException(404, "Project not found")
-    gh_token = await get_repo_token(proj) \
-        or await _user_gh_token(user_id)
+    from services.pat_vault import get_repo_token_or_error
+    gh_token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
+    if _auth_err:
+        raise HTTPException(403, f"GitHub App auth failed ({_auth_err}): {_auth_detail}")
     owner = proj.get("github_owner") or ""
     repo  = proj.get("github_repo") or ""
     branch = proj.get("branch") or "main"
@@ -1668,10 +1475,9 @@ async def update_project(
     updates = {k: v for k, v in body.model_dump().items() if v is not None and v != ""}
     if not updates:
         raise HTTPException(400, "Nothing to update")
-    # BUG 2 fix — encrypt PAT at rest on update too (add_project already did
-    # this; the PATCH path was storing it plaintext).
+    # 2026-06 PAT-removal — PATs are no longer accepted on update either.
     if "github_token" in updates and updates["github_token"]:
-        updates["github_token"] = await _encrypt_pat(me["user_id"], updates["github_token"])
+        raise HTTPException(400, "PATs are no longer supported. Connect via the AUREM GitHub App instead.")
     # 2026-08-20 — Auto-Reconnect Prompt. Re-attaching a project to a
     # fresh GitHub App installation (after the user revoked/reinstalled
     # it) takes over as the auth method, same precedence rule as
@@ -1751,42 +1557,20 @@ async def _enqueue_cto_task(
         "source": "chat_handoff",
         "created_at": time.time(),
     })
-    user_token = await get_repo_token(proj) \
-        or await _user_gh_token(user_id)
+    from services.pat_vault import get_repo_token_or_error
+    user_token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
     if not user_token:
         await db.cto_tasks.update_one(
             {"task_id": task_id},
             {"$set": {"status": "failed",
-                      "error": "No GitHub token configured.",
+                      "error": f"GitHub App auth failed ({_auth_err}): {_auth_detail}",
                       "completed_at": time.time()}},
         )
         return {"ok": False, "reason": "no_pat",
                 "task_id": task_id, "project_id": proj["project_id"]}
 
-    # Iter 212m-6 — loud surface when the project's encrypted PAT
-    # could not be decrypted but we fell back to the user's OAuth
-    # token. The fallback often has different scopes than the
-    # project-scoped PAT (e.g. read-only) and silently using it
-    # causes 403 on blob upload later. Log a warning + mark the task
-    # row so the UI can show a "PAT decrypt fallback" advisory.
-    try:
-        _project_pat_raw = proj.get("github_token") or ""
-        _project_pat_decoded = (
-            await _decrypt_pat(user_id, _project_pat_raw)
-            if _project_pat_raw else None
-        )
-        if _project_pat_raw and not _project_pat_decoded:
-            logger.warning(
-                "PAT decrypt fallback for project=%s — using OAuth token. "
-                "User should re-add the project PAT.",
-                proj.get("project_id"),
-            )
-            await db.cto_tasks.update_one(
-                {"task_id": task_id},
-                {"$set": {"pat_decrypt_fallback": True}},
-            )
-    except Exception:
-        pass
+    # 2026-06 PAT-removal — the old PAT-decrypt-fallback advisory block
+    # is gone; get_repo_token is App-only and fails closed upstream.
 
     if bg is not None:
         bg.add_task(_run_task, task_id, proj, task_text, [], "",
@@ -1942,13 +1726,10 @@ async def rollback_task(
     if not proj:
         raise HTTPException(404, "Parent project not found")
 
-    user_token = await get_repo_token(proj) \
-        or await _user_gh_token(me["user_id"])
+    from services.pat_vault import get_repo_token_or_error
+    user_token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
     if not user_token:
-        raise HTTPException(
-            400,
-            "No PAT on file for this project — open Projects → Edit and add one.",
-        )
+        raise HTTPException(403, f"GitHub App auth failed ({_auth_err}): {_auth_detail}")
 
     await db.cto_tasks.update_one(
         {"task_id": task_id},
@@ -2232,8 +2013,10 @@ async def retry_task(
                           "status": "info",
                           "ts": time.time()}],
     })
-    user_token = await get_repo_token(proj) \
-        or await _user_gh_token(me["user_id"])
+    from services.pat_vault import get_repo_token_or_error
+    user_token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
+    if not user_token:
+        raise HTTPException(403, f"GitHub App auth failed ({_auth_err}): {_auth_detail}")
     bg.add_task(
         _run_task,
         new_task_id, proj, old.get("task", ""),

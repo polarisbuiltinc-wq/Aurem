@@ -797,10 +797,11 @@ async def _tool_get_recent_commits(user_id: str, args: dict) -> dict:
     # so encrypted-token storage stays consistent.
     # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token unifies PAT
     # + github_app auth paths.
-    from routers.cto_projects import _user_gh_token
-    from services.pat_vault import get_repo_token
-    gh_token = await get_repo_token(proj) \
-        or await _user_gh_token(user_id)
+    from services.pat_vault import GithubAppAuthError, get_repo_token
+    try:
+        gh_token = await get_repo_token(proj)
+    except GithubAppAuthError as e:
+        raise RuntimeError(f"GitHub App auth failed ({e.code}): {e.detail}")
     owner  = proj.get("github_owner")
     repo   = proj.get("github_repo")
     branch = proj.get("branch") or "main"

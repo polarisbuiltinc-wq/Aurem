@@ -132,17 +132,7 @@ _GH_TIMEOUT = 20.0
 _CONCURRENT_FETCHES = 8        # parallel raw-content fetches
 
 
-# ─── PAT decrypt (shared with cto_projects router) ────────────────────
-async def _decrypt_pat(user_id: str, token: Optional[str]) -> Optional[str]:
-    if not token:
-        return token
-    if not token.startswith("v1:"):
-        return token
-    try:
-        from services.vault import decrypt
-        return await decrypt(user_id, token, kind="github_token")
-    except Exception:
-        return None
+# 2026-06 PAT-removal — the _decrypt_pat helper that lived here is gone.
 
 
 def _gh_headers(pat: str) -> dict:
@@ -387,23 +377,9 @@ async def run_security_scan(
     owner = proj.get("github_owner") or ""
     repo  = proj.get("github_repo") or ""
     # 2026-02-11 · Phase 3b (Bug 2 fix) — dual-auth token resolver.
-    from services.pat_vault import get_repo_token
-    pat   = await get_repo_token(proj)
-    # Iter 212m-102 — Fallback to the user's GitHub OAuth access_token
-    # when the project row has no per-project PAT. OAuth tokens carry
-    # `repo, read:user, user:email` scopes (see services/github_oauth.py
-    # SCOPES) which is enough for the static scanner's tree/contents
-    # reads. Without this fallback, every OAuth-only user hits
-    # "Project missing GitHub linkage / PAT" even when their GitHub
-    # account is fully connected.
-    if not pat:
-        try:
-            u = await db.dev_users.find_one(
-                {"user_id": user_id}, {"_id": 0, "github": 1},
-            )
-            pat = ((u or {}).get("github") or {}).get("access_token") or None
-        except Exception:
-            pat = None
+    from services.pat_vault import get_repo_token_or_error
+    pat, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
+    # 2026-06 PAT-removal — OAuth fallback removed; App-only auth.
     if not (owner and repo):
         raise HTTPException(
             400,
@@ -411,9 +387,8 @@ async def run_security_scan(
         )
     if not pat:
         raise HTTPException(
-            400,
-            "No GitHub credentials found. Add a PAT to this project, "
-            "or connect GitHub in Settings.",
+            403,
+            f"GitHub App auth failed ({_auth_err}): {_auth_detail}",
         )
 
     async with httpx.AsyncClient(timeout=30) as client:

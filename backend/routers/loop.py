@@ -1211,15 +1211,12 @@ async def rollback_loop(
     # second key-derivation path (single source of truth for HKDF).
     # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token unifies PAT
     # + github_app auth paths so App-installed projects can rollback too.
-    from routers.cto_projects import _user_gh_token
-    from services.pat_vault import get_repo_token
-    user_token = await get_repo_token(proj) \
-        or await _user_gh_token(user["user_id"])
+    # 2026-06 PAT-removal — App-only, typed fail-closed errors.
+    from services.pat_vault import get_repo_token_or_error
+    user_token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
     if not user_token:
         raise HTTPException(
-            400,
-            "No PAT on file for this project — open Projects → Edit and "
-            "add one.",
+            403, f"GitHub App auth failed ({_auth_err}): {_auth_detail}",
         )
 
     await db.loop_sessions.update_one(

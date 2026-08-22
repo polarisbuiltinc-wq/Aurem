@@ -666,16 +666,9 @@ async def _verify_commit_exists(*, db, user: dict, project_id: str,
         repo  = proj.get("github_repo")
         # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token dispatches on
         # project.auth_method so App-installed projects also succeed.
-        from services.pat_vault import get_repo_token
-        token = await get_repo_token(proj)
-        if not token:
-            try:
-                u = await db.dev_users.find_one(
-                    {"user_id": user["user_id"]}, {"_id": 0, "github": 1},
-                )
-                token = ((u or {}).get("github") or {}).get("access_token") or None
-            except Exception:
-                token = None
+        # 2026-06 PAT-removal — App-only, no OAuth fallback.
+        from services.pat_vault import get_repo_token_or_error
+        token, _auth_err, _ = await get_repo_token_or_error(proj)
         if not (owner and repo and token):
             return None
         import httpx

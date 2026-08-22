@@ -39,7 +39,6 @@ from fastapi import APIRouter, Header, HTTPException
 
 from cto_services.auth import current_dev
 from cto_services.db import get_db
-from cto_services.crypto import decrypt
 
 logger = logging.getLogger("aurem-dev.repo_status")
 router = APIRouter(prefix="/cto/projects", tags=["Repo Status"])
@@ -51,13 +50,6 @@ _CACHE_TTL_S    = 8       # short cache to swallow duplicate polls
 _CACHE: dict[str, dict] = {}        # keyed by project_id
 
 
-async def _decrypt_pat(user_id: str, ciphertext: Optional[str]) -> Optional[str]:
-    if not ciphertext:
-        return None
-    try:
-        return await decrypt(user_id, ciphertext, kind="github_token")
-    except Exception:                                     # noqa: BLE001
-        return None
 
 
 async def _check_one(client: httpx.AsyncClient, *, project_id: str,
@@ -107,7 +99,9 @@ async def _check_one(client: httpx.AsyncClient, *, project_id: str,
                          else ("repo_not_found" if r.status_code == 404
                                else f"http_{r.status_code}")}
     except (httpx.TimeoutException, httpx.NetworkError) as e:
-        return {"project_id": project_id, "status": "disconnected",
+        # 2026-06 — a network failure is NOT a revocation. Distinct
+        # status so the UI never renders it as "access revoked".
+        return {"project_id": project_id, "status": "unreachable",
                 "http_code": 0, "checked_at": now,
                 "auth": auth, "owner": owner, "repo": repo,
                 "error": f"network: {type(e).__name__}"}
@@ -148,11 +142,7 @@ async def connection_status(authorization: str = Header(None)) -> dict:
          "auth_method": 1, "installation_id": 1, "user_id": 1},
     ).sort("created_at", -1).to_list(50)
 
-    # Pull the user's OAuth token once — many projects may share it.
-    me = await db.dev_users.find_one(
-        {"user_id": user_id}, {"_id": 0, "github": 1},
-    )
-    oauth_token = ((me or {}).get("github") or {}).get("access_token") or None
+    # 2026-06 PAT-removal — OAuth token no longer used for repo auth.
 
     # 2026-08-20 — installation health pre-check. A GitHub-App-installed
     # project whose installation was suspended/removed used to fall
@@ -213,19 +203,20 @@ async def connection_status(authorization: str = Header(None)) -> dict:
         # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token dispatches on
         # project.auth_method; App-installed rows mint a fresh installation
         # token, PAT rows decrypt normally.
-        from services.pat_vault import get_repo_token
-        pat = await get_repo_token(p)
-        if pat:
-            token, auth = pat, "pat"
-        elif oauth_token:
-            token, auth = oauth_token, "oauth"
-        else:
-            no_check.append({"project_id": pid, "status": "disconnected",
+        # 2026-06 PAT-removal — App-only auth, typed codes, no OAuth.
+        from services.pat_vault import get_repo_token_or_error
+        token, _auth_err, _ = await get_repo_token_or_error(p)
+        if not token:
+            # github_unreachable is a TEMPORARY network state — report
+            # it as `unreachable`, never as disconnected/revoked.
+            _status = ("unreachable" if _auth_err == "github_unreachable"
+                       else "disconnected")
+            no_check.append({"project_id": pid, "status": _status,
                              "http_code": 0, "checked_at": now,
                              "auth": "none", "owner": owner, "repo": repo,
-                             "error": "no_token"})
+                             "error": _auth_err or "no_token"})
             continue
-        tasks.append(("check", pid, owner, repo, token, auth))
+        tasks.append(("check", pid, owner, repo, token, "github_app"))
 
     # Run the live HTTP checks in parallel with a semaphore.
     sem = asyncio.Semaphore(_MAX_PARALLEL)

@@ -185,16 +185,9 @@ async def build_bin_context(
     # and `get_repo_token()` mints a fresh installation access token.
     # `get_repo_token` returns str|None and never raises — matches the
     # existing fallback contract at line 197.
-    from services.pat_vault import (
-        get_repo_token as _get_repo_token,
-        get_user_gh_token as _user_gh_token,   # legacy OAuth fallback
-    )
-    pat = await _get_repo_token(proj)
-    if not pat:
-        # Legacy OAuth-only rows (pre-Iter 211) never stored a per-project
-        # PAT AND aren't App-installed either — fall through to the
-        # user-level OAuth token.
-        pat = await _user_gh_token(user_id)
+    # 2026-06 PAT-removal — App-only, no OAuth fallback.
+    from services.pat_vault import get_repo_token_or_error
+    pat, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
 
     if not pat:
         logger.warning(

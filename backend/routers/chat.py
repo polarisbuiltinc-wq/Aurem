@@ -1584,13 +1584,11 @@ async def chat_stream(
             # 2026-02-11 · Phase 3b (Bug 2 fix) — dual-auth token resolver.
             _pat = None
             try:
-                from routers.cto_projects import _user_gh_token
-                from services.pat_vault import get_repo_token
-                # Iter 212m-177 P1-6 — hard cap: PAT decrypt hits Mongo +
-                # HKDF and the OAuth fallback hits Mongo again.
+                # 2026-06 PAT-removal — App-only, no OAuth fallback.
+                from services.pat_vault import get_repo_token_or_error
                 async def _pat_lookup():
-                    return (await get_repo_token(_proj or {})
-                            or await _user_gh_token(user_id))
+                    t, _e, _d = await get_repo_token_or_error(_proj or {})
+                    return t
                 _pat = await asyncio.wait_for(_pat_lookup(), timeout=10.0)
             except Exception:
                 _pat = None
@@ -1927,7 +1925,6 @@ async def chat_stream(
                 if _mode in ("D", "E"):
                     from services.mode_d_debugger import run_debug_session
                     from services.mode_e_auditor  import run_audit
-                    from routers.cto_projects     import _user_gh_token, _decrypt_pat
 
                     db_h     = get_db()
                     repo_own = ""
@@ -1949,11 +1946,16 @@ async def chat_stream(
                         # projects mint a fresh installation token; PAT rows
                         # decrypt normally (Iter 204 fix retained inside the
                         # helper).
-                        from services.pat_vault import get_repo_token
-                        pat = (
-                            await get_repo_token(project or {})
-                            or await _user_gh_token(user_id)
+                        # 2026-06 PAT-removal — App-only, no fallback.
+                        from services.pat_vault import (
+                            get_repo_token_or_error,
                         )
+                        pat, _auth_err, _auth_detail = (
+                            await get_repo_token_or_error(project or {})
+                        )
+                        if _auth_err:
+                            logger.warning(
+                                "mode D/E: App auth failed (%s)", _auth_err)
                     except Exception:
                         pat = None
 

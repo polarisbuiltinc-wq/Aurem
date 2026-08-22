@@ -157,15 +157,14 @@ async def revert_last_ship(
         })
     # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token unifies PAT
     # + github_app auth so App-installed projects can rollback too.
-    from routers.cto_projects import _user_gh_token
-    from services.pat_vault import get_repo_token
-    user_token = await get_repo_token(proj) \
-        or await _user_gh_token(user["user_id"])
+    # 2026-06 PAT-removal — App-only, typed fail-closed errors.
+    from services.pat_vault import get_repo_token_or_error
+    user_token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
     if not user_token:
-        raise HTTPException(400, {
-            "error":   "no_github_pat",
-            "message": ("No GitHub PAT on file for this project — open "
-                        "Projects → Edit and add one before rolling back."),
+        raise HTTPException(403, {
+            "error":   _auth_err or "app_installation_missing",
+            "message": _auth_detail or
+                       "Connect this repo via the AUREM GitHub App.",
         })
 
     # 4) Stage state + fire the REAL rollback background task.

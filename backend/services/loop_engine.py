@@ -538,24 +538,37 @@ class LoopEngine:
                      "auth_method": 1, "installation_id": 1, "user_id": 1},
                 )
                 if proj and proj.get("github_owner") and proj.get("github_repo"):
-                    # 2026-02-11 · Phase 3b (Bug 2 fix) — App-installed projects.
-                    from services.pat_vault import get_repo_token
-                    token = await get_repo_token(proj)
-                    if not token:
-                        u = await self.db.dev_users.find_one(
-                            {"user_id": self.user_id}, {"_id": 0, "github": 1},
-                        )
-                        token = ((u or {}).get("github") or {}).get("access_token") or None
+                    # 2026-06 PAT-removal — App-only preflight with honest,
+                    # method-correct errors. A NETWORK failure is retryable
+                    # and must never be presented as a revoked connection.
+                    from services.pat_vault import get_repo_token_or_error
+                    token, _auth_err, _auth_detail = (
+                        await get_repo_token_or_error(proj)
+                    )
+                    if _auth_err:
+                        await self._fail("plan",
+                                         f"GitHub App auth failed "
+                                         f"({_auth_err}): {_auth_detail}")
+                        return
                     if token:
                         from services.loop_safety import validate_github_token
                         ok, err = await validate_github_token(
                             proj["github_owner"], proj["github_repo"], token,
                         )
+                        if not ok and err == "network_error":
+                            await self._fail(
+                                "plan",
+                                "GitHub is unreachable right now (network "
+                                "timeout). This is temporary — your repo "
+                                "connection is fine. Retry in a moment.",
+                            )
+                            return
                         if not ok:
                             await self._fail(
                                 "plan",
-                                f"GitHub PAT preflight failed: {err}. "
-                                f"Reconnect your repo before running the loop.",
+                                f"GitHub auth preflight failed ({err}). "
+                                "Check the GitHub App installation for "
+                                "this repo, then retry.",
                             )
                             return
             except Exception as e:                          # noqa: BLE001
@@ -1149,22 +1162,15 @@ class LoopEngine:
             owner   = proj.get("github_owner") or ""
             repo    = proj.get("github_repo")  or ""
             branch  = proj.get("github_branch") or "main"
-            # 2026-02-11 · Phase 3b (Bug 2 fix) — dual-auth token resolver.
-            from services.pat_vault import get_repo_token  # local import
-            token = await get_repo_token(proj)
-            if not token:
-                try:
-                    u = await self.db.dev_users.find_one(
-                        {"user_id": self.user_id}, {"_id": 0, "github": 1},
-                    )
-                    token = ((u or {}).get("github") or {}).get("access_token") or None
-                except Exception:
-                    token = None
+            # 2026-06 PAT-removal — App-only, no OAuth fallback.
+            from services.pat_vault import get_repo_token_or_error
+            token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
         if not (owner and repo and token):
-            logger.error("[loop %s] EXECUTE — missing GitHub creds (owner=%s repo=%s token=%s)",
-                         self.loop_id, bool(owner), bool(repo), bool(token))
+            logger.error("[loop %s] EXECUTE — GitHub App auth failed (%s)",
+                         self.loop_id, _auth_err if 'proj' in dir() else 'no_project')
             await self._fail("execute",
-                             "GitHub credentials missing for execute. Connect repo + PAT/OAuth.")
+                             f"GitHub App auth failed ({_auth_err or 'missing_repo'}): "
+                             f"{_auth_detail or 'Connect this repo via the GitHub App.'}")
             return
 
         from services.loop_execute import generate_files
@@ -2781,20 +2787,13 @@ class LoopEngine:
             owner   = proj.get("github_owner") or ""
             repo    = proj.get("github_repo")  or ""
             branch  = proj.get("github_branch") or "main"
-            # 2026-02-11 · Phase 3b (Bug 2 fix) — dual-auth token resolver.
-            from services.pat_vault import get_repo_token  # local import
-            token = await get_repo_token(proj)
-            if not token:
-                try:
-                    u = await self.db.dev_users.find_one(
-                        {"user_id": self.user_id}, {"_id": 0, "github": 1},
-                    )
-                    token = ((u or {}).get("github") or {}).get("access_token") or None
-                except Exception:
-                    token = None
+            # 2026-06 PAT-removal — App-only, no OAuth fallback.
+            from services.pat_vault import get_repo_token_or_error
+            token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
         if not (owner and repo and token):
             await self._fail_ship(
-                "GitHub credentials missing. Connect a repo + PAT (or OAuth) before shipping."
+                f"GitHub App auth failed ({_auth_err or 'missing_repo'}): "
+                f"{_auth_detail or 'Connect this repo via the GitHub App before shipping.'}"
             )
             return
 
@@ -3981,13 +3980,9 @@ async def _generate_plan(user_id: str, project_id: Optional[str],
                     )
                     if proj and proj.get("github_owner") and proj.get("github_repo"):
                         # 2026-02-11 · Phase 3b (Bug 2 fix) — App-installed projects.
-                        from services.pat_vault import get_repo_token
-                        tok = await get_repo_token(proj)
-                        if not tok:
-                            u = await db.dev_users.find_one(
-                                {"user_id": user_id}, {"_id": 0, "github": 1},
-                            )
-                            tok = ((u or {}).get("github") or {}).get("access_token")
+                        # 2026-06 PAT-removal — App-only.
+                        from services.pat_vault import get_repo_token_or_error
+                        tok, _g_err, _ = await get_repo_token_or_error(proj)
                         if tok:
                             logger.info(
                                 "[plan] graph stale (age=%.0fs) — rebuilding silently",
@@ -4113,7 +4108,6 @@ async def _run_security_scan(user_id: str,
     # Pull the project's encrypted PAT + repo coords and reuse the
     # scanner's lower-level helpers so we don't need a JWT.
     from cto_services.db import get_db
-    from services.pat_vault import decrypt_pat as _decrypt_pat  # iter 212m-225 boundary fix
     # Iter 319 · Bug 3 — restore the missing `_scan_text` import.
     # This function references `_scan_text(...)` at the scan_one
     # inner call site; the import block that once carried it was
@@ -4134,12 +4128,12 @@ async def _run_security_scan(user_id: str,
                 "skipped_reason": "no_project_doc"}
     owner = proj.get("github_owner") or ""
     repo  = proj.get("github_repo")  or ""
-    # 2026-02-11 · Phase 3b (Bug 2 fix) — dual-auth token resolver.
-    from services.pat_vault import get_repo_token
-    pat   = await get_repo_token(proj)
+    # 2026-06 PAT-removal — App-only.
+    from services.pat_vault import get_repo_token_or_error
+    pat, _auth_err, _ = await get_repo_token_or_error(proj)
     if not (owner and repo and pat):
         return {"summary": {"total": 0, "by_severity": {}},
-                "skipped_reason": "no_github_linkage"}
+                "skipped_reason": _auth_err or "no_github_linkage"}
     # Re-run a trimmed scan inline — same rule library, capped 200
     # files for the engine path to keep phase budget under 120s.
     # arch: allow-router-import — scanner internals live in security_scan router until phase-4 refactor

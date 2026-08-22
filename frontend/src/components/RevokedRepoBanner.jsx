@@ -21,6 +21,9 @@ const REASON_LABEL = {
   repo_not_found:         "repo not found — renamed, deleted, or access removed",
   installation_suspended: "GitHub App installation suspended — an org admin paused it",
   installation_deleted:   "GitHub App installation removed — reinstall to reconnect",
+  // 2026-06 PAT-removal — App-only typed codes:
+  app_installation_missing: "not connected via the GitHub App — reconnect to continue",
+  app_installation_revoked: "GitHub App installation revoked — reinstall to reconnect",
 };
 
 // App-level states fixed on GitHub's OWN settings page (unsuspend) or
@@ -51,7 +54,9 @@ export default function RevokedRepoBanner({ activeProject }) {
         const j = await res.json();
         const mine = (j.statuses || []).find((s) => s.project_id === projectId);
         if (!cancelled && mine) {
-          setStatus(mine.status === "connected" ? "connected" : "disconnected");
+          // 2026-06 — "unreachable" (network) is a TEMPORARY state and
+          // must NEVER render as revoked. Tracked as its own status.
+          setStatus(mine.status);
           setReason(mine.error || null);
           setInstallationId(mine.installation_id || null);
         }
@@ -118,6 +123,27 @@ export default function RevokedRepoBanner({ activeProject }) {
         setReconnecting(false);
       }
     }, 1500);
+  }
+
+  // 2026-06 — network blips get a calm amber note, never the red
+  // "revoked" banner (a timeout is not a revocation).
+  if (status === "unreachable") {
+    return (
+      <div
+        data-testid="github-unreachable-banner"
+        style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "8px 14px", margin: "8px 0", borderRadius: 10,
+          background: "rgba(245, 158, 11, 0.08)",
+          border: "1px solid rgba(245, 158, 11, 0.35)",
+          color: "#fbbf24", fontSize: 13,
+        }}
+      >
+        <Loader2 size={15} className="animate-spin" />
+        GitHub is unreachable right now (temporary network issue). Your
+        repo connection is fine — retrying automatically.
+      </div>
+    );
   }
 
   if (status !== "disconnected") return null;

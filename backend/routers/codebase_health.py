@@ -46,7 +46,7 @@ from cto_services.auth import current_dev, require_admin
 from cto_services.db import get_db
 from services.http import ext_client
 from routers.security_scan import (
-    _decrypt_pat, _list_repo_tree, _list_repo_tree_with_sha, _fetch_file,
+    _list_repo_tree, _list_repo_tree_with_sha, _fetch_file,
     _MAX_FILES, _MAX_BYTES_PER_FILE, _SCAN_EXTS, _SKIP_DIRS,
     _CONCURRENT_FETCHES,
 )

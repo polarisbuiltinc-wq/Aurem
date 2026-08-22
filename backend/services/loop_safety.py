@@ -37,7 +37,7 @@ logger = logging.getLogger("aurem-dev.loop_safety")
 async def validate_github_token(
     owner: str, repo: str, token: str,
 ) -> tuple[bool, Optional[str]]:
-    """Hit GET /repos/{owner}/{repo} with the user's PAT. Returns
+    """Hit GET /repos/{owner}/{repo} with the App installation token. Returns
     (ok, error_code). Fails-fast in <2 s instead of letting the loop
     crash at SHIP after Plan+Execute+Verify+Scan have spent tokens."""
     if not (owner and repo and token):
@@ -54,21 +54,21 @@ async def validate_github_token(
         if r.status_code == 200:
             return True, None
         if r.status_code == 401:
-            return False, "pat_invalid_or_expired"
+            return False, "github_rejected_401"
         if r.status_code == 403:
             # Could be rate-limited OR scope-missing.
             remaining = r.headers.get("x-ratelimit-remaining")
             if remaining == "0":
                 return False, "github_rate_limited"
-            return False, "pat_missing_scope"
+            return False, "github_rejected_403"
         if r.status_code == 404:
             return False, "repo_not_found_or_no_access"
         return False, f"github_status_{r.status_code}"
     except (httpx.TimeoutException, httpx.NetworkError) as e:
-        logger.warning("PAT preflight network err: %r", e)
+        logger.warning("GitHub preflight network err: %r", e)
         return False, "network_error"
     except Exception as e:                                # noqa: BLE001
-        logger.exception("PAT preflight unexpected err")
+        logger.exception("GitHub preflight unexpected err")
         return False, f"unexpected: {e}"
 
 

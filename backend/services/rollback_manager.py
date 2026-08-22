@@ -128,20 +128,14 @@ async def execute_rollback(
                 "loop_id": loop_id, "user_id": user_id,
                 "project_id": project_id}
 
+    # 2026-06 PAT-removal — App-only auth, typed fail-closed errors.
+    from services.pat_vault import GithubAppAuthError, get_repo_token
     try:
-        from routers.cto_projects import _user_gh_token
-        from services.pat_vault import get_repo_token
-        # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token dispatches
-        # on project.auth_method so App-installed projects work too.
-        user_token = (await get_repo_token(proj)
-                      or await _user_gh_token(user_id))
-    except Exception as e:
-        return {"ok": False, "reason": "pat_resolve_failed",
-                "detail": str(e)[:200]}
-    if not user_token:
-        return {"ok": False, "reason": "no_github_pat",
+        user_token = await get_repo_token(proj)
+    except GithubAppAuthError as e:
+        return {"ok": False, "reason": e.code,
                 "loop_id": loop_id, "user_id": user_id,
-                "hint": "User has no GitHub PAT on file for this project."}
+                "hint": e.detail}
 
     # ── 3) Idempotence via loop_sessions.rollback_status ──────────
     try:

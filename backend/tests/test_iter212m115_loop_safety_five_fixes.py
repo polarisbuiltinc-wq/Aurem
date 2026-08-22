@@ -47,7 +47,7 @@ async def test_validate_github_token_401_returns_clean_error(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", _Client)
     ok, err = await ls.validate_github_token("o", "r", "ghp_bad")
     assert ok is False
-    assert err == "pat_invalid_or_expired"
+    assert err == "github_rejected_401"
 
 
 @pytest.mark.asyncio
@@ -248,9 +248,9 @@ async def test_finding_fix_applier_uses_branch_per_fix(monkeypatch):
         dev_users     = _Users()
         finding_fixes = _Fixes()
 
-    import routers.security_scan as ss
-    async def fake_decrypt(uid, tok): return None
-    monkeypatch.setattr(ss, "_decrypt_pat", fake_decrypt)
+    import services.pat_vault as pv
+    async def fake_token(proj): return ("ghs_apptoken", None, None)
+    monkeypatch.setattr(pv, "get_repo_token_or_error", fake_token)
 
     async def fake_fetch(*a, **k):
         return "API_KEY = 'AKIA'\n", None
@@ -338,8 +338,9 @@ async def test_finding_fix_applier_falls_back_to_base_if_branch_create_fails(mon
         dev_users     = _Users()
         finding_fixes = _Fixes()
 
-    import routers.security_scan as ss
-    monkeypatch.setattr(ss, "_decrypt_pat", AsyncMock(return_value=None))
+    import services.pat_vault as pv
+    monkeypatch.setattr(pv, "get_repo_token_or_error",
+                        AsyncMock(return_value=("ghs_apptoken", None, None)))
     async def fake_fetch(*a, **k): return "x = 1\n", None
     monkeypatch.setattr(ff, "_fetch_file_content", fake_fetch)
     async def fake_llm(**kw): return "x = 2\n", None

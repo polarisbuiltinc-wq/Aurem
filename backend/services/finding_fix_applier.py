@@ -282,18 +282,13 @@ async def apply_finding_fix(
     # Decrypt project PAT → fall back to OAuth access_token.
     # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token handles both PAT
     # and github_app auth methods.
-    from services.pat_vault import get_repo_token  # iter 212m-225 boundary fix
-    token = await get_repo_token(proj)
-    if not token:
-        try:
-            u = await db.dev_users.find_one(
-                {"user_id": user_id}, {"_id": 0, "github": 1},
-            )
-            token = ((u or {}).get("github") or {}).get("access_token") or None
-        except Exception:
-            token = None
+    # 2026-06 PAT-removal — App-only, no OAuth fallback.
+    from services.pat_vault import get_repo_token_or_error
+    token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
     if not (owner and repo and token):
-        return {"ok": False, "error": "github_credentials_missing"}
+        return {"ok": False,
+                "error": _auth_err or "github_credentials_missing",
+                "detail": _auth_detail or ""}
 
     # Step 1: fetch current file content
     content, fetch_err = await _fetch_file_content(owner, repo, branch, path, token)

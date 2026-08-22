@@ -244,14 +244,9 @@ async def admin_brain_dump(
     # (matches what ORA would see for this user in a real chat turn).
     # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token unifies PAT
     # + github_app auth.
-    token = None
-    try:
-        from routers.cto_projects import _user_gh_token
-        from services.pat_vault import get_repo_token
-        token = await get_repo_token(proj) \
-            or await _user_gh_token(proj["user_id"])
-    except Exception:
-        token = None
+    # 2026-06 PAT-removal — App-only, no OAuth fallback.
+    from services.pat_vault import get_repo_token_or_error
+    token, _auth_err, _ = await get_repo_token_or_error(proj)
 
     brain_doc = await db.project_brains.find_one({"project_id": project_id}) or {}
     # Strip Mongo _id from the raw doc so it stays JSON-serialisable
@@ -439,14 +434,9 @@ async def admin_brain_replay(
     # answer is comparable to what a user would actually get.
     # 2026-02-11 · Phase 3b (Bug 2 fix) — get_repo_token unifies PAT
     # + github_app auth.
-    token = None
-    try:
-        from routers.cto_projects import _user_gh_token
-        from services.pat_vault import get_repo_token
-        token = await get_repo_token(proj) \
-            or await _user_gh_token(proj["user_id"])
-    except Exception:
-        token = None
+    # 2026-06 PAT-removal — App-only, no OAuth fallback.
+    from services.pat_vault import get_repo_token_or_error
+    token, _auth_err2, _ = await get_repo_token_or_error(proj)
 
     from services.project_brain import get_brain_context
     from services.llm import call_llm
