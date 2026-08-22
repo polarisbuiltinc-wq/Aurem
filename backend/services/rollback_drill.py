@@ -9,10 +9,16 @@ two-phase code paths production uses (zero drill-only shortcuts).
 Target configuration (backend/.env):
   AUREM_DRILL_REPO   — "owner/repo" of a disposable, WRITABLE test repo
   AUREM_DRILL_BRANCH — branch to drill on (default: main)
-  AUREM_DRILL_TOKEN  — token with contents:read/write on that repo
-                       (falls back to GITHUB_ACTIONS_TOKEN)
-If the token lacks write access the drill fails honestly at the seed
-step and records the exact GitHub error — no simulated success.
+Write auth resolution (Rule 12 — reuse the existing GitHub App first):
+  1. GitHub App installation token (services/github_app) — preferred.
+     Uses AUREM_DRILL_INSTALLATION_ID if set, else auto-discovers the
+     installation covering AUREM_DRILL_REPO. Requires the App config
+     to be seeded in admin_settings (admin ops-config endpoint).
+  2. AUREM_DRILL_TOKEN env fallback (fine-grained PAT).
+  3. GITHUB_ACTIONS_TOKEN last resort (read-only in preview → drill
+     fails honestly at the seed step).
+If no auth can write, the drill records the exact GitHub error —
+no simulated success.
 """
 from __future__ import annotations
 
@@ -48,6 +54,39 @@ def _h(s: str) -> str:
     return hashlib.sha256(s.encode()).hexdigest()
 
 
+async def _resolve_write_token(repo_full: str) -> tuple[str, str]:
+    """Return (token, auth_via). Preference order: GitHub App
+    installation token → AUREM_DRILL_TOKEN → GITHUB_ACTIONS_TOKEN."""
+    # 1 — existing GitHub App (Rule 12 reuse).
+    try:
+        from services.github_app import (
+            get_installation_token, list_installations,
+            list_installation_repos,
+        )
+        iid_env = os.environ.get("AUREM_DRILL_INSTALLATION_ID", "").strip()
+        iid = int(iid_env) if iid_env else None
+        if iid is None and repo_full and "/" in repo_full:
+            for inst in await list_installations():
+                repos = await list_installation_repos(inst["id"])
+                if any(r.get("full_name", "").lower() == repo_full.lower()
+                       for r in repos):
+                    iid = inst["id"]
+                    break
+        if iid is not None:
+            token, _exp = await get_installation_token(iid)
+            if token:
+                return token, f"github_app_installation:{iid}"
+    except Exception as e:  # noqa: BLE001
+        logger.info("[drill] GitHub App auth unavailable (%r) — "
+                    "falling back to env token", e)
+    # 2/3 — env tokens.
+    t = os.environ.get("AUREM_DRILL_TOKEN", "").strip()
+    if t:
+        return t, "env:AUREM_DRILL_TOKEN"
+    t = os.environ.get("GITHUB_ACTIONS_TOKEN", "").strip()
+    return t, "env:GITHUB_ACTIONS_TOKEN" if t else "none"
+
+
 async def run_drill(db, initiated_by: str) -> dict:
     drill_id = f"drill_{uuid.uuid4().hex[:12]}"
     steps: list[dict] = []
@@ -70,14 +109,15 @@ async def run_drill(db, initiated_by: str) -> dict:
 
     repo_full = os.environ.get("AUREM_DRILL_REPO", "").strip()
     branch = os.environ.get("AUREM_DRILL_BRANCH", "main").strip() or "main"
-    token = (os.environ.get("AUREM_DRILL_TOKEN", "").strip()
-             or os.environ.get("GITHUB_ACTIONS_TOKEN", "").strip())
+    token, auth_via = await _resolve_write_token(repo_full)
     if not repo_full or "/" not in repo_full or not token:
         _step("config", "blocked",
-              "AUREM_DRILL_REPO and a writable token are required")
+              "AUREM_DRILL_REPO and a writable auth (GitHub App "
+              "installation or AUREM_DRILL_TOKEN) are required")
         return await _finish("blocked")
     owner, repo = repo_full.split("/", 1)
-    _step("config", "ok", f"target {repo_full}@{branch} path {DRILL_PATH}")
+    _step("config", "ok",
+          f"target {repo_full}@{branch} path {DRILL_PATH} auth={auth_via}")
 
     from services.github_api_writer import commit_files, fetch_file
     from services.rollback_snapshot import create_snapshot
