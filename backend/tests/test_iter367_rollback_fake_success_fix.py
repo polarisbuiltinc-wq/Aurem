@@ -197,23 +197,38 @@ async def test_revert_last_ship_calls_real_run_rollback(monkeypatch):
     monkeypatch.setattr(
         "routers.user_rollback.require_db", lambda: db
     )
-    # PAT decrypt stubs
+    # PAT decrypt stub.
+    # 2026-08-23 audit fix — production's real call path is
+    # `services.pat_vault.get_repo_token()` → its OWN module-level
+    # `_decrypt_pat`, not `routers.cto_projects._decrypt_pat` (that's a
+    # separate wrapper that re-imports pat_vault's function fresh on
+    # every call — patching it never touched what `get_repo_token`
+    # actually calls). Patch the real target.
     async def _decrypt_pat(uid, enc):
         return "ghp_REAL_TOKEN"
     async def _user_gh_token(uid):
         return None
     monkeypatch.setattr(
-        "routers.cto_projects._decrypt_pat", _decrypt_pat
+        "services.pat_vault._decrypt_pat", _decrypt_pat
     )
     monkeypatch.setattr(
         "routers.cto_projects._user_gh_token", _user_gh_token
     )
-    # Capture what run_rollback is called with
+    # Capture what run_rollback is called with.
+    # 2026-08-23 audit fix — the production background-task call site
+    # (routers/user_rollback.py) imports `run_rollback_bg`, a
+    # module-level `safe_bg(run_rollback)` wrapper created at import
+    # time (services/loop_rollback.py:332). That wrapper closed over
+    # the ORIGINAL `run_rollback` function object, so patching the
+    # `run_rollback` name here never touched what actually runs —
+    # this test was silently making a real, unmocked GitHub API call
+    # (401 against the fake "acme/widgets" repo) instead of exercising
+    # the stub. Patch the wrapper that's actually invoked instead.
     calls = {}
     async def _fake_run(**kwargs):
         calls.update(kwargs)
     monkeypatch.setattr(
-        "services.loop_rollback.run_rollback", _fake_run
+        "services.loop_rollback.run_rollback_bg", _fake_run
     )
 
     bg = BackgroundTasks()
@@ -295,21 +310,28 @@ async def test_execute_rollback_resolves_sha_to_loop_and_fires(monkeypatch):
         "github_token": "enc:PAT2",
     })
 
+    # 2026-08-23 audit fix — see the identical fix + comment on
+    # test_revert_last_ship_calls_real_run_rollback above: patch
+    # pat_vault's own `_decrypt_pat`, the actual target `get_repo_token`
+    # calls, not the separate `routers.cto_projects` wrapper.
     async def _decrypt_pat(uid, enc):
         return "ghp_TOKEN2"
     async def _user_gh_token(uid):
         return None
     monkeypatch.setattr(
-        "routers.cto_projects._decrypt_pat", _decrypt_pat
+        "services.pat_vault._decrypt_pat", _decrypt_pat
     )
     monkeypatch.setattr(
         "routers.cto_projects._user_gh_token", _user_gh_token
     )
+    # 2026-08-23 audit fix — same stale-mock-target issue as
+    # test_revert_last_ship_calls_real_run_rollback above: production
+    # calls the `run_rollback_bg` wrapper, not `run_rollback` directly.
     calls = {}
     async def _fake_run(**kwargs):
         calls.update(kwargs)
     monkeypatch.setattr(
-        "services.loop_rollback.run_rollback", _fake_run
+        "services.loop_rollback.run_rollback_bg", _fake_run
     )
     # No-op founder_alerts to avoid Resend calls
     async def _noop_alert(*a, **k):

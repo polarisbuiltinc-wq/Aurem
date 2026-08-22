@@ -164,8 +164,22 @@ async def test_fetch_file_retries_on_403_secondary_limit(monkeypatch):
                 return _Resp(403, headers={"Retry-After": "1"})   # secondary limit
             return _Resp(200, text="def foo():\n    return 1\n")
 
-    monkeypatch.setattr(ffa, "httpx",
-                        SimpleNamespace(AsyncClient=_Client))
+    # 2026-08-23 audit fix — `_fetch_file_content` was refactored to
+    # call `ext_client("github", ...)` (services/http/client.py) for
+    # circuit-breaker/pool policy, not `httpx.AsyncClient()` directly.
+    # Patching `ffa.httpx.AsyncClient` therefore no longer intercepts
+    # anything — the test was silently hitting the REAL github.com API
+    # with a fake token and getting a genuine 401, not exercising the
+    # 403/429 retry loop it claims to cover. Patch `ffa.ext_client`
+    # (the actual name imported into finding_fix_applier's namespace)
+    # with an async-context-manager stand-in instead.
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def _fake_ext_client(*_a, **_k):
+        yield _Client()
+
+    monkeypatch.setattr(ffa, "ext_client", _fake_ext_client)
     monkeypatch.setattr(ffa.asyncio, "sleep",
                         lambda *_a, **_k: _noop())
     content, err = await ffa._fetch_file_content(

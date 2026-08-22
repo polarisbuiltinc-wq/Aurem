@@ -3475,6 +3475,24 @@ informational, none introduced this session:
 
 
 
+## Future — Retention & Stickiness (backlog, DO NOT BUILD — revisit only once we have real paying customers + real usage data) — saved 2026-08-23
+
+Findings-bridge (built above) already covers pillar 1 (turning
+detected issues into an actionable loop). Four more pillars identified
+by founder, explicitly deferred:
+
+1. **Habit loop** — a streak/regular-activity indicator tied to fixing
+   findings or shipping code.
+2. **Progress visibility** — a simple "code health score" trend over
+   time (e.g. "45 → 78 this month").
+3. **Social proof** — honest, real aggregate stats only, never
+   fabricated (e.g. "X founders improved their code this week").
+4. **Genuine irreplaceability** — accumulated fix-history and project
+   health data that naturally makes the product harder to walk away
+   from over time.
+
+
+
 ## 2026-08-23 — Findings-to-Fix Bridge, Phase 1 of 2 (backend + teaser strip + Fix All reuse)
 
 Founder-approved brief: connect ORA chat's `save_finding` calls to the
@@ -3575,4 +3593,366 @@ commit-verification tri-state + retry UX polish on top of the
 `fix_pipeline.py`/`fix_job_manager.py` changes already made in this
 session (tri-state verify + retry endpoint exist but not yet
 frontend-wired or tested).
+
+
+
+## 2026-08-23 — Full 9-category honesty audit (founder-authorized, "HOD-level")
+
+Full audit of AUREM CTO's own codebase across code quality, security,
+reliability, performance, data, testing/QA, devops/infra, UX, and
+cost/business. Standing authorization used to fix clear-cut low-risk
+bugs found; ambiguous/high-risk items (rollback, backup integrity)
+reported, not auto-fixed, per explicit founder instruction.
+
+**1. CODE QUALITY** (code_review_agent, read-only):
+- CONFIRMED HIGH bug (FIXED): `routers/cto_projects.py::_run_task_via_api`
+  referenced undefined `user_id` (should be `proj.get("user_id")`) and
+  used `db` before assignment in the diff-popup persistence block —
+  both raised silently-caught exceptions, meaning brain-update context
+  fetch and diff-popup persistence never actually ran on the HTTP task
+  path. Fixed both; same `user_id` bug also existed in the sibling
+  `_run_task_with_git` fallback (fixed).
+- CONFIRMED MEDIUM bug (FIXED): `routers/admin_ops_config.py` RobotGuide
+  message save referenced an undefined `_SCRIPT_RE` — every save call
+  raised NameError (500). Added the missing compiled regex.
+- Dead code / unused imports: present but LOW severity, no functional
+  impact (consistent with prior sessions' "safe to leave" calls) — not
+  removed, matches project convention of not chasing cosmetic cleanup.
+- Top-5 highest-risk files flagged: `routers/chat.py`, `services/
+  orchestrator.py`, `routers/fix_pipeline.py`, `routers/cto_projects.py`,
+  `frontend/ChatPanel.jsx` — all large/high-churn/critical-path, no
+  new action beyond what's already tracked.
+
+**2. SECURITY** — live-tested with two real accounts (test@aurem.dev
+admin + free-gate-test-0822@aurem.dev non-admin), not just code review:
+- IDOR sweep: CONFIRMED SECURE. User B reading/deleting User A's
+  findings backlog, project file tree, project file content, and
+  admin-only endpoints all correctly returned 403/404 (or a true no-op
+  `deleted:0` for a delete on a non-owned project — no data exposed or
+  mutated).
+- NoSQL injection: CONFIRMED SECURE. `{"$ne":null}`/`{"$gt":""}`/array
+  payloads against `/auth/login` all rejected with clean 422
+  (Pydantic type validation), never reach a Mongo query.
+- Token validation: CONFIRMED SECURE. Missing/malformed/tampered JWTs
+  all return 401 consistently. Minor P3 note: the malformed-token 401
+  echoes PyJWT's raw decode-error string (e.g. "'utf-8' codec can't
+  decode byte...") — not a secrets leak, just slightly verbose; left
+  as-is (cosmetic, matches existing pattern across the codebase).
+- SEC-001 (execute_bash argv-only exec) / SEC-002 (chat_sessions
+  user_id scoping): RE-CONFIRMED still holding, both via code
+  inspection and (SEC-002) live cross-account test.
+
+**3. RELIABILITY** (testing_agent + main agent):
+- GitHub third-party failure (using the ALREADY-revoked token on
+  project p_demo_a as a natural test case): CONFIRMED CLEAN. Fast
+  401 from GitHub read paths, and a clear chat-facing message ("GitHub
+  access... was revoked — reconnect from project settings") — no hang,
+  no 500.
+- LLM/orchestrator timeout: PARTIAL. Normal chat/send completes in
+  14-22s; testing_agent observed 1/6 sends hit a ~60s Cloudflare 502
+  (backend still processing on the longcat+claude review branch,
+  ingress timed out first). Not reproduced in 5 retries. **Recommend**
+  (not yet built): a server-side abort budget under ~55s on that
+  branch so it fails to a friendly retry instead of a raw 502 — flagged
+  as P1 backlog, not fixed this pass (needs a deliberate timeout-budget
+  decision, not a blind patch).
+- DB-disconnect / auto-restart: happened for real (see DATA below) —
+  supervisor auto-restarted mongod and the backend reconnected on its
+  own with zero manual intervention. Positive confirmation of
+  resilience.
+
+**4. PERFORMANCE** (testing_agent, real numbers):
+- `GET /findings/backlog` × 20 concurrent: 0% error rate, p95 0.94s.
+- `GET /chat/history` × 15 concurrent: 0% error rate, p95 0.70s.
+- Real Lighthouse on production: NOT TESTED — no Lighthouse tool
+  available to this agent; would need the founder to run it directly
+  or a follow-up with a dedicated performance-audit tool.
+
+**5. DATA — the most important finding of this audit:**
+- Malformed/oversized input (25k-char prompt, null bytes, missing
+  required fields on `/findings/dismiss`): CONFIRMED CLEAN, all clean
+  4xx, zero 500s/hangs.
+- **Backup+restore drill — FAILED, reported not fixed (high-risk, per
+  founder's own rollback-style caution).** Main agent ran the real
+  `/admin/backups/test-restore` endpoint live: it failed with
+  `AutoReconnect` — the local preview MongoDB was OOM-killed mid-restore
+  (54,723 docs / 157 collections into a scratch DB on top of the live
+  DB exceeded this pod's memory; supervisor correctly auto-restarted
+  mongod and the backend auto-reconnected, confirming restart
+  resilience, but the restore itself did not complete).
+- **Separately, and more seriously**: the automated weekly restore-drill
+  cron's history shows 3 consecutive real failures — `R2 download
+  failed: 404 Not Found` — against `mongo/aurem_20260821_213454...`, a
+  backup that `backup_history` had marked `"success"`. Confirmed via a
+  live R2 bucket listing: that exact object genuinely does not exist in
+  R2, while a near-identical backup 100 seconds later (`...213634...`)
+  does. Root cause not fully determined (checked `_prune_old` — it's
+  correctly age-based, not the cause). **This means there was a real
+  window where the "most recent successful backup" recorded in
+  `backup_history` was not actually restorable, and the drill cron does
+  not fall back to the next-most-recent good backup when the top one
+  fails.** The CURRENT/most-recent backup does exist in R2 right now.
+  **Not fixed — reported per founder's explicit instruction to stop on
+  ambiguous/high-risk data-recovery findings.** Recommend: investigate
+  why a "success"-marked backup can be missing from R2 (upload
+  atomicity? R2-side lifecycle rule outside this codebase?), and add a
+  drill-cron fallback to the next good backup on 404.
+- Retention policy enforcement: not independently re-verified this pass
+  (age-based `_prune_old` logic read and confirmed correct in code).
+
+**6. TESTING/QA:**
+- Full suite (CI-matching: `-m "not legacy"`, ignoring the 2 known-slow
+  files ci.yml itself ignores): **4862 passed, 233 failed, 85 skipped,
+  100 deselected, 18 errors** (958s runtime). All 18 collection errors
+  were the SAME root cause — 5 live-E2E test files read
+  `os.environ["REACT_APP_BACKEND_URL"]`, which isn't set in the backend
+  process env by default (only in `frontend/.env`); exporting it before
+  running fixed all 18 (test-infra gap, not an app bug, confirmed by
+  re-running those files with the var set — all passed except 2 real,
+  separately-investigated failures in `test_iter212m120_vanguard_ci_
+  ingest.py`, see below).
+- Sampled + fixed 3 concrete stale-test-mock bugs found among the 233
+  failures (all TEST-ONLY fixes, zero production code changed for
+  these): `test_iter367_rollback_fake_success_fix.py` (2 tests) and
+  `test_iter212m178_prod_perf.py::test_fetch_file_retries_on_403_
+  secondary_limit` were all patching a function reference that
+  production no longer calls (`run_rollback` → actually calls
+  `run_rollback_bg`; `routers.cto_projects._decrypt_pat` → actually
+  calls `services.pat_vault._decrypt_pat`; `httpx.AsyncClient` →
+  actually calls `ext_client(...)`), meaning these three tests had been
+  silently making REAL unmocked network calls (to github.com) instead
+  of testing the mocked path. Fixed all 3 patch targets; all now pass
+  and correctly exercise the mocked logic. This is a real, valuable
+  finding: **rollback and file-fetch-retry test coverage had silently
+  regressed to blind spots** even though the underlying production code
+  paths themselves were behaviorally fine (confirmed once the mocks
+  were corrected).
+- `test_iter212m120_vanguard_ci_ingest.py`: 2 remaining real failures —
+  one expects a `VANGUARD_CI_TOKEN`-unset 503 that this pod doesn't
+  reproduce (env-config difference, not a bug), one expects partial
+  secret redaction (`AKIA...LE`) but got full redaction (`***R…**`) —
+  arguably MORE conservative/secure, not a vulnerability; left as a
+  stale test expectation, not fixed (out of time budget, zero security
+  risk either way).
+- Did NOT triage all 233 failures individually (time-boxed); the
+  patterns found (env-var gap, stale mock targets) likely explain a
+  large fraction, but this is not exhaustively proven for every
+  remaining failure — flagging honestly rather than claiming full
+  triage.
+- Re-verified 5 previously-fixed bugs live: SEC-001 (code-only, no
+  live surface), SEC-002 (live, confirmed), boot-gap race condition
+  (`TestBootGapRealRestart`, real supervisorctl restart, PASSED),
+  ship-fix cold-start mismatch guard (live chat, confirmed clean),
+  findings-bridge Phase 1 `matched` field (live, confirmed).
+
+**7. DEVOPS/INFRA:**
+- CI/CD (G8): CONFIRMED all of `ci.yml`, `auto_deploy.yml`,
+  `auto_push.yml`, `quality-gate.yml` are push-triggered (not
+  manual-only) — no regression from the earlier-fixed trigger bug.
+- Deployment health-check / boot-gap ordering: CONFIRMED still correct
+  in `main.py` (boot-gap check runs before `_loop_housekeeping` is
+  scheduled).
+- **Rollback (G12) — the founder's top explicit concern.** Safe/negative
+  paths CONFIRMED correct: candidate listing returns `[]` when no
+  shipped loop exists in this preview DB; triggering with a bogus SHA
+  correctly fails closed (`{"ok": false, "reason": "sha_not_shipped"}`),
+  never a fake success. **The positive path — actually reverting a real
+  shipped commit — could NOT be tested live**: this preview DB has zero
+  rollback candidates (no real shipped loops recorded here) and no
+  project has working GitHub write access. Separately, found (and
+  fixed, test-only) that the regression-test suite for rollback had a
+  stale mock target and was blind to whether the real background-task
+  wrapper was even being exercised, for an unknown period — see
+  Testing/QA above. **Net honest status: rollback's code paths are now
+  better test-covered than before this session, but a real end-to-end
+  revert-a-real-commit has still never been observed, in preview or (as
+  far as this agent knows) production.** This matches the founder's own
+  framing exactly — reported, not silently marked "done."
+
+**8. UX** (testing_agent, live flows):
+- Cold-start chat reliability: CONFIRMED CLEAN this pass (fresh session,
+  first message, ~20s response, no error/mismatch-guard). Still
+  recommend continued vigilance given prior flakiness reports (1/6 502
+  seen under Reliability above).
+- "Blank screen after Ship": NOT TESTED — no project in this preview DB
+  has a real working GitHub write path (all either revoked or fabricated
+  owner/repo). Recommend seeding one working demo repo + PAT in preview
+  for a future pass.
+- Findings-to-Fix Bridge Phase 1: re-confirmed live (see prior entry).
+- **Found + FIXED**: cookie-consent banner (bottom-center, maxWidth 620)
+  overlapped the Sign-in submit button on desktop 1440×900 — first-time
+  visitors clicking Sign in before dismissing cookies hit the banner
+  instead. Moved the banner to a bottom-right corner toast (420px) on
+  ≥640px screens via a scoped media query, kept full-width bottom sheet
+  on mobile. Verified via screenshot: 0px overlap at 1440×900, banner
+  and login card both fully clickable.
+- Login/cookie-banner `data-testid`s testing_agent flagged as missing
+  (`login-submit`, `cookie-accept-btn`) were already present in the
+  code — false alarm, no action needed.
+
+**9. COST/BUSINESS:**
+- `/admin/bi/summary` CONFIRMED live and error-free: real Stripe MRR
+  ($0, 0 active subs — expected, no paying customers yet), real
+  internal LLM-inference cost tracking (today/month spend, budget caps,
+  30-day series) all populated and consistent.
+- Consolidated monthly cost across ALL services (Mongo Atlas, R2,
+  GitHub, hosting, LLM key balance): NOT TESTED — no access to external
+  billing dashboards (Atlas console, Cloudflare billing, Emergent
+  hosting invoice). Internal LLM-cost tracking is confirmed working and
+  captures both `admin_tool` and `customer_chat` cost buckets
+  separately.
+
+**Files changed this session (Task 2 fixes):**
+`backend/routers/cto_projects.py`, `backend/routers/admin_ops_config.py`,
+`backend/tests/test_iter367_rollback_fake_success_fix.py`,
+`backend/tests/test_iter212m178_prod_perf.py`,
+`frontend/src/components/CookieConsentBanner.jsx`.
+
+**Escalated to founder, NOT auto-fixed (per explicit instruction):**
+1. Backup/restore integrity gap (R2 object missing for a "success"-
+   marked backup; drill cron has no fallback-to-next-good-backup).
+2. Rollback's real end-to-end revert path remains genuinely unverified
+   (no live candidate + no writable test repo in preview).
+3. Occasional ~60s chat/send 502 on the longcat+claude review branch
+   (needs a deliberate timeout-budget architecture decision).
+
+
+
+## 2026-08-23 (cont'd) — Escalated-item fixes, 233-failure clarification, Council-mode investigation
+
+**Fix 1 — Backup/restore drill fallback (founder-approved, scoped).**
+`services/restore_drill_cron.py::run_restore_drill` now tries up to 5
+of the most recent `backup_history` "success" rows (newest first)
+instead of only the single newest one, stopping at the first that
+actually restores. If it has to fall back, it still sends a
+non-critical founder alert naming the bad row(s) so the underlying
+`backup_history`/R2 mismatch (see prior entry) stays visible even
+though the drill itself now finds a real restorable backup. `/admin/
+backups/drill-now` inherits this automatically (`/test-restore`, the
+separate manual single-backup tool, intentionally untouched — out of
+the approved scope). Did not re-run the live drill end-to-end after
+this fix (would risk repeating the earlier local-Mongo OOM crash in
+this resource-constrained pod); verified via `py_compile` + full-suite
+run showing no new failures in this file's test coverage.
+
+**Fix 2 — Chat/send ~50s abort budget (founder-approved, Rule 6).**
+Root cause: `routers/chat.py`'s `/chat/stream` already had a mature,
+well-designed graceful-timeout mechanism (`HARD_TIMEOUT_S`, synthesizes
+a real partial-progress summary + friendly message) — but its default
+is 180s, while the platform ingress/proxy in front of this app appears
+to cut long-idle-progress connections around ~55-60s (matches the
+1/6 raw-502 testing_agent observed). The graceful mechanism never got
+a chance to fire because the proxy killed the connection first. Added
+a new `SOFT_TIMEOUT_S` (default 48s, env `CHAT_SOFT_TIMEOUT_S`) that
+triggers the SAME existing graceful-timeout code path early — but
+ONLY when the turn has made ≤1 tool call so far (i.e. it's stuck
+waiting on one slow LLM round-trip, matching "the longcat+claude
+review path" the founder named). Turns that have already made real
+tool-call progress (legit long pro/maxx repo audits) keep their full
+180s runway — this specifically preserves the Iter 169 fix (90s was
+previously found to guillotine legitimate 13-tool-call sweeps; that
+regression risk is why a blanket lower timeout was NOT used here).
+Updated `tests/test_iter136_hard_timeout_enforced.py`'s source-pin
+regex to allow the new OR-clause while still enforcing its real
+invariant (only `_is_tick` events ever trigger the timeout branch,
+real results are never discarded) — verified passing. Live-verified
+normal chat/send still completes fast (1.4s) with no regression;
+could not force-reproduce the exact 60s-hang condition live (would
+need to mock a slow LLM), so real-world effectiveness rests on the
+mechanism reusing an already-proven code path, not a fresh live 502
+repro — flagging this honestly rather than overclaiming.
+
+**233/228-failure clarification (explicitly requested before Task 3):**
+Reran the full CI-matching suite twice (`-m "not legacy"`, same 2 files
+ci.yml itself ignores) with `REACT_APP_BACKEND_URL` exported (fixing
+the 18 env-var collection errors from the first pass): **228 failed,
+4932 passed, 72 skipped, 100 deselected, 0 errors** (1200s). Sampled
+7 tests across 4 unrelated failing files in depth (not all 228 —
+time-boxed):
+- `test_iter367_rollback_fake_success_fix.py` (2), `test_iter212m178_
+  prod_perf.py` (1) — root-caused + FIXED as stale test-mock targets
+  (see prior entry).
+- `test_db_backup.py` (5) / `test_iter369_restore_drill_and_ad_
+  attribution.py::TestRestoreDrill` (4) — confirmed these are a
+  test-runner **timeout-budget** issue, not a functional bug: reran
+  `test_backup_writes_and_history_recorded` alone with an 80s budget
+  and it was STILL genuinely mid-operation (real R2 upload against
+  this pod's now-large accumulated live DB) when killed — the
+  operation would eventually succeed (matches the fact current backups
+  DO exist in R2 right now), it's just slower than this suite's 30s
+  per-test timeout allows in this specific pod. Same failure signature
+  existed BEFORE my restore-drill fallback fix too — not something my
+  change introduced.
+- `test_iter63_cache_purge.py` (7) and `test_iter212m16_admin_password_
+  leak_and_health.py` (4) — both are **source-path grep-lock tests**
+  reading `routers/admin.py` for a specific endpoint that has since
+  moved to `routers/admin_users.py` (a module split) — the test can't
+  find what it's looking for at the old path. Critically, live-curl
+  verified the actual security property these tests exist to guard
+  (`/admin/users` must never leak a real `password` field) **is still
+  true right now** — the live response has zero `password`/
+  `password_hash` keys. So the underlying guarantee holds; only the
+  test's file-path assumption is stale.
+- Zero of the 228 failures are in any file touched by this session's
+  functional changes (`findings.py`, `chat.py`, `orchestrator.py`,
+  `local_tools.py`, `finding_fix_applier.py`, `fix_pipeline.py`,
+  `fix_job_manager.py`) — confirmed via `grep` against the full FAILED
+  list.
+
+**Answer, labeled per the founder's own confidence-level request:**
+**LIKELY** (not CONFIRMED — 7 of 228 individually deep-dived, not all)
+that the 228 failures are predominantly **pre-existing test-
+infrastructure staleness** (moved/renamed code the tests still point
+at old locations for, mock targets that drifted, timeout budgets too
+tight for this pod's accumulated data size) rather than functional
+regressions from this session. Every single sample investigated
+(7 tests, 4 different files, 3 different failure "shapes") traced to
+a stale-test-artifact root cause with the real underlying behavior
+independently verified safe/working via live testing — none were a
+live functional defect. This is NOT an exhaustive triage of all 228;
+stated honestly as LIKELY with the sampling method disclosed, not
+folded into "audit clean."
+
+**Council-mode tool-calling investigation (investigation-only, per
+explicit boundary — NOT fixed, NOT touching paused areas):**
+- Reproduced the exact reported symptom personally in-browser on
+  2026-08-23 (narrated "Saving this finding now" with zero DB change).
+- **CONFIRMED** (code-level): `services/mode_b_council.py::run_council`
+  is architecturally a single, deliberately tool-less LLM call
+  (hardcoded `tool_calls_run: 0`), gated by BOTH the classifier picking
+  "Mode B" AND an explicit regex match for personal/business stuck-
+  decision phrasing (`_COUNCIL_SIGNALS`: "5-adviser", "should I pivot/
+  quit/fire/...", "big decision", etc.). It is a real, intentional
+  feature (life/business decision advice), not a bug, and does not
+  apply to security-audit-style prompts by design.
+- **CONFIRMED** (live, reproduced twice): the IDENTICAL prompt text
+  that failed in the stuck browser session, sent fresh via both
+  `/chat/send` and `/chat/stream` with a brand-new `session_id`,
+  correctly classified as `mode: "code"` (NOT B) and correctly called
+  `save_finding` with real findings persisted both times. General
+  Council-mode tool-calling is NOT broken for fresh sessions.
+- **UNCERTAIN, PAUSED per Rule 13** — the specific stuck browser
+  session where the bug WAS observed had pre-existing accumulated
+  history (visible old "Loop cancelled/failed" messages from before
+  this fork) that a fresh session doesn't have. This strongly suggests
+  the real trigger was session-accumulated-state-dependent classification
+  drift, not a Council-mode-specific defect — but confirming exactly
+  why THAT session behaved differently would require investigating
+  session-history-dependent classification logic, which overlaps with
+  the paused cold-start/session-state territory. **Stopped here per
+  the explicit boundary — no further investigation attempted.**
+- **Explicit relationship to the cold-start bug**: based on available
+  evidence, this is **NOT the same confirmed root cause** as any
+  specific previously-fixed cold-start bug (no shared code path
+  found) — but it **is in the same general risk category** (session/
+  state-dependent behavior drift) that Rule 13 exists to guard against.
+  Reported as a DISTINCT-BUT-RELATED risk area, not "the same bug,"
+  and not "unrelated."
+- No fix proposed or implemented for this item — reported only, per
+  the explicit "report back before taking any action beyond
+  investigation" instruction.
+
+**Files changed in this fix batch:** `services/restore_drill_cron.py`,
+`routers/chat.py` (SOFT_TIMEOUT_S), `tests/test_iter136_hard_timeout_
+enforced.py` (regex update to match).
 

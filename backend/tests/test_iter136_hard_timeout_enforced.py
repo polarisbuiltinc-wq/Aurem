@@ -50,11 +50,20 @@ def test_deadline_explicit_check_present() -> None:
 def test_tick_only_triggers_timeout_past_deadline() -> None:
     """Real result/mode/error events arriving slightly past deadline
     must NOT be discarded — only ticks should trigger the timeout branch.
+
+    2026-08-23 — extended to allow an additional `(_past_soft_deadline
+    and _is_tick)` OR-clause (added for the proxy-safe soft timeout),
+    as long as every clause still requires `_is_tick` — i.e. the core
+    invariant this test pins (only ticks trigger the timeout branch,
+    never a real result/error event) still holds.
     """
     src = _src()
     # The check must specifically guard on the tick type.
     block = re.search(
-        r"_past_deadline\s*=.*?\n.*?_is_tick\s*=.*?\n\s*if ev is None or \(_past_deadline and _is_tick\):",
+        r"_past_deadline\s*=.*?\n.*?_is_tick\s*=.*?\n"
+        r"(?:.*?\n)*?"
+        r"\s*if ev is None or \(_past_deadline and _is_tick\)"
+        r"((?: or \([a-zA-Z_]+ and _is_tick\))*):",
         src,
         re.DOTALL,
     )

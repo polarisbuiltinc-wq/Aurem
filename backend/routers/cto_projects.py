@@ -2704,7 +2704,7 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
             _db = get_db()
             if _db is not None:
                 _brain = await get_brain_v2(
-                    _db, proj.get("project_id", ""), user_id,
+                    _db, proj.get("project_id", ""), proj.get("user_id"),
                 )
                 if _brain:
                     brain_ctx = format_brain_for_agent(_brain)
@@ -3575,6 +3575,13 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
                     ),
                 })
             edited_files_payload = wrap_edited_files(hunk_files)
+            # 2026-08-23 audit fix — `db` was referenced here before its
+            # assignment further down (line ~3610), so this whole block
+            # always raised UnboundLocalError and was silently swallowed
+            # by the enclosing `except Exception as _diff_e`, meaning
+            # diff-popup persistence never actually ran on this (HTTP
+            # task) path. Resolve `db` locally right here instead.
+            db = get_db()
             _started = (await db.cto_tasks.find_one(
                 {"task_id": task_id}, {"started_at": 1, "_id": 0}
             )) or {}
@@ -3758,7 +3765,7 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
             _db = get_db()
             if _db is not None:
                 _brain = await get_brain_v2(
-                    _db, proj.get("project_id", ""), user_id,
+                    _db, proj.get("project_id", ""), proj.get("user_id"),
                 )
                 if _brain:
                     brain_ctx = format_brain_for_agent(_brain)

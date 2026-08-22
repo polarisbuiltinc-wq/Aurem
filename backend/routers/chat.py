@@ -1747,6 +1747,22 @@ async def chat_stream(
         # spinner past 3 min, and the cut-off only fires on truly stuck
         # turns — not on legitimate deep dives.
         HARD_TIMEOUT_S = float(os.getenv("CHAT_HARD_TIMEOUT_S", "180"))
+        # 2026-08-23 audit fix (founder-approved, Rule 6 no-silent-failures) —
+        # live testing found ~1/6 chat sends hitting a raw Cloudflare 502
+        # around ~60s: the backend was still genuinely working (well within
+        # the 180s HARD_TIMEOUT_S above) but the ingress gave up first,
+        # so the user got a dead-end gateway error instead of ANY message.
+        # This SOFT budget reuses the exact same graceful timeout path
+        # below, just triggered earlier — but ONLY when there's been
+        # little/no real tool-call progress yet (<=1 invocation), i.e.
+        # the turn is stuck waiting on a single slow LLM round-trip
+        # (the "longcat+claude review" case), not a legitimate multi-tool
+        # deep-repo audit. That distinction is exactly what protects the
+        # Iter 169 fix above (90s was cutting off real 13-tool-call
+        # sweeps) — turns already making tool-call progress keep the
+        # full 180s runway; turns stuck on one slow call get rescued
+        # before the ~55-60s proxy cutoff.
+        SOFT_TIMEOUT_S = float(os.getenv("CHAT_SOFT_TIMEOUT_S", "48"))
         stop_event = asyncio.Event()
         q: asyncio.Queue = asyncio.Queue()
         # Shared activity hint the worker mutates as it progresses; the
@@ -2911,7 +2927,13 @@ async def chat_stream(
             # event just because it raced past the cut-off by a few ms.
             _past_deadline = _t.monotonic() >= deadline_at
             _is_tick = isinstance(ev, dict) and ev.get("type") == "tick"
-            if ev is None or (_past_deadline and _is_tick):
+            # 2026-08-23 audit fix — see SOFT_TIMEOUT_S comment above.
+            _tool_count_so_far = len(activity.get("invocations") or [])
+            _past_soft_deadline = (
+                _t.monotonic() >= (t_start + SOFT_TIMEOUT_S)
+                and _tool_count_so_far <= 1
+            )
+            if ev is None or (_past_deadline and _is_tick) or (_past_soft_deadline and _is_tick):
                 # Wall-clock blown. Cancel everything but emit a USEFUL
                 # message instead of just an "error" payload — the
                 # frontend used to render that red and the user saw
@@ -2935,8 +2957,15 @@ async def chat_stream(
                 # grep-lock test couldn't catch a swapped branch).
                 tool_count = len(partial_invocations)
                 from services.orchestrator import build_timeout_message
+                # 2026-08-23 audit fix — report whichever budget actually
+                # fired so the message says "48s" not a misleading "180s"
+                # when the soft (proxy-safe) deadline is what triggered.
+                _effective_budget = (
+                    SOFT_TIMEOUT_S if (_past_soft_deadline and not _past_deadline)
+                    else HARD_TIMEOUT_S
+                )
                 content, _slow_api = build_timeout_message(
-                    tool_count, HARD_TIMEOUT_S, summary,
+                    tool_count, _effective_budget, summary,
                 )
                 # Stream as a normal assistant turn (meta → tokens → done)
                 # so the bubble renders properly instead of going red.

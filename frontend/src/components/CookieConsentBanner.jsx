@@ -173,32 +173,50 @@ export default function CookieConsentBanner() {
   const toggle = (key) => setCats((c) => ({ ...c, [key]: !c[key] }));
 
   return (
-    <div
-      role="dialog"
-      aria-live="polite"
-      aria-label="Cookie consent"
-      data-testid="cookie-consent-banner"
-      style={{
-        position: "fixed",
-        left: 16,
-        right: 16,
-        bottom: 16,
-        maxWidth: 620,
-        margin: "0 auto",
-        zIndex: 10000,
-        background: "rgba(12, 14, 18, 0.96)",
-        backdropFilter: "blur(18px)",
-        WebkitBackdropFilter: "blur(18px)",
-        border: "1px solid rgba(255,200,120,0.18)",
-        borderRadius: 12,
-        padding: 20,
-        color: "var(--text, #e8e3d3)",
-        fontFamily: "Inter, system-ui, sans-serif",
-        fontSize: 13,
-        lineHeight: 1.55,
-        boxShadow: "0 24px 60px rgba(0,0,0,0.48)",
-      }}
-    >
+    <>
+      {/* 2026-08-23 audit fix — banner was bottom-center + maxWidth 620,
+          which on desktop viewports can sit directly over a centered
+          login/signup card's primary submit button (confirmed via
+          testing_agent screenshot at 1440x900). Anchor to bottom-right
+          on wider screens instead; keep full-width bottom sheet on
+          mobile where a corner toast would be too cramped. */}
+      <style>{`
+        @media (min-width: 640px) {
+          .aurem-cookie-banner {
+            left: auto !important;
+            right: 24px !important;
+            bottom: 24px !important;
+            max-width: 420px !important;
+          }
+        }
+      `}</style>
+      <div
+        role="dialog"
+        aria-live="polite"
+        aria-label="Cookie consent"
+        data-testid="cookie-consent-banner"
+        className="aurem-cookie-banner"
+        style={{
+          position: "fixed",
+          left: 16,
+          right: 16,
+          bottom: 16,
+          maxWidth: 620,
+          margin: "0 auto",
+          zIndex: 10000,
+          background: "rgba(12, 14, 18, 0.96)",
+          backdropFilter: "blur(18px)",
+          WebkitBackdropFilter: "blur(18px)",
+          border: "1px solid rgba(255,200,120,0.18)",
+          borderRadius: 12,
+          padding: 20,
+          color: "var(--text, #e8e3d3)",
+          fontFamily: "Inter, system-ui, sans-serif",
+          fontSize: 13,
+          lineHeight: 1.55,
+          boxShadow: "0 24px 60px rgba(0,0,0,0.48)",
+        }}
+      >
       {!showPrefs ? (
         <>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
@@ -254,7 +272,8 @@ export default function CookieConsentBanner() {
           </div>
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }
 

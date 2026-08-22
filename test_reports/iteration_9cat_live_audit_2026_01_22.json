@@ -1,0 +1,80 @@
+{
+  "summary": "Live 9-category founder audit — categories 3 (Reliability), 4 (Performance), 5 (Data/malformed), 6 (QA re-verify of 5 fixes), 8 (UX), plus lightweight 9 (Cost/BI). 12/12 backend audit tests PASS + TestBootGapRealRestart PASS separately. Live UI probe of cold-start chat + revoked-token surfacing confirms user-facing behavior is clean. One real UX friction found on login screen (cookie banner overlay covers primary submit button on desktop 1440x900).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/aurem-dev/chat/send", "issue": "Observed 1/6 flaky ~60s 502 Cloudflare gateway-timeout on longcat+claude review path (prompt 'What is 2+2?'). Not reproducible in 5 subsequent retries. The friendly-status-retry hook exists client-side, but backend p99 for the review path is at/near the ingress timeout budget — worth measuring latency budget on the longcat+claude branch specifically."},
+      {"endpoint": "GET /api/aurem-dev/chat/history (data quality)", "issue": "Non-blocking: some legacy session_ids in the preview DB contain deleted messages (empty payload). No error, just note."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "LoginPage cookie banner overlay", "issue": "The 'We use cookies to improve your experience' banner overlays the primary 'Sign in' submit button on desktop 1440x900. First-time users clicking submit before dismissing cookies hit the banner instead; the form silently no-ops (email may even revert to placeholder). Accepting cookies fixes it. Suggest either moving the cookie banner to bottom-left/right corner as a small toast, or z-index-ordering it below the form's action button. Screenshot: /app/test_reports/screenshots/ux_01_login.png", "selector": ".cookie-banner (via 'We use cookies to improve your experience' text)", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/dashboard (project scope)", "issues": [
+        "Positive finding: the 'GitHub access revoked' banner at the top is exceptionally clear and includes a direct 'Reconnect GitHub App' CTA — no friction here.",
+        "Secondary warning banner ('26 projects point to deleted or unreachable repos — click to clean up') is prominent and helpful, but firing on every session render may become noise; consider dismiss+snooze."
+      ]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_audit_2026_01_full_stack.py",
+    "/app/backend/tests/test_maintenance.py::TestBootGapRealRestart (rerun this session, PASSED)",
+    "/app/test_reports/pytest/audit_2026_01.xml",
+    "/app/test_reports/screenshots/ux_01_login.png",
+    "/app/test_reports/screenshots/ux_10_after_login.png",
+    "/app/test_reports/screenshots/ux_11_after_hi.png"
+  ],
+  "action_items": [
+    "MEDIUM UX: fix cookie-banner overlaying the Sign-in submit button on desktop viewports (login page). Simple z-index / repositioning change.",
+    "LOW REL: investigate the occasional 60s+ latency on chat/send when the longcat+claude review path is invoked. Consider a server-side abort budget < 55s to guarantee a friendly-fail response rather than Cloudflare 502.",
+    "NO-OP CONFIRMED: revoked-token GitHub failure path returns a clean actionable message end-to-end (backend + UI). No fix needed."
+  ],
+  "critical_code_review_comments": [
+    "chat/send has an ~14-22s typical latency even for trivial prompts because the intent-router+longcat+claude pipeline runs unconditionally for chat mode. If founder wants sub-5s 'hi' latency, add a shortcut to bypass the review pass for detected greetings (already partially exists per session-1 turn returning in <1s the second time).",
+    "Login form submit button has no data-testid — recommend adding data-testid='login-submit' to reduce future selector churn.",
+    "Cookie banner has no data-testid on the 'Accept all' button (had to select by text) — same recommendation."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_audit_2026_01_full_stack.py (new)"
+  ],
+  "success_rate": {"backend": "100% (12/12 audit tests + 1/1 boot-gap regression)", "frontend": "cold-start chat OK, revoked-token surfacing OK, 1 UX friction found"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (admin/founder), free-gate-test-0822@aurem.dev / FreeGateTest2026! (free non-admin) — both work.",
+  "seed_data_creation": "None. Test only created ephemeral chat sessions (audit_*, coldstart_*, rel_*, math_*, probe_*, revoked_probe_* prefixed session_ids) belonging to test_admin_001. No data-mutating writes to findings/projects/config.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "detailed_findings": {
+    "cat_3_reliability": {
+      "third_party_failure_github_revoked": "CONFIRMED CLEAN. GET /cto/projects/p_demo_a/check-pat → {state:'expired', message:'PAT rejected by GitHub — please rotate.'}. GET /cto/projects/p_demo_a/tree → 401 {'detail':'GitHub PAT invalid or expired'} fast-fail. POST /chat/send with project_id=p_demo_a → 200 in 13-15s with content: 'GitHub access to `aurem-demo/frontend` was revoked — reconnect this repo from the project settings to restore access. ...To fix: 1. Go to project settings 2. Reconnect the GitHub repo 3. Once reconnected, I\\'ll be able to read any file you need.' UI shows a prominent amber 'Reconnect GitHub App' banner. No hang, no 500.",
+      "llm_orchestrator_timeout": "PARTIALLY CONFIRMED. Typical chat/send completes in 14-22s with 'friendly status masking' hook. Observed one 502 (Cloudflare ingress ~60s timeout) out of ~6 sends — the backend was still processing on the longcat+claude branch. Recommend adding a server-side abort budget under 55s to translate to a friendly retry rather than an ingress 502."
+    },
+    "cat_4_performance": {
+      "findings_backlog_x20": {"ok": 20, "error_rate": 0.0, "min_s": 0.85, "max_s": 0.94, "avg_s": 0.90, "p95_s": 0.94},
+      "chat_history_x15": {"ok": 15, "error_rate": 0.0, "min_s": 0.44, "max_s": 0.70, "avg_s": 0.61, "p95_s": 0.70},
+      "verdict": "Both endpoints handle 15-20 concurrent hits comfortably under 1s p95 with 0% error rate."
+    },
+    "cat_5_data_malformed": {
+      "oversized_25k_prompt": "PASS — returns clean 4xx (422), not 500 or hang.",
+      "null_bytes_and_control_chars": "PASS — no 5xx.",
+      "findings_dismiss_missing_fields": "PASS — clean 422 with pydantic detail."
+    },
+    "cat_6_qa_reverify_5_fixes": {
+      "SEC001_execute_bash_shell_injection": "CONFIRMED via code inspection (/app/backend/services/local_tools.py has argv-only exec markers). Not testable from HTTP (founder-only local tool).",
+      "SEC002_chat_sessions_user_scoping": "CONFIRMED — admin session list ∩ free-user session list = ∅. Free user requesting an admin session's chat/history returns empty messages (not a leak).",
+      "boot_gap_race_condition_TestBootGapRealRestart": "CONFIRMED PASS — ran the real supervisorctl-restart regression test: `backend/tests/test_maintenance.py::TestBootGapRealRestart::test_real_restart_logs_outage_with_correct_duration PASSED` in 15.20s.",
+      "ship_fix_cold_start_mismatch_guard": "CONFIRMED — fresh session_id sends 'hi' and receives 'Hello! I\\'m AUREM — your senior engineering co-pilot...' with no 'mismatch guard' / 'coldstart mismatch' / 'fetch_file signature' error anywhere in response or DOM.",
+      "findings_to_fix_bridge_phase1_matched": "CONFIRMED — GET /findings/backlog?project_id=p_demo_a&ids=<id> returns a 'matched' array (list type) in the response payload."
+    },
+    "cat_8_ux": {
+      "cold_start_chat_reliability": "CONFIRMED — first message in brand-new session responds cleanly in ~20s. No blank screen, no error, no mismatch-guard.",
+      "blank_screen_after_ship": "NOT TESTED — no project in preview DB has a working GitHub write path (p_demo_a=revoked, p_demo_b=has_pat:false, all TEST_Proj_* point to owner/test-repo which is fabricated). This matches main agent's prior note. Cannot exercise ship without either (a) a real repo with a valid PAT in preview or (b) mocking the GitHub client. Recommend seeding one working (small) demo repo + PAT in preview for future audit passes.",
+      "other_friction": "Cookie banner overlays 'Sign in' submit button on desktop 1440x900 (see ui_bugs). Login form fields lack data-testid attributes."
+    },
+    "cat_9_cost_bi": {
+      "admin_bi_summary": "CONFIRMED — 200, keys=[stripe, inference, projected_month_infer_usd, net_margin_usd, net_margin_pct, generated_at], stripe.mode='live'. Read-only sanity: no errors."
+    }
+  },
+  "context_for_next_testing_agent": "The full audit test file /app/backend/tests/test_audit_2026_01_full_stack.py is idempotent and safe to re-run. It uses _get_retry() for GET endpoints to tolerate Cloudflare 502 transients. TestBootGapRealRestart in test_maintenance.py performs a real supervisorctl restart — do not run it in parallel with other backend tests that assume backend is up. For 'blank-screen-after-Ship' verification, seed one working small repo + valid PAT in the preview DB first."
+}

@@ -816,6 +816,12 @@ class RobotGuidePayload(BaseModel):
     login_message:  str = ""
 
 
+# 2026-08-23 audit fix — used below to strip <script> tags before
+# persisting robot-guide messages; was referenced but never defined,
+# so every save call raised NameError (500).
+_SCRIPT_RE = re.compile(r"<script\b[^>]*>.*?</script\s*>", re.IGNORECASE | re.DOTALL)
+
+
 @router.get("/robot-guide")
 async def admin_robot_guide_read(authorization: Optional[str] = Header(None)):
     """Return the current robot-guide messages. Admin-only."""
