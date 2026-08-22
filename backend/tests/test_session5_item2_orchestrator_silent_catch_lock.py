@@ -36,7 +36,14 @@ ORCHESTRATOR = BACKEND / "services" / "orchestrator.py"
 # all 7 sites verified still-hooks, only line numbers shifted). If a
 # real hygiene target ever slips into orchestrator.py, it will NOT be
 # in this set and the test below will fail.
-LEGIT_UI_HOOK_LINES = {2067, 2072, 2174, 2439, 2485, 2516, 2525}
+LEGIT_UI_HOOK_LINES = {2067, 2072, 2174, 2439, 2490, 2521, 2530}
+# 2026-08-23 audit fix — the last 3 of these 7 line numbers drifted
+# (+4) after this session's findings-to-fix-bridge edits added lines
+# earlier in orchestrator.py (capturing `findings_saved_this_turn`),
+# shifting everything below that point. Re-derived from the actual
+# current file: each of these 7 `pass` lines (inside `except
+# Exception:` blocks that call activity_hook/step_hook) is unchanged
+# in behavior — same 7 legit silent-catches, 3 of them just moved.
 
 
 def _is_truly_empty_return(s: ast.stmt) -> bool:

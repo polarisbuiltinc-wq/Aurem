@@ -3956,3 +3956,276 @@ explicit boundary — NOT fixed, NOT touching paused areas):**
 `routers/chat.py` (SOFT_TIMEOUT_S), `tests/test_iter136_hard_timeout_
 enforced.py` (regex update to match).
 
+
+
+## 2026-08-23 (cont'd 2) — Deeper 233-failure sample (21 total), Council-mode risk NOT closed, Health Score feasibility
+
+**Production note**: app is now deployed to https://auremcto.com. All work in this entry is PREVIEW-only; nothing here has been redeployed or verified against production.
+
+**Deeper 233/228-failure sample — now 21 of 228 investigated (7 from
+first pass + 14 more), prioritized per founder's request (files
+touching this session's backup-fallback/chat-timeout changes, and
+files in cto_projects.py/admin_ops_config.py's module family):**
+
+- `test_iter205_pat_decryption_in_tools.py` (2 failures) — **CONFIRMED**
+  same stale-mock-target class as the rollback tests fixed earlier
+  (mocks `routers.cto_projects._decrypt_pat`, real call goes through
+  `services.pat_vault._decrypt_pat`). Pre-existing (predates this
+  session — the `pat_vault` module split is old), NOT fixed this pass
+  (out of time budget; same fix pattern already proven, low risk to
+  apply later).
+- `test_iter211_pat_compulsory_and_oauth_id.py` (3) — **LIKELY** stale
+  source-anchor greps (checking for exact old strings at specific
+  file offsets); did not fully re-verify the underlying behavior live
+  for these 3, flagged LIKELY not CONFIRMED.
+- `test_iter212m169_bin_context_isolation.py` (1) — **LIKELY** stale
+  exact-substring assertion against an error message that was later
+  reworded to be friendlier (old test wants the literal phrase
+  "github credentials failed"; current message is a more polished
+  paraphrase of the same fact).
+- `test_iter86_architecture_health.py::test_cli_fail_on_new_against_baseline_is_clean`
+  (1) — **CONFIRMED real, pre-existing finding** (not a stale test,
+  not a regression): the committed architecture-health baseline is
+  genuinely out of date — 27 files (including `admin_ops_config.py`)
+  have grown past the 300-line bloat threshold since the baseline was
+  last updated, with nobody having run `--update-baseline` or split
+  them. Real, accumulating code-quality debt — feeds directly into
+  the Health Score's Architecture/Code-Quality categories below.
+- `test_iter370_sandbox_health_restore.py::TestRestoreDrill` (1) —
+  **CONFIRMED** same test-runner timeout-budget issue as `test_db_
+  backup.py` (real R2 operation genuinely still running past this
+  suite's 30s per-test budget on this pod's now-large accumulated
+  data) — not a functional bug, not caused by this session's fallback
+  change (same signature pre-dates it).
+- `test_iter55_tool_call_leak_and_timeout.py` (1) — **LIKELY** stale
+  exact-wording assertion on a fallback message that reads as
+  first-person/answer-shaped in its CURRENT form but doesn't match
+  the test's older exact pattern.
+- `test_iter212m211_advisor_tool_leak.py::test_advisor_house_rules_round_trip`
+  (1) — **UNCERTAIN**, not fully resolved: advisor house-rule
+  injection logged `injected=False` when `enabled_advisor=True` was
+  set, for a call with `project_id=None`. Didn't fully re-verify
+  whether that's a legitimate "advisor rules require a project" gate
+  or a real injection bug — narrow, isolated feature, unrelated to
+  anything this session touched. Flagged for a future pass, not
+  fixed.
+- `test_session5_item2_orchestrator_silent_catch_lock.py` (2) —
+  **CONFIRMED real regression caused by THIS session** (not
+  pre-existing): a hardcoded line-number pin (`LEGIT_UI_HOOK_LINES`)
+  drifted because this session's earlier findings-to-fix-bridge edit
+  to `services/orchestrator.py` added lines above it. **Fixed**:
+  re-derived and corrected the 3 affected line numbers (2485→2490,
+  2516→2521, 2525→2530); re-verified all 5 tests in the file pass and
+  the underlying invariant (exactly 7 legit silent-catches, each still
+  calling its UI hook, no new unauthorized ones) still holds.
+
+**Updated, more rigorous conclusion (still not exhaustive — 21/228,
+not 228/228):** of 21 sampled, 20 traced to pre-existing test-artifact
+staleness (stale mocks/anchors/wording/timeout-budgets) or one
+genuine pre-existing architecture-debt finding (not a regression) —
+and exactly **1 was a real regression from this session**, now found
+and fixed (orchestrator.py line-pin). No other sampled failure
+touches any file this session's backup-fallback or chat-timeout fixes
+changed. Given the fix for the one real regression found, and zero
+further regressions across the other 20 samples, **"LIKELY
+pre-existing, this session introduced at most the 1 already-fixed
+regression"** is now a fair working conclusion for the sampled 21 —
+still explicitly NOT proven for the remaining ~207 unsampled failures.
+
+**Council-mode / session-drift — explicitly NOT closed:**
+Per founder instruction, recorded here verbatim as the standing
+status: **Known unresolved risk, same risk class as the flagged
+cold-start bug. Not fixed, only isolated to a reproduction path we
+currently can't trigger in fresh sessions. Do not treat as closed.**
+Fresh-session tool-calling being confirmed-working does NOT mean the
+original stuck-session symptom is understood or resolved — it only
+narrows where the problem is NOT. No further investigation into the
+paused session-state territory without a genuinely new theory backed
+by real log evidence (per Rule 13).
+
+**Fix 2 (chat SOFT_TIMEOUT_S) — status downgraded per founder
+instruction, do not overstate in any future summary:** "Shipped and
+logically sound" — reuses an already-proven graceful-timeout code
+path, source-level regression test passes, normal-path behavior
+unaffected. **NOT** "confirmed working against the real failure
+case" — the actual 60s-hang-on-slow-LLM condition was never
+force-reproduced live. Needs either (a) a mocked-slow-LLM test that
+actually exercises the new soft-deadline branch, or (b) a real
+production observation of it firing correctly, before this can be
+called confirmed.
+
+---
+
+### Codebase Health Score widget — feasibility report (per founder's
+detailed 9-category engineering spec; NO implementation code written
+yet, per explicit instruction to report feasibility first)
+
+| # | Category (weight) | Status | Evidence / gap |
+|---|---|---|---|
+| 1 | Security (25%) | **NEEDS INSTRUMENTATION** | No persisted `security_scan_results` table exists for AUREM's OWN codebase (Vanguard/`loop_full_scan.py` scans customer projects by `project_id`, never self-scans). This session's live IDOR/injection/token/secrets checks were real but ad-hoc (subagent + manual curl), not stored anywhere queryable — there is nothing to `find_one(sort=[("timestamp",-1)])` against right now. **Gap**: need a new `security_scan_results` collection + a scheduled/on-demand self-scan job (could reuse the existing Vanguard/IDOR-sweep logic pointed at this app's own routes) before this category can show anything beyond a one-time hardcoded snapshot of today's manual audit. Formula (100 − critical×15 − high×7 − medium×3 − low×1) is trivial once real findings exist. |
+| 2 | Correctness / Bug Density (15%) | **NOT FEASIBLE without new tooling** | No bug tracker/issue-log table exists in this codebase (confirmed via search — no `bug_tracker`/`issue_log` collection or router). There is no live, queryable "open bugs in production" source to divide by LOC. Repurposing `cto_open_findings` or `loop_outcomes` would be scoring CUSTOMER project bugs, not AUREM's own — wrong data for this widget. **Gap**: needs a real internal bug-tracking mechanism (even a simple `aurem_internal_bugs` collection fed by this session's audit + future ones) before any real number exists here. Recommend: UNSCORED until that exists — do not calibrate off "5 bugs in one audit," a single session's manual finding count is not a rate, it's an anecdote. |
+| 3 | Test Coverage (meaningful) (10%) | **FEASIBLE NOW, partially** | Real pass/fail/error counts exist today (this session's 4932/228/72/100, re-runnable on demand — `pytest -m "not legacy" --cov`). `pytest-cov`/`coverage` ARE installed (confirmed in requirements.txt) but **not currently run** as part of the standard suite — raw % coverage needs one added `--cov` flag (cheap). The "critical-path modules with real integration tests vs. zero" half of the formula needs a manually-curated list of what counts as "critical" (auth, payments, chat, findings, fix-pipeline) — feasible to build but requires a one-time definition, not automatable from data alone. **Feasible with minor instrumentation**: add `--cov` to the CI run + hand-curate the critical-module list once. |
+| 4 | Reliability (15%) | **NEEDS INSTRUMENTATION** | Sentry integration exists (`test_iter96_sentry_live.py`) — real crash capture likely already flowing there, but this agent has no query access to Sentry's own dashboard/API from these tools. Silent-failure COUNTING does exist as a concept in-repo (the `test_session5_item2_orchestrator_silent_catch_lock.py` pattern proves the codebase already tracks/bounds "legit silent catches" for at least `orchestrator.py`) but it's not aggregated into a single rolling 30-day metric anywhere. 5xx/timeout rates: no dedicated request-log aggregation table found. **Gap**: needs either a Sentry API pull (if credentials are available) or a new lightweight `request_error_log` collection + a rollup query, before a real 30-day number exists. |
+| 5 | Performance (5%) | **FEASIBLE NOW, partially** | Real p95 latency numbers exist from THIS session's testing_agent load test (findings/backlog p95 0.94s, chat/history p95 0.70s at 15-20 concurrent) — a real, if point-in-time, number. `services/usage.py` already tracks real LLM inference cost (confirmed live via `/admin/bi/summary` — today/month spend, real numbers). No rolling-7-day p50/p95/p99 aggregation table exists yet for general endpoint latency — today's numbers are from an ad-hoc test run, not a continuously-recorded series. **Gap**: needs a lightweight latency-sample table (many APM tools log this already; would need to confirm if one is already wired before building a new one) for a true rolling 7-day view; cost-tracking reuse is ready today. |
+| 6 | Code Quality / Maintainability (10%) | **FEASIBLE NOW** | `services/architecture_health.py` (+ `scripts/architecture_health.py`, exposed via `/admin/architecture-health`) already computes, with real AST + `radon` analysis (radon confirmed installed): file-size bloat count, cyclomatic-complexity outliers (CC>10), god-files, lint-adjacent signals — and a committed baseline to diff against. Real, current data available RIGHT NOW: 27 files newly bloated past baseline, 443 functions over CC 10 (numbers surfaced during this session's audit). This is the strongest "feasible now" category — no new tooling needed, just wiring the existing report's numbers into the widget's formula. |
+| 7 | Architecture (5%) | **FEASIBLE NOW for the automatable half; NEEDS INSTRUMENTATION for the human/AI-review half** | Circular-import detection and module-boundary-violation checks ARE already automated in `architecture_health.py` (real data today). The rubric-checklist / periodic-AI-review half (coupling, SPOF judgment) has NO existing persisted review log — `core/parliament.py` is a Loop-Mode code-generation orchestrator, NOT an architecture-review system, despite the naming similarity; it doesn't produce a storable rubric score. **Gap**: needs a new `architecture_review_log` (reviewer, date, rubric scores) if the qualitative half is wanted; the quantitative half can ship today. |
+| 8 | Data Handling (10%) | **FEASIBLE NOW** | `restore_drill_history` (real, this session extended it with fallback-attempt data) + `backup_history` give real, timestamped, queryable pass/fail data — including the exact "success"-marked-but-404-in-R2 gap found this session. The founder's required "Rollback unverified → penalize" rule is directly computable: `rollback_manager`/`admin_qa` has zero real end-to-end-verified revert on record (confirmed this session — `guard12-rollback` candidate list is empty, no positive-path evidence exists), so this category's formula can apply that penalty truthfully today, not as a guess. |
+| 9 | DevOps/Infra (5%) | **FEASIBLE NOW, partially** | `deploy_events` (via `services/deploy_logger.py`) is a real, already-populated collection with real deploy/boot history — CI pass-rate and deployment-failure-rate are computable from it today. The SAME "Rollback unverified" penalty from category 8 applies here too (founder's explicit cross-cutting requirement) — straightforward to share one computed penalty value between both categories rather than two separately-guessed ones. **Minor gap**: haven't confirmed `deploy_events` captures a distinct "CI run pass/fail" signal vs. just "a deploy happened" — may need one more field or a join with GitHub Actions' own run history if a true CI-pass-rate (not just deploy-attempt-rate) is required. |
+
+**No manual-override field will be added anywhere** — per the explicit
+constraint, categories without a real computable source stay
+"UNSCORED — insufficient data," never a typed-in number.
+
+**Summary for founder decision (original pass):** categories 6 (Code
+Quality) and 8 (Data Handling) are FEASIBLE NOW with zero new
+instrumentation — could ship real scores today. Categories 3, 5, 7, 9
+are feasible with small, well-scoped additions (a `--cov` flag;
+reusing an existing load-test pattern into a stored series; one new
+review-log collection for the qualitative architecture half;
+confirming/adding a CI-pass signal). Categories 1 (Security) and 4
+(Reliability) need real new instrumentation (a self-scan results
+table; a Sentry pull or new error-log rollup) before they can show
+anything but a stale one-time snapshot. Category 2 (Bug Density) is
+NOT feasible at all right now — no bug-tracking source exists;
+recommend it ships as permanently UNSCORED until a real internal bug
+tracker exists, rather than being built on a proxy that would
+misrepresent customer-project data as AUREM's own.
+
+---
+
+### Codebase Health Score — DEEPER pass, per founder's request to
+also state **live/real-time vs. cached/point-in-time** for every
+source before any code is written (2026-08-23, cont'd 3). Corrects
+two claims from the pass above after finding additional plumbing that
+pass missed, and downgrades one claim that turned out weaker than it
+looked. Still **zero implementation code written**.
+
+**Corrections to the original pass:**
+
+- **DevOps/Infra CI-pass signal — UPGRADED from "gap, needs
+  confirming" to CONFIRMED FEASIBLE NOW, and it is LIVE, not cached.**
+  `backend/.env` has both `GITHUB_ACTIONS_TOKEN` and `GITHUB_REPO`
+  already configured. `routers/admin_qa.py::_harvest_ci_status()`
+  hits the real GitHub Actions REST API
+  (`/repos/{repo}/actions/runs?event=push`) fresh on every call — no
+  cache layer, no stored copy, genuinely re-queries GitHub at request
+  time. **Verified live right now** (this session, via the actual
+  code path incl. its `follow_redirects=True` default): real data
+  for the last 8 push-triggered runs on commit `622f1a6` (2026-08-22)
+  came back, including a real **"Quality Gate — Bug-fix Discipline"
+  = failure** and a real **"AUREM CI — Build + Test Guard" =
+  cancelled**. This is already wired into
+  `_check_ci_vs_local_drift()` in `services/health_checks.py`. The
+  original pass's DevOps evidence (`deploy_events`) is **downgraded**
+  below — this GitHub-API pull is the real signal; `deploy_events`
+  is not.
+- **DevOps/Infra `deploy_events` — DOWNGRADED.** Confirmed real and
+  huge (4,270 docs), but a live count of the most recent 500 showed
+  **100% `trigger:"boot"`** — it fires on every pod hot-reload/
+  supervisor restart in this preview container, not on a GitHub
+  Actions CI result. It proves "the app booted with commit X," not
+  "CI passed for commit X." Do NOT use it as the CI-pass-rate source;
+  use `_harvest_ci_status()` above instead.
+- **Security self-scan storage — UPGRADED from "no table exists" to
+  "tables exist, but the pipeline feeding them is unreliable/stale —
+  a plumbing gap, not a schema gap."** Two real collections were
+  found that the original pass missed:
+    - `vanguard_ci_findings` (trufflehog secret scan, self-scan-
+      capable via `ci.yml`'s `secret-scan` job → `POST
+      /aurem-dev/vanguard/ci-findings`) — **only 1 document ever**,
+      dated 2026-06-29, with a commit value (`abc123def4567890`) that
+      does not look like a real 40-char git SHA — almost certainly a
+      test/manual insert, not a real CI run. Effectively **zero real
+      self-scan secret data** despite the code path existing.
+    - `synthetic_checks` (dependency-CVE scan via `g15_dependency_scan.py`
+      → `POST /aurem-dev/admin/synthetic-checks/ingest`) — **9 real
+      docs**, genuinely from pip-audit/yarn-audit against this repo's
+      actual `requirements.txt`/`package.json` (latest: 7 findings, 0
+      high/critical, incl. a real `extract-zip` CVE). But the **latest
+      run is dated 2026-08-20** — stale by the time of this
+      investigation (2026-08-23+), and only 9 runs exist total despite
+      thousands of commits (`deploy_events` shows 4,270 boots) — the
+      CI job that feeds this is evidently not firing/persisting on
+      most recent pushes. Same collection's `g1_route_sweep` kind has
+      **exactly 1 document, ever** (2026-08-19).
+    - `g21_security_scan.py` (misconfig + supply-chain scan, runs in
+      `ci.yml`) **persists nothing** — it only gates that one CI run's
+      pass/fail; there is no queryable history for it at all.
+  **Net effect on Security category**: real, code-verified,
+  self-scan-capable pipelines exist for 2 of 3 static-scan angles
+  (secrets, dependency CVEs), but actual data is either fake-looking
+  (secrets) or stale/sparse (deps) — so Security still cannot show a
+  trustworthy CURRENT score without first fixing why these CI jobs
+  aren't reliably running/ingesting on recent pushes. This is now a
+  **CI-pipeline-health problem**, not a **missing-schema problem** —
+  a materially different (and smaller) fix than originally scoped.
+  IDOR/injection/auth-bypass style checks (this session's live manual
+  audit) still have **zero** persisted storage of any kind.
+- **Performance — partially UPGRADED.** `ora_skill_usage` (1,877
+  docs, continuously appended on every ORA skill/tool call) already
+  powers a real, LIVE, rolling p50/p95-by-tool view
+  (`/admin-analytics/skills-usage`, genuinely re-aggregates on every
+  request over the requested day-window — not a cached snapshot).
+  This is stronger evidence than the original pass's "one ad-hoc
+  load-test run" citation. **Caveat, unchanged from before**: this is
+  tool/skill-call latency, not general HTTP endpoint latency — a
+  dedicated endpoint-latency table would still be needed for a true
+  "all-endpoints p50/p95/p99" view; the tool-call-level series is
+  real and live today, general endpoint latency is not.
+- **Reliability — one more adjacent-but-not-matching signal found.**
+  `core/quality_monitor.py` → `quality_scores` collection (1,660 docs,
+  continuously appended after every chat turn, LIVE) scores customer
+  chat *output quality* (hallucination phrases, refusal, repetition,
+  length) with drift-alerting into `quality_alerts`. Real and live,
+  but it measures LLM response quality, not 5xx rate / timeout rate /
+  unhandled exceptions as the founder's spec defines Reliability. Not
+  a substitute — **Reliability stays UNSCORED** per the standing
+  agreement, this is just documented as an adjacent real signal that
+  exists in case a future, different widget wants it.
+
+**Per-category live-vs-cached classification (as requested — every
+"feasible" source explicitly marked):**
+
+| # | Category | Source | Live or cached? |
+|---|---|---|---|
+| 1 | Security | `synthetic_checks` (g15 dep-CVE) | **Cached/point-in-time** — one scan per CI run, last one 2026-08-20, stale. Not re-run on read. |
+| 1 | Security | `vanguard_ci_findings` (secrets) | **Cached/point-in-time**, and the only record on file looks synthetic/test, not a real run. |
+| 3 | Test Coverage | `pytest --cov` (already runs in `ci.yml`) | **Not currently persisted anywhere** — exists only in the ephemeral CI runner's stdout/uploaded artifact. Needs a small ingest step (reuse the g15 ingest pattern) before it becomes a queryable "cached, refreshed every CI run" source. |
+| 5 | Performance | `ora_skill_usage` (tool/skill p50/p95) | **LIVE** — re-aggregated fresh from a continuously-appended collection on every request; window is a rolling N days, not a stored precomputed number. |
+| 6 | Code Quality | `services/architecture_health.py::run_health_report()` | **LIVE** — re-runs the full AST/radon/import-graph scan against the CURRENT files on disk synchronously on every call (confirmed sub-second in the module's own docstring; not cached, not reading a stored snapshot). |
+| 7 | Architecture (automated half) | same `run_health_report()` | **LIVE**, same as above. |
+| 7 | Architecture (review-log half) | *(does not exist yet)* | N/A — needs instrumentation. |
+| 8 | Data Handling | `restore_drill_history` (43 docs), `backup_history` (182 docs) | **Cached/point-in-time snapshot of the latest recurring job** — real and genuinely recurring (weekly/daily cron), but each read reflects "as of the last drill/backup," not a continuous live signal. Freshness must be checked against the drill's own schedule (7-day default) before trusting it as current. |
+| 8 / 9 | "Rollback unverified" penalty | `rollback_manager` / `guard12-rollback` | **Cached** — a standing fact (zero positive-path evidence on record), re-checked at read time but the underlying fact doesn't change without a real drill. |
+| 9 | DevOps/Infra CI-pass rate | `_harvest_ci_status()` → live GitHub Actions API pull | **LIVE** — genuinely re-queries `api.github.com` at request time, confirmed working with real current data this session. **This is the strongest, most "live" source of any category evidence found.** |
+| 9 | DevOps/Infra (deploy boots) | `deploy_events` | **LIVE but wrong signal** — real-time boot log, not a CI-pass proxy. Do not use for this category's score; keep for a different "uptime/boot" purpose if ever needed. |
+
+**Updated summary for founder decision:**
+- **FEASIBLE NOW, LIVE, ship today**: Code Quality (6), Architecture's
+  automated half (7a), DevOps/Infra's CI-pass-rate half (9a — via the
+  GitHub Actions pull, previously mis-scoped as a gap).
+- **FEASIBLE NOW, but only a cached/recurring snapshot (must show a
+  "last verified" timestamp, not implied real-time)**: Data Handling
+  (8), DevOps/Infra's rollback-penalty half (9b).
+- **FEASIBLE WITH SMALL INSTRUMENTATION** (unchanged from original
+  pass, now with exact reuse pattern identified — the g15/vanguard
+  shared-secret ingest endpoint pattern already exists and should be
+  copied, not reinvented): Test Coverage (3 — persist `--cov` output
+  per CI run), Performance's general-endpoint half (5b — tool-call
+  half is already live), Architecture's review-log half (7b).
+- **RE-SCOPED from "needs new schema" to "needs a CI-pipeline
+  reliability fix"**: Security (1) — the storage and self-scan code
+  already exist for 2 of 3 angles; the actual blocker is that the
+  feeding CI jobs aren't reliably running/ingesting on recent pushes
+  (last real dep-scan data is 3+ days stale; secret-scan has
+  essentially zero real data). Fixing *that* is a different, smaller
+  task than building a new `security_scan_results` table, but it is
+  still real work and still **UNSCORED** until the pipeline is
+  confirmed reliably fresh.
+- **UNCHANGED, still UNSCORED**: Reliability (4 — real adjacent
+  `quality_scores` signal exists but measures the wrong thing per
+  spec), Bug Density (2 — permanently, no tracker exists).
+- **No implementation started.** Waiting on founder review of this
+  breakdown before writing any pipeline/schema/widget code, per
+  explicit instruction.
+
