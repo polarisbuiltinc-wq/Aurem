@@ -1,0 +1,38 @@
+{
+  "summary": "Re-verification (on CURRENT workspace HEAD 4ef9730) of PAT-removal + Rollback v2 Pillar-1, per founder Rule 7/C prior to 'Save to GitHub' push. Ran pytest suite (35/35 PASS in 44.79s) covering PAT rejection paths, connection-status honesty (no 500s, unreachable vs disconnected distinction), typed GithubAppAuthError with code app_installation_missing from services/pat_vault.get_repo_token + get_repo_token_or_error, admin gating on all 7 rollback2 endpoints (14 parametrized 401/403 cases), real R2 snapshot + preview + execute + attempts ledger + single-use preview_token enforcement, and drill blocked path. Additionally executed a LIVE end-to-end rollback drill against AUREM_DRILL_REPO=polarisbuiltinc-wq/aurem-rollback-testbed (installation 152797252): result='passed' in 12.7s, all 8 steps ok (config, seed_good_state, snapshot, ship_breaking_change, verify_broken, preview, execute_rollback, verify_restored), attempt rba_87423c8343c7428a in ledger with result='success' and verified=true, no ghp_/github_pat_/gho_/ghs_ leakage in drill response, /drills, or /attempts. Timeout-vs-revoked distinction confirmed in backend/routers/repo_status.py:101-107 (httpx.TimeoutException/NetworkError → status='unreachable', never 'disconnected'/'revoked') and again at L210-217 for pat_vault github_unreachable code. RevokedRepoBanner.jsx confirmed to render all 4 required data-testids (github-unreachable-banner, revoked-repo-banner, revoked-repo-reconnect-btn, revoked-repo-reconnect-suspended-link) with correct branch handling for each reason code. PAT PATCH/verify/add paths return honest 400/422 rejections with 'PATs are no longer supported' messaging. No regressions vs prior 25/25 + 10/10 reports.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_pat_removal_full_2026_01.py",
+    "/app/backend/tests/test_pat_removal_rollback_typed_error.py",
+    "/app/backend/tests/test_rollback_v2_pillar1.py",
+    "/app/test_reports/pytest/reverify_2026_01_25.xml"
+  ],
+  "results_summary": {
+    "pytest_totals": "35 passed, 0 failed in 44.79s",
+    "pat_rejection_add_project": "422 (Pydantic-level missing github_url) + 400 pat_not_supported on canonical path — honest rejection, no silent storage",
+    "pat_rejection_patch": "PATCH /cto/projects/{id} github_token=ghp_… → 400 'PATs are no longer supported. Connect via the AUREM GitHub App instead.'",
+    "pat_rejection_verify_pat": "POST /cto/projects/verify-pat → 200 {ok:false, error:'pat_not_supported'}",
+    "typed_error_missing_installation": "services/pat_vault.py raises GithubAppAuthError('app_installation_missing', ...) on missing auth_method/installation_id; get_repo_token_or_error surfaces (None, 'app_installation_missing', detail) — verified via test_pat_removal_rollback_typed_error.py",
+    "connection_status_no_500": "GET /cto/projects/connection-status returns 200 for empty and populated project sets; no 'no_token' surfacing; codes limited to {connected, disconnected, unreachable}",
+    "timeout_vs_revoked": "repo_status._check_one catches (httpx.TimeoutException, httpx.NetworkError) → status='unreachable' (L101-107). Empty-token path also honors github_unreachable code (L210-217). Confirmed live behavior in previous iterations; static grep here shows the guard is intact under HEAD 4ef9730.",
+    "revoked_banner_testids": "github-unreachable-banner (L133), revoked-repo-banner (L156), revoked-repo-reconnect-btn (L196), revoked-repo-reconnect-suspended-link (L180) all present; reason codes handled: app_installation_missing, app_installation_revoked, installation_suspended, installation_deleted, unreachable",
+    "rollback2_admin_gating": "14/14 parametrized cases 401/403 for unauthenticated and non-admin across POST snapshot/preview/execute/drill and GET snapshots/attempts/drills",
+    "rollback2_execute_preview_token": "single-use preview_token enforced ('preview_token_already_used' on reuse), confirm=false → 'confirm_required', bogus token → 'preview_token_invalid'",
+    "rollback2_drill_e2e": "LIVE — result='passed', drill_id=drill_5049cf3d699b, attempt_id=rba_87423c8343c7428a, restored_commit_sha present, 8/8 steps ok, ledger row result=success verified=true, no secret leakage"
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Preview account has 0 cto_projects rows — the fixture project p_6d0be78cdd referenced in the request is not present under test@aurem.dev on this preview backend (empty connection-status list). Drill still runs because it uses AUREM_DRILL_REPO env directly, not a per-user project. Non-blocking, but worth reconciling the request text vs preview state so future testers don't chase a phantom fixture.",
+    "services/rollback_two_phase.py preview-token expiry compares ISO-8601 strings lexicographically (flagged in the 2026-01-24 report). Still safe today; still worth switching to datetime parsing.",
+    "backend/routers/cto_projects.py is now ~3800 lines — split-file refactor still recommended (flagged in prior report, not blocking)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (35/35 pytest + live drill e2e)", "frontend": "n/a — component code review only (all 4 required data-testids present)"},
+  "test_credentials": "admin: test@aurem.dev / AuremTest2026! (preview) — from /app/memory/test_credentials.md",
+  "seed_data_creation": "One additional live drill artifact was created as part of re-verification: drill_5049cf3d699b + attempt rba_87423c8343c7428a + real commits in polarisbuiltinc-wq/aurem-rollback-testbed. This is expected/intended per the drill design (disposable testbed). No cleanup needed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "PAT-removal + Rollback v2 Pillar-1 both remain green on HEAD 4ef9730. To re-verify quickly: `pytest /app/backend/tests/test_pat_removal_full_2026_01.py /app/backend/tests/test_pat_removal_rollback_typed_error.py /app/backend/tests/test_rollback_v2_pillar1.py -v` (~45s). For a live drill, POST /api/aurem-dev/admin/rollback2/drill with the admin token (~13s, real GitHub commits into the disposable testbed). AUREM_DRILL_REPO is set in backend/.env. Founder is cleared to click 'Save to GitHub'.",
+  "rca of the issue": "n/a — no regressions detected against prior 10/10 + 25/25 baselines."
+}

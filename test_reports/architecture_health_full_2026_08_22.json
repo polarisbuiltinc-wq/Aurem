@@ -1,0 +1,3868 @@
+{
+  "generated_at": 1787442142.9672964,
+  "duration_ms": 1317,
+  "total_files": 695,
+  "line_limit": 300,
+  "cc_limit": 10,
+  "bloated_files": [
+    {
+      "path": "/app/frontend/src/components/ChatPanel.jsx",
+      "rel": "components/ChatPanel.jsx",
+      "lines": 5445,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/loop_engine.py",
+      "rel": "services/loop_engine.py",
+      "lines": 4258,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/chat.py",
+      "rel": "routers/chat.py",
+      "lines": 3877,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/Admin.jsx",
+      "rel": "pages/Admin.jsx",
+      "lines": 3579,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/routers/cto_projects.py",
+      "rel": "routers/cto_projects.py",
+      "lines": 3560,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/main.py",
+      "rel": "main.py",
+      "lines": 2996,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/orchestrator.py",
+      "rel": "services/orchestrator.py",
+      "lines": 2557,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/local_tools.py",
+      "rel": "services/local_tools.py",
+      "lines": 2253,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/AdminOverview.jsx",
+      "rel": "pages/AdminOverview.jsx",
+      "lines": 2138,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/routers/admin_analytics.py",
+      "rel": "routers/admin_analytics.py",
+      "lines": 1992,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/Projects.jsx",
+      "rel": "pages/Projects.jsx",
+      "lines": 1946,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/routers/mcp.py",
+      "rel": "routers/mcp.py",
+      "lines": 1806,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/ora_chat.py",
+      "rel": "routers/ora_chat.py",
+      "lines": 1589,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/Landing.jsx",
+      "rel": "pages/Landing.jsx",
+      "lines": 1563,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/pages/OraDirect.jsx",
+      "rel": "pages/OraDirect.jsx",
+      "lines": 1461,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/routers/loop.py",
+      "rel": "routers/loop.py",
+      "lines": 1337,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/scaffold.py",
+      "rel": "routers/scaffold.py",
+      "lines": 1270,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/core/parliament.py",
+      "rel": "core/parliament.py",
+      "lines": 1218,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/MessageBubble.jsx",
+      "rel": "components/MessageBubble.jsx",
+      "lines": 1177,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/routers/codebase_health.py",
+      "rel": "routers/codebase_health.py",
+      "lines": 1171,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/admin_users.py",
+      "rel": "routers/admin_users.py",
+      "lines": 1113,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/Shell.jsx",
+      "rel": "components/Shell.jsx",
+      "lines": 1104,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/routers/security_scan.py",
+      "rel": "routers/security_scan.py",
+      "lines": 1096,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/qa_matrix.py",
+      "rel": "services/qa_matrix.py",
+      "lines": 1047,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/Both.jsx",
+      "rel": "pages/Both.jsx",
+      "lines": 1010,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/SecurityScanDrawer.jsx",
+      "rel": "components/SecurityScanDrawer.jsx",
+      "lines": 951,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/routers/auth.py",
+      "rel": "routers/auth.py",
+      "lines": 935,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/ora_chat/deep_research.py",
+      "rel": "services/ora_chat/deep_research.py",
+      "lines": 928,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/admin_ops_config.py",
+      "rel": "routers/admin_ops_config.py",
+      "lines": 904,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/admin_qa.py",
+      "rel": "routers/admin_qa.py",
+      "lines": 901,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/dev_skills.py",
+      "rel": "services/dev_skills.py",
+      "lines": 886,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/integration_health.py",
+      "rel": "services/integration_health.py",
+      "lines": 861,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/fix_pipeline.py",
+      "rel": "routers/fix_pipeline.py",
+      "lines": 834,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/admin.py",
+      "rel": "routers/admin.py",
+      "lines": 827,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/LoopLiveFeed.jsx",
+      "rel": "components/LoopLiveFeed.jsx",
+      "lines": 822,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/NewUserWizard.jsx",
+      "rel": "components/NewUserWizard.jsx",
+      "lines": 818,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/project_brain.py",
+      "rel": "services/project_brain.py",
+      "lines": 814,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/demo/demoSteps.jsx",
+      "rel": "components/demo/demoSteps.jsx",
+      "lines": 806,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/routers/payments.py",
+      "rel": "routers/payments.py",
+      "lines": 800,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/PreviewPanel.jsx",
+      "rel": "components/PreviewPanel.jsx",
+      "lines": 755,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/routers/github_app.py",
+      "rel": "routers/github_app.py",
+      "lines": 754,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/CodebaseHealth.jsx",
+      "rel": "pages/CodebaseHealth.jsx",
+      "lines": 733,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/GraphPanel.jsx",
+      "rel": "components/GraphPanel.jsx",
+      "lines": 722,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/pages/Dashboard.jsx",
+      "rel": "pages/Dashboard.jsx",
+      "lines": 708,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/pages/AdminSystemHealth.jsx",
+      "rel": "pages/AdminSystemHealth.jsx",
+      "lines": 703,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/FixProgressDrawer.jsx",
+      "rel": "components/FixProgressDrawer.jsx",
+      "lines": 697,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/mode_d_debugger.py",
+      "rel": "services/mode_d_debugger.py",
+      "lines": 694,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/AdminQADashboard.jsx",
+      "rel": "pages/AdminQADashboard.jsx",
+      "lines": 678,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/OraChatDrawer.jsx",
+      "rel": "components/OraChatDrawer.jsx",
+      "lines": 674,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/ora_fix_learning.py",
+      "rel": "services/ora_fix_learning.py",
+      "lines": 668,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/ORASidePanel.jsx",
+      "rel": "components/ORASidePanel.jsx",
+      "lines": 664,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/vanguard_scanner.py",
+      "rel": "services/vanguard_scanner.py",
+      "lines": 652,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/DeployPanel.jsx",
+      "rel": "components/DeployPanel.jsx",
+      "lines": 645,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/nav/RailShell.jsx",
+      "rel": "components/nav/RailShell.jsx",
+      "lines": 641,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/dashboard/v2/SidebarBound.jsx",
+      "rel": "components/dashboard/v2/SidebarBound.jsx",
+      "lines": 605,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/supabase_provisioner.py",
+      "rel": "services/supabase_provisioner.py",
+      "lines": 604,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/vanguard_verify_agent.py",
+      "rel": "services/vanguard_verify_agent.py",
+      "lines": 597,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/admin/PersonalTrackAdmin.jsx",
+      "rel": "pages/admin/PersonalTrackAdmin.jsx",
+      "lines": 597,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/OperationHistory.jsx",
+      "rel": "components/OperationHistory.jsx",
+      "lines": 592,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/vercel_skills.py",
+      "rel": "services/vercel_skills.py",
+      "lines": 591,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/AdminHouseRules.jsx",
+      "rel": "components/AdminHouseRules.jsx",
+      "lines": 586,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/AddProjectWizard.jsx",
+      "rel": "components/AddProjectWizard.jsx",
+      "lines": 568,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/llm/openrouter_providers.py",
+      "rel": "services/llm/openrouter_providers.py",
+      "lines": 566,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/llm/_meta.py",
+      "rel": "services/llm/_meta.py",
+      "lines": 564,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/Settings.jsx",
+      "rel": "pages/Settings.jsx",
+      "lines": 551,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/bug_hunt_rules.py",
+      "rel": "services/bug_hunt_rules.py",
+      "lines": 550,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/health_score.py",
+      "rel": "services/health_score.py",
+      "lines": 550,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/repo_context.py",
+      "rel": "services/repo_context.py",
+      "lines": 549,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/deploy.py",
+      "rel": "routers/deploy.py",
+      "lines": 545,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/Login.jsx",
+      "rel": "pages/Login.jsx",
+      "lines": 542,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/ShipConfirmModal.jsx",
+      "rel": "components/ShipConfirmModal.jsx",
+      "lines": 542,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/LoopStatusChip.jsx",
+      "rel": "components/LoopStatusChip.jsx",
+      "lines": 542,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/pages/Integrations.jsx",
+      "rel": "pages/Integrations.jsx",
+      "lines": 540,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/routers/github_oauth.py",
+      "rel": "routers/github_oauth.py",
+      "lines": 538,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/BugHunt.jsx",
+      "rel": "pages/BugHunt.jsx",
+      "lines": 537,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/routers/admin_payments.py",
+      "rel": "routers/admin_payments.py",
+      "lines": 534,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/FeatureWindow.jsx",
+      "rel": "pages/FeatureWindow.jsx",
+      "lines": 532,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/pages/AdminFinancials.jsx",
+      "rel": "pages/AdminFinancials.jsx",
+      "lines": 527,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/funnel_nudge_cron.py",
+      "rel": "services/funnel_nudge_cron.py",
+      "lines": 518,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/App.jsx",
+      "rel": "App.jsx",
+      "lines": 498,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/pages/AdminCockpit.jsx",
+      "rel": "pages/AdminCockpit.jsx",
+      "lines": 492,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/KnowledgeGraph.jsx",
+      "rel": "components/KnowledgeGraph.jsx",
+      "lines": 490,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/architecture_health.py",
+      "rel": "services/architecture_health.py",
+      "lines": 483,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/ora_context.py",
+      "rel": "services/ora_context.py",
+      "lines": 480,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/ora_chat/codebase_index.py",
+      "rel": "services/ora_chat/codebase_index.py",
+      "lines": 479,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/health_checks.py",
+      "rel": "services/health_checks.py",
+      "lines": 478,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/dashboard/v2/AskAdvisorReal.jsx",
+      "rel": "components/dashboard/v2/AskAdvisorReal.jsx",
+      "lines": 476,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/tools_bridge.py",
+      "rel": "services/tools_bridge.py",
+      "lines": 475,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/ora_chat/safety.py",
+      "rel": "services/ora_chat/safety.py",
+      "lines": 474,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/scripts/init_prod_collections.py",
+      "rel": "scripts/init_prod_collections.py",
+      "lines": 471,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/admin_bin.py",
+      "rel": "routers/admin_bin.py",
+      "lines": 467,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/core/intent_gateway.py",
+      "rel": "core/intent_gateway.py",
+      "lines": 461,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/OraPreviewPanel.jsx",
+      "rel": "components/OraPreviewPanel.jsx",
+      "lines": 458,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/web_skills.py",
+      "rel": "services/web_skills.py",
+      "lines": 455,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/PricingCards.jsx",
+      "rel": "components/PricingCards.jsx",
+      "lines": 454,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/AuremAdminPanel.jsx",
+      "rel": "components/AuremAdminPanel.jsx",
+      "lines": 449,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/AdminThinkingHints.jsx",
+      "rel": "components/AdminThinkingHints.jsx",
+      "lines": 449,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/finding_fix_applier.py",
+      "rel": "services/finding_fix_applier.py",
+      "lines": 448,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/findings.py",
+      "rel": "routers/findings.py",
+      "lines": 446,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/admin_projects_brain.py",
+      "rel": "routers/admin_projects_brain.py",
+      "lines": 446,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/RenderedMessage.jsx",
+      "rel": "components/RenderedMessage.jsx",
+      "lines": 444,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/LiveTaskPopup.jsx",
+      "rel": "components/LiveTaskPopup.jsx",
+      "lines": 444,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/loop_speed_diagnostic.py",
+      "rel": "services/loop_speed_diagnostic.py",
+      "lines": 438,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/graph_builder.py",
+      "rel": "services/graph_builder.py",
+      "lines": 433,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/repo_indexing.py",
+      "rel": "services/repo_indexing.py",
+      "lines": 429,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/LoopStepBar.jsx",
+      "rel": "components/LoopStepBar.jsx",
+      "lines": 426,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/pages/SystemStatsPage.jsx",
+      "rel": "pages/SystemStatsPage.jsx",
+      "lines": 425,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/admin_analytics_cache.py",
+      "rel": "services/admin_analytics_cache.py",
+      "lines": 424,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/ora_chat/grounding_check.py",
+      "rel": "services/ora_chat/grounding_check.py",
+      "lines": 424,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/FixJobContext.jsx",
+      "rel": "components/FixJobContext.jsx",
+      "lines": 421,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/github_deploy_service.py",
+      "rel": "services/github_deploy_service.py",
+      "lines": 417,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/supabase.py",
+      "rel": "routers/supabase.py",
+      "lines": 407,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/fix_job_manager.py",
+      "rel": "services/fix_job_manager.py",
+      "lines": 405,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/oauth.py",
+      "rel": "routers/oauth.py",
+      "lines": 404,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/WhyOra.jsx",
+      "rel": "pages/WhyOra.jsx",
+      "lines": 403,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/FounderOfferCard.jsx",
+      "rel": "components/FounderOfferCard.jsx",
+      "lines": 399,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/lib/api.js",
+      "rel": "lib/api.js",
+      "lines": 392,
+      "extension": ".js"
+    },
+    {
+      "path": "/app/backend/services/ora_chat/slash_commands.py",
+      "rel": "services/ora_chat/slash_commands.py",
+      "lines": 388,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/github_app.py",
+      "rel": "services/github_app.py",
+      "lines": 386,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/BrainDump.jsx",
+      "rel": "pages/BrainDump.jsx",
+      "lines": 386,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/financials.py",
+      "rel": "services/financials.py",
+      "lines": 379,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/Analytics.jsx",
+      "rel": "pages/Analytics.jsx",
+      "lines": 375,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/loop_execute.py",
+      "rel": "services/loop_execute.py",
+      "lines": 374,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/version.py",
+      "rel": "routers/version.py",
+      "lines": 371,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/repo_status.py",
+      "rel": "routers/repo_status.py",
+      "lines": 361,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/promo_first50.py",
+      "rel": "routers/promo_first50.py",
+      "lines": 361,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/admin_bi.py",
+      "rel": "routers/admin_bi.py",
+      "lines": 360,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/llm/__init__.py",
+      "rel": "services/llm/__init__.py",
+      "lines": 357,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/Signup.jsx",
+      "rel": "pages/Signup.jsx",
+      "lines": 356,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/pages/AdminApiKeys.jsx",
+      "rel": "pages/AdminApiKeys.jsx",
+      "lines": 356,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/routers/founder_offer.py",
+      "rel": "routers/founder_offer.py",
+      "lines": 355,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/AdminInspectSpeedDiagnostic.jsx",
+      "rel": "pages/AdminInspectSpeedDiagnostic.jsx",
+      "lines": 354,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/LiveBusinessIntelligence.jsx",
+      "rel": "components/LiveBusinessIntelligence.jsx",
+      "lines": 354,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/SecretScanCard.jsx",
+      "rel": "components/SecretScanCard.jsx",
+      "lines": 353,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/pages/ShippedRowHarness.jsx",
+      "rel": "pages/ShippedRowHarness.jsx",
+      "lines": 352,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/dashboard/v2/GraphView.jsx",
+      "rel": "components/dashboard/v2/GraphView.jsx",
+      "lines": 352,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/mode_e_auditor.py",
+      "rel": "services/mode_e_auditor.py",
+      "lines": 345,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/github_api_writer.py",
+      "rel": "services/github_api_writer.py",
+      "lines": 342,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/NotificationBell.jsx",
+      "rel": "components/NotificationBell.jsx",
+      "lines": 341,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/TaskLiveTape.jsx",
+      "rel": "components/TaskLiveTape.jsx",
+      "lines": 341,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/onboarding_email.py",
+      "rel": "services/onboarding_email.py",
+      "lines": 338,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/topup_alerts.py",
+      "rel": "services/topup_alerts.py",
+      "lines": 336,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/repo_heal.py",
+      "rel": "services/repo_heal.py",
+      "lines": 335,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/scripts/iter309_sse_reconnect_harness.py",
+      "rel": "scripts/iter309_sse_reconnect_harness.py",
+      "lines": 333,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/risk_routing.py",
+      "rel": "services/risk_routing.py",
+      "lines": 333,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/ora_council_retriever.py",
+      "rel": "services/ora_council_retriever.py",
+      "lines": 333,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/evals/runner.py",
+      "rel": "evals/runner.py",
+      "lines": 330,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/agents.py",
+      "rel": "services/agents.py",
+      "lines": 330,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/loop_rollback.py",
+      "rel": "services/loop_rollback.py",
+      "lines": 329,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/correction_rules.py",
+      "rel": "services/correction_rules.py",
+      "lines": 324,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/loop_safety.py",
+      "rel": "services/loop_safety.py",
+      "lines": 322,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/first50_campaign.py",
+      "rel": "services/first50_campaign.py",
+      "lines": 321,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/ShipPendingCard.jsx",
+      "rel": "components/ShipPendingCard.jsx",
+      "lines": 321,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/demo/WalkthroughPlayer.jsx",
+      "rel": "components/demo/WalkthroughPlayer.jsx",
+      "lines": 320,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/dashboard/v2/ChatView.jsx",
+      "rel": "components/dashboard/v2/ChatView.jsx",
+      "lines": 317,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/fix_triage.py",
+      "rel": "services/fix_triage.py",
+      "lines": 310,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/admin_support.py",
+      "rel": "routers/admin_support.py",
+      "lines": 309,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/AdminVanguard.jsx",
+      "rel": "pages/AdminVanguard.jsx",
+      "lines": 309,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/CookieConsentBanner.jsx",
+      "rel": "components/CookieConsentBanner.jsx",
+      "lines": 309,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/cto_services/codebase_indexer.py",
+      "rel": "cto_services/codebase_indexer.py",
+      "lines": 308,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/evals/harness.py",
+      "rel": "evals/harness.py",
+      "lines": 307,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/generation_rules.py",
+      "rel": "services/generation_rules.py",
+      "lines": 307,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/pages/Deploy.jsx",
+      "rel": "pages/Deploy.jsx",
+      "lines": 307,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/pages/personal/DraftReview.jsx",
+      "rel": "pages/personal/DraftReview.jsx",
+      "lines": 306,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/backend/services/billing_cron.py",
+      "rel": "services/billing_cron.py",
+      "lines": 305,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/payment_recovery_email.py",
+      "rel": "services/payment_recovery_email.py",
+      "lines": 304,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/rate_limiter.py",
+      "rel": "services/rate_limiter.py",
+      "lines": 304,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/routers/advisor_context.py",
+      "rel": "routers/advisor_context.py",
+      "lines": 304,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/ora_learning.py",
+      "rel": "services/ora_learning.py",
+      "lines": 303,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/backend/services/reasoning_evals.py",
+      "rel": "services/reasoning_evals.py",
+      "lines": 302,
+      "extension": ".py"
+    },
+    {
+      "path": "/app/frontend/src/components/TabBar.jsx",
+      "rel": "components/TabBar.jsx",
+      "lines": 302,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/VercelCard.jsx",
+      "rel": "components/VercelCard.jsx",
+      "lines": 302,
+      "extension": ".jsx"
+    },
+    {
+      "path": "/app/frontend/src/components/TwoFactorCard.jsx",
+      "rel": "components/TwoFactorCard.jsx",
+      "lines": 301,
+      "extension": ".jsx"
+    }
+  ],
+  "complexity_hits": [
+    {
+      "file": "services/orchestrator.py",
+      "func": "chat_with_tools",
+      "line": 1453,
+      "cc": 191
+    },
+    {
+      "file": "routers/cto_projects.py",
+      "func": "_run_task_via_api",
+      "line": 2418,
+      "cc": 166
+    },
+    {
+      "file": "routers/chat.py",
+      "func": "chat_send",
+      "line": 713,
+      "cc": 72
+    },
+    {
+      "file": "services/project_brain.py",
+      "func": "build_brain_v2",
+      "line": 570,
+      "cc": 71
+    },
+    {
+      "file": "routers/security_scan.py",
+      "func": "run_security_scan",
+      "line": 336,
+      "cc": 71
+    },
+    {
+      "file": "services/bug_hunt_rules.py",
+      "func": "scan_bug_hunt",
+      "line": 362,
+      "cc": 65
+    },
+    {
+      "file": "routers/github_oauth.py",
+      "func": "callback",
+      "line": 219,
+      "cc": 65
+    },
+    {
+      "file": "routers/chat.py",
+      "func": "chat_stream",
+      "line": 1302,
+      "cc": 63
+    },
+    {
+      "file": "services/graph_builder.py",
+      "func": "build_graph",
+      "line": 202,
+      "cc": 62
+    },
+    {
+      "file": "routers/github_app.py",
+      "func": "install_webhook",
+      "line": 383,
+      "cc": 60
+    },
+    {
+      "file": "services/llm/_meta.py",
+      "func": "_call_llm_with_meta_inner",
+      "line": 108,
+      "cc": 58
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "LoopEngine._do_execute",
+      "line": 1072,
+      "cc": 54
+    },
+    {
+      "file": "services/tools_bridge.py",
+      "func": "extract_tool_calls",
+      "line": 184,
+      "cc": 54
+    },
+    {
+      "file": "services/orchestrator.py",
+      "func": "_synthesise_max_iters_summary",
+      "line": 193,
+      "cc": 52
+    },
+    {
+      "file": "services/funnel_nudge_cron.py",
+      "func": "classify_users",
+      "line": 350,
+      "cc": 52
+    },
+    {
+      "file": "routers/advisor_context.py",
+      "func": "get_advisor_context",
+      "line": 74,
+      "cc": 52
+    },
+    {
+      "file": "routers/cto_projects.py",
+      "func": "_run_task_with_git",
+      "line": 3517,
+      "cc": 51
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "LoopEngine._do_ship",
+      "line": 2727,
+      "cc": 46
+    },
+    {
+      "file": "routers/admin_analytics.py",
+      "func": "loop_metrics",
+      "line": 1690,
+      "cc": 46
+    },
+    {
+      "file": "services/finding_fix_applier.py",
+      "func": "apply_finding_fix",
+      "line": 245,
+      "cc": 43
+    },
+    {
+      "file": "routers/payments.py",
+      "func": "stripe_webhook",
+      "line": 491,
+      "cc": 43
+    },
+    {
+      "file": "services/personal_track_smoke.py",
+      "func": "run_smoke",
+      "line": 68,
+      "cc": 42
+    },
+    {
+      "file": "services/repo_heal.py",
+      "func": "heal_project",
+      "line": 155,
+      "cc": 41
+    },
+    {
+      "file": "services/seo/orchestrator.py",
+      "func": "run_seo_fixes",
+      "line": 86,
+      "cc": 41
+    },
+    {
+      "file": "scripts/self_scan.py",
+      "func": "main",
+      "line": 81,
+      "cc": 40
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "LoopEngine.confirm_ship",
+      "line": 3187,
+      "cc": 40
+    },
+    {
+      "file": "routers/admin_users.py",
+      "func": "get_user",
+      "line": 226,
+      "cc": 40
+    },
+    {
+      "file": "routers/admin_users.py",
+      "func": "admin_funnel_dashboard",
+      "line": 622,
+      "cc": 40
+    },
+    {
+      "file": "main.py",
+      "func": "lifespan",
+      "line": 269,
+      "cc": 39
+    },
+    {
+      "file": "routers/codebase_health.py",
+      "func": "scan",
+      "line": 653,
+      "cc": 39
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "write_repo_file",
+      "line": 718,
+      "cc": 38
+    },
+    {
+      "file": "routers/fix_pipeline.py",
+      "func": "_run_bulk_job",
+      "line": 304,
+      "cc": 38
+    },
+    {
+      "file": "services/qa_matrix.py",
+      "func": "matrix_coverage_gap",
+      "line": 220,
+      "cc": 37
+    },
+    {
+      "file": "services/dev_skills.py",
+      "func": "detect_framework",
+      "line": 357,
+      "cc": 37
+    },
+    {
+      "file": "services/llm/openrouter_providers.py",
+      "func": "_call_deepseek",
+      "line": 361,
+      "cc": 37
+    },
+    {
+      "file": "services/ora_chat/deep_research.py",
+      "func": "orchestrate",
+      "line": 815,
+      "cc": 36
+    },
+    {
+      "file": "routers/codebase_health.py",
+      "func": "request_fix",
+      "line": 996,
+      "cc": 36
+    },
+    {
+      "file": "routers/findings.py",
+      "func": "backlog_list",
+      "line": 109,
+      "cc": 35
+    },
+    {
+      "file": "routers/admin.py",
+      "func": "_compute_activation_funnel",
+      "line": 589,
+      "cc": 35
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "LoopEngine._do_verify",
+      "line": 1874,
+      "cc": 34
+    },
+    {
+      "file": "services/vanguard_verify_agent.py",
+      "func": "_llm_review",
+      "line": 298,
+      "cc": 34
+    },
+    {
+      "file": "routers/admin_users.py",
+      "func": "admin_send_user_offer",
+      "line": 822,
+      "cc": 34
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "LoopEngine._do_plan",
+      "line": 522,
+      "cc": 33
+    },
+    {
+      "file": "services/dev_skills.py",
+      "func": "find_usages",
+      "line": 77,
+      "cc": 33
+    },
+    {
+      "file": "routers/scaffold.py",
+      "func": "materialize_draft",
+      "line": 580,
+      "cc": 33
+    },
+    {
+      "file": "services/architecture_health.py",
+      "func": "_scan_boundaries",
+      "line": 359,
+      "cc": 32
+    },
+    {
+      "file": "routers/repo_status.py",
+      "func": "connection_status",
+      "line": 117,
+      "cc": 32
+    },
+    {
+      "file": "routers/security_scan.py",
+      "func": "_create_draft_pr",
+      "line": 879,
+      "cc": 32
+    },
+    {
+      "file": "services/loop_speed_diagnostic.py",
+      "func": "compute_speed_report",
+      "line": 300,
+      "cc": 31
+    },
+    {
+      "file": "routers/ora_chat.py",
+      "func": "ora_upload",
+      "line": 1482,
+      "cc": 31
+    },
+    {
+      "file": "routers/security_scan.py",
+      "func": "apply_security_fix",
+      "line": 1076,
+      "cc": 31
+    },
+    {
+      "file": "routers/admin.py",
+      "func": "_compute_stage_buckets",
+      "line": 472,
+      "cc": 31
+    },
+    {
+      "file": "services/vanguard_scanner.py",
+      "func": "scan_text",
+      "line": 107,
+      "cc": 30
+    },
+    {
+      "file": "services/repo_context.py",
+      "func": "_build_blob",
+      "line": 287,
+      "cc": 30
+    },
+    {
+      "file": "services/topup_alerts.py",
+      "func": "upsert_alerts_from_snapshot",
+      "line": 97,
+      "cc": 30
+    },
+    {
+      "file": "services/dev_skills.py",
+      "func": "get_dependencies",
+      "line": 193,
+      "cc": 30
+    },
+    {
+      "file": "routers/loop.py",
+      "func": "pause_response",
+      "line": 521,
+      "cc": 30
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "list_repo_files",
+      "line": 1074,
+      "cc": 29
+    },
+    {
+      "file": "services/ora_chat/canary.py",
+      "func": "run_canary",
+      "line": 182,
+      "cc": 29
+    },
+    {
+      "file": "routers/security_scan.py",
+      "func": "_normalize_findings",
+      "line": 607,
+      "cc": 29
+    },
+    {
+      "file": "routers/wrapped.py",
+      "func": "my_wrapped",
+      "line": 50,
+      "cc": 29
+    },
+    {
+      "file": "services/mode_d_debugger.py",
+      "func": "run_debug_session",
+      "line": 537,
+      "cc": 28
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "LoopEngine._heal_full_scan_findings",
+      "line": 2582,
+      "cc": 28
+    },
+    {
+      "file": "services/web_skills.py",
+      "func": "fetch_url",
+      "line": 151,
+      "cc": 28
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "_search_repo_via_api",
+      "line": 1496,
+      "cc": 28
+    },
+    {
+      "file": "services/vanguard_verify_agent.py",
+      "func": "verify_patch",
+      "line": 509,
+      "cc": 28
+    },
+    {
+      "file": "routers/codebase_health.py",
+      "func": "_build_text_cache",
+      "line": 533,
+      "cc": 28
+    },
+    {
+      "file": "services/minimal_edit.py",
+      "func": "_apply_op",
+      "line": 75,
+      "cc": 27
+    },
+    {
+      "file": "services/repo_indexing.py",
+      "func": "_analyse_tree",
+      "line": 289,
+      "cc": 27
+    },
+    {
+      "file": "services/seo/sitemap.py",
+      "func": "extract_routes",
+      "line": 27,
+      "cc": 27
+    },
+    {
+      "file": "routers/mcp.py",
+      "func": "_execute_vanguard_scan",
+      "line": 1010,
+      "cc": 27
+    },
+    {
+      "file": "routers/security_scan.py",
+      "func": "_gh_get",
+      "line": 196,
+      "cc": 27
+    },
+    {
+      "file": "routers/automations.py",
+      "func": "github_webhook",
+      "line": 37,
+      "cc": 27
+    },
+    {
+      "file": "scripts/iter309_sse_reconnect_harness.py",
+      "func": "main",
+      "line": 171,
+      "cc": 26
+    },
+    {
+      "file": "services/web_skills.py",
+      "func": "firecrawl_crawl_site",
+      "line": 339,
+      "cc": 26
+    },
+    {
+      "file": "services/full_scan_scanners.py",
+      "func": "scan_docker_cis",
+      "line": 78,
+      "cc": 26
+    },
+    {
+      "file": "routers/feature_window.py",
+      "func": "feature_window_status",
+      "line": 43,
+      "cc": 26
+    },
+    {
+      "file": "services/dev_skills.py",
+      "func": "get_commit_history",
+      "line": 460,
+      "cc": 25
+    },
+    {
+      "file": "services/dev_skills.py",
+      "func": "list_issues",
+      "line": 533,
+      "cc": 25
+    },
+    {
+      "file": "services/deploy_readiness.py",
+      "func": "get_deploy_readiness",
+      "line": 68,
+      "cc": 25
+    },
+    {
+      "file": "services/ora_chat/grounding_check.py",
+      "func": "run_post_response_check",
+      "line": 386,
+      "cc": 25
+    },
+    {
+      "file": "routers/mcp.py",
+      "func": "_handle_one",
+      "line": 1508,
+      "cc": 25
+    },
+    {
+      "file": "routers/admin_bi.py",
+      "func": "_fetch_inference_metrics",
+      "line": 213,
+      "cc": 25
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "_generate_plan",
+      "line": 3920,
+      "cc": 24
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "read_repo_files",
+      "line": 618,
+      "cc": 24
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "semantic_search_repo",
+      "line": 1637,
+      "cc": 24
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "execute_bash",
+      "line": 2017,
+      "cc": 24
+    },
+    {
+      "file": "services/reasoning_evals.py",
+      "func": "validate_plan_shape",
+      "line": 57,
+      "cc": 24
+    },
+    {
+      "file": "services/dev_skills.py",
+      "func": "get_pr_comments",
+      "line": 611,
+      "cc": 24
+    },
+    {
+      "file": "routers/loop.py",
+      "func": "start_loop",
+      "line": 88,
+      "cc": 24
+    },
+    {
+      "file": "services/qa_matrix.py",
+      "func": "run_regression_locks",
+      "line": 1007,
+      "cc": 23
+    },
+    {
+      "file": "services/ora_chat/grounding_check.py",
+      "func": "classify_claims",
+      "line": 335,
+      "cc": 23
+    },
+    {
+      "file": "routers/chat.py",
+      "func": "draft_support_email",
+      "line": 3924,
+      "cc": 23
+    },
+    {
+      "file": "services/web_skills.py",
+      "func": "web_search",
+      "line": 76,
+      "cc": 22
+    },
+    {
+      "file": "services/web_skills.py",
+      "func": "firecrawl_scrape",
+      "line": 283,
+      "cc": 22
+    },
+    {
+      "file": "services/supabase_provisioner.py",
+      "func": "_migrate_supabase_to_shared_mongo",
+      "line": 612,
+      "cc": 22
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "_search_snapshot_sync",
+      "line": 1349,
+      "cc": 22
+    },
+    {
+      "file": "services/rollback_two_phase.py",
+      "func": "execute_rollback_from_snapshot",
+      "line": 106,
+      "cc": 22
+    },
+    {
+      "file": "services/project_brain.py",
+      "func": "update_brain_after_task",
+      "line": 783,
+      "cc": 22
+    },
+    {
+      "file": "services/loop_speed_diagnostic.py",
+      "func": "_phase_durations_from_events",
+      "line": 107,
+      "cc": 22
+    },
+    {
+      "file": "services/ora_chat/adversarial_review.py",
+      "func": "run_review",
+      "line": 163,
+      "cc": 22
+    },
+    {
+      "file": "routers/admin_payments.py",
+      "func": "admin_get_stripe_config",
+      "line": 229,
+      "cc": 22
+    },
+    {
+      "file": "routers/vanguard_ci.py",
+      "func": "_normalise_trufflehog",
+      "line": 76,
+      "cc": 22
+    },
+    {
+      "file": "routers/admin_analytics.py",
+      "func": "admin_overview_metrics",
+      "line": 1312,
+      "cc": 22
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "_run_security_scan",
+      "line": 4097,
+      "cc": 21
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "_run_diff_security_scan",
+      "line": 4205,
+      "cc": 21
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "lookup_or_rehydrate",
+      "line": 4350,
+      "cc": 21
+    },
+    {
+      "file": "services/web_skills.py",
+      "func": "web_search_and_summarize",
+      "line": 226,
+      "cc": 21
+    },
+    {
+      "file": "services/payment_reconciliation.py",
+      "func": "run_reconciliation",
+      "line": 39,
+      "cc": 21
+    },
+    {
+      "file": "services/repo_map.py",
+      "func": "format_repo_map",
+      "line": 72,
+      "cc": 21
+    },
+    {
+      "file": "services/supabase_provisioner.py",
+      "func": "migrate_from_shared_mongo",
+      "line": 465,
+      "cc": 21
+    },
+    {
+      "file": "services/git_identity.py",
+      "func": "resolve_git_identity",
+      "line": 167,
+      "cc": 21
+    },
+    {
+      "file": "services/ora_fix_learning.py",
+      "func": "record_fix_outcome",
+      "line": 137,
+      "cc": 21
+    },
+    {
+      "file": "services/project_brain.py",
+      "func": "_build_context_string",
+      "line": 152,
+      "cc": 21
+    },
+    {
+      "file": "services/ora_learning.py",
+      "func": "extract_session_patterns",
+      "line": 224,
+      "cc": 21
+    },
+    {
+      "file": "services/error_classifier.py",
+      "func": "classify_error",
+      "line": 59,
+      "cc": 21
+    },
+    {
+      "file": "services/orchestrator.py",
+      "func": "_extract_web_sources",
+      "line": 50,
+      "cc": 21
+    },
+    {
+      "file": "services/llm/openrouter_client.py",
+      "func": "call_openrouter_model",
+      "line": 119,
+      "cc": 21
+    },
+    {
+      "file": "routers/admin_payments.py",
+      "func": "admin_set_stripe_prices",
+      "line": 479,
+      "cc": 21
+    },
+    {
+      "file": "routers/notify_interest.py",
+      "func": "notify_interest",
+      "line": 63,
+      "cc": 21
+    },
+    {
+      "file": "routers/admin_ops_config.py",
+      "func": "admin_set_github_app_config",
+      "line": 496,
+      "cc": 21
+    },
+    {
+      "file": "routers/deploy.py",
+      "func": "_run_deploy_ftp_or_sftp",
+      "line": 330,
+      "cc": 21
+    },
+    {
+      "file": "routers/admin_projects_brain.py",
+      "func": "code_surface",
+      "line": 280,
+      "cc": 21
+    },
+    {
+      "file": "main.py",
+      "func": "_resolve_build_hash",
+      "line": 2533,
+      "cc": 20
+    },
+    {
+      "file": "services/rollback_manager.py",
+      "func": "execute_rollback",
+      "line": 66,
+      "cc": 20
+    },
+    {
+      "file": "services/financials.py",
+      "func": "compute_financials",
+      "line": 279,
+      "cc": 20
+    },
+    {
+      "file": "services/db_restore.py",
+      "func": "restore_to_scratch",
+      "line": 81,
+      "cc": 20
+    },
+    {
+      "file": "services/risk_routing.py",
+      "func": "score_change",
+      "line": 150,
+      "cc": 20
+    },
+    {
+      "file": "services/project_brain.py",
+      "func": "format_brain_for_agent",
+      "line": 873,
+      "cc": 20
+    },
+    {
+      "file": "services/design_linter.py",
+      "func": "lint_file_blocks",
+      "line": 156,
+      "cc": 20
+    },
+    {
+      "file": "services/ora_chat/providers.py",
+      "func": "stream_call",
+      "line": 67,
+      "cc": 20
+    },
+    {
+      "file": "core/intent_gateway.py",
+      "func": "_classify_heuristic",
+      "line": 113,
+      "cc": 20
+    },
+    {
+      "file": "routers/cto_projects.py",
+      "func": "search_graph",
+      "line": 660,
+      "cc": 20
+    },
+    {
+      "file": "routers/cto_projects.py",
+      "func": "add_project",
+      "line": 852,
+      "cc": 20
+    },
+    {
+      "file": "routers/cto_projects.py",
+      "func": "get_project_tree",
+      "line": 1349,
+      "cc": 20
+    },
+    {
+      "file": "routers/admin_payments.py",
+      "func": "reconcile_pending_payments",
+      "line": 110,
+      "cc": 20
+    },
+    {
+      "file": "routers/admin_payments.py",
+      "func": "admin_get_stripe_prices",
+      "line": 399,
+      "cc": 20
+    },
+    {
+      "file": "routers/auth.py",
+      "func": "login",
+      "line": 437,
+      "cc": 20
+    },
+    {
+      "file": "routers/qa_probe.py",
+      "func": "chat_probe",
+      "line": 80,
+      "cc": 20
+    },
+    {
+      "file": "scripts/self_scan.py",
+      "func": "build_local_text_cache",
+      "line": 33,
+      "cc": 19
+    },
+    {
+      "file": "services/browser_self_test.py",
+      "func": "classify_frontend_change",
+      "line": 73,
+      "cc": 19
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "_run_syntax_check",
+      "line": 83,
+      "cc": 19
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "search_repo",
+      "line": 1418,
+      "cc": 19
+    },
+    {
+      "file": "services/vanguard_scanner.py",
+      "func": "run_two_round_scan",
+      "line": 611,
+      "cc": 19
+    },
+    {
+      "file": "services/loop_execute.py",
+      "func": "_localize_change_target",
+      "line": 117,
+      "cc": 19
+    },
+    {
+      "file": "services/ora_learning.py",
+      "func": "maybe_log_ora_escalation",
+      "line": 67,
+      "cc": 19
+    },
+    {
+      "file": "services/ora_chat/hallucination_classifier.py",
+      "func": "classify_batch",
+      "line": 106,
+      "cc": 19
+    },
+    {
+      "file": "services/ora_chat/slash_commands.py",
+      "func": "_rule",
+      "line": 352,
+      "cc": 19
+    },
+    {
+      "file": "core/quality_monitor.py",
+      "func": "QualityMonitor._compute_score",
+      "line": 59,
+      "cc": 19
+    },
+    {
+      "file": "routers/admin_qa.py",
+      "func": "_harvest_ci_status",
+      "line": 250,
+      "cc": 19
+    },
+    {
+      "file": "routers/github_bot.py",
+      "func": "push",
+      "line": 74,
+      "cc": 19
+    },
+    {
+      "file": "routers/security_scan.py",
+      "func": "_generate_remediation_report",
+      "line": 669,
+      "cc": 19
+    },
+    {
+      "file": "routers/upload.py",
+      "func": "upload_convert",
+      "line": 156,
+      "cc": 19
+    },
+    {
+      "file": "routers/admin_analytics.py",
+      "func": "loop_inspect",
+      "line": 2032,
+      "cc": 19
+    },
+    {
+      "file": "scripts/g15_dependency_scan.py",
+      "func": "_run_yarn_audit",
+      "line": 79,
+      "cc": 18
+    },
+    {
+      "file": "services/full_scan_orchestrator.py",
+      "func": "_normalise",
+      "line": 67,
+      "cc": 18
+    },
+    {
+      "file": "services/full_scan_orchestrator.py",
+      "func": "run_full_scan",
+      "line": 114,
+      "cc": 18
+    },
+    {
+      "file": "services/health_notifier.py",
+      "func": "_tick_once",
+      "line": 187,
+      "cc": 18
+    },
+    {
+      "file": "services/finding_fix_applier.py",
+      "func": "_generate_patched_content",
+      "line": 142,
+      "cc": 18
+    },
+    {
+      "file": "services/user_deletion.py",
+      "func": "cascade_delete_user_data",
+      "line": 38,
+      "cc": 18
+    },
+    {
+      "file": "services/loop_safety.py",
+      "func": "github_request_with_retry",
+      "line": 75,
+      "cc": 18
+    },
+    {
+      "file": "services/health_score.py",
+      "func": "score_performance",
+      "line": 342,
+      "cc": 18
+    },
+    {
+      "file": "services/health_score.py",
+      "func": "_ci_pass_rate_30d",
+      "line": 515,
+      "cc": 18
+    },
+    {
+      "file": "services/orchestrator.py",
+      "func": "_wants_execute",
+      "line": 1194,
+      "cc": 18
+    },
+    {
+      "file": "services/file_selector.py",
+      "func": "select_relevant_files",
+      "line": 79,
+      "cc": 18
+    },
+    {
+      "file": "services/llm/__init__.py",
+      "func": "call_emergent_watchdog",
+      "line": 320,
+      "cc": 18
+    },
+    {
+      "file": "services/ora_chat/session.py",
+      "func": "maybe_update_summary",
+      "line": 224,
+      "cc": 18
+    },
+    {
+      "file": "services/ora_chat/deep_research.py",
+      "func": "_fetch_github",
+      "line": 263,
+      "cc": 18
+    },
+    {
+      "file": "routers/mcp.py",
+      "func": "_tool_get_recent_commits",
+      "line": 782,
+      "cc": 18
+    },
+    {
+      "file": "routers/codebase_health.py",
+      "func": "_scan_security",
+      "line": 82,
+      "cc": 18
+    },
+    {
+      "file": "routers/admin_health.py",
+      "func": "status_all",
+      "line": 136,
+      "cc": 18
+    },
+    {
+      "file": "routers/loop.py",
+      "func": "cancel_loop",
+      "line": 936,
+      "cc": 18
+    },
+    {
+      "file": "routers/repo_status.py",
+      "func": "cleanup_delete",
+      "line": 335,
+      "cc": 18
+    },
+    {
+      "file": "routers/admin_bi.py",
+      "func": "_subscription_monthly_usd",
+      "line": 60,
+      "cc": 18
+    },
+    {
+      "file": "routers/admin_analytics.py",
+      "func": "admin_system_stats",
+      "line": 228,
+      "cc": 18
+    },
+    {
+      "file": "evals/runner.py",
+      "func": "run",
+      "line": 246,
+      "cc": 17
+    },
+    {
+      "file": "cto_services/auth.py",
+      "func": "current_dev",
+      "line": 18,
+      "cc": 17
+    },
+    {
+      "file": "scripts/migrate_iter34.py",
+      "func": "main",
+      "line": 58,
+      "cc": 17
+    },
+    {
+      "file": "scripts/ci_check_test_style.py",
+      "func": "main",
+      "line": 109,
+      "cc": 17
+    },
+    {
+      "file": "scripts/iter309_sse_reconnect_harness.py",
+      "func": "_stream_once",
+      "line": 99,
+      "cc": 17
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "LoopEngine._run_full_scan_pass",
+      "line": 2447,
+      "cc": 17
+    },
+    {
+      "file": "services/health_coverage_scan.py",
+      "func": "run_coverage_scan",
+      "line": 64,
+      "cc": 17
+    },
+    {
+      "file": "services/usage.py",
+      "func": "get_usage",
+      "line": 81,
+      "cc": 17
+    },
+    {
+      "file": "services/fix_triage.py",
+      "func": "_suggest_marker",
+      "line": 285,
+      "cc": 17
+    },
+    {
+      "file": "services/browser_self_test.py",
+      "func": "run_smoke",
+      "line": 172,
+      "cc": 17
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "_index_tfidf_search",
+      "line": 1737,
+      "cc": 17
+    },
+    {
+      "file": "services/ora_context.py",
+      "func": "validate_founder_pod_command",
+      "line": 471,
+      "cc": 17
+    },
+    {
+      "file": "services/loop_full_scan.py",
+      "func": "persist_findings_to_backlog",
+      "line": 57,
+      "cc": 17
+    },
+    {
+      "file": "services/rollback_drill.py",
+      "func": "run_drill",
+      "line": 90,
+      "cc": 17
+    },
+    {
+      "file": "services/loop_rollback.py",
+      "func": "run_rollback",
+      "line": 174,
+      "cc": 17
+    },
+    {
+      "file": "services/dev_skills.py",
+      "func": "get_env_vars",
+      "line": 284,
+      "cc": 17
+    },
+    {
+      "file": "services/dev_skills.py",
+      "func": "validate_syntax",
+      "line": 780,
+      "cc": 17
+    },
+    {
+      "file": "services/ora_chat/slash_commands.py",
+      "func": "_loop_stats",
+      "line": 222,
+      "cc": 17
+    },
+    {
+      "file": "routers/codebase_health.py",
+      "func": "_scan_dependencies",
+      "line": 308,
+      "cc": 17
+    },
+    {
+      "file": "routers/admin_payments.py",
+      "func": "admin_set_stripe_config",
+      "line": 333,
+      "cc": 17
+    },
+    {
+      "file": "routers/admin_ops_config.py",
+      "func": "db_health",
+      "line": 358,
+      "cc": 17
+    },
+    {
+      "file": "routers/vanguard_ci.py",
+      "func": "ingest_ci_findings",
+      "line": 119,
+      "cc": 17
+    },
+    {
+      "file": "routers/vanguard_ci.py",
+      "func": "list_ci_findings",
+      "line": 194,
+      "cc": 17
+    },
+    {
+      "file": "routers/repo_status.py",
+      "func": "cleanup_summary",
+      "line": 286,
+      "cc": 17
+    },
+    {
+      "file": "routers/ora_chat.py",
+      "func": "run_slash",
+      "line": 152,
+      "cc": 17
+    },
+    {
+      "file": "routers/ora_chat.py",
+      "func": "send_message",
+      "line": 287,
+      "cc": 17
+    },
+    {
+      "file": "routers/admin_analytics.py",
+      "func": "agent_tokens",
+      "line": 669,
+      "cc": 17
+    },
+    {
+      "file": "routers/admin_analytics.py",
+      "func": "scope_drift_audit",
+      "line": 2119,
+      "cc": 17
+    },
+    {
+      "file": "main.py",
+      "func": "NoSQLOpASGIGuard.__call__",
+      "line": 1834,
+      "cc": 16
+    },
+    {
+      "file": "evals/runner.py",
+      "func": "_run_prompt",
+      "line": 102,
+      "cc": 16
+    },
+    {
+      "file": "services/scaffold_security_gate.py",
+      "func": "scan_files",
+      "line": 55,
+      "cc": 16
+    },
+    {
+      "file": "services/mode_d_debugger.py",
+      "func": "llm_diagnosis",
+      "line": 460,
+      "cc": 16
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "LoopEngine",
+      "line": 402,
+      "cc": 16
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "LoopEngine._persist_chat_turns",
+      "line": 3604,
+      "cc": 16
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "LoopEngine._emit",
+      "line": 3652,
+      "cc": 16
+    },
+    {
+      "file": "services/sandbox_runner.py",
+      "func": "validate_generated_files",
+      "line": 151,
+      "cc": 16
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "get_commit_diff",
+      "line": 1783,
+      "cc": 16
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "save_finding",
+      "line": 1911,
+      "cc": 16
+    },
+    {
+      "file": "services/architecture_health.py",
+      "func": "_scan_imports",
+      "line": 238,
+      "cc": 16
+    },
+    {
+      "file": "services/loop_execute.py",
+      "func": "_generate_one_inner",
+      "line": 219,
+      "cc": 16
+    },
+    {
+      "file": "services/qa_matrix.py",
+      "func": "decide_scope",
+      "line": 467,
+      "cc": 16
+    },
+    {
+      "file": "services/loop_speed_diagnostic.py",
+      "func": "_execute_per_file_calls",
+      "line": 214,
+      "cc": 16
+    },
+    {
+      "file": "services/agents.py",
+      "func": "ReviewerAgent",
+      "line": 156,
+      "cc": 16
+    },
+    {
+      "file": "services/ora_council_retriever.py",
+      "func": "get_council_few_shot",
+      "line": 273,
+      "cc": 16
+    },
+    {
+      "file": "routers/codebase_health.py",
+      "func": "_scan_code_quality",
+      "line": 219,
+      "cc": 16
+    },
+    {
+      "file": "routers/loop.py",
+      "func": "rollback_loop",
+      "line": 1149,
+      "cc": 16
+    },
+    {
+      "file": "routers/admin_ops_config.py",
+      "func": "admin_github_app_diagnostics",
+      "line": 611,
+      "cc": 16
+    },
+    {
+      "file": "routers/fix_pipeline.py",
+      "func": "preview_cost",
+      "line": 173,
+      "cc": 16
+    },
+    {
+      "file": "routers/fix_pipeline.py",
+      "func": "restart_job",
+      "line": 819,
+      "cc": 16
+    },
+    {
+      "file": "routers/version.py",
+      "func": "_read_commit",
+      "line": 96,
+      "cc": 16
+    },
+    {
+      "file": "routers/admin_analytics.py",
+      "func": "learning_health",
+      "line": 781,
+      "cc": 16
+    },
+    {
+      "file": "main.py",
+      "func": "_route_cache_mw",
+      "line": 2042,
+      "cc": 15
+    },
+    {
+      "file": "services/house_rules.py",
+      "func": "get_active_house_rules",
+      "line": 212,
+      "cc": 15
+    },
+    {
+      "file": "services/parallel_agents.py",
+      "func": "decompose_task",
+      "line": 42,
+      "cc": 15
+    },
+    {
+      "file": "services/onboarding_email.py",
+      "func": "eligible_users",
+      "line": 218,
+      "cc": 15
+    },
+    {
+      "file": "services/first50_campaign.py",
+      "func": "render_stage",
+      "line": 106,
+      "cc": 15
+    },
+    {
+      "file": "services/fix_triage.py",
+      "func": "_normalise",
+      "line": 253,
+      "cc": 15
+    },
+    {
+      "file": "services/loop_independent_verifier.py",
+      "func": "verify",
+      "line": 132,
+      "cc": 15
+    },
+    {
+      "file": "services/url_fetcher.py",
+      "func": "_is_safe_host",
+      "line": 64,
+      "cc": 15
+    },
+    {
+      "file": "services/graph_builder.py",
+      "func": "_llm_describe_files",
+      "line": 141,
+      "cc": 15
+    },
+    {
+      "file": "services/supabase_sweeper.py",
+      "func": "_process_one",
+      "line": 48,
+      "cc": 15
+    },
+    {
+      "file": "services/ora_fix_learning.py",
+      "func": "_finding_category",
+      "line": 102,
+      "cc": 15
+    },
+    {
+      "file": "services/vanguard_verify_agent.py",
+      "func": "_e2b_smoke",
+      "line": 471,
+      "cc": 15
+    },
+    {
+      "file": "services/fix_job_manager.py",
+      "func": "update_result_verified",
+      "line": 205,
+      "cc": 15
+    },
+    {
+      "file": "services/fix_job_manager.py",
+      "func": "close",
+      "line": 252,
+      "cc": 15
+    },
+    {
+      "file": "services/fix_job_manager.py",
+      "func": "subscribe",
+      "line": 301,
+      "cc": 15
+    },
+    {
+      "file": "services/citation_guard.py",
+      "func": "_read_paths_this_turn",
+      "line": 65,
+      "cc": 15
+    },
+    {
+      "file": "services/citation_guard.py",
+      "func": "CitationGuard.enforce",
+      "line": 124,
+      "cc": 15
+    },
+    {
+      "file": "services/ora_learning.py",
+      "func": "load_user_patterns",
+      "line": 294,
+      "cc": 15
+    },
+    {
+      "file": "services/agents.py",
+      "func": "ReviewerAgent.review",
+      "line": 165,
+      "cc": 15
+    },
+    {
+      "file": "services/file_selector.py",
+      "func": "score_file",
+      "line": 50,
+      "cc": 15
+    },
+    {
+      "file": "services/ora_chat/deep_research.py",
+      "func": "_fetch_one_url",
+      "line": 518,
+      "cc": 15
+    },
+    {
+      "file": "core/parliament.py",
+      "func": "_ceo_judge_call_with_rescue",
+      "line": 865,
+      "cc": 15
+    },
+    {
+      "file": "routers/cto_projects.py",
+      "func": "test_project_pat",
+      "line": 1260,
+      "cc": 15
+    },
+    {
+      "file": "routers/cto_projects.py",
+      "func": "get_project_file",
+      "line": 1436,
+      "cc": 15
+    },
+    {
+      "file": "routers/cto_projects.py",
+      "func": "retry_task",
+      "line": 1972,
+      "cc": 15
+    },
+    {
+      "file": "routers/chat.py",
+      "func": "_f12_has_real_signal",
+      "line": 361,
+      "cc": 15
+    },
+    {
+      "file": "routers/chat.py",
+      "func": "_maybe_guard_shell_handoff_followup",
+      "line": 1199,
+      "cc": 15
+    },
+    {
+      "file": "routers/admin_ops_config.py",
+      "func": "admin_get_github_app_config",
+      "line": 417,
+      "cc": 15
+    },
+    {
+      "file": "routers/admin_users.py",
+      "func": "first_message_sample",
+      "line": 1013,
+      "cc": 15
+    },
+    {
+      "file": "routers/admin_bi.py",
+      "func": "_fetch_stripe_metrics",
+      "line": 95,
+      "cc": 15
+    },
+    {
+      "file": "routers/user_rollback.py",
+      "func": "revert_last_ship",
+      "line": 89,
+      "cc": 15
+    },
+    {
+      "file": "routers/auth.py",
+      "func": "google_session",
+      "line": 344,
+      "cc": 15
+    },
+    {
+      "file": "routers/admin.py",
+      "func": "_github_app_live_probe",
+      "line": 318,
+      "cc": 15
+    },
+    {
+      "file": "scripts/timeout_audit.py",
+      "func": "run_audit",
+      "line": 139,
+      "cc": 14
+    },
+    {
+      "file": "services/house_rules.py",
+      "func": "set_house_rules_doc",
+      "line": 165,
+      "cc": 14
+    },
+    {
+      "file": "services/mode_classifier.py",
+      "func": "classify_intent_v2",
+      "line": 90,
+      "cc": 14
+    },
+    {
+      "file": "services/restore_drill_cron.py",
+      "func": "run_restore_drill",
+      "line": 52,
+      "cc": 14
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "LoopEngine._apply_integrity_guard_to_report",
+      "line": 1809,
+      "cc": 14
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "LoopEngine._do_scan",
+      "line": 2280,
+      "cc": 14
+    },
+    {
+      "file": "services/error_translator.py",
+      "func": "_llm_rewrite",
+      "line": 208,
+      "cc": 14
+    },
+    {
+      "file": "services/minimal_edit.py",
+      "func": "try_minimal_edit",
+      "line": 166,
+      "cc": 14
+    },
+    {
+      "file": "services/correction_rules.py",
+      "func": "match_rules",
+      "line": 162,
+      "cc": 14
+    },
+    {
+      "file": "services/github_sync.py",
+      "func": "_compute",
+      "line": 71,
+      "cc": 14
+    },
+    {
+      "file": "services/task_diff.py",
+      "func": "build_files_changed",
+      "line": 35,
+      "cc": 14
+    },
+    {
+      "file": "services/ora_fix_learning.py",
+      "func": "record_scan_run",
+      "line": 189,
+      "cc": 14
+    },
+    {
+      "file": "services/topup_alerts.py",
+      "func": "_render_email",
+      "line": 294,
+      "cc": 14
+    },
+    {
+      "file": "services/repo_indexing.py",
+      "func": "build_repo_index",
+      "line": 117,
+      "cc": 14
+    },
+    {
+      "file": "services/admin_analytics_cache.py",
+      "func": "cached_agg",
+      "line": 135,
+      "cc": 14
+    },
+    {
+      "file": "services/bin_context.py",
+      "func": "build_bin_context",
+      "line": 120,
+      "cc": 14
+    },
+    {
+      "file": "services/inventory_service.py",
+      "func": "scan_git_range",
+      "line": 118,
+      "cc": 14
+    },
+    {
+      "file": "services/rate_limiter.py",
+      "func": "_ensure_redis",
+      "line": 173,
+      "cc": 14
+    },
+    {
+      "file": "services/orchestrator.py",
+      "func": "run_post_edit_hook",
+      "line": 397,
+      "cc": 14
+    },
+    {
+      "file": "services/funnel_nudge_cron.py",
+      "func": "current_stage_for_user",
+      "line": 298,
+      "cc": 14
+    },
+    {
+      "file": "services/ora_client.py",
+      "func": "call_ora",
+      "line": 175,
+      "cc": 14
+    },
+    {
+      "file": "services/mode_e_auditor.py",
+      "func": "build_audit_report",
+      "line": 262,
+      "cc": 14
+    },
+    {
+      "file": "services/mode_e_auditor.py",
+      "func": "run_audit",
+      "line": 322,
+      "cc": 14
+    },
+    {
+      "file": "services/llm/openrouter_providers.py",
+      "func": "_call_longcat",
+      "line": 191,
+      "cc": 14
+    },
+    {
+      "file": "services/ora_chat/deep_research.py",
+      "func": "_is_safe_public_url",
+      "line": 387,
+      "cc": 14
+    },
+    {
+      "file": "core/parliament.py",
+      "func": "_llm_call_protected",
+      "line": 360,
+      "cc": 14
+    },
+    {
+      "file": "core/tool_router.py",
+      "func": "get_tools_for_task",
+      "line": 109,
+      "cc": 14
+    },
+    {
+      "file": "routers/codebase_health.py",
+      "func": "scanner_feedback",
+      "line": 1171,
+      "cc": 14
+    },
+    {
+      "file": "routers/oauth.py",
+      "func": "oauth_token",
+      "line": 347,
+      "cc": 14
+    },
+    {
+      "file": "routers/suggestions.py",
+      "func": "_analyze_with_groq",
+      "line": 99,
+      "cc": 14
+    },
+    {
+      "file": "routers/loop.py",
+      "func": "loop_history",
+      "line": 1262,
+      "cc": 14
+    },
+    {
+      "file": "routers/loop.py",
+      "func": "loop_diagnostics",
+      "line": 1387,
+      "cc": 14
+    },
+    {
+      "file": "routers/chat.py",
+      "func": "classify_intent",
+      "line": 439,
+      "cc": 14
+    },
+    {
+      "file": "routers/admin_users.py",
+      "func": "user_patterns_insights",
+      "line": 1077,
+      "cc": 14
+    },
+    {
+      "file": "routers/payments.py",
+      "func": "_match_discovered_price",
+      "line": 238,
+      "cc": 14
+    },
+    {
+      "file": "routers/payments.py",
+      "func": "create_checkout",
+      "line": 331,
+      "cc": 14
+    },
+    {
+      "file": "routers/admin_bin.py",
+      "func": "llm_credits",
+      "line": 310,
+      "cc": 14
+    },
+    {
+      "file": "routers/auth.py",
+      "func": "login_2fa_verify",
+      "line": 533,
+      "cc": 14
+    },
+    {
+      "file": "routers/github_oauth.py",
+      "func": "connect",
+      "line": 110,
+      "cc": 14
+    },
+    {
+      "file": "routers/admin_analytics.py",
+      "func": "token_pnl",
+      "line": 533,
+      "cc": 14
+    },
+    {
+      "file": "routers/admin_projects_brain.py",
+      "func": "get_architecture",
+      "line": 88,
+      "cc": 14
+    },
+    {
+      "file": "evals/harness.py",
+      "func": "leak_scorer",
+      "line": 188,
+      "cc": 13
+    },
+    {
+      "file": "scripts/g21_security_scan.py",
+      "func": "scan_misconfig",
+      "line": 64,
+      "cc": 13
+    },
+    {
+      "file": "scripts/loop_speed_report.py",
+      "func": "main",
+      "line": 36,
+      "cc": 13
+    },
+    {
+      "file": "scripts/timeout_audit.py",
+      "func": "audit_python_file",
+      "line": 51,
+      "cc": 13
+    },
+    {
+      "file": "services/mode_d_debugger.py",
+      "func": "parse_f12_payload",
+      "line": 237,
+      "cc": 13
+    },
+    {
+      "file": "services/code_reviewer.py",
+      "func": "_parse_file_blocks",
+      "line": 119,
+      "cc": 13
+    },
+    {
+      "file": "services/url_fetcher.py",
+      "func": "_fetch_one",
+      "line": 117,
+      "cc": 13
+    },
+    {
+      "file": "services/supabase_provisioner.py",
+      "func": "create_project",
+      "line": 187,
+      "cc": 13
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "read_repo_file",
+      "line": 541,
+      "cc": 13
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "_ensure_repo_snapshot",
+      "line": 1242,
+      "cc": 13
+    },
+    {
+      "file": "services/finding_fix_applier.py",
+      "func": "_fetch_file_content",
+      "line": 64,
+      "cc": 13
+    },
+    {
+      "file": "services/ora_fix_learning.py",
+      "func": "get_rule_stats",
+      "line": 224,
+      "cc": 13
+    },
+    {
+      "file": "services/rollback_two_phase.py",
+      "func": "preview_rollback",
+      "line": 42,
+      "cc": 13
+    },
+    {
+      "file": "services/loop_verify.py",
+      "func": "verify_files",
+      "line": 124,
+      "cc": 13
+    },
+    {
+      "file": "services/repo_context.py",
+      "func": "get_repo_context",
+      "line": 533,
+      "cc": 13
+    },
+    {
+      "file": "services/loop_diff_classifier.py",
+      "func": "classify",
+      "line": 62,
+      "cc": 13
+    },
+    {
+      "file": "services/g22_idle_spend_guard.py",
+      "func": "check_idle_window_spend",
+      "line": 49,
+      "cc": 13
+    },
+    {
+      "file": "services/project_brain.py",
+      "func": "_maybe_append_github_commits",
+      "line": 94,
+      "cc": 13
+    },
+    {
+      "file": "services/rollback_drill.py",
+      "func": "_resolve_write_token",
+      "line": 57,
+      "cc": 13
+    },
+    {
+      "file": "services/health_score.py",
+      "func": "_rollback_penalty",
+      "line": 473,
+      "cc": 13
+    },
+    {
+      "file": "services/dev_skills.py",
+      "func": "find_package_docs",
+      "line": 695,
+      "cc": 13
+    },
+    {
+      "file": "services/loop_task_specs.py",
+      "func": "freeze",
+      "line": 59,
+      "cc": 13
+    },
+    {
+      "file": "services/mode_e_auditor.py",
+      "func": "llm_deep_audit",
+      "line": 181,
+      "cc": 13
+    },
+    {
+      "file": "services/ora_chat/session.py",
+      "func": "append_message",
+      "line": 114,
+      "cc": 13
+    },
+    {
+      "file": "services/ora_chat/deep_research.py",
+      "func": "_gh_fetch_repo_contents",
+      "line": 206,
+      "cc": 13
+    },
+    {
+      "file": "routers/cto_projects.py",
+      "func": "_hallucination_reasons",
+      "line": 2396,
+      "cc": 13
+    },
+    {
+      "file": "routers/onboarding.py",
+      "func": "send_connect_nudge",
+      "line": 46,
+      "cc": 13
+    },
+    {
+      "file": "routers/chat.py",
+      "func": "chat_task_followup",
+      "line": 3755,
+      "cc": 13
+    },
+    {
+      "file": "routers/admin_users.py",
+      "func": "list_users",
+      "line": 83,
+      "cc": 13
+    },
+    {
+      "file": "routers/support.py",
+      "func": "create_ticket_public",
+      "line": 180,
+      "cc": 13
+    },
+    {
+      "file": "routers/github_app.py",
+      "func": "install_callback",
+      "line": 260,
+      "cc": 13
+    },
+    {
+      "file": "routers/version.py",
+      "func": "_env_from_host",
+      "line": 219,
+      "cc": 13
+    },
+    {
+      "file": "cto_services/codebase_indexer.py",
+      "func": "_format_context_block",
+      "line": 203,
+      "cc": 12
+    },
+    {
+      "file": "scripts/g1_route_smoke_sweep.py",
+      "func": "_crawl_one",
+      "line": 46,
+      "cc": 12
+    },
+    {
+      "file": "scripts/g15_dependency_scan.py",
+      "func": "_run_pip_audit",
+      "line": 42,
+      "cc": 12
+    },
+    {
+      "file": "services/parallel_agents.py",
+      "func": "parse_file_blocks",
+      "line": 182,
+      "cc": 12
+    },
+    {
+      "file": "services/scaffold_design_review.py",
+      "func": "_parse",
+      "line": 97,
+      "cc": 12
+    },
+    {
+      "file": "services/scaffold_design_review.py",
+      "func": "verify_scaffold",
+      "line": 124,
+      "cc": 12
+    },
+    {
+      "file": "services/welcome_email.py",
+      "func": "_resend_send",
+      "line": 231,
+      "cc": 12
+    },
+    {
+      "file": "services/loop_engine.py",
+      "func": "LoopEngine._with_budget",
+      "line": 887,
+      "cc": 12
+    },
+    {
+      "file": "services/loop_ship_diff.py",
+      "func": "compute_files_diff",
+      "line": 41,
+      "cc": 12
+    },
+    {
+      "file": "services/full_scan_orchestrator.py",
+      "func": "_touches_web_or_dockerfile",
+      "line": 236,
+      "cc": 12
+    },
+    {
+      "file": "services/graph_builder.py",
+      "func": "extract_symbols",
+      "line": 97,
+      "cc": 12
+    },
+    {
+      "file": "services/pat_vault.py",
+      "func": "get_repo_token",
+      "line": 68,
+      "cc": 12
+    },
+    {
+      "file": "services/mermaid_diagram.py",
+      "func": "_compact_summary",
+      "line": 166,
+      "cc": 12
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "_fetch_subtree_contents",
+      "line": 1018,
+      "cc": 12
+    },
+    {
+      "file": "services/task_diff.py",
+      "func": "build_unified_diff_hunks",
+      "line": 119,
+      "cc": 12
+    },
+    {
+      "file": "services/ora_fix_learning.py",
+      "func": "recall_fabrication_caution",
+      "line": 554,
+      "cc": 12
+    },
+    {
+      "file": "services/repo_context.py",
+      "func": "_format_tree",
+      "line": 199,
+      "cc": 12
+    },
+    {
+      "file": "services/repo_context.py",
+      "func": "_fetch_subtree_contents",
+      "line": 443,
+      "cc": 12
+    },
+    {
+      "file": "services/scaffold_llm.py",
+      "func": "_parse_llm_response",
+      "line": 159,
+      "cc": 12
+    },
+    {
+      "file": "services/scaffold_llm.py",
+      "func": "generate_scaffold_via_parliament",
+      "line": 217,
+      "cc": 12
+    },
+    {
+      "file": "services/codebase_indexer.py",
+      "func": "_format_context_block",
+      "line": 199,
+      "cc": 12
+    },
+    {
+      "file": "services/billing_cron.py",
+      "func": "bill_maxx_overages",
+      "line": 56,
+      "cc": 12
+    },
+    {
+      "file": "services/billing_cron.py",
+      "func": "grant_referral_reward",
+      "line": 140,
+      "cc": 12
+    },
+    {
+      "file": "services/qa_matrix.py",
+      "func": "regression_index",
+      "line": 91,
+      "cc": 12
+    },
+    {
+      "file": "services/qa_matrix.py",
+      "func": "verify_pass_is_real",
+      "line": 871,
+      "cc": 12
+    },
+    {
+      "file": "services/daily_digest.py",
+      "func": "_run_once",
+      "line": 142,
+      "cc": 12
+    },
+    {
+      "file": "services/repo_indexing.py",
+      "func": "_render_codebase_md",
+      "line": 408,
+      "cc": 12
+    },
+    {
+      "file": "services/mcp_scoped_tools.py",
+      "func": "classify_tool_groups",
+      "line": 156,
+      "cc": 12
+    },
+    {
+      "file": "services/integration_health.py",
+      "func": "_probe_stripe",
+      "line": 106,
+      "cc": 12
+    },
+    {
+      "file": "services/integration_health.py",
+      "func": "_probe_emergent_llm",
+      "line": 755,
+      "cc": 12
+    },
+    {
+      "file": "services/project_brain.py",
+      "func": "_gh_list_files",
+      "line": 472,
+      "cc": 12
+    },
+    {
+      "file": "services/verification_email.py",
+      "func": "_resend_send",
+      "line": 140,
+      "cc": 12
+    },
+    {
+      "file": "services/loop_token_ledger.py",
+      "func": "log_llm_usage",
+      "line": 94,
+      "cc": 12
+    },
+    {
+      "file": "services/mode_e_auditor.py",
+      "func": "check_quick_wins",
+      "line": 222,
+      "cc": 12
+    },
+    {
+      "file": "services/llm/_probes.py",
+      "func": "periodic_longcat_reprobe",
+      "line": 231,
+      "cc": 12
+    },
+    {
+      "file": "services/ora_chat/adversarial_review.py",
+      "func": "_parse_flags",
+      "line": 98,
+      "cc": 12
+    },
+    {
+      "file": "services/ora_chat/codebase_index.py",
+      "func": "bm25_relevant_files",
+      "line": 389,
+      "cc": 12
+    },
+    {
+      "file": "services/ora_chat/codebase_index.py",
+      "func": "system_highlights",
+      "line": 439,
+      "cc": 12
+    },
+    {
+      "file": "services/ora_chat/deep_research.py",
+      "func": "_robots_allows",
+      "line": 442,
+      "cc": 12
+    },
+    {
+      "file": "services/ora_chat/canary.py",
+      "func": "_send_message",
+      "line": 120,
+      "cc": 12
+    },
+    {
+      "file": "services/seo/schema_markup.py",
+      "func": "detect_page_type",
+      "line": 15,
+      "cc": 12
+    },
+    {
+      "file": "services/seo/meta_tags.py",
+      "func": "patch_meta_tags",
+      "line": 38,
+      "cc": 12
+    },
+    {
+      "file": "core/parliament.py",
+      "func": "_score_output",
+      "line": 82,
+      "cc": 12
+    },
+    {
+      "file": "routers/mcp.py",
+      "func": "_tool_search_repo",
+      "line": 921,
+      "cc": 12
+    },
+    {
+      "file": "routers/mcp.py",
+      "func": "_tool_get_project_info",
+      "line": 1196,
+      "cc": 12
+    },
+    {
+      "file": "routers/mfa.py",
+      "func": "disable",
+      "line": 178,
+      "cc": 12
+    },
+    {
+      "file": "routers/admin_first50_campaign.py",
+      "func": "dispatch",
+      "line": 115,
+      "cc": 12
+    },
+    {
+      "file": "routers/codebase_health.py",
+      "func": "_scan_performance",
+      "line": 171,
+      "cc": 12
+    },
+    {
+      "file": "routers/codebase_health.py",
+      "func": "_scan_database",
+      "line": 361,
+      "cc": 12
+    },
+    {
+      "file": "routers/cto_projects.py",
+      "func": "build_project_brain",
+      "line": 191,
+      "cc": 12
+    },
+    {
+      "file": "routers/cto_projects.py",
+      "func": "get_graph_tour",
+      "line": 619,
+      "cc": 12
+    },
+    {
+      "file": "routers/cto_projects.py",
+      "func": "graph_impact",
+      "line": 712,
+      "cc": 12
+    },
+    {
+      "file": "routers/cto_projects.py",
+      "func": "_classify_phase",
+      "line": 2173,
+      "cc": 12
+    },
+    {
+      "file": "routers/usage.py",
+      "func": "public_stats",
+      "line": 71,
+      "cc": 12
+    },
+    {
+      "file": "routers/admin_qa.py",
+      "func": "_harvest_a11y",
+      "line": 200,
+      "cc": 12
+    },
+    {
+      "file": "routers/admin_qa.py",
+      "func": "guard16_auth_hardening",
+      "line": 689,
+      "cc": 12
+    },
+    {
+      "file": "routers/admin_qa.py",
+      "func": "ci_vs_local_drift",
+      "line": 972,
+      "cc": 12
+    },
+    {
+      "file": "routers/synthetic_checks_ci.py",
+      "func": "ingest_synthetic_check",
+      "line": 37,
+      "cc": 12
+    },
+    {
+      "file": "routers/chat.py",
+      "func": "_persist_turn",
+      "line": 617,
+      "cc": 12
+    },
+    {
+      "file": "routers/vanguard_ci.py",
+      "func": "ci_ingest_status",
+      "line": 266,
+      "cc": 12
+    },
+    {
+      "file": "routers/deploy.py",
+      "func": "run_deploy",
+      "line": 451,
+      "cc": 12
+    },
+    {
+      "file": "routers/version.py",
+      "func": "_fetch_last_github_push",
+      "line": 279,
+      "cc": 12
+    },
+    {
+      "file": "routers/github_funnel.py",
+      "func": "funnel_stats",
+      "line": 135,
+      "cc": 12
+    },
+    {
+      "file": "routers/promo_first50.py",
+      "func": "verify_email",
+      "line": 128,
+      "cc": 12
+    },
+    {
+      "file": "main.py",
+      "func": "health_ora",
+      "line": 2801,
+      "cc": 11
+    },
+    {
+      "file": "main.py",
+      "func": "diag_memory",
+      "line": 3018,
+      "cc": 11
+    },
+    {
+      "file": "evals/runner.py",
+      "func": "_dispatch_scorers",
+      "line": 61,
+      "cc": 11
+    },
+    {
+      "file": "cto_services/auth.py",
+      "func": "require_admin",
+      "line": 85,
+      "cc": 11
+    },
+    {
+      "file": "scripts/session_start_dashboard.py",
+      "func": "main",
+      "line": 75,
+      "cc": 11
+    },
+    {
+      "file": "scripts/init_prod_collections.py",
+      "func": "_ensure_indexes",
+      "line": 342,
+      "cc": 11
+    },
+    {
+      "file": "services/aurem_managed_db.py",
+      "func": "validate_against_schema",
+      "line": 86,
+      "cc": 11
+    },
+    {
+      "file": "services/loop_outcomes.py",
+      "func": "record_shipped_commit",
+      "line": 49,
+      "cc": 11
+    },
+    {
+      "file": "services/stripe_client.py",
+      "func": "stripe_key",
+      "line": 66,
+      "cc": 11
+    },
+    {
+      "file": "services/github_org_client.py",
+      "func": "push_file",
+      "line": 161,
+      "cc": 11
+    },
+    {
+      "file": "services/payment_recovery_email.py",
+      "func": "_resend_send",
+      "line": 148,
+      "cc": 11
+    },
+    {
+      "file": "services/supabase_provisioner.py",
+      "func": "translate_schema_to_sql",
+      "line": 380,
+      "cc": 11
+    },
+    {
+      "file": "services/rollback_snapshot.py",
+      "func": "create_snapshot",
+      "line": 44,
+      "cc": 11
+    },
+    {
+      "file": "services/local_tools.py",
+      "func": "_repo_ctx_from",
+      "line": 246,
+      "cc": 11
+    },
+    {
+      "file": "services/supabase_sweeper.py",
+      "func": "sweep_once",
+      "line": 169,
+      "cc": 11
+    },
+    {
+      "file": "services/git_identity.py",
+      "func": "build_commit_message",
+      "line": 121,
+      "cc": 11
+    },
+    {
+      "file": "services/ora_fix_learning.py",
+      "func": "recall_similar_fixes",
+      "line": 365,
+      "cc": 11
+    },
+    {
+      "file": "services/ci_ingest_heartbeat.py",
+      "func": "heartbeat_status",
+      "line": 39,
+      "cc": 11
+    },
+    {
+      "file": "services/reasoning_evals.py",
+      "func": "scan_finding_matches",
+      "line": 199,
+      "cc": 11
+    },
+    {
+      "file": "services/vanguard_scanner.py",
+      "func": "scan_file_blocks",
+      "line": 273,
+      "cc": 11
+    },
+    {
+      "file": "services/architecture_health.py",
+      "func": "_iter_source_files",
+      "line": 140,
+      "cc": 11
+    },
+    {
+      "file": "services/architecture_health.py",
+      "func": "summarise",
+      "line": 507,
+      "cc": 11
+    },
+    {
+      "file": "services/scaffold_llm.py",
+      "func": "_path_is_safe",
+      "line": 67,
+      "cc": 11
+    },
+    {
+      "file": "services/topup_alerts.py",
+      "func": "classify",
+      "line": 58,
+      "cc": 11
+    },
+    {
+      "file": "services/loop_safety.py",
+      "func": "validate_github_token",
+      "line": 37,
+      "cc": 11
+    },
+    {
+      "file": "services/vercel_skills.py",
+      "func": "_vercel_get",
+      "line": 83,
+      "cc": 11
+    },
+    {
+      "file": "services/citation_guard.py",
+      "func": "CitationGuard",
+      "line": 87,
+      "cc": 11
+    },
+    {
+      "file": "services/qa_matrix.py",
+      "func": "_frontend_coverage_summary",
+      "line": 156,
+      "cc": 11
+    },
+    {
+      "file": "services/qa_matrix.py",
+      "func": "canary_e2e",
+      "line": 348,
+      "cc": 11
+    },
+    {
+      "file": "services/qa_matrix.py",
+      "func": "_run_secret_leak_scan",
+      "line": 628,
+      "cc": 11
+    },
+    {
+      "file": "services/boilerplate_audit.py",
+      "func": "read_js_constant",
+      "line": 127,
+      "cc": 11
+    },
+    {
+      "file": "services/github_app.py",
+      "func": "get_installation_token",
+      "line": 193,
+      "cc": 11
+    },
+    {
+      "file": "services/project_brain.py",
+      "func": "update_brain_from_conversation",
+      "line": 297,
+      "cc": 11
+    },
+    {
+      "file": "services/project_brain.py",
+      "func": "_gh_read_small",
+      "line": 511,
+      "cc": 11
+    },
+    {
+      "file": "services/mock_reality_check.py",
+      "func": "check_openrouter",
+      "line": 110,
+      "cc": 11
+    },
+    {
+      "file": "services/deploy_readiness.py",
+      "func": "_remote_state",
+      "line": 44,
+      "cc": 11
+    },
+    {
+      "file": "services/ora_chat/providers.py",
+      "func": "one_shot",
+      "line": 144,
+      "cc": 11
+    },
+    {
+      "file": "services/ora_chat/deep_research.py",
+      "func": "_fetch_reddit",
+      "line": 642,
+      "cc": 11
+    },
+    {
+      "file": "services/ora_chat/cost_tracker.py",
+      "func": "_maybe_send_threshold_alert",
+      "line": 247,
+      "cc": 11
+    },
+    {
+      "file": "services/seo/image_alts.py",
+      "func": "patch_image_alts",
+      "line": 83,
+      "cc": 11
+    },
+    {
+      "file": "services/seo/schema_markup.py",
+      "func": "generate_schema",
+      "line": 32,
+      "cc": 11
+    },
+    {
+      "file": "routers/codebase_health.py",
+      "func": "_check_scan_rate_limit",
+      "line": 935,
+      "cc": 11
+    },
+    {
+      "file": "routers/cto_projects.py",
+      "func": "update_project",
+      "line": 1495,
+      "cc": 11
+    },
+    {
+      "file": "routers/cto_projects.py",
+      "func": "rollback_task",
+      "line": 1712,
+      "cc": 11
+    },
+    {
+      "file": "routers/founder_offer.py",
+      "func": "claim_offer",
+      "line": 170,
+      "cc": 11
+    },
+    {
+      "file": "routers/engagement.py",
+      "func": "my_streak",
+      "line": 149,
+      "cc": 11
+    },
+    {
+      "file": "routers/admin_ops_config.py",
+      "func": "purge_caches",
+      "line": 204,
+      "cc": 11
+    },
+    {
+      "file": "routers/admin_users.py",
+      "func": "admin_delete_user",
+      "line": 768,
+      "cc": 11
+    },
+    {
+      "file": "routers/fix_pipeline.py",
+      "func": "_compute_diff_lines",
+      "line": 87,
+      "cc": 11
+    },
+    {
+      "file": "routers/fix_pipeline.py",
+      "func": "_verify_commit_exists",
+      "line": 642,
+      "cc": 11
+    },
+    {
+      "file": "routers/fix_pipeline.py",
+      "func": "retry_verify_commit",
+      "line": 774,
+      "cc": 11
+    },
+    {
+      "file": "routers/ora_chat.py",
+      "func": "image_generate",
+      "line": 1680,
+      "cc": 11
+    },
+    {
+      "file": "routers/github_app.py",
+      "func": "_upsert_installation",
+      "line": 128,
+      "cc": 11
+    },
+    {
+      "file": "routers/security_scan.py",
+      "func": "_scan_text",
+      "line": 146,
+      "cc": 11
+    },
+    {
+      "file": "routers/scaffold.py",
+      "func": "create_live_preview",
+      "line": 902,
+      "cc": 11
+    },
+    {
+      "file": "routers/admin_bin.py",
+      "func": "_fetch_openrouter_balance",
+      "line": 271,
+      "cc": 11
+    },
+    {
+      "file": "routers/github_oauth.py",
+      "func": "_request_origin",
+      "line": 31,
+      "cc": 11
+    },
+    {
+      "file": "routers/admin_projects_brain.py",
+      "func": "brain_recent_commits",
+      "line": 370,
+      "cc": 11
+    }
+  ],
+  "god_files": [
+    {
+      "module": "cto_services.db",
+      "path": "cto_services/db.py",
+      "imported_by": 119
+    },
+    {
+      "module": "cto_services.auth",
+      "path": "cto_services/auth.py",
+      "imported_by": 83
+    },
+    {
+      "module": "services.pat_vault",
+      "path": "services/pat_vault.py",
+      "imported_by": 21
+    },
+    {
+      "module": "services.usage",
+      "path": "services/usage.py",
+      "imported_by": 20
+    },
+    {
+      "module": "services.github_api_writer",
+      "path": "services/github_api_writer.py",
+      "imported_by": 14
+    },
+    {
+      "module": "services.founder_alerts",
+      "path": "services/founder_alerts.py",
+      "imported_by": 12
+    },
+    {
+      "module": "services.retry_guard",
+      "path": "services/retry_guard.py",
+      "imported_by": 11
+    },
+    {
+      "module": "services.vanguard_scanner",
+      "path": "services/vanguard_scanner.py",
+      "imported_by": 10
+    },
+    {
+      "module": "routers._admin_common",
+      "path": "routers/_admin_common.py",
+      "imported_by": 9
+    },
+    {
+      "module": "services.ora_fix_learning",
+      "path": "services/ora_fix_learning.py",
+      "imported_by": 8
+    }
+  ],
+  "circular_imports": [],
+  "boundary_violations": [
+    {
+      "file": "services/project_onboarding_scan.py",
+      "rule": "service-imports-router",
+      "detail": "from routers.codebase_health import _build_text_cache, SCANNERS"
+    },
+    {
+      "file": "services/loop_engine.py",
+      "rule": "service-imports-router",
+      "detail": "from routers.security_scan import _scan_text"
+    },
+    {
+      "file": "services/health_checks.py",
+      "rule": "service-imports-router",
+      "detail": "from routers.admin_qa import _harvest_counts, _harvest_ci_status"
+    },
+    {
+      "file": "services/integration_health.py",
+      "rule": "service-imports-router",
+      "detail": "from routers.payments import _match_discovered_price"
+    },
+    {
+      "file": "templates/stacks/react-fastapi/boilerplate/api/generated_app_email.py",
+      "rule": "http-call-outside-services",
+      "detail": "raw httpx/requests call \u2014 wrap it in services/"
+    },
+    {
+      "file": "templates/stacks/react-fastapi/boilerplate/api/aurem_db_client.py",
+      "rule": "http-call-outside-services",
+      "detail": "raw httpx/requests call \u2014 wrap it in services/"
+    },
+    {
+      "file": "scripts/iter309_sse_reconnect_harness.py",
+      "rule": "http-call-outside-services",
+      "detail": "raw httpx/requests call \u2014 wrap it in services/"
+    },
+    {
+      "file": "routers/version.py",
+      "rule": "http-call-outside-services",
+      "detail": "raw httpx/requests call \u2014 wrap it in services/"
+    }
+  ]
+}
