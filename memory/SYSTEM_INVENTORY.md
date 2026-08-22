@@ -820,3 +820,8 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `services/response_confidence.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-21T01:27:08.019951Z] <!-- inv:service:services/response_confidence.py -->
 - `HEALTH_CONFIRM_TICKS` — auto-detected in backend/services/health_notifier.py (verify) (default: unset) [Iter 0, 2026-08-21T04:27:40.792903Z] <!-- inv:envvar:HEALTH_CONFIRM_TICKS -->
 - `services/payment_recovery_email.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-21T15:39:46.876816Z] <!-- inv:service:services/payment_recovery_email.py -->
+
+### Iter 0 · 2026-08-22
+
+- `AUREM_DRILL_INSTALLATION_ID` — auto-detected in backend/services/rollback_drill.py (verify) (default: unset) [Iter 0, 2026-08-22T20:14:04.623106Z] <!-- inv:envvar:AUREM_DRILL_INSTALLATION_ID -->
+- `AUREM_DRILL_TOKEN` — auto-detected in backend/services/rollback_drill.py (verify) (default: unset) [Iter 0, 2026-08-22T20:14:04.623134Z] <!-- inv:envvar:AUREM_DRILL_TOKEN -->
