@@ -336,9 +336,25 @@ async def score_performance(db) -> dict:
     if db is None:
         return _unscored("database unavailable")
     cutoff_dt = datetime.now(timezone.utc) - timedelta(days=_PERF_WINDOW_DAYS)
-    samples = await db.health_endpoint_latency.find(
-        {"ts": {"$gte": cutoff_dt}}, {"_id": 0, "elapsed_ms": 1},
+    raw = await db.health_endpoint_latency.find(
+        {"ts": {"$gte": cutoff_dt}}, {"_id": 0, "elapsed_ms": 1, "path": 1},
     ).to_list(20000)
+    # 2026-08-24 — self-instrumentation pollution fix (founder-approved):
+    # known-long-running admin/self-check endpoints (the health-score
+    # computation itself, on-demand coverage runs, QA harvesters, boundary
+    # probes, founder-summary LLM generation) were skewing the p95 the
+    # score judges — the widget was scoring its own cost. They are
+    # excluded from the SLA sample; the unfiltered p95 stays in evidence
+    # for honesty.
+    excluded = tuple(
+        f"/api/aurem-dev{p}" for p in (
+            "/admin/health-score", "/admin/qa", "/admin/boundary-probes",
+            "/admin/founder-summary",
+        )
+    )
+    samples = [s for s in raw
+               if not str(s.get("path") or "").startswith(excluded)]
+    excluded_count = len(raw) - len(samples)
     tool_p95 = None
     try:
         cutoff_iso = cutoff_dt.isoformat()
@@ -356,10 +372,16 @@ async def score_performance(db) -> dict:
     evidence = {
         "window_days": _PERF_WINDOW_DAYS,
         "endpoint_sample_count": len(samples),
+        "sla_excluded_sample_count": excluded_count,
+        "sla_excluded_prefixes": [p.replace("/api/aurem-dev", "") for p in excluded],
         "tool_call_p95_ms_live": tool_p95,
         "sla_p95_good_ms": _PERF_P95_GOOD_MS,
         "sla_p95_bad_ms": _PERF_P95_BAD_MS,
     }
+    # Unfiltered p95 kept in evidence so the exclusion is transparent.
+    all_elapsed = sorted(s["elapsed_ms"] for s in raw)
+    if all_elapsed:
+        evidence["p95_ms_unfiltered"] = all_elapsed[int(len(all_elapsed) * 0.95) - 1]
     if len(samples) < _PERF_MIN_SAMPLES:
         return _unscored(
             f"Insufficient data — {len(samples)} endpoint-latency samples "
@@ -442,14 +464,40 @@ async def score_devops_infra(db) -> dict:
 
 # ── shared: rollback-unverified penalty (Data Handling + DevOps/Infra) ─
 async def _rollback_penalty(db) -> dict:
+    # 2026-08-24 — ROOT FIX: this previously read ONLY the legacy
+    # rollback_manager ledger (loop_sessions.rollback_status), which is
+    # blind to the rollback-v2 system's `rollback_attempts` ledger where
+    # all real drill/production rollback evidence now lives. Result: a
+    # permanent -25 "zero positive-path rollback evidence" penalty on
+    # DevOps/Infra + Data Handling despite verified successful rollbacks.
+    # Order: v2 ledger first (authoritative), legacy ledger as fallback.
+    try:
+        latest_v2 = await db.rollback_attempts.find_one(
+            {}, sort=[("timestamp", -1)],
+        )
+    except Exception as e:
+        latest_v2 = None
+        logger_reason = f"rollback_attempts lookup failed: {e!r}"
+    else:
+        logger_reason = None
+    if latest_v2:
+        if latest_v2.get("result") == "success":
+            return {"penalty": 0,
+                    "reason": (f"last rollback (v2 ledger) success — "
+                               f"mechanism={latest_v2.get('mechanism')}, "
+                               f"verified={latest_v2.get('verified')}, "
+                               f"at {latest_v2.get('finished_at') or latest_v2.get('timestamp')}")}
+        return {"penalty": 30,
+                "reason": (f"last rollback attempt (v2 ledger) FAILED: "
+                           f"{latest_v2.get('failure_reason')}")}
     try:
         from services.rollback_manager import rollback_status
         st = await rollback_status(db) or {}
     except Exception as e:
-        return {"penalty": 20, "reason": f"rollback_status lookup failed: {e!r}"}
+        return {"penalty": 20, "reason": logger_reason or f"rollback_status lookup failed: {e!r}"}
     last = st.get("last_rollback")
     if not last:
-        return {"penalty": 25, "reason": "zero positive-path rollback evidence on record"}
+        return {"penalty": 25, "reason": "zero positive-path rollback evidence on record (both ledgers empty)"}
     if last.get("error") or last.get("status") == "failed":
         return {"penalty": 30, "reason": f"last rollback attempt FAILED: {last.get('error')}"}
     return {"penalty": 0, "reason": f"last rollback {last.get('status')} "
