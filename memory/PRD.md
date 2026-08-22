@@ -4804,4 +4804,12 @@ Confidence: LIKELY solid based on a representative sample; not exhaustively CONF
 ### Testing summary
 Independent `testing_agent` pass (`/app/test_reports/iteration_pillars_2345_2026_08_24.json`): 100% backend (6/6 assertions), 100% frontend, zero blockers. Two non-blocking nits noted (404-vs-200 for missing founder-summary event_id; a control-flow comment suggestion in auth.py) — not fixed, tracked here as low-priority.
 
-1. **Rollback E2E
+1. **Rollback E2E** — blocked on founder sign-off (Rule 13) + disposable writable test repo.
+
+---
+
+## Founder decisions — post-pillar review round (2026-06)
+1. **Pillar 2 (deploy gate)**: HOLD — founder reviewing the workflow YAML diffs before Save to GitHub. Diffs shared: `auto_deploy.yml` (commit 46469a8) + `quality-gate.yml` (commit 9470c6b). No push, no live-run proof yet — gate remains UNPROVEN in real GitHub Actions until a deliberate failing build is blocked.
+2. **Pillar 3 (scan persistence)**: AWAITING founder confirmation that production `AUREM_CI_INGEST_TOKEN` is set. No production verification performed yet.
+3. **Pillar 1 (rollback)**: HOLD — founder reviewing the proposal in detail before authorizing implementation. Rule 13 stands; no rollback code to be written.
+4. **Pillar 4 (`needs_confirm` banner)**: NOTED-BUT-UNTOUCHED by explicit founder decision. The non-blocking banner in `ChatPanel.jsx` (~line 326) is deliberate prior design; changing it is out of scope for this build loop. If revisited later: it touches the live chat SSE protocol → requires separate approval + mandatory testing_agent run.
