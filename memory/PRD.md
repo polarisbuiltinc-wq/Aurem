@@ -4813,3 +4813,24 @@ Independent `testing_agent` pass (`/app/test_reports/iteration_pillars_2345_2026
 2. **Pillar 3 (scan persistence)**: AWAITING founder confirmation that production `AUREM_CI_INGEST_TOKEN` is set. No production verification performed yet.
 3. **Pillar 1 (rollback)**: HOLD — founder reviewing the proposal in detail before authorizing implementation. Rule 13 stands; no rollback code to be written.
 4. **Pillar 4 (`needs_confirm` banner)**: NOTED-BUT-UNTOUCHED by explicit founder decision. The non-blocking banner in `ChatPanel.jsx` (~line 326) is deliberate prior design; changing it is out of scope for this build loop. If revisited later: it touches the live chat SSE protocol → requires separate approval + mandatory testing_agent run.
+
+---
+
+## Deploy-gate manual-override procedure (founder-approved precondition for fail-closed gate — 2026-06)
+The `gate-on-ci` job in `auto_deploy.yml` is now fail-closed: if CI + Quality Gate don't both complete successfully within 12 minutes, the deploy is BLOCKED (exit 1). If GitHub Actions itself is degraded and blocks a deploy that should legitimately go through:
+
+**Step 1 — Preferred: re-run, don't bypass.** GitHub repo → Actions tab → select the failed "AUREM Auto-Deploy" run → "Re-run failed jobs". The gate polls *fresh* workflow state, so if CI/QG have since completed green (or their runs are re-run and pass), the gate opens on re-run. No code change, no bypass, full audit trail in Actions history.
+
+**Step 2 — True emergency only (Actions fully down, deploy genuinely urgent):** trigger the deploy provider's webhook directly, outside GitHub: `curl -X POST "<AUREM_DEPLOY_HOOK_URL value from repo secrets>" -H "Content-Type: application/json" -d '{"commit":"<sha>","ref":"refs/heads/main"}'`. Founder/admin only. MUST be recorded afterwards (commit sha, reason, timestamp) — an unrecorded bypass defeats the gate's audit purpose. NOTE (CONFIRMED from run history): `AUREM_DEPLOY_HOOK_URL` repo secret is currently EMPTY — the webhook step has been skipped on every historical run, so this path requires the secret to be configured first.
+
+**Never do:** edit the timeout branch in `auto_deploy.yml` back to allow (reintroduces the confirmed fail-open bug), or delete the gate job.
+
+## Pillar 2 — real GitHub Actions evidence gathered 2026-06 (post-approval verification)
+All queried live from the GitHub API (`GITHUB_ACTIONS_TOKEN`, HTTP 200):
+1. **Workflow changes are ALREADY on GitHub main.** Commits 9470c6b + 46469a8 (the gate/QG fixes) exist on the remote with Actions runs against them — platform auto-sync pushed them. No separate Save to GitHub needed for these.
+2. **Old fail-open bug: CONFIRMED with real production run data.** Commit 68a27268 (pre-fix): CI = cancelled, Quality Gate = failure, yet "Wait for CI tests" job = success (fell through the manual-override allow branch) and `deploy-and-report` ran to success. Same pattern on 622f1a6c, 373e306b, 1db511b1. Indisputable: failing/cancelled checks did not block deploys.
+3. **New gate blocked the deploy on 46469a8 — but NOT via its polling logic.** The gate job failed with 0 steps executed in ~3s (startup failure), and `deploy-and-report` was skipped via the `needs:` dependency. Block happened, but the new polling code has never actually executed on GitHub. Gate logic remains UNPROVEN in a live run.
+4. **BLOCKER (account-level, founder action required):** since 2026-08-22 ~07:18 UTC, EVERY workflow run on the repo fails at startup with 0 steps in ~2-3s — including "Force sync preview to main" which succeeded at 06:39 the same day. Most likely cause for a private repo on a personal account: GitHub Actions spending limit reached / billing failure (free private-repo minutes exhausted). Founder must check GitHub → Settings → Billing and plans → Actions spending limit / payment method, and repo Settings → Actions → ensure enabled. No E2E gate proof is possible until Actions runs execute steps again.
+5. **Side finding (CONFIRMED):** `AUREM_DEPLOY_HOOK_URL` repo secret is empty — "Trigger customer deploy webhook" was skipped on every historical run. Historical "deploy success" = workflow completed, not a real deploy webhook fired. The fail-open bug therefore never fired a real webhook, but fixing the gate remains correct for when the hook is configured.
+
+**Remaining to close Pillar 2 (in order):** (a) founder restores GitHub Actions execution (billing/settings); (b) push a deliberately failing build → confirm gate job's polling logic detects the failure and blocks (`deploy-and-report` skipped, gate log shows the conclusion-based error, not a startup crash); (c) revert the failing marker, push green → confirm gate opens. Only then: CONFIRMED closed.
