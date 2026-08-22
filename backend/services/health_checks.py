@@ -389,11 +389,10 @@ async def _check_g21_security_scan() -> dict:
     return result_red(f"{findings} misconfig finding(s), {unpinned} unpinned dep(s)")
 
 
-async def _check_g16_auth_hardening() -> dict:
-    """G16 — Auth-hardening posture. Calls the guard16 endpoint's
-    underlying logic in-process (no HTTP self-call) and maps to
-    3-state. See routers/admin_qa.guard16_auth_hardening for the
-    real check details."""
+def g16_auth_hardening_raw() -> dict:
+    """Raw findings for G16 — shared by the registry check below AND
+    services/health_score.py's score_security() (2026-08-24 Inventory
+    Sweep wiring). Extracted so both callers use one source of truth."""
     import os
     import bcrypt
     from cto_services.auth import JWT_SECRET as _JWT
@@ -425,9 +424,22 @@ async def _check_g16_auth_hardening() -> dict:
     if lockout_min < 5:
         findings.append(f"LOGIN_LOCKOUT_MIN={lockout_min}min (<5)")
 
+    return {"findings": findings, "rounds": rounds,
+            "fail_limit": fail_limit, "lockout_min": lockout_min}
+
+
+async def _check_g16_auth_hardening() -> dict:
+    """G16 — Auth-hardening posture. Calls the guard16 endpoint's
+    underlying logic in-process (no HTTP self-call) and maps to
+    3-state. See routers/admin_qa.guard16_auth_hardening for the
+    real check details."""
+    raw = g16_auth_hardening_raw()
+    findings = raw["findings"]
     if findings:
         return result_red(f"{len(findings)} auth-hardening issue(s): {'; '.join(findings)}")
-    return result_green(f"JWT_SECRET ok · bcrypt rounds={rounds} · lockout {fail_limit}/{lockout_min}m")
+    return result_green(
+        f"JWT_SECRET ok · bcrypt rounds={raw['rounds']} · "
+        f"lockout {raw['fail_limit']}/{raw['lockout_min']}m")
 
 
 # ═══════════════════════════════════════════════════════════════

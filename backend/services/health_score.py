@@ -37,6 +37,21 @@ WEIGHTS = {
     "devops_infra":      5,
 }
 
+# 2026-08-24 · founder-mandated disclaimer for the Reliability/Bug
+# Density categories: whether preview-pod dev-restart churn makes this
+# score meaningfully different from what production would show is
+# UNCERTAIN — NOT confirmed either way until real production data is
+# observed. Do not let this become a settled assumption. Surfaced in
+# the widget via CategoryBar's `caveat` field.
+_RELIABILITY_BUG_DENSITY_CAVEAT = (
+    "UNCERTAIN — not yet confirmed against real production data. This "
+    "score is built from G17/G19/G20 guard history, which in a "
+    "frequently-restarted preview/dev pod can include restart-loop "
+    "noise from ordinary hot-reloads and fork sessions. Whether "
+    "production (which restarts far less) gives a meaningfully "
+    "different number is a plausible but UNVERIFIED theory."
+)
+
 _TEST_COVERAGE_STALE_DAYS = 7
 _ARCH_REVIEW_STALE_DAYS   = 30
 _DRILL_STALE_DAYS         = 14   # drill cadence is ~7d — allow 2x buffer
@@ -79,65 +94,143 @@ def _scored(score: int, evidence: dict, last_verified: Optional[str], live: bool
             "last_verified": last_verified}
 
 
-# ── 1. Security — UNSCORED per Finding B (ingest pipeline stale) ──────
+# ── 1. Security — LIVE via Health Registry guards G21+G16+G3 ──────────
+# 2026-08-24 · Inventory Sweep wiring — the old dep-scan-only signal is
+# replaced with three already-shipped, already-persisted guard checks
+# (services/health_checks.py) that were previously only feeding the
+# admin cockpit tiles and never touched health_score.py.
 async def score_security(db) -> dict:
-    doc = None
+    import asyncio
+    from scripts.g21_security_scan import run_scan
+    from services.health_checks import g16_auth_hardening_raw
+    from services.scope_drift_guard import get_scope_block_stats
+
+    g21 = await asyncio.to_thread(run_scan)
+    g16 = g16_auth_hardening_raw()
+    g3 = await get_scope_block_stats(db) if db is not None else {"available": False}
+
+    unpinned = g21["supply_chain"]["unpinned_count"]
+    misconfig = g21["misconfig"]["finding_count"]
+    g21_score = max(0, 100 - unpinned * 10 - misconfig * 15)
+
+    g16_findings = g16["findings"]
+    g16_score = max(0, 100 - len(g16_findings) * 25)
+
+    g3_score = 100 if g3.get("available") else 0
+
+    score = 0.4 * g21_score + 0.4 * g16_score + 0.2 * g3_score
+
+    dep_scan_doc = None
     if db is not None:
         try:
-            doc = await db.synthetic_checks.find_one(
+            dep_scan_doc = await db.synthetic_checks.find_one(
                 {"kind": "g15_dep_scan"}, sort=[("finished_at", -1)],
             )
         except Exception:
-            doc = None
-    evidence = {}
-    if doc:
-        evidence = {
-            "last_dep_scan_finished_at": str(doc.get("finished_at")),
-            "total_findings": doc.get("total_findings"),
-            "high_critical": doc.get("high_critical"),
-            "note": "CI job runs and gates on every push (confirmed), "
-                    "but result-persistence has been silently dropping "
-                    "since production's AUREM_CI_INGEST_TOKEN is unset "
-                    "(HTTP 503) — see PRD Finding B.",
-        }
-    return _unscored(
-        "No trustworthy CURRENT security signal — dependency/secret-scan "
-        "ingestion pipeline has been dropping results since ~2026-08-20 "
-        "pending a production env var fix (Finding B). IDOR/injection "
-        "checks have zero persisted history.",
-        evidence,
-    )
+            dep_scan_doc = None
+
+    evidence = {
+        "g21_security_scan": {"unpinned_deps": unpinned,
+                              "misconfig_findings": misconfig,
+                              "misconfig_details": g21["misconfig"]["findings"],
+                              "pass": g21["pass"]},
+        "g16_auth_hardening": g16,
+        "g3_scope_drift_guard": g3,
+        "g15_dep_scan_ci_ingest": {
+            "last_finished_at": str(dep_scan_doc.get("finished_at")) if dep_scan_doc else None,
+            "note": "Separate CI job (runs+gates on every push, confirmed) — "
+                    "result-persistence has been silently dropping since "
+                    "production's AUREM_CI_INGEST_TOKEN is unset (Finding B). "
+                    "NOT part of this score; informational only.",
+        },
+        "note": "Live static scan (G21) + auth-hardening posture (G16) + "
+                "scope-drift protected-path guard (G3) — see PRD Inventory "
+                "Sweep 2026-08-24. Was UNSCORED before this wiring.",
+    }
+    return _scored(score, evidence, _iso_now(), live=True)
 
 
-# ── 2. Bug Density — permanently UNSCORED, no tracker exists ──────────
+# ── 2. Bug Density — PARTIAL PROXY via G20 incident log (2026-08-24) ──
+# NOT a code-level bug count. Counts AUREM's own infra/guard-detected
+# incidents (open + resolved-30d + MTTR). A dedicated bug-tracker table
+# for actual code defects remains separate future work — see PRD
+# Inventory Sweep 2026-08-24.
 async def score_bug_density(db) -> dict:
-    return _unscored(
-        "Permanently unscored — no internal bug-tracker source exists. "
-        "Would require repurposing customer-project findings, which "
-        "would misrepresent AUREM's own bug rate.",
-    )
+    if db is None:
+        return _unscored("database unavailable")
+    from services.incident_log import incident_stats
+    stats = await incident_stats(db)
+    evidence = {
+        "g20_incident_log": stats,
+        "note": "PARTIAL PROXY ONLY — this is AUREM's own infra/guard-"
+                "detected incident count (G20 incident log: open + "
+                "resolved-30d + MTTR), NOT a code-level bug count. No "
+                "source exists yet for actual bug/defect tracking. A "
+                "dedicated bug-tracker table remains separate future work.",
+    }
+    if not stats.get("total"):
+        result = _unscored(
+            "No incidents logged yet by the guard system (G20 incident "
+            "log is empty) — not a failure signal, just no history yet.",
+            evidence,
+        )
+        result["caveat"] = _RELIABILITY_BUG_DENSITY_CAVEAT
+        return result
+    open_ = stats.get("open") or 0
+    resolved_30d = stats.get("resolved_30d") or 0
+    score = max(0, 100 - open_ * 15 - resolved_30d * 3)
+    result = _scored(score, evidence, _iso_now(), live=True)
+    result["caveat"] = _RELIABILITY_BUG_DENSITY_CAVEAT
+    return result
 
 
-# ── 3. Reliability — UNSCORED, no 5xx/timeout aggregation exists ──────
+# ── 3. Reliability — LIVE via Health Registry guards G17+G19+G20 ──────
+# 2026-08-24 · Inventory Sweep wiring. Sentry (live, real exception
+# capture) was identified as a strong future addition but deliberately
+# deferred by founder decision — no new credential dependency added
+# until this wiring's signal is evaluated first.
 async def score_reliability(db) -> dict:
-    evidence = {}
-    if db is not None:
-        try:
-            recent = await db.quality_scores.count_documents(
-                {"timestamp_ts": {"$gte": time.time() - 7 * 86400}},
-            )
-            evidence = {"quality_scores_7d_count": recent,
-                        "note": "quality_scores tracks LLM response-quality "
-                                "heuristics (hallucination/refusal/repetition), "
-                                "not 5xx/timeout/silent-failure rate — an "
-                                "adjacent but different signal."}
-        except Exception:
-            pass
-    return _unscored(
-        "No rolling 5xx-rate / timeout-rate / unhandled-exception "
-        "aggregation exists yet.",
-        evidence,
-    )
+    if db is None:
+        return _unscored("database unavailable")
+    from services.retry_guard import snapshot_all, trip_counts_7d
+    from services.process_recovery import recovery_status
+    from services.incident_log import incident_stats
+
+    breakers = snapshot_all()
+    trips_7d = await trip_counts_7d(db)
+    g19 = await recovery_status(db)
+    g20 = await incident_stats(db)
+
+    open_breakers = [d for d, s in breakers.items() if s["state"] == "open"]
+    total_trips_7d = sum(trips_7d.values())
+    g17_score = max(0, 100 - len(open_breakers) * 30 - total_trips_7d * 5)
+
+    loop_trips = g19.get("loop_trips_7d") or 0
+    restarts = g19.get("restarts_7d") or 0
+    # Allow a baseline of restarts/week from normal deploys/hot-reload
+    # before penalising — only excess restarts count against the score.
+    g19_score = max(0, 100 - loop_trips * 50 - max(0, restarts - 5) * 3)
+
+    open_incidents = g20.get("open") or 0
+    resolved_30d = g20.get("resolved_30d") or 0
+    g20_score = max(0, 100 - open_incidents * 25 - resolved_30d * 2)
+
+    score = 0.35 * g17_score + 0.30 * g19_score + 0.35 * g20_score
+
+    evidence = {
+        "g17_breakers": {"open_deps": open_breakers, "trip_counts_7d": trips_7d,
+                         "snapshot": breakers},
+        "g19_process_recovery": g19,
+        "g20_incidents": g20,
+        "note": "Live breaker/process/incident guards (G17/G19/G20) — see "
+                "PRD Inventory Sweep 2026-08-24. No HTTP 5xx-rate "
+                "aggregation exists yet; Sentry (live, real exception "
+                "capture) identified as the natural next addition but "
+                "deferred by founder decision for now.",
+    }
+    result = _scored(score, evidence, _iso_now(), live=True)
+    result["caveat"] = _RELIABILITY_BUG_DENSITY_CAVEAT
+    return result
 
 
 # ── 4. Test Coverage — feasible with instrumentation (built) ──────────

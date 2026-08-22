@@ -86,6 +86,13 @@ function CategoryBar({ id, cat, weight, expanded, onToggle }) {
           last verified {relAge(cat.last_verified)}
         </div>
       )}
+      {cat.caveat && (
+        <div data-testid={`health-score-caveat-${id}`}
+             style={{ fontSize: 10, color: C.amber, marginTop: 4, fontStyle: "italic",
+                       lineHeight: 1.4, borderLeft: `2px solid ${C.amber}66`, paddingLeft: 6 }}>
+          ⚠ {cat.caveat}
+        </div>
+      )}
       {cat.status === "unscored" && (
         <div style={{ fontSize: 10, color: C.gray, marginTop: 3 }}>
           {cat.reason}

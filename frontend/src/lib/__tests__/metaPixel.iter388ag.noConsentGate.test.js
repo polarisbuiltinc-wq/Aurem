@@ -35,11 +35,13 @@ describe("Meta Pixel — Iter 388-ag runtime contract", () => {
   const block = pixelBlockMatch ? pixelBlockMatch[0] : "";
 
   it("pixel ID 1571887197933821 is initialised", () => {
-    expect(block).toMatch(/fbq\('init', '1571887197933821'\)/);
+    // Iter 391 wrapped the calls in `f.fbq(...)` with no space after the
+    // comma (deferred-bootstrap refactor) — match either spacing/prefix.
+    expect(block).toMatch(/f\.fbq\('init',\s*'1571887197933821'\)/);
   });
 
   it("PageView is tracked at load time", () => {
-    expect(block).toMatch(/fbq\('track', 'PageView'\)/);
+    expect(block).toMatch(/f\.fbq\('track',\s*'PageView'\)/);
   });
 
   it("runtime code has NO consent gate — `canLoad` is not referenced in executed code", () => {

@@ -167,6 +167,16 @@ jobs:
         env:
           MONGO_URL: mongodb://localhost:27017
           DB_NAME:   aurem_ci_smoke
+          # 2026-08-24 · CI-job triage — this job was missing these two
+          # vars that several test modules read at COLLECTION time
+          # (module-level `os.environ.get(...).rstrip("/")` /
+          # `RuntimeError: JWT_SECRET must be set`), causing pytest
+          # collection errors on every run regardless of -k filtering.
+          # Values mirror the same job's Mongo pattern + ci.yml's
+          # backend-tests job (JWT_SECRET) and quality-gate.yml's own
+          # lighthouse/vitest jobs (REACT_APP_BACKEND_URL).
+          JWT_SECRET: ci-test-secret-32-chars-minimum!!
+          REACT_APP_BACKEND_URL: http://localhost:8001
         run: |
           # Iter 309 · Phase 0.2 — DISCOVERY-BASED test collection.
           # Prior version was a hardcoded whitelist of specific test
@@ -259,8 +269,51 @@ jobs:
     name: Visual regression (Playwright chromium)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # 2026-08-24 · CI-job triage — this job never started a backend,
+    # so every "landing"/"why-ora"/"demo"/"login"/ship-gate screenshot
+    # was actually capturing the frontend's own error-boundary fallback
+    # ("Brief Hiccup — Reconnecting") because it couldn't reach
+    # localhost:8001. The ~4-5% pixel diffs were the spinner icon's
+    # rotation frame, not a real product regression. Root cause
+    # confirmed by downloading a failing run's playwright-report
+    # artifact and viewing both the actual + expected PNGs directly —
+    # both show the fallback screen, not the real page. Fix: boot a
+    # real backend (same mongodb-service + uvicorn pattern already
+    # used by ci.yml's "Simulated-user QA" job) before starting the
+    # frontend.
+    services:
+      mongodb:
+        image: mongo:7
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ping:1})'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      MONGO_URL:  mongodb://localhost:27017
+      DB_NAME:    aurem_visual_ci
+      JWT_SECRET: ci-test-secret-32-chars-minimum!!
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend deps
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt \
+            --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
+      - name: Boot backend in background
+        working-directory: backend
+        run: |
+          uvicorn main:app --host 0.0.0.0 --port 8001 &
+          echo $! > /tmp/backend.pid
+          for i in {1..60}; do
+            curl -sf http://127.0.0.1:8001/health && break
+            sleep 1
+          done
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -293,6 +346,10 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3000
         run: npx playwright test
+      - name: Stop backend
+        if: always()
+        run: |
+          if [[ -f /tmp/backend.pid ]]; then kill "$(cat /tmp/backend.pid)" || true; fi
       - name: Upload HTML report on failure
         if: failure()
         uses: actions/upload-artifact@v4

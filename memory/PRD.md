@@ -4660,3 +4660,95 @@ on that build, not a race condition, not account/browser-specific.
   log/analytics access from this environment.
 
 
+## Inventory Sweep — existing systems that could feed UNSCORED Health Score categories (2026-08-24)
+
+Code-inspection-only pass (no builds). Full table delivered to founder in chat. Headline findings:
+
+- **Unified Health Registry** (`services/health_registry.py` + `services/health_checks.py` + `routers/admin_health.py`) — a LIVE, already-shipped system of 21 guard checks (G1-G21) + 6 integration checks + 3 infra checks, each calling a real mechanism and persisting state (`health_check_state`, `health_notifications`, `incidents`, `breaker_events`, `process_boots`, `process_loop_trips`, `loop_scope_blocks`). This is **completely disconnected from `services/health_score.py`** (the founder-facing Health Score widget) — health_score.py re-implements a narrower, staler version of what several of these guards already do live. CONFIRMED usable with modification for Security (G21 static scan, G16 auth hardening, G3 scope-drift), Reliability (G17 breakers, G19 process recovery, G20 incidents/MTTR, infra_db/infra_supervised/infra_ci_vs_local), and as the closest available proxy for Bug Density (G20's `incidents` collection — real detected-problem log with severity/root_cause/resolution/MTTR, though it tracks infra incidents, not code-level bugs).
+- **Sentry** — ACTIVE and LIVE (SDK initialized in `main.py` with FastAPI/Starlette/Asyncio/PyMongo integrations, `capture_exception` called at real error sites, `SENTRY_DSN` configured). This is exactly the "5xx/timeout/unhandled-exception aggregation" that `score_reliability()` currently says doesn't exist. Data lives in Sentry's cloud — LIKELY usable with modification (needs a Sentry API pull, same pattern as the existing GitHub Actions CI pull in `score_devops_infra()`; requires a Sentry API auth token, DSN alone isn't enough).
+- **Langfuse** (`core/observability.py`) — ACTIVE (keys configured, wraps every Parliament/LLM call with `trace_llm`, records errors). LIKELY usable with modification for LLM-call-path reliability — same external-API-pull caveat as Sentry.
+- **quality_monitor.py** (`core/quality_monitor.py`) — ACTIVE, wired into `routers/chat.py`, persists to `quality_scores`/`quality_alerts` with real drift detection. NOT usable for AUREM's own Bug Density/Reliability — it scores ORA's LLM *response* quality for customers, not AUREM's own codebase; already correctly flagged as "adjacent but different" in `health_score.py`.
+- **github_issues_context.py, bug_hunt_rules.py, vanguard_scanner.py, mode_e_auditor.py, codebase_health.py, security_scan.py, full_scan_scanners.py, qa_matrix.py, fix_triage.py, boilerplate_audit.py** — all ACTIVE but scoped to scanning **customer** `project_id` repos (Loop/ORA product surface), not AUREM's own repo. NOT usable for AUREM's own Health Score without misrepresenting customer data as AUREM's own — same fabricated-proxy risk already called out in the founder's original mandate. `boilerplate_audit.py` is explicitly test-infrastructure-only by design (dormant, not a bug).
+- **rate_limiter.py** — ACTIVE (Redis + in-memory fallback) but has no persistence layer, so no historical trend exists yet; only a live snapshot. LIKELY usable with modification.
+- No TODO/FIXME tracker or GitHub-Issues-on-AUREM's-own-repo pipeline exists. `mode_e_auditor.py`'s TODO/FIXME scan is LLM-based, on-demand, per customer project, and not persisted — not a Bug Density source.
+
+No implementation performed this pass — awaiting founder direction on which of the CONFIRMED/LIKELY items to wire into `health_score.py` next.
+
+## Future Build — Production-Readiness Pillars (prioritized, backlog only, no build authorization)
+
+1. **Rollback E2E verification** — needs a writable test repo + a real shipped-loop candidate to prove a full rollback round-trip. Blocked on Rule 13 (do not investigate/modify without new evidence + explicit authorization).
+2. **Deploy gate fail-closed fix** — workflow-name mismatch means the gate can fail open instead of blocking. On hold until the 3 long-standing failing CI jobs (incl. visual-regression) are triaged/resolved or explicitly accepted as non-blocking.
+3. **Security scan persistence reliability** — production has been silently dropping dependency/secret-scan results since ~2026-08-20 because `AUREM_CI_INGEST_TOKEN` is unset in production. Requires founder to set the production secret.
+4. **Trust layer / confidence-gated action architecture** — broader architectural work on how much autonomy ORA/Loop actions get before requiring explicit confirmation.
+5. **Systemic error handling for nontechnical users** — user-facing error messages that don't leak stack traces or technical jargon to founders using the product.
+6. **Founder-language translation layer** — translating technical findings/errors into plain founder-facing language across the product.
+7. **Per-user isolation maintenance** — ongoing verification that customer projects/data stay isolated from each other.
+
+Rollback and confidence-gate pillars remain constrained by Rule 13 — no work without new log-backed evidence and explicit founder authorization.
+
+## Inventory Sweep — existing systems that could feed UNSCORED Health Score categories (2026-08-24)
+
+Code-inspection-only pass (no builds). Full table delivered to founder in chat. Headline findings:
+
+- **Unified Health Registry** (`services/health_registry.py` + `services/health_checks.py` + `routers/admin_health.py`) — a LIVE, already-shipped system of 21 guard checks (G1-G21) + 6 integration checks + 3 infra checks, each calling a real mechanism and persisting state (`health_check_state`, `health_notifications`, `incidents`, `breaker_events`, `process_boots`, `process_loop_trips`, `loop_scope_blocks`). This is **completely disconnected from `services/health_score.py`** (the founder-facing Health Score widget) — health_score.py re-implements a narrower, staler version of what several of these guards already do live. CONFIRMED usable with modification for Security (G21 static scan, G16 auth hardening, G3 scope-drift), Reliability (G17 breakers, G19 process recovery, G20 incidents/MTTR, infra_db/infra_supervised/infra_ci_vs_local), and as the closest available proxy for Bug Density (G20's `incidents` collection — real detected-problem log with severity/root_cause/resolution/MTTR, though it tracks infra incidents, not code-level bugs).
+- **Sentry** — ACTIVE and LIVE (SDK initialized in `main.py` with FastAPI/Starlette/Asyncio/PyMongo integrations, `capture_exception` called at real error sites, `SENTRY_DSN` configured). This is exactly the "5xx/timeout/unhandled-exception aggregation" that `score_reliability()` currently says doesn't exist. Data lives in Sentry's cloud — LIKELY usable with modification (needs a Sentry API pull, same pattern as the existing GitHub Actions CI pull in `score_devops_infra()`; requires a Sentry API auth token, DSN alone isn't enough).
+- **Langfuse** (`core/observability.py`) — ACTIVE (keys configured, wraps every Parliament/LLM call with `trace_llm`, records errors). LIKELY usable with modification for LLM-call-path reliability — same external-API-pull caveat as Sentry.
+
+## Health Registry wiring into health_score.py — shipped (2026-08-24)
+
+Per founder direction: wired the already-live Unified Health Registry guards into `services/health_score.py`, replacing the old UNSCORED stubs.
+
+- **Security** — now built from G21 (live static scan: unpinned deps + misconfig), G16 (auth-hardening posture — extracted into shared `services/health_checks.g16_auth_hardening_raw()` so registry + score share one source), G3 (scope-drift protected-path guard). Old dep-scan-ingest signal (Finding B, still broken in production) kept as informational-only evidence, not part of the score.
+- **Reliability** — now built from G17 (`retry_guard.snapshot_all()` + `trip_counts_7d()`), G19 (`process_recovery.recovery_status()`), G20 (`incident_log.incident_stats()`).
+- **Bug Density** — now a labeled PARTIAL PROXY using G20's incident log (open + resolved-30d + MTTR). Evidence and `_unscored` fallback text explicitly state this is AUREM's own infra/guard-detected incidents, NOT a code-level bug count, per founder's explicit instruction. Separate from any future dedicated bug-tracker table.
+- Sentry explicitly deferred (founder decision — no new credential dependency until this wiring's signal is evaluated).
+
+**Before**: security/bug_density/reliability all `unscored`; `weight_scored_pct` ≈ 45%.
+**After (verified live in preview)**: all 9 categories `scored`; `weight_scored_pct` = 100%; `overall_score` 42-43 (security=100, bug_density=0, reliability=35 at test time).
+
+
+## Production sign-in — founder-confirmed (2026-08-24)
+
+Founder tested it themselves on auremcto.com and confirmed working. Status upgraded from "redeployed, bundle-confirmed" to **CONFIRMED working end-to-end** (sign-in). GitHub-connect flow specifically still not separately re-confirmed by founder — carry as a minor open item if it resurfaces.
+
+## Health Score widget — Reliability/Bug Density preview-vs-production caveat (2026-08-24)
+
+Added a persistent, always-visible amber caveat line under the Reliability and Bug Density category bars in `HealthScoreWidget.jsx` (`data-testid="health-score-caveat-{id}"`), sourced from a new `caveat` field `services/health_score.py` attaches to both categories' response.
+
+**Explicit wording note per founder instruction**: the "preview-pod restart noise vs. production" explanation is labeled **UNCERTAIN — not yet confirmed against real production data**, not settled fact. Do not treat this theory as confirmed just because it is plausible, until production's own G17/G19/G20 numbers are actually observed and compared.
+
+Verified: curl on `/admin/health-score` shows `caveat` present on `reliability` and `bug_density`, absent on `security` (as intended). Screenshot + DOM query confirmed both `data-testid="health-score-caveat-*"` elements render in the live AdminCockpit page (2 elements found).
+
+## CI-job triage — all 3 long-standing failing quality-gate.yml jobs root-caused and fixed locally (2026-08-24)
+
+Per founder direction, resumed and completed the triage of the 3 failing `quality-gate.yml` jobs (failing consistently since ~2026-07-27, 98 failed runs). All 3 root causes were CONFIRMED (none remain UNCERTAIN) by pulling live GitHub Actions job logs and, for visual-regression, downloading and directly viewing the actual failing-run screenshot PNGs.
+
+1. **Visual regression (Playwright chromium) — CONFIRMED root cause: CI infra bug, not a product regression.** The job started the frontend but **never started a backend** — no Mongo service, no `uvicorn`. Downloaded run 32557552393's `playwright-report` artifact and viewed the actual + expected PNGs directly: both screenshots show the frontend's own error-boundary fallback screen ("Brief Hiccup — Reconnecting"), not the real landing/why-ora/demo pages, because `localhost:8001` had nothing listening. The ~4-5% pixel diffs were just the retry spinner's rotation frame, not a real UI change. **Fix applied**: added a `mongodb` service + `uvicorn main:app` boot step (mirrors the exact pattern already used by `ci.yml`'s "Simulated-user QA" job) before starting the frontend, plus a "Stop backend" cleanup step.
+2. **Vitest (RTL state-sync + axe component a11y) — CONFIRMED root cause: stale test, not a product bug.** `metaPixel.iter388ag.noConsentGate.test.js` asserted `fbq('init', '1571887197933821')` / `fbq('track', 'PageView')` (with a space after the comma, no prefix). Iter 391's deferred-bootstrap refactor changed the actual code to `f.fbq('init','1571887197933821');` / `f.fbq('track','PageView');` (added `f.` prefix, removed the space) — the pixel itself still fires correctly, the regex just never got updated. **Fix applied**: updated both regexes to `/f\.fbq\('init',\s*'1571887197933821'\)/` and `/f\.fbq\('track',\s*'PageView'\)/`.
+3. **Fitness-function invariants (always green on main) — CONFIRMED root cause: CI job missing required env vars.** The `invariants` job's env block only set `MONGO_URL`/`DB_NAME`; several test modules read `JWT_SECRET` (`RuntimeError: JWT_SECRET must be set`) and `REACT_APP_BACKEND_URL` (`os.environ.get("REACT_APP_BACKEND_URL").rstrip("/")` → `AttributeError: 'NoneType' object has no attribute 'rstrip'` — this exact line, in `tests/test_codebase_health_score.py`) at **collection time**, which crashes pytest collection regardless of `-k` filtering. **Fix applied**: added `JWT_SECRET` and `REACT_APP_BACKEND_URL` to the job's env block, matching values already used elsewhere in this same workflow/`ci.yml`.
+
+**Status**: all 3 fixes are made in the local preview checkout (`.github/workflows/quality-gate.yml`, `frontend/src/lib/__tests__/metaPixel.iter388ag.noConsentGate.test.js`) and YAML-syntax-validated. **They are NOT yet live** — GitHub Actions only runs what's pushed to GitHub. Founder needs to use "Save to GitHub" to push these, then a real CI run is needed to confirm all 3 jobs actually go green (self-testing a GitHub Actions workflow from inside the preview pod isn't possible). **Deploy gate stays on hold** until that real green run is observed — do not flip it based on local reasoning alone.
+
+**Important caveat — preview-only noise**: the reliability/bug-density numbers above are dragged down by this PREVIEW pod's dev-churn history (`restarts_7d: 1099`, `loop_trips_7d: 959`, `open incidents: 37/143` — accumulated across many fork/hot-reload sessions), not a real production instability signal. The wiring and formulas are CONFIRMED correct; the specific preview score is not representative of production, which won't have this restart churn. Flagged to founder; no formula change made without further direction.
+
+Verification: syntax-checked, backend restarted clean, `GET /admin/health-score` returns 200 with all 9 categories scored (curl-verified), and the AdminCockpit widget renders the new score with the "100% of weight scored" disclosure (screenshot-verified, no crash). No testing_agent run — scoped backend scoring change, self-tested via curl + screenshot.
+
+## Production redeploy verification (2026-08-24)
+
+Confirmed via production bundle inspection (no credentials needed):
+- Current production JS bundle (`index-R1WQY9wI.js`) has `VITE_API_URL` baked in at build time as `"https://auremcto.com"` (was previously absent/undefined).
+- `baseURL` construction resolves to `https://auremcto.com/api/aurem-dev` — zero `undefined`/`void 0` residue.
+- `POST https://auremcto.com/api/aurem-dev/auth/login` with bad credentials returns proper JSON (`{"detail":"Invalid credentials"}`, HTTP 401) — not the SPA HTML shell that was the original symptom.
+- **CONFIRMED**: the redeploy happened and the root-cause fix (missing `|| ""` fallback + `.env.production`) is live in production at the network/bundle level.
+- **Not verified** (no test credentials with real production access): full UI sign-in with a real account, or the GitHub-connect flow end-to-end. Recommend founder do one real login to fully close this out, but the underlying bug class is conclusively fixed.
+
+- **quality_monitor.py** (`core/quality_monitor.py`) — ACTIVE, wired into `routers/chat.py`, persists to `quality_scores`/`quality_alerts` with real drift detection. NOT usable for AUREM's own Bug Density/Reliability — it scores ORA's LLM *response* quality for customers, not AUREM's own codebase; already correctly flagged as "adjacent but different" in `health_score.py`.
+- **github_issues_context.py, bug_hunt_rules.py, vanguard_scanner.py, mode_e_auditor.py, codebase_health.py, security_scan.py, full_scan_scanners.py, qa_matrix.py, fix_triage.py, boilerplate_audit.py** — all ACTIVE but scoped to scanning **customer** `project_id` repos (Loop/ORA product surface), not AUREM's own repo. NOT usable for AUREM's own Health Score without misrepresenting customer data as AUREM's own — same fabricated-proxy risk already called out in the founder's original mandate. `boilerplate_audit.py` is explicitly test-infrastructure-only by design (dormant, not a bug).
+- **rate_limiter.py** — ACTIVE (Redis + in-memory fallback) but has no persistence layer, so no historical trend exists yet; only a live snapshot. LIKELY usable with modification.
+- No TODO/FIXME tracker or GitHub-Issues-on-AUREM's-own-repo pipeline exists. `mode_e_auditor.py`'s TODO/FIXME scan is LLM-based, on-demand, per customer project, and not persisted — not a Bug Density source.
+
+No implementation performed this pass — awaiting founder direction on which of the CONFIRMED/LIKELY items to wire into `health_score.py` next.
+
+## Future Build — Production-Readiness Pillars (prioritized, backlog only, no build authorization)
+
+1. **Rollback E2E
