@@ -125,8 +125,11 @@ describe("Iter 362 · Bug B — in-app themed rollback confirmation modal", () =
       fireEvent.pointerDown(btn(), { button: 0 });
     });
     expect(modal()).not.toBeNull();
+    // Iter 388t moved the Escape listener from window to the modal
+    // container (WCAG focus-trap) — fire on the modal, matching where
+    // a real user's keydown originates (focus is trapped inside it).
     await act(async () => {
-      fireEvent.keyDown(window, { key: "Escape" });
+      fireEvent.keyDown(modal(), { key: "Escape" });
     });
     expect(modal()).toBeNull();
     expect(rollbackLoopMock).not.toHaveBeenCalled();

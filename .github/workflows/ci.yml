@@ -70,7 +70,9 @@ jobs:
   backend-tests:
     name: Backend — pytest
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 2026-06 · was 10 — first real post-billing-fix run was killed at
+    # the job timeout mid-suite (93%), hiding the true failure list.
+    timeout-minutes: 20
 
     services:
       mongodb:

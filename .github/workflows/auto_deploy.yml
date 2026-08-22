@@ -74,7 +74,11 @@ jobs:
     name: Wait for CI + Quality Gate
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 2026-06 · was 15 — real block-run evidence: CI takes ~12 min, the
+    # gate's 12-min poll deadline caught it with 27s to spare. A green
+    # build would routinely time out and be blocked by accident. Raised
+    # to 35 (job) / 30 min (poll deadline below).
+    timeout-minutes: 35
     permissions:
       actions: read
       contents: read
@@ -86,7 +90,7 @@ jobs:
           SHA:  ${{ github.sha }}
         run: |
           set -e
-          DEADLINE=$(( $(date +%s) + 720 ))   # 12 min hard cap
+          DEADLINE=$(( $(date +%s) + 1800 ))   # 30 min hard cap (was 12 — see job comment)
           CI_NAME="AUREM CI — Build + Test Guard"
           QG_NAME="Quality Gate — Bug-fix Discipline"
           echo "Waiting for '$CI_NAME' and '$QG_NAME' on commit $SHA"
@@ -118,7 +122,7 @@ jobs:
             fi
             sleep 15
           done
-          echo "::error::CI/Quality Gate did not complete within 12min — blocking deploy (fail-closed default, 2026-08-24)"
+          echo "::error::CI/Quality Gate did not complete within 30min — blocking deploy (fail-closed default)"
           exit 1
 
   deploy-and-report:

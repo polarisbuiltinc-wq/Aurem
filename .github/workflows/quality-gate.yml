@@ -177,6 +177,12 @@ jobs:
           # lighthouse/vitest jobs (REACT_APP_BACKEND_URL).
           JWT_SECRET: ci-test-secret-32-chars-minimum!!
           REACT_APP_BACKEND_URL: http://localhost:8001
+          # 2026-06 · first real post-billing-fix run — invariants job
+          # errored at setup: is_vault_available() requires a >=32-char
+          # master key (services/vault.py + cto_services/crypto.py).
+          # CI dummy values, same pattern as JWT_SECRET above.
+          AUREM_MASTER_KEY: ci-vault-master-key-32-chars-min!!
+          AUREM_CTO_MASTER_KEY: ci-cto-vault-master-key-32-chars!!
         run: |
           # Iter 309 · Phase 0.2 — DISCOVERY-BASED test collection.
           # Prior version was a hardcoded whitelist of specific test
