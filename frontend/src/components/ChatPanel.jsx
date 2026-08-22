@@ -21,7 +21,6 @@ import { toast, dismissToast } from "./Toast";
 import PreviewPanel from "./PreviewPanel";
 import ModeSelector from "./ModeSelector";
 import ThinkingHint from "./ThinkingHint";
-import PromptStarterPanel from "./PromptStarterPanel";
 import LiveTaskPopup from "./LiveTaskPopup";
 import WarmStatusBar from "./WarmStatusBar";
 import { useWarmStart } from "../hooks/useWarmStart";
@@ -53,6 +52,7 @@ import PlanApprovalCard from "./PlanApprovalCard";
 // User Action card (powered by the real /loop/* SSE stream).
 import { SelfHealIndicator, UserActionCard } from "./LoopActionCards";
 import ShipPendingCard from "./ShipPendingCard";
+import ShipSuccessCard from "./ShipSuccessCard";
 import LoopFailureCard from "./LoopFailureCard";
 // Iter 328 hotfix v3 — pure mappers for the two ship-pending ingress
 // paths. Extracted here (and unit-tested at src/lib/__tests__) after
@@ -672,7 +672,34 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   // Iter 212m-111 — Manual Ship gate. Populated when the engine emits
   // a paused_for_user event with data.kind === "awaiting_ship".
   // `{owner, repo, branch, files, file_count, commit_message}`.
+  // 2026-06 — receives ORA GUIDE picks from the right-side Advisor
+  // panel (PromptStarterPanel moved there per founder direction).
+  useEffect(() => {
+    const onStarterPick = (e) => {
+      const p = e?.detail?.prompt;
+      if (p) setInput(p);
+    };
+    window.addEventListener("aurem:starter-pick", onStarterPick);
+    return () => window.removeEventListener("aurem:starter-pick", onStarterPick);
+  }, []);
+
   const [shipPending, setShipPending] = useState(null);
+  // 2026-06 · ghost-state fix — terminal ship confirmation rendered in
+  // the same slot the confirm button occupied. {commitSha, fullSha,
+  // htmlUrl, repo, branch}.
+  const [shipResult, setShipResult] = useState(null);
+  const shipResultPollRef = useRef(null);
+  // 2026-08-24 — 8s stepper-dwell timer handle so unmount can cancel it
+  // (testing-agent review: setState after unmount otherwise).
+  const stepperResetTimerRef = useRef(null);
+  useEffect(() => () => {
+    if (shipResultPollRef.current) {
+      try { clearInterval(shipResultPollRef.current); } catch { /* noop */ }
+    }
+    if (stepperResetTimerRef.current) {
+      try { clearTimeout(stepperResetTimerRef.current); } catch { /* noop */ }
+    }
+  }, []);
   const [shipBusy, setShipBusy] = useState(false);
   const loopAbortRef = useRef(null);
   // Iter 316 · Fix A — handle for the /loop/active fallback-poll
@@ -2808,7 +2835,13 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         setMessages((m) =>
           m.filter((row) => !(row.role === "assistant" && row.loopPending)));
         setBusy(false);
-        setLoopPhase("idle");
+        // 2026-06 · stepper ghost fix (founder live repro): "idle" kept
+        // the LoopStepBar mounted, and any pre-recorded plan tone left
+        // PLAN glowing forever (the 8s auto-reset only fires on a
+        // terminal SSE event, which a chat-redirect never emits).
+        // Null phase + cleared tones unmount the chip cleanly.
+        setLoopPhase(null);
+        setLoopStepTones({});
         setLoopId(null);
         // 2026-08-21 — bug fix (founder production report): this
         // internal send() re-invocation was being silently DROPPED
@@ -2843,7 +2876,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           // as literal underscores instead of italics. Asterisk
           // emphasis doesn't have that intraword/punctuation
           // restriction — swapped `_..._` → `*...*`.
-          content: "*⚡ Ye simple/read-only query lagi, isliye seedha jawab de diya (Loop Mode skip — koi credits burn nahi). Agar full Loop (plan → execute → verify → ship) chahiye tha, bolo **\"run this as a loop\"**.*",
+          content: "*⚡ This looked like a simple read-only question, so I answered it directly (Loop Mode skipped — no credits burned). If you wanted the full loop (plan → execute → verify → ship), say **\"run this as a loop\"**.*",
         }]));
         return;
       }
@@ -3275,7 +3308,40 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     else if (state === "verifying")             setLoopPhase("verifying");
     else if (state === "scanning")              setLoopPhase("scanning");
     else if (state === "shipping")              setLoopPhase("shipping");
-    else if (state === "completed")             setLoopPhase("completed");
+    else if (state === "completed") {
+      setLoopPhase("completed");
+      // 2026-08-24 · stepper ghost ROOT FIX (founder: "stays highlighted
+      // until page reload") — LoopStepBar only unmounts when phase is
+      // falsy, and NOTHING ever nulled it after a terminal COMPLETED
+      // frame. Dwell 8s so the finished bar is seen, then unmount.
+      // loopTerminalRef guard: if a NEW loop started meanwhile (start
+      // path flips it back to false), leave the fresh loop's UI alone.
+      if (stepperResetTimerRef.current) {
+        try { clearTimeout(stepperResetTimerRef.current); } catch { /* noop */ }
+      }
+      stepperResetTimerRef.current = setTimeout(() => {
+        if (loopTerminalRef.current) {
+          setLoopPhase((p) => (p === "completed" ? null : p));
+          setLoopStepTones({});
+        }
+      }, 8000);
+      // 2026-06 · ghost-state fix — capture the terminal ship result
+      // so ShipSuccessCard renders where the confirm button was.
+      if (phase === "ship" && data?.commit_sha) {
+        setShipResult({
+          commitSha: data.commit_sha,
+          fullSha:   data.full_sha || data.commit_sha,
+          htmlUrl:   data.html_url || null,
+          repo:      data.repo || null,
+          branch:    data.branch || null,
+        });
+        setBusy(false);
+        if (shipResultPollRef.current) {
+          try { clearInterval(shipResultPollRef.current); } catch { /* noop */ }
+          shipResultPollRef.current = null;
+        }
+      }
+    }
     else if (state === "failed")                setLoopPhase("failed");
     else if (state === "aborted")               setLoopPhase("aborted");
     else if (state === "expired")               setLoopPhase("expired");
@@ -3747,7 +3813,51 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       // SSE will deliver SHIPPING → COMPLETED. Clear the card now to
       // give immediate feedback; the LoopStepBar shows progress.
       setShipPending(null);
+      setShipResult(null);
       setBusy(true);
+      // 2026-06 · ghost-state fix, part 1 — the original SSE stream can
+      // die during the human pause before ship-confirm; re-open it so
+      // the terminal COMPLETED frame has a live channel to arrive on.
+      try { openLoopStream(loopId); } catch { /* stream may already be open */ }
+      // Part 2 — belt-and-braces bounded poll (3s × 3min): if SSE still
+      // fails to deliver, read the engine-persisted session doc and
+      // synthesize the same terminal event. No invented data — the
+      // commit sha comes from the engine's context.commit.
+      const lid = loopId;
+      const startedAt = Date.now();
+      if (shipResultPollRef.current) {
+        try { clearInterval(shipResultPollRef.current); } catch { /* noop */ }
+      }
+      shipResultPollRef.current = setInterval(async () => {
+        try {
+          if (Date.now() - startedAt > 180000) {
+            clearInterval(shipResultPollRef.current);
+            shipResultPollRef.current = null;
+            return;
+          }
+          const { getLoopStatus } = await import("../lib/loopApi");
+          const doc = await getLoopStatus(lid);
+          const commit = doc?.context?.commit || {};
+          if (doc?.state === "completed"
+              && (commit.sha || commit.full_sha || commit.commit_sha)) {
+            handleLoopEvent({
+              loop_id: lid, state: "completed", phase: "ship",
+              message: "Shipped (via status-poll fallback)",
+              data: {
+                commit_sha: commit.sha || commit.commit_sha || commit.full_sha,
+                full_sha:   commit.full_sha || commit.sha || null,
+                html_url:   commit.html_url || null,
+              },
+            });
+            clearInterval(shipResultPollRef.current);
+            shipResultPollRef.current = null;
+          } else if (doc?.state === "failed") {
+            setBusy(false);
+            clearInterval(shipResultPollRef.current);
+            shipResultPollRef.current = null;
+          }
+        } catch { /* poll failure is silent — SSE may still deliver */ }
+      }, 3000);
     } catch (e) {
       toast(e?.response?.data?.detail || e?.message || "Ship failed to start");
     } finally {
@@ -3774,6 +3884,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   async function handleApprovePlan() {
     if (busy || !loopId) return;
     setLoopPhase("executing");
+    setShipResult(null);
     setBusy(true);
     try {
       await confirmLoop(loopId, true, "");
@@ -4641,6 +4752,12 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           onAction={handlePauseAction}
         />
       )}
+      {shipResult && (
+        <ShipSuccessCard
+          result={shipResult}
+          onDismiss={() => setShipResult(null)}
+        />
+      )}
       {shipPending && (
         <ShipPendingCard
           pending={shipPending}
@@ -4958,13 +5075,11 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
             is already a reliable "never sent a real message" signal —
             no extra localStorage flag needed. Replaces the older
             3-pill FirstMessageChips with 5 clearer categories. */}
-        {activeProject && activeProject.project_id !== "home" && messages.length <= 1 && (
-          <PromptStarterPanel
-            onPick={(prompt) => setInput(prompt)}
-            projectId={activeProject.project_id}
-            inputEmpty={!input || !input.trim()}
-          />
-        )}
+        {/* 2026-06 · founder-directed placement — the ORA GUIDE
+            prompt-starter card moved to the right-side Advisor panel
+            (see Dashboard.jsx topSlot). It no longer renders inline
+            here in the center chat stream; picks arrive via the
+            "aurem:starter-pick" event listener below. */}
 
         {/* Iter 147 — unified composer card: textarea + toolbar share
             one rounded surface so it reads as a single chat input. */}

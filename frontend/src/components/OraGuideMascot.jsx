@@ -26,6 +26,7 @@ import { useLocation } from "react-router-dom";
 import { api } from "../lib/api";
 import { useGuideSpotlight, GuideSpotlightStyle } from "../hooks/useGuideSpotlight.jsx";
 import { shouldHide } from "./GlobalHelpFAB";
+import { Z_FLOATING_GUIDE } from "../lib/zIndex";
 import { toast } from "./Toast";
 
 const STAGE_COPY = {
@@ -168,7 +169,7 @@ export default function OraGuideMascot() {
       // 2026-08-20 — was `bottom: 20`, sat directly on top of the chat
       // composer's send button on the chat page (both anchor to the
       // bottom-right corner). Raised clear of the composer footer row.
-      style={{ position: "fixed", bottom: 92, right: 20, zIndex: 9990 }}
+      style={{ position: "fixed", bottom: 92, right: 20, zIndex: Z_FLOATING_GUIDE /* 2026-06 — must sit ABOVE CookieConsentBanner; at 9990 the banner intercepted every click → founder-reported dead icon */ }}
     >
       <GuideSpotlightStyle />
       <style>{MASCOT_KEYFRAMES}</style>

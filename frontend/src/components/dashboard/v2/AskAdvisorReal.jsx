@@ -69,7 +69,7 @@ const CHIPS = [
   { icon: BarChart2,      label: "Token breakdown",      danger: false },
 ];
 
-export default function AskAdvisorReal({ collapsed = false, onCollapse, projectId }) {
+export default function AskAdvisorReal({ collapsed = false, onCollapse, projectId, topSlot = null }) {
   const [messages, setMessages] = useState([
     { id: "m0", role: "advisor",
       text: "Hi — I'm the ORA Advisor. Ask anything about your repo, "
@@ -323,6 +323,15 @@ export default function AskAdvisorReal({ collapsed = false, onCollapse, projectI
             <ChevronRight className="size-4" strokeWidth={2} />
           </button>
         </div>
+
+        {/* 2026-06 — founder-directed placement: the ORA GUIDE
+            quick-action card lives HERE in the right-side panel,
+            not inline in the center chat stream. */}
+        {topSlot && (
+          <div className="mx-3 mt-3 shrink-0" data-testid="ds2-advisor-guide-slot">
+            {topSlot}
+          </div>
+        )}
 
         <div className="mx-3 mt-3 shrink-0 rounded-lg border border-warning/20 bg-[#1a1200] p-3" data-testid="ds2-advisor-morning-brief">
           <p className="mb-1 text-[11px] font-bold text-warning">Morning brief</p>

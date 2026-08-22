@@ -124,6 +124,17 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
   const [activeTab, setActiveTab] = useState(0);
   const [viewMode, setViewMode] = useState(initialViewMode || "preview"); // 'preview' | 'code' | 'deploy'
   const [refreshKey, setRefreshKey] = useState(0);
+  // 2026-06 · Rule 6 — Live-preview must never be a silent blank.
+  // "loading" until the iframe's onLoad fires; a 10s timer flips to
+  // "slow" (site may block embedding → offer open-in-new-tab).
+  const [liveState, setLiveState] = useState("loading"); // loading|loaded|slow
+  useEffect(() => {
+    setLiveState("loading");
+    const t = setTimeout(() => {
+      setLiveState((s) => (s === "loading" ? "slow" : s));
+    }, 10000);
+    return () => clearTimeout(t);
+  }, [refreshKey]);
   // Iter 170c — Codebase browse mode.
   //   `codebase`        — { files: [{path, size}], owner, repo, branch } once loaded
   //   `codebaseLoading` — true while the tree fetch is in flight
@@ -516,17 +527,72 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
         {viewMode === "deploy" ? (
           <DeployPanel activeProject={activeProject} />
         ) : viewMode === "preview" && isLiveUrl ? (
-          <iframe
-            key={`liveurl-${block.code}-${refreshKey}`}
-            data-testid="preview-iframe-live"
-            src={String(block.code || "").trim()}
-            title="live-site"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-            style={{
-              width: "100%", height: "100%",
-              border: "none", background: "white",
-            }}
-          />
+          <div style={{ position: "relative", width: "100%", height: "100%" }}>
+            <iframe
+              key={`liveurl-${block.code}-${refreshKey}`}
+              data-testid="preview-iframe-live"
+              src={String(block.code || "").trim()}
+              title="live-site"
+              onLoad={() => setLiveState("loaded")}
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+              style={{
+                width: "100%", height: "100%",
+                border: "none", background: "white",
+              }}
+            />
+            {liveState !== "loaded" && (
+              <div
+                data-testid="preview-live-state-overlay"
+                style={{
+                  position: "absolute", inset: 0, zIndex: 2,
+                  display: "flex", flexDirection: "column",
+                  alignItems: "center", justifyContent: "center", gap: 10,
+                  background: "var(--bg, #111)", color: "var(--text-dim, #bbb)",
+                  fontSize: 13, textAlign: "center", padding: 24,
+                }}
+              >
+                {liveState === "loading" ? (
+                  <>
+                    <span className="animate-spin" style={{
+                      width: 18, height: 18, borderRadius: "50%",
+                      border: "2px solid rgba(255,102,8,0.25)",
+                      borderTopColor: "#FF6608", display: "inline-block",
+                    }} />
+                    <span>Loading live preview…</span>
+                    <span style={{ fontSize: 11, color: "var(--text-faint, #777)", wordBreak: "break-all" }}>
+                      {String(block.code || "").trim()}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontWeight: 700, color: "#fbbf24" }}>
+                      Still loading after 10 seconds
+                    </span>
+                    <span style={{ maxWidth: 420 }}>
+                      The site may be slow, offline, or blocking embedded
+                      previews (X-Frame-Options). It is NOT necessarily broken.
+                    </span>
+                    <a
+                      data-testid="preview-live-open-newtab"
+                      href={String(block.code || "").trim()}
+                      target="_blank" rel="noopener noreferrer"
+                      style={{ color: "#60a5fa", fontWeight: 600 }}
+                    >
+                      Open in a new tab ↗
+                    </a>
+                    <button
+                      data-testid="preview-live-retry-btn"
+                      onClick={() => setRefreshKey((k) => k + 1)}
+                      className="btn-ghost"
+                      style={{ fontSize: 12, padding: "4px 12px" }}
+                    >
+                      Retry
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         ) : viewMode === "preview" && isRenderable && !block?.isCodebase ? (
           <iframe
             key={`iframe-${activeTab}-${refreshKey}`}

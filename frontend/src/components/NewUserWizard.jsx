@@ -16,6 +16,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Loader2, X, ArrowRight, Github } from "lucide-react";
 import { api, getToken, API_BASE } from "../lib/api";
+import { trackFunnel, withFunnelParams, getFunnelSessionId } from "../lib/githubFunnel";
 import { setActiveProjectId } from "./TabBar";
 import RobotGuide, { RobotGuideKeyframes, escapeHtml, oraPulseRingStyle } from "./RobotGuide";
 import useModalA11y from "../hooks/useModalA11y";
@@ -248,28 +249,18 @@ export default function NewUserWizard({ onComplete }) {
       setErr("Session expired — please log in again.");
       return;
     }
-    // 2026-08-01 — funnel telemetry: cta_click for wizard entry.
-    // Fire-and-forget so popup opens synchronously (avoid pop-up blockers).
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      import("../lib/githubFunnel").then(({ trackFunnel, withFunnelParams }) => {
-        trackFunnel("cta_click", "wizard", { has_token: true });
-        const stitched = withFunnelParams(
-          `${API_BASE}/github/oauth/connect?auth=${encodeURIComponent(token)}`,
-          "wizard",
-        );
-        // Update popup location AFTER telemetry adds session params.
-        if (popupRef.current) {
-          try { popupRef.current.location.href = stitched; } catch {}
-        }
-      }).catch(() => {});
-    } catch {}
-    // Open the OAuth flow in a popup. The backend's /connect handler
-    // accepts the JWT via `?auth=` so cookieless browsers still work.
-    // NOTE: popup MUST open synchronously in the click handler or
-    // browsers will block it. Funnel stitching above updates the URL
-    // after the popup opens; if telemetry fails, popup still works.
-    const url = `${API_BASE}/github/oauth/connect?auth=${encodeURIComponent(token)}`;
+    // 2026-08-24 — ROOT FIX for oauth_redirect over-count: the old code
+    // opened the popup with an UNSTITCHED /connect URL, then a dynamic
+    // import asynchronously rewrote popup.location to the stitched URL —
+    // navigating /connect TWICE (once with no `fs`, once with it), which
+    // logged two server-side oauth_redirect events under two different
+    // session ids. githubFunnel is now statically imported so the URL is
+    // stitched synchronously and the popup navigates exactly once.
+    trackFunnel("cta_click", "wizard", { has_token: true });
+    const url = withFunnelParams(
+      `${API_BASE}/github/oauth/connect?auth=${encodeURIComponent(token)}`,
+      "wizard",
+    );
     const w = 560, h = 720;
     const left = Math.max(0, window.screenX + (window.outerWidth  - w) / 2);
     const top  = Math.max(0, window.screenY + (window.outerHeight - h) / 2);
@@ -346,6 +337,9 @@ export default function NewUserWizard({ onComplete }) {
         name,
         github_url: repoUrl.trim(),
         branch:     branch.trim() || "main",
+        // 2026-08-24 — funnel stitching: lets the backend's server-side
+        // `repo_selected` event join this browser's funnel journey.
+        funnel_session: getFunnelSessionId(),
       };
       if (installation_id) {
         payload.installation_id = installation_id;
@@ -619,6 +613,8 @@ export default function NewUserWizard({ onComplete }) {
                                     onClick={() => {
                                       setRepoUrl(`https://github.com/${r.full_name}`);
                                       setBranch(r.default_branch || "main");
+                                      trackFunnel("app_repo_selected", "wizard",
+                                        { repo: r.full_name });
                                     }}
                                     style={{
                                       padding: "5px 10px", fontSize: 11,
@@ -756,10 +752,21 @@ export default function NewUserWizard({ onComplete }) {
                       (hidden on pure "choosing" landing) */}
 
                   {err && <div data-testid="wizard-error" style={errStyle}>{err}</div>}
+                  {/* 2026-08-24 — ROOT FIX for the repo-pick dead end: on
+                      the "choosing" landing (no App installed yet) the
+                      repo URL/branch inputs are hidden, so the old
+                      generic "Continue" submitted an empty form and
+                      threw "Use a real GitHub repo URL" — a wall every
+                      OAuth-linked user hit. Continue now drives the one
+                      action that can actually progress: the App install. */}
                   <Footer
                     busy={busy}
-                    primary="Continue"
-                    onPrimary={submitRepo}
+                    primary={(ghStatus === "choosing" && !appPickerActive)
+                      ? "Continue with GitHub App"
+                      : "Continue"}
+                    onPrimary={(ghStatus === "choosing" && !appPickerActive)
+                      ? openAppInstallPopup
+                      : submitRepo}
                     onSkip={close}
                   />
                 </>
@@ -828,6 +835,8 @@ function buildRobotMessage({ ghStatus, busy, err, repoUrl }) {
       return `<strong>Fastest way:</strong> click <strong>Continue with GitHub</strong> below <span class="ora-arrow">👇</span> — connects in seconds, no PAT needed.`;
     if (ghStatus === "manual")
       return `Paste any <strong>public repo URL</strong> below. For private repos, connect GitHub from Settings later. <span class="ora-arrow">👇</span>`;
+    if (ghStatus === "choosing" && !repoUrl)
+      return `One click: <strong>Continue with GitHub App</strong> below — you pick which repos AUREM can see, then choose one here. <span class="ora-arrow">👇</span>`;
     if (!repoUrl) return `Your GitHub repos are loaded! <strong>Pick a repo</strong> from the dropdown — or paste a URL. <span class="ora-arrow">👇</span>`;
     return `Nice — <strong>${escapeHtml(repoUrl.replace(/^https?:\/\/github\.com\//, ""))}</strong> looks good. Click <strong>Continue</strong> to connect it. <span class="ora-arrow">👇</span>`;
   }

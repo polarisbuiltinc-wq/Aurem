@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import Shell, { PageHeader } from "../components/Shell";
 import RailShell from "../components/nav/RailShell";
-import { api } from "../lib/api";
+import { api, getToken, API_BASE } from "../lib/api";
 import { toast } from "../components/Toast";
 import RobotGuide, { RobotGuideKeyframes, escapeHtml, oraPulseRingStyle } from "../components/RobotGuide";
 import DOMPurify from "dompurify";
@@ -82,7 +82,7 @@ function Body() {
     const params = new URLSearchParams(window.location.search);
     const gh = params.get("github");
     const wantsAdd = params.get("add") === "1";
-    const patId = params.get("pat");
+    const patId = params.get("pat") || params.get("app");
     const editId = params.get("edit");
     if (!gh && !wantsAdd && !patId && !editId) return;
 
@@ -257,13 +257,13 @@ function Body() {
               <button
                 type="button"
                 data-testid={`proj-row-pat-${p.project_id}`}
-                title={p.has_pat ? "Update PAT" : "Add PAT"}
+                title="Connect / repair GitHub App access"
                 onClick={(e) => { e.stopPropagation(); setPatProject(p); }}
-                style={rowActionBtn(p.has_pat ? "#22c55e" : "#f59e0b")}
+                style={rowActionBtn(p.auth_method === "github_app" ? "#22c55e" : "#f59e0b")}
               >
                 <Key size={12} />
                 <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.04em" }}>
-                  PAT
+                  APP
                 </span>
               </button>
               <button
@@ -1370,24 +1370,38 @@ function EditDialog({ project, onClose, onSaved }) {
 // "Add PAT" CTA when a tool hits a 401.
 // ───────────────────────────────────────────────────────────────────
 export function PatModal({ project, onClose, onSaved }) {
-  const [pat, setPat] = useState("");
+  // 2026-08-24 · PAT-removal sweep — this modal no longer accepts PATs
+  // (backend rejects them with pat_not_supported). It is now the
+  // per-project GitHub App connect/repair flow: open the install popup,
+  // auto-detect the installation that covers this repo, PATCH the
+  // project's installation_id, then run the real connection test.
   const [busy, setBusy] = useState(false);
-  const [reveal, setReveal] = useState(false);
-  // Iter 207 — multi-stage flow: input → testing → success | failed.
-  // Replaces the old "save and pray" close-on-success behaviour.
   const [stage, setStage] = useState("input"); // input | testing | success | failed
   const [testResult, setTestResult] = useState(null); // {ok, repo, private, error}
+  const [matchInstall, setMatchInstall] = useState(null);
+  const pollRef = useRef(null);
+  const repoFullName = `${project.github_owner}/${project.github_repo}`.toLowerCase();
 
-  // Pre-filled deep-link to GitHub's fine-grained PAT creation page,
-  // scoped to this exact repo + the contents:read & contents:write
-  // permissions ORA needs. GitHub auto-selects the repo in the UI when
-  // both `target_name` and `repository_ids` are absent, so we just pass
-  // a sensible name + description and let the user pick the repo.
-  const ghPatUrl =
-    "https://github.com/settings/personal-access-tokens/new" +
-    "?name=" + encodeURIComponent(`ORA · ${project.name}`) +
-    "&description=" + encodeURIComponent("AUREM (ORA) — read & commit on this repo.") +
-    "&expires_in=90&contents=write&pull_requests=write";
+  const findMatch = useCallback((list) =>
+    (list || []).find((inst) =>
+      (inst.repositories || []).some(
+        (r) => (r.full_name || "").toLowerCase() === repoFullName,
+      )) || null,
+  [repoFullName]);
+
+  useEffect(() => {
+    let gone = false;
+    (async () => {
+      try {
+        const r = await api.get("/github/app/installations");
+        if (!gone) setMatchInstall(findMatch(r.data?.installations));
+      } catch { /* ignore — CTA below still works */ }
+    })();
+    return () => {
+      gone = true;
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [findMatch]);
 
   async function runConnectionTest() {
     setStage("testing");
@@ -1404,33 +1418,50 @@ export function PatModal({ project, onClose, onSaved }) {
     }
   }
 
-  async function save(e) {
-    e?.preventDefault?.();
-    const trimmed = pat.trim();
-    if (!trimmed) {
-      toast({ message: "Paste a GitHub PAT first.", kind: "warn" });
-      return;
-    }
-    if (!/^(ghp_|github_pat_)/.test(trimmed)) {
-      toast({ message: "That doesn't look like a GitHub PAT — should start with ghp_ or github_pat_", kind: "warn" });
-      return;
-    }
+  async function linkInstallation(inst) {
+    if (!inst) return;
     setBusy(true);
     try {
-      await api.patch(`/cto/projects/${project.project_id}`, { github_token: trimmed });
-      // Don't close the modal yet — run the connection test so the
-      // user sees a definitive green ✓ or red ✗ before leaving.
-      toast({ message: "PAT saved — testing connection…", kind: "success" });
+      await api.patch(`/cto/projects/${project.project_id}`,
+        { installation_id: inst.installation_id });
+      toast({ message: "GitHub App linked — testing connection…", kind: "success" });
       await runConnectionTest();
     } catch (e2) {
-      toast({ message: e2?.response?.data?.detail || "PAT save failed", kind: "error" });
+      toast({ message: e2?.response?.data?.detail || "Linking the installation failed", kind: "error" });
     } finally { setBusy(false); }
+  }
+
+  function openInstallPopup() {
+    const token = getToken();
+    if (!token) {
+      toast({ message: "Session expired — please log in again.", kind: "warn" });
+      return;
+    }
+    // Popup must open synchronously in the click handler.
+    const url = `${API_BASE}/github/app/install?auth=${encodeURIComponent(token)}`;
+    window.open(url, "aurem_github_app_install", "width=720,height=800");
+    const started = Date.now();
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      if (Date.now() - started > 180000) {   // 3-minute cap
+        clearInterval(pollRef.current); pollRef.current = null;
+        return;
+      }
+      try {
+        const r = await api.get("/github/app/installations");
+        const m = findMatch(r.data?.installations);
+        if (m) {
+          clearInterval(pollRef.current); pollRef.current = null;
+          setMatchInstall(m);
+          await linkInstallation(m);
+        }
+      } catch { /* keep polling */ }
+    }, 2000);
   }
 
   function tryNewToken() {
     setStage("input");
     setTestResult(null);
-    setPat("");
   }
 
   function close() {
@@ -1447,7 +1478,7 @@ export function PatModal({ project, onClose, onSaved }) {
       backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
       display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
     }}>
-      <form onSubmit={save} onClick={(e) => e.stopPropagation()} style={{
+      <form onSubmit={(e) => e.preventDefault()} onClick={(e) => e.stopPropagation()} style={{
         width: "min(520px, 100%)",
         background: "#0f172a",
         border: "0.5px solid rgba(255,255,255,0.1)",
@@ -1461,7 +1492,7 @@ export function PatModal({ project, onClose, onSaved }) {
           <div>
             <div style={{ fontSize: 11, color: "#f59e0b", letterSpacing: "0.08em",
                           fontFamily: "var(--font-mono, ui-monospace, monospace)" }}>
-              PERSONAL ACCESS TOKEN
+              GITHUB APP ACCESS
             </div>
             <h3 style={{ margin: "2px 0 0", fontSize: 17, color: "#f8fafc" }}>
               {project.name}
@@ -1537,7 +1568,7 @@ export function PatModal({ project, onClose, onSaved }) {
               <button type="button" data-testid="proj-pat-try-new"
                       onClick={tryNewToken}
                       style={primaryAmberBtn}>
-                Try a new token <ArrowRight size={12} style={{ marginLeft: 4 }} />
+                Try again <ArrowRight size={12} style={{ marginLeft: 4 }} />
               </button>
             </div>
           </div>
@@ -1566,85 +1597,59 @@ export function PatModal({ project, onClose, onSaved }) {
               testid="proj-pat-robot"
               kind="info"
               message={
-                pat && /^(ghp_|github_pat_)/.test(pat.trim())
-                  ? `Looks good! Hit <strong>Save &amp; Test</strong> below — I&rsquo;ll verify the token works against your repo right after. <span class="ora-arrow">👇</span>`
-                  : `Click <strong>Open GitHub → Create PAT</strong> below — page opens in a new tab with everything pre-filled, including <strong>Contents</strong> + <strong>Pull requests: Read &amp; Write</strong> permissions. Just pick the right repo, click Generate, then paste the token here. <span class="ora-arrow">👇</span>`
+                matchInstall
+                  ? `Your GitHub App installation on <strong>@${escapeHtml(matchInstall.github_login || "")}</strong> already covers this repo. One click below links it. <span class="ora-arrow">👇</span>`
+                  : `Click <strong>Install / Configure GitHub App</strong> below — a popup opens on GitHub where you pick which repos AUREM can access. No tokens to create or paste. <span class="ora-arrow">👇</span>`
               }
             />
 
-            {/* Big deep-link CTA */}
-            <a
-              href={ghPatUrl}
-              target="_blank" rel="noopener noreferrer"
-              data-testid="proj-pat-github-link"
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-                padding: 13, background: "#24292e", color: "#fff",
-                border: "2px solid #f59e0b", borderRadius: 10,
-                textDecoration: "none", fontSize: 14, fontWeight: 500,
-              }}
-            >
-              <Github size={18} />
-              Open GitHub → Create PAT
-              <ExternalLink size={13} style={{ opacity: 0.7 }} />
-            </a>
+            {matchInstall ? (
+              <button
+                type="button"
+                data-testid="proj-app-link-btn"
+                onClick={() => linkInstallation(matchInstall)}
+                disabled={busy}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                  padding: 13, background: "#24292e", color: "#fff",
+                  border: "2px solid #22c55e", borderRadius: 10,
+                  fontSize: 14, fontWeight: 500, cursor: "pointer",
+                }}
+              >
+                <Github size={18} />
+                {busy ? "Linking…" : `Link @${matchInstall.github_login} installation`}
+                <ArrowRight size={13} style={{ opacity: 0.7 }} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                data-testid="proj-app-install-btn"
+                onClick={openInstallPopup}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                  padding: 13, background: "#24292e", color: "#fff",
+                  border: "2px solid #f59e0b", borderRadius: 10,
+                  fontSize: 14, fontWeight: 500, cursor: "pointer",
+                }}
+              >
+                <Github size={18} />
+                Install / Configure GitHub App
+                <ExternalLink size={13} style={{ opacity: 0.7 }} />
+              </button>
+            )}
 
             <ol style={{
               margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.6,
               color: "var(--text-dim, #94a3b8)",
             }}>
-              <li><strong style={{ color: "#f8fafc" }}>Repository access:</strong> select <em>Only select repositories</em> → pick <code style={codeChip}>{project.github_owner}/{project.github_repo}</code>.</li>
-              <li><strong style={{ color: "#f8fafc" }}>Permissions:</strong> <code style={codeChip}>Contents: Read and write</code> + <code style={codeChip}>Pull requests: Read and write</code> — already pre-selected by the button above.</li>
-              <li>Click <em>Generate token</em>, copy it (starts with <code style={codeChip}>github_pat_…</code> or <code style={codeChip}>ghp_…</code>).</li>
-              <li>Paste below and hit <strong style={{ color: "#f8fafc" }}>Save &amp; Test</strong>.</li>
+              <li>A GitHub popup opens — sign in if asked.</li>
+              <li><strong style={{ color: "#f8fafc" }}>Repository access:</strong> pick <em>Only select repositories</em> → include <code style={codeChip}>{project.github_owner}/{project.github_repo}</code>.</li>
+              <li>Finish on GitHub — this modal detects the installation automatically, links it, and runs a live connection test.</li>
             </ol>
-
-            <label style={{ display: "grid", gap: 6 }}>
-              <span style={{ fontSize: 11, color: "#94a3b8",
-                              fontFamily: "'JetBrains Mono', monospace",
-                              letterSpacing: "0.04em" }}>
-                Paste your PAT
-              </span>
-              <div style={{ position: "relative" }}>
-                <input
-                  data-testid="proj-pat-input"
-                  type={reveal ? "text" : "password"}
-                  autoComplete="off" autoCorrect="off" spellCheck={false}
-                  value={pat}
-                  onChange={(e) => setPat(e.target.value)}
-                  placeholder="github_pat_…"
-                  style={{
-                    width: "100%", padding: "10px 38px 10px 12px", fontSize: 13,
-                    background: "#0a0e1a", color: "#f8fafc",
-                    border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
-                    fontFamily: "'JetBrains Mono', monospace",
-                  }}
-                />
-                <button
-                  type="button"
-                  data-testid="proj-pat-reveal"
-                  onClick={() => setReveal(v => !v)}
-                  style={{
-                    position: "absolute", right: 6, top: "50%",
-                    transform: "translateY(-50%)",
-                    background: "transparent", border: "none",
-                    color: "#64748b", cursor: "pointer", padding: 6,
-                  }}
-                  title={reveal ? "Hide" : "Show"}
-                >
-                  {reveal ? <Lock size={13} /> : <Info size={13} />}
-                </button>
-              </div>
-            </label>
 
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button type="button" onClick={close}
                       data-testid="proj-pat-cancel" className="btn-ghost">Cancel</button>
-              <button type="submit" data-testid="proj-pat-save" disabled={busy}
-                      style={primaryAmberBtn}>
-                {busy ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                {busy ? "Saving…" : "Save & Test"}
-              </button>
             </div>
           </>
         )}

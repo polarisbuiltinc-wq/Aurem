@@ -80,9 +80,31 @@ def is_configured() -> bool:
     return bool(_RUNTIME_GITHUB_APP)
 
 
+async def ensure_configured_from_db(db) -> bool:
+    """Lazy one-shot hydration fallback (2026-08-24).
+
+    A request that lands in the first moments after process boot can
+    race the lifespan hydration hook and see an empty cache even though
+    valid credentials sit in Mongo — observed as a fail-closed 503/499
+    immediately post-restart. When the cache is empty, re-read the
+    config doc once and hydrate. Cheap no-op when already configured.
+    """
+    if _RUNTIME_GITHUB_APP:
+        return True
+    if db is None:
+        return False
+    try:
+        doc = await db.admin_settings.find_one({"_id": "github_app_config"})
+        set_runtime_github_app_config(doc)
+    except Exception:
+        return False
+    return bool(_RUNTIME_GITHUB_APP)
+
+
 __all__ = [
     "REQUIRED_FIELDS",
     "set_runtime_github_app_config",
     "get_runtime_github_app_config",
     "is_configured",
+    "ensure_configured_from_db",
 ]

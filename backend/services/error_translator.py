@@ -4,7 +4,7 @@ Hybrid pipeline:
 
   1. **Static catalog** — fast regex match against ~20 common
      failure shapes (PAT issues, GitHub merge conflicts, OpenRouter
-     rate-limits, network/DNS, vault, etc.). Returns plain Hinglish
+     rate-limits, network/DNS, vault, etc.). Returns plain English
      + a concrete "what to do" step list. Zero LLM cost.
 
   2. **LLM fallback** — when no static match wins, ship the raw
@@ -34,162 +34,159 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────
 
 _RULES: List[Dict[str, Any]] = [
-    # ── GitHub PAT issues ─────────────────────────────────────────
+    # ── GitHub App auth issues (2026-06 · English-only + App-era copy) ─
     {
-        "pattern": re.compile(r"no\s+pat\b|pat\s+missing|missing\s+pat", re.I),
-        "plain":   "Project pe GitHub access token (PAT) save nahi hai — isiliye ORA tumhare repo pe likh nahi paaya.",
+        "pattern": re.compile(r"app_installation_missing|no\s+pat\b|pat\s+missing|missing\s+pat", re.I),
+        "plain":   "This project isn't connected through the AUREM GitHub App, so ORA couldn't write to your repo.",
         "steps":   [
-            "Projects page open karo",
-            "Apne project ke Edit (pencil) button pe click karo",
-            "GitHub PAT field mein apna fine-grained token paste karo (https://github.com/settings/personal-access-tokens/new)",
-            "Save karke wapas chat pe aao aur ye task retry karo",
+            "Open the Projects page",
+            "Click Connect / Edit on this project",
+            "Install the AUREM GitHub App on the repo (the only supported auth method)",
+            "Come back to chat and retry the task",
         ],
-        "suggestion": "PAT mein 'Contents: Read & write' aur 'Metadata: Read' permission zaroor honi chahiye.",
+        "suggestion": "PAT support was removed — the GitHub App is more secure and never expires like a token.",
     },
     {
-        "pattern": re.compile(r"invalid[_\s-]?token|401|bad\s+credentials", re.I),
-        "plain":   "GitHub ne tumhara PAT reject kar diya — ya expire ho gaya hai, ya galat hai.",
+        "pattern": re.compile(r"app_installation_revoked|invalid[_\s-]?token|401|bad\s+credentials", re.I),
+        "plain":   "GitHub rejected the App installation for this repo — it may have been suspended or uninstalled.",
         "steps":   [
-            "GitHub → Settings → Developer settings → Personal access tokens",
-            "Purane PAT ko delete karke naya fine-grained token banao",
-            "Repository access scope mein sirf is project ka repo select karo",
-            "Permissions: Contents (Read & write) + Metadata (Read)",
-            "Project Edit dialog mein naya PAT paste karke retry karo",
+            "Open GitHub → Settings → Applications → Installed GitHub Apps",
+            "Check that the AUREM app is still installed and covers this repo",
+            "Re-install it if missing, then retry the task",
         ],
-        "suggestion": "Fine-grained PAT recommended hai — classic token avoid karo, woh broad access deta hai.",
+        "suggestion": "Org repos sometimes need an org admin to approve the installation.",
     },
     {
         "pattern": re.compile(r"missing[_\s-]?scope|insufficient\s+scope|forbidden|403", re.I),
-        "plain":   "PAT to valid hai but iss repo pe write permission nahi hai.",
+        "plain":   "The GitHub App is connected but doesn't have write permission on this repo.",
         "steps":   [
-            "GitHub Settings → Personal access tokens → apna PAT edit karo",
-            "Repository access section mein is project ka repo add karo",
-            "Permissions mein 'Contents' ko 'Read and write' karo",
-            "Save token → wapas yahan retry button dabao",
+            "Open GitHub → Settings → Installed GitHub Apps → AUREM → Configure",
+            "Make sure this repo is included in the installation's repository access",
+            "Retry the task",
         ],
-        "suggestion": "Permission change save karne ke baad PAT instantly active ho jaata hai, nayi PAT generate karne ki zarurat nahi.",
+        "suggestion": "Permission changes apply instantly — no reconnect needed after saving.",
     },
 
     # ── Repo / branch problems ───────────────────────────────────
     {
         "pattern": re.compile(r"repo[_\s-]?not[_\s-]?found|404.*repo|repository.*not\s+found", re.I),
-        "plain":   "GitHub pe ye repository milti hi nahi — ya rename ho chuki hai ya delete ho gayi.",
+        "plain":   "GitHub can't find this repository — it may have been renamed or deleted.",
         "steps":   [
-            "GitHub pe jaake confirm karo ki repo abhi bhi exist karta hai aur naam wahi hai",
-            "Agar rename hua hai: Projects → Edit → repo name update karo",
-            "Agar delete ho gaya: project hata do aur naya banao",
+            "Check on GitHub that the repo still exists under the same name",
+            "If renamed: Projects → Edit → update the repo name",
+            "If deleted: remove this project and create a new one",
         ],
-        "suggestion": "Owner/org name bhi check karo — agar tumne handle change kiya hai to woh bhi sync karna padega.",
+        "suggestion": "Check the owner/org name too — a changed handle needs syncing as well.",
     },
     {
         "pattern": re.compile(r"branch[_\s-]?not[_\s-]?found|branch.*not\s+exist", re.I),
-        "plain":   "Jis branch pe ORA push karne wala tha woh ab repo mein hai hi nahi.",
+        "plain":   "The branch ORA was about to push to no longer exists in the repo.",
         "steps":   [
-            "GitHub pe repo → branches list dekho",
-            "Confirm karo ki target branch (jaise 'main' ya 'develop') exist karti hai",
-            "Project Edit dialog mein correct branch name set karo aur retry",
+            "Open the repo's branches list on GitHub",
+            "Confirm the target branch (e.g. 'main' or 'develop') exists",
+            "Set the correct branch in the Project Edit dialog and retry",
         ],
-        "suggestion": "Default branch 'main' set rakhna safest hai — kuch repos abhi bhi 'master' use karte hain.",
+        "suggestion": "Keeping 'main' as the default branch is safest — some repos still use 'master'.",
     },
     {
         "pattern": re.compile(r"merge\s+conflict|conflict.*on\s+push|409|fast[_\s-]?forward", re.I),
-        "plain":   "Tumhare branch pe ORA ke working copy ke baad koi naya commit aa gaya — isliye push reject ho gaya.",
+        "plain":   "A new commit landed on your branch after ORA took its working copy, so the push was rejected.",
         "steps":   [
-            "Locally repo pull karke check karo ki kya naya commit hai",
-            "Decide karo: chahiye to manual merge karo, ya is task ko retry karo (ORA fresh fetch karega)",
-            "Retry button dabao — ORA latest HEAD se dobara plan karega",
+            "Pull the repo locally and check what the new commit is",
+            "Either merge manually, or retry this task (ORA will fetch fresh)",
+            "Hit Retry — ORA will re-plan from the latest HEAD",
         ],
-        "suggestion": "Agar tum aur ORA same branch pe parallel kaam kar rahe ho to chhoti tasks rakhna better hai — long-running tasks aksar conflict hit karte hain.",
+        "suggestion": "If you and ORA work on the same branch in parallel, smaller tasks hit fewer conflicts.",
     },
 
     # ── Rate-limits / LLM gateway ────────────────────────────────
     {
         "pattern": re.compile(r"429|rate[_\s-]?limit|too\s+many\s+requests", re.I),
-        "plain":   "AI provider (OpenRouter) ne thoda load throttle kiya — ek pal mein wapas free ho jaayega.",
+        "plain":   "The AI provider throttled the request under load — it clears on its own shortly.",
         "steps":   [
-            "2-3 minute wait karo",
-            "Phir Retry dabao — backend khud waapas connect kar lega",
+            "Wait 2-3 minutes",
+            "Hit Retry — the backend reconnects automatically",
         ],
-        "suggestion": "Agar baar-baar 429 aata hai aur tum heavy user ho, Pro/Team plan pe priority queue milti hai jo public throttle bypass karti hai.",
+        "suggestion": "If you hit 429s often as a heavy user, the Pro/Team plans get a priority queue that bypasses the public throttle.",
     },
     {
         "pattern": re.compile(r"openrouter.*5\d\d|llm.*5\d\d|upstream.*5\d\d|bad\s+gateway|503", re.I),
-        "plain":   "AI provider ka apna server abhi hicchki maar raha — humari taraf se kuch fix nahi karna.",
+        "plain":   "The AI provider's own servers are hiccuping — nothing to fix on our side.",
         "steps":   [
-            "1-2 minute wait karo",
-            "Retry karo — OpenRouter usually 30-60 seconds mein recover ho jaata hai",
-            "Agar 5 minute baad bhi same error, status.openrouter.ai pe check karo",
+            "Wait 1-2 minutes",
+            "Retry — the provider usually recovers within 30-60 seconds",
+            "If it persists past 5 minutes, check status.openrouter.ai",
         ],
-        "suggestion": "Persistent ho to chat ke top-right Mode selector se Pro → Swift switch karke try karo — kabhi-kabhi sirf ek specific model down hota hai.",
+        "suggestion": "If persistent, try switching Pro → Swift in the chat's Mode selector — sometimes only one specific model is down.",
     },
 
     # ── Network / DNS ────────────────────────────────────────────
     {
         "pattern": re.compile(r"timeout|timed\s+out|deadline\s+exceeded|connection.*reset", re.I),
-        "plain":   "Network slow tha aur ek request bich mein hi kat gayi.",
+        "plain":   "The network was slow and a request got cut off midway. This is temporary.",
         "steps":   [
-            "Apna internet briefly check karo",
-            "Retry karo — kaafi baar same network blip do baar nahi aati",
+            "Briefly check your internet connection",
+            "Retry — the same network blip rarely happens twice",
         ],
-        "suggestion": "Agar har task pe timeout aa raha hai to repo size bahut bada ho sakta hai — small focused tasks (1-2 files) zyada reliable rehte hain.",
+        "suggestion": "If every task times out, the repo may be very large — small focused tasks (1-2 files) are more reliable.",
     },
     {
         "pattern": re.compile(r"dns|getaddrinfo|name\s+resolution|unreachable", re.I),
-        "plain":   "Backend GitHub ya OpenRouter ke server tak pahonch hi nahi paaya.",
+        "plain":   "The backend couldn't reach GitHub or the AI provider's servers.",
         "steps":   [
-            "Apni internet connection check karo",
-            "VPN on hai to off karke try karo (kuch VPNs github.com block kar dete hain)",
-            "Retry button dabao",
+            "Check your internet connection",
+            "If a VPN is on, try without it (some VPNs block github.com)",
+            "Hit Retry",
         ],
-        "suggestion": "Office/college networks me kabhi-kabhi outbound HTTPS blocked hota hai — agar persistent ho, mobile hotspot pe ek test karo.",
+        "suggestion": "Office/campus networks sometimes block outbound HTTPS — if persistent, test once on a mobile hotspot.",
     },
 
     # ── Vault / encryption ───────────────────────────────────────
     {
         "pattern": re.compile(r"vault_unavailable|master[_\s-]?key|fernet|decrypt.*fail", re.I),
-        "plain":   "Server pe encryption key configured nahi hai — admin ko set karni padegi.",
+        "plain":   "The server's encryption key isn't configured — an admin needs to set it.",
         "steps":   [
-            "Ye admin-side issue hai, tum kuch nahi kar sakte",
-            "ORA guide (auremcto.com/support) pe ek line bhejo: 'Vault unavailable error on task XYZ'",
-            "Admin AUREM_CTO_MASTER_KEY env var set karke service restart kar dega",
+            "This is an admin-side issue — nothing you can do from here",
+            "Send one line to support (auremcto.com/support): 'Vault unavailable error on task XYZ'",
+            "The admin sets the AUREM_CTO_MASTER_KEY env var and restarts the service",
         ],
-        "suggestion": "Agar tum apna instance khud chala rahe ho (self-host), `backend/.env` mein `AUREM_CTO_MASTER_KEY` ek fernet key set karo (Python: `Fernet.generate_key()`).",
+        "suggestion": "Self-hosting? Set `AUREM_CTO_MASTER_KEY` in `backend/.env` to a Fernet key (Python: `Fernet.generate_key()`).",
     },
 
     # ── Token / wallet exhausted ─────────────────────────────────
     {
         "pattern": re.compile(r"token.*exhaust|wallet.*empty|tokens?.*remaining.*0|out\s+of\s+tokens", re.I),
-        "plain":   "Is mahine ka task quota khatam ho gaya hai.",
+        "plain":   "This month's task quota is used up.",
         "steps":   [
-            "Pricing page pe jaao → Upgrade button dabao",
-            "Pro ($19/mo) → 300 tasks, Team ($49/mo) → 400 tasks aur Maxx mode",
-            "Subscription active hote hi naya quota turant unlock ho jaata hai",
+            "Open the Pricing page → hit Upgrade",
+            "Pro ($19/mo) → 300 tasks, Team ($49/mo) → 400 tasks plus Maxx mode",
+            "The new quota unlocks the moment the subscription activates",
         ],
-        "suggestion": "Founder accounts (FOUNDER_EMAILS env var) ka quota unlimited hota hai — apne use case ke liye relevant ho to admin se baat karo.",
+        "suggestion": "Founder accounts (FOUNDER_EMAILS env var) have unlimited quota — talk to the admin if that fits your case.",
     },
 
     # ── Common test/lint ─────────────────────────────────────────
     {
         "pattern": re.compile(r"lint.*fail|eslint.*error|ruff.*error|syntax.*error", re.I),
-        "plain":   "ORA ne code generate to kar diya but uska lint pass nahi hua — commit safety ke liye block kar diya.",
+        "plain":   "ORA generated the code but it failed lint, so the commit was blocked for safety.",
         "steps":   [
-            "Retry button dabao — ORA second pass mein lint errors dekhke khud fix karega",
-            "Agar dobara same error: chat pe likho 'fix the lint errors and try again'",
+            "Hit Retry — ORA fixes lint errors itself on the second pass",
+            "If the same error repeats: type 'fix the lint errors and try again' in chat",
         ],
-        "suggestion": "Maxx mode (Team plan) lint failures pe automatic 2-pass review karta hai — Pro/Swift mein manual retry chahiye.",
+        "suggestion": "Maxx mode (Team plan) auto-runs a 2-pass review on lint failures — Pro/Swift needs a manual retry.",
     },
 ]
 
 
 # Generic fallback when nothing matches and LLM is also unreachable.
 _GENERIC: Dict[str, Any] = {
-    "plain":      "Task complete nahi ho paya — exact reason backend logs mein hai.",
+    "plain":      "The task couldn't complete — the exact reason is in the backend logs.",
     "steps":      [
-        "Retry button dabao — kaafi failures one-time blips hote hain",
-        "Agar dobara same error: chat mein likho 'last task kyun fail hua'",
-        "Persistent ho to auremcto.com/support pe error message bhej do",
+        "Hit Retry — many failures are one-time blips",
+        "If the same error repeats: ask in chat 'why did the last task fail'",
+        "If it persists, send the error message to auremcto.com/support",
     ],
-    "suggestion": "Generally first retry ka success rate 60%+ hota hai.",
+    "suggestion": "The first retry succeeds more than 60% of the time.",
 }
 
 
@@ -220,12 +217,12 @@ async def _llm_rewrite(raw_error: str) -> Dict[str, Any] | None:
         # on cold-start; the dependency is only touched on real failures.
         from services.llm import call_llm_with_meta
         sys_prompt = (
-            "You translate raw backend error messages into a Hinglish "
-            "(hindi+english) explanation for a non-technical founder. "
+            "You translate raw backend error messages into a plain-English "
+            "explanation for a non-technical founder. "
             "Output STRICT JSON only, no prose around it. Schema:\n"
-            '{"plain": "<1-2 sentences why this failed in Hinglish>",\n'
+            '{"plain": "<1-2 sentences why this failed, in plain English>",\n'
             ' "steps": ["step 1", "step 2", "step 3"],\n'
-            ' "suggestion": "<1 helpful tip in Hinglish>"}\n'
+            ' "suggestion": "<1 helpful tip in plain English>"}\n'
             "Constraints: total under 200 tokens, no markdown, no code "
             "fences, no extra keys. Steps must be concrete actions the "
             "user can do RIGHT NOW (not 'contact your admin' unless the "

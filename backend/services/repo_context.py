@@ -317,13 +317,13 @@ async def _build_blob(project: dict) -> str:
             note = (
                 f"(could not load repo tree — 404. "
                 f"Check that branch `{branch}` exists on {owner}/{repo} and "
-                f"that the saved PAT has access.)"
+                f"that the GitHub App installation covers this repo.)"
             )
         elif status == 401:
             note = (
-                "(GitHub rejected the project's PAT — 401 Unauthorized. "
-                "Open Projects → Edit and paste a fresh fine-grained PAT "
-                "with `Contents: Read` access for this repo.)"
+                "(GitHub rejected the project's App credentials — 401 "
+                "Unauthorized. Reconnect via Projects → APP (AUREM GitHub "
+                "App).)"
             )
         else:
             note = f"(GitHub error {status} fetching repo tree.)"

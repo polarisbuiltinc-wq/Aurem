@@ -218,7 +218,12 @@ async def install_kickoff(
       fs    — optional funnel session_id to stitch client + server events.
     """
     if not _app_configured():
-        raise HTTPException(503, "github_app_not_configured")
+        # 2026-08-24 — lifespan-hydration race: fall back to a one-shot
+        # DB read before failing closed (testing-agent-observed 499s in
+        # the first second after a restart).
+        from services.github_app_config import ensure_configured_from_db
+        if not await ensure_configured_from_db(require_db()):
+            raise HTTPException(503, "github_app_not_configured")
 
     if not authorization and auth:
         authorization = f"Bearer {auth}"

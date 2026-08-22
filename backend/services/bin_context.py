@@ -172,8 +172,7 @@ async def build_bin_context(
             status_code=400,
             detail=(
                 "Project is not wired to a GitHub repo. Open Projects → "
-                "Edit and paste a fine-grained PAT with Contents: Read "
-                "and write for the repo you want to use."
+                "Edit and connect the repo via the AUREM GitHub App."
             ),
         )
 
@@ -199,11 +198,10 @@ async def build_bin_context(
         raise HTTPException(
             status_code=403,
             detail=(
-                "This project's GitHub credentials aren't available. If "
-                "installed via the GitHub App, the installation may have "
-                "been revoked — reinstall it. If using a PAT, open "
-                "Projects → Edit and paste a fresh fine-grained PAT with "
-                "Contents: Read and write."
+                "This project's GitHub App access isn't available — the "
+                "installation may have been revoked or doesn't cover this "
+                "repo. Open Projects → APP to reconnect via the AUREM "
+                "GitHub App."
             ),
         )
 

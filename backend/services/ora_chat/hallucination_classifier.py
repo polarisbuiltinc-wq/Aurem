@@ -91,7 +91,7 @@ _PROMPT_TEMPLATE = (
     "TASK: Find the ≤3 STRONGEST recurring patterns (each seen in "
     ">= 3 cases). For each, output:\n"
     "  - pattern_name: short kebab-case slug (e.g. 'fabricated-test-file')\n"
-    "  - description: one sentence in plain English + Hinglish\n"
+    "  - description: one sentence in plain English\n"
     "  - example_cases: list of case numbers from the input\n"
     "  - proposed_rule: a single sentence rule that would prevent this "
     "class of hallucination, phrased as an imperative addition to the "

@@ -800,9 +800,9 @@ async def write_repo_file(ctx: dict, args: dict) -> dict:
         return {
             "ok": False,
             "error": (
-                "No PAT configured for this project — write_repo_file needs "
-                "write access. Add a fine-grained PAT with Contents: "
-                "Read & Write via Projects → Add PAT."
+                "GitHub App access is unavailable for this project — "
+                "write_repo_file needs write access. Reconnect the repo "
+                "via Projects → APP (AUREM GitHub App)."
             ),
         }
 

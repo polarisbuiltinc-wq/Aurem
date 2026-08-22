@@ -1088,20 +1088,33 @@ function Section({ title, children }) {
 // Shows counts per stage + conv-% between adjacent stages so the
 // drop-off point is one glance away without a curl command.
 function GhFunnelStrip({ funnel }) {
-  // Human-readable labels for the 5 canonical stages.
+  // 2026-08-24 — added the GitHub-App stages between "Linked" and
+  // "Repo picked": the wizard's real journey since Phase 4 is
+  // link identity → install App → pick repo, and hiding the App
+  // stages made the true drop-off point invisible.
   const LABELS = {
-    cta_click:         "CTA click",
-    oauth_redirect:    "OAuth redirect",
-    callback_received: "Callback",
-    linked:            "Linked",
-    repo_selected:     "Repo picked",
+    cta_click:            "CTA click",
+    oauth_redirect:       "OAuth redirect",
+    callback_received:    "Callback",
+    linked:               "Linked",
+    app_install_redirect: "App install",
+    app_installed:        "App installed",
+    repo_selected:        "Repo picked",
   };
   const STAGES = [
-    "cta_click", "oauth_redirect", "callback_received", "linked", "repo_selected",
+    "cta_click", "oauth_redirect", "callback_received", "linked",
+    "app_install_redirect", "app_installed", "repo_selected",
   ];
   const stages = funnel?.stages || {};
-  const convs  = funnel?.conversions || [];
   const totalClicks = stages.cta_click || 0;
+  // Conversions computed client-side in DISPLAY order — the backend's
+  // `conversions` array follows its own canonical stage order, which
+  // no longer matches this journey view.
+  const convPct = (i) => {
+    const prev = stages[STAGES[i - 1]] || 0;
+    const curr = stages[STAGES[i]] || 0;
+    return prev > 0 ? ((curr / prev) * 100).toFixed(1) : "0.0";
+  };
 
   // Empty-state — first 3-5 days of no data. Show a friendly placeholder
   // instead of an ugly row of zeros.
@@ -1134,7 +1147,6 @@ function GhFunnelStrip({ funnel }) {
             }}>
               {STAGES.map((s, i) => {
                 const n = stages[s] || 0;
-                const conv = i > 0 ? convs[i - 1] : null;
                 return (
                   <React.Fragment key={s}>
                     {i > 0 && (
@@ -1145,9 +1157,9 @@ function GhFunnelStrip({ funnel }) {
                           padding: "0 6px 6px", whiteSpace: "nowrap",
                           fontFamily: "'JetBrains Mono', monospace",
                         }}
-                        title={`${conv?.from_n ?? 0} → ${conv?.to_n ?? 0}`}
+                        title={`${stages[STAGES[i - 1]] || 0} → ${n}`}
                       >
-                        {conv ? `→ ${conv.conv_pct}%` : "→"}
+                        {`→ ${convPct(i)}%`}
                       </div>
                     )}
                     <div
@@ -1181,8 +1193,12 @@ function GhFunnelStrip({ funnel }) {
                 {totalClicks} click{totalClicks === 1 ? "" : "s"} · {funnel?.window_days ?? 7} d window
               </span>
               <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                {/* 2026-08-24 — "overall conv" previously divided `linked`
+                    by clicks, reporting 100% while the funnel's actual
+                    final stage (repo picked) sat at 0. Overall conversion
+                    is END of funnel over START, nothing else. */}
                 overall conv {totalClicks > 0
-                  ? `${((stages.linked || 0) / totalClicks * 100).toFixed(1)}%`
+                  ? `${((stages.repo_selected || 0) / totalClicks * 100).toFixed(1)}%`
                   : "—"}
               </span>
             </div>

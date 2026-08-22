@@ -141,6 +141,11 @@ class AddProject(BaseModel):
     # decision #1). NEVER stored — installation access tokens are minted
     # fresh per-request via services.github_app.
     installation_id: Optional[int] = None
+    # 2026-08-24 — GitHub-connect funnel stitching: the wizard passes its
+    # localStorage funnel session so the server-side `repo_selected`
+    # event (fired at add-success, the moment of truth) joins the same
+    # journey as cta_click/oauth_redirect/linked.
+    funnel_session: Optional[str] = None
 
 
 class TaskBody(BaseModel):
@@ -1054,6 +1059,20 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
         metadata={"project_id": proj_id, "owner": owner, "repo": repo,
                   "auth_method": auth_method},
     )
+
+    # 2026-08-24 — GitHub Connect funnel: `repo_selected` was a declared
+    # stage that NO code ever emitted (root cause of the perpetual
+    # "Repo picked: 0"). Fire it server-side at the moment of truth — a
+    # project row actually created — so the stage measures reality and
+    # can never be lost to client-side flakiness. Deterministic
+    # per-user fallback session keeps retries deduped.
+    from routers.github_funnel import track_server_side as _gh_funnel_track
+    await _gh_funnel_track(
+        "repo_selected", source="wizard",
+        session_id=body.funnel_session or f"srv:uid:{me['user_id']}",
+        user_id=me["user_id"],
+        meta={"project_id": proj_id, "auth_method": auth_method},
+    )
     return resp
 
 
@@ -1134,8 +1153,13 @@ async def project_indexing_status(
 # proxy access logs — small but real security win vs. query strings.
 # ─────────────────────────────────────────────────────────────────────
 class VerifyPatBody(BaseModel):
-    repo: str  # "owner/name"
-    pat:  str  # ghp_… or github_pat_…
+    # 2026-08-24 — all fields optional: this endpoint's ONLY job is an
+    # honest pat_not_supported rejection, so a stale caller with any
+    # legacy body shape (repo / github_url / pat) must reach it instead
+    # of bouncing off a confusing 422 validation error.
+    repo: Optional[str] = None        # "owner/name" (legacy)
+    pat:  Optional[str] = None        # ghp_… or github_pat_… (never used)
+    github_url: Optional[str] = None  # older callers sent a full URL
 
 
 @router.post("/projects/verify-pat")
@@ -1270,7 +1294,8 @@ async def test_project_pat(
     if not gh_token:
         return {
             "ok": False,
-            "error": "No PAT saved and no GitHub OAuth connection on file.",
+            "error": "GitHub App access is not linked for this project. "
+                     "Reconnect via Projects → APP.",
         }
 
     import httpx
@@ -1300,19 +1325,22 @@ async def test_project_pat(
     if r.status_code in (401, 403):
         return {
             "ok":    False,
-            "error": "Token invalid or missing repo scope. Regenerate the "
-                     "PAT with **Contents: Read and write** for this repo.",
+            "error": "GitHub rejected the App credentials — the installation "
+                     "may be suspended or revoked. Reconnect via "
+                     "**Projects → APP** (AUREM GitHub App).",
         }
     if r.status_code == 404:
         return {
             "ok":    False,
             "error": f"Repo not found at github.com/{owner}/{repo}. The repo "
-                     "may be private, or your token doesn't include it. "
-                     "Re-pick the repo when generating a fine-grained PAT.",
+                     "may be private, or the App installation doesn't cover "
+                     "it. On GitHub → the AUREM App → Configure → Repository "
+                     "access, add this repo.",
         }
     return {
         "ok":    False,
-        "error": f"GitHub returned HTTP {r.status_code}. Try a new token.",
+        "error": f"GitHub returned HTTP {r.status_code}. Try reconnecting "
+                 "via Projects → APP.",
     }
 
 

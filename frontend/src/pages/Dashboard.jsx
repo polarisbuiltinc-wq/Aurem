@@ -61,6 +61,7 @@ import { Menu as MenuIcon } from "lucide-react";
 import SidebarV2Bound   from "../components/dashboard/v2/SidebarBound";
 import RailShell        from "../components/nav/RailShell";
 import AskAdvisorReal   from "../components/dashboard/v2/AskAdvisorReal";
+import PromptStarterPanel from "../components/PromptStarterPanel";
 
 const SHARE_MILESTONES = [10, 25, 50, 100, 250];
 
@@ -655,6 +656,20 @@ function DashboardV2Body() {
           collapsed={advisorCollapsed}
           onCollapse={setAdvisorCollapsed}
           projectId={activeProject?.project_id || null}
+          topSlot={
+            activeProject && activeProject.project_id !== "home" ? (
+              <PromptStarterPanel
+                onPick={(prompt) => {
+                  try {
+                    window.dispatchEvent(new CustomEvent("aurem:starter-pick",
+                      { detail: { prompt } }));
+                  } catch { /* noop */ }
+                }}
+                projectId={activeProject.project_id}
+                inputEmpty
+              />
+            ) : null
+          }
         />
       </div>
 

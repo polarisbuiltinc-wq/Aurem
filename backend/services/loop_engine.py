@@ -3509,6 +3509,8 @@ class LoopEngine:
                              "commit_sha":     short_sha,
                              "full_sha":       full_sha,
                              "html_url":       html_url,
+                             "repo":           f"{owner}/{repo}",
+                             "branch":         branch,
                              "files_changed":  list(files_dict.keys()),
                              "scan_results":   self.context.get("scan_results"),
                          })

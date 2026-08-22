@@ -1,42 +1,39 @@
 /**
- * PatRequiredCTA.jsx — Inline "Add PAT" button inside chat bubbles.
+ * PatRequiredCTA.jsx — Inline "Connect GitHub App" button inside chat
+ * bubbles.
  *
- * When ORA (or any assistant) hits a GitHub 401 and tells the user to
- * fix their PAT, we surface a one-click CTA right inside the bubble
- * that deep-links to /projects?pat=<active-project-id>. Projects.jsx
- * picks up that query param and opens the PatModal for the right
- * project so the user doesn't have to hunt through Project Settings.
+ * 2026-08-24 · PAT-removal sweep — PATs are no longer an auth method
+ * anywhere in AUREM. When ORA (or any assistant/tool) reports a GitHub
+ * auth failure, this CTA deep-links to /projects?app=<active-project-id>
+ * where Projects.jsx opens the per-project GitHub App connect modal.
  *
  * Detection is intentionally conservative — we only fire when the
- * message contains multiple PAT signals so we never show the CTA on
- * incidental mentions of "GitHub" or "token".
- *
- * Iter 212f — if the active project already has a saved PAT
- * (`project.has_pat === true`), we suppress the CTA entirely. The
- * user already provided the token at project creation; the LLM was
- * just rambling about PATs in its answer. Avoids the "add PAT twice"
- * UX bug where users had to re-paste the same token after every
- * GitHub-related question.
+ * message contains multiple auth-failure signals so we never show the
+ * CTA on incidental mentions of "GitHub" or "token".
  */
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { Key, ArrowRight } from "lucide-react";
+import { Github, ArrowRight } from "lucide-react";
 import { getActiveProjectId, useActiveProject } from "./TabBar";
 
-const PAT_SIGNALS = [
+const AUTH_SIGNALS = [
   /\b401\b.*\b(github|bad credentials|authentication|unauthor)/i,
   /\b(bad credentials|invalid credentials)\b/i,
+  /\bgithub app\b.*\b(revoked|missing|reinstall|reconnect|not installed)/i,
+  /\binstallation\b.*\b(revoked|missing|suspended|reinstall)/i,
+  /\bcredentials aren'?t available\b/i,
+  // Legacy PAT phrasing can still appear in OLD persisted chat turns —
+  // detect it so those historical bubbles get the modern App CTA too.
   /\bpersonal access token\b/i,
   /\bgithub pat\b/i,
   /\bfine[- ]grained pat\b/i,
-  /\b(update|fix|regenerate|generate).{0,40}\bpat\b/i,
   /\bcontents:\s*read/i,
 ];
 
-function needsPat(text) {
+function needsAppConnect(text) {
   if (!text || typeof text !== "string") return false;
   let hits = 0;
-  for (const re of PAT_SIGNALS) if (re.test(text)) hits++;
+  for (const re of AUTH_SIGNALS) if (re.test(text)) hits++;
   // Require ≥2 distinct signals to avoid false positives on casual mentions.
   return hits >= 2;
 }
@@ -45,17 +42,15 @@ export default function PatRequiredCTA({ text }) {
   const navigate = useNavigate();
   const activeProject = useActiveProject();
 
-  // Iter 212f — if the project already has a saved PAT, the LLM
-  // talking about PATs is just commentary, not an actionable
-  // "you need to set this up" signal. Hide the CTA entirely so
-  // users aren't prompted to re-enter the token they already gave us.
-  if (activeProject?.has_pat) return null;
+  // Healthy App-authed project → any auth chatter is commentary, not an
+  // actionable setup signal.
+  if (activeProject?.auth_method === "github_app" && activeProject?.installation_active) return null;
 
-  if (!needsPat(text)) return null;
+  if (!needsAppConnect(text)) return null;
 
   const projectId = getActiveProjectId();
   const target = projectId
-    ? `/projects?pat=${encodeURIComponent(projectId)}`
+    ? `/projects?app=${encodeURIComponent(projectId)}`
     : `/projects?add=1`;
 
   return (
@@ -66,9 +61,10 @@ export default function PatRequiredCTA({ text }) {
       borderRadius: 8,
       display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
     }}>
-      <Key size={14} style={{ color: "#f59e0b", flexShrink: 0 }} />
+      <Github size={14} style={{ color: "#f59e0b", flexShrink: 0 }} />
       <span style={{ fontSize: 12, color: "var(--text-dim, #94a3b8)", flex: 1, minWidth: 0 }}>
-        Need a GitHub Personal Access Token to scan this repo. ORA can guide you in 30 seconds.
+        GitHub access for this repo is unavailable. Connect it via the AUREM
+        GitHub App — one popup, no tokens to manage.
       </span>
       <button
         type="button"
@@ -84,7 +80,7 @@ export default function PatRequiredCTA({ text }) {
           flexShrink: 0,
         }}
       >
-        Add PAT <ArrowRight size={11} />
+        Connect GitHub App <ArrowRight size={11} />
       </button>
     </div>
   );

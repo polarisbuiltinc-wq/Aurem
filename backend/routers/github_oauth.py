@@ -200,9 +200,16 @@ async def connect(
             "funnel_source":  fsrc or "settings_card",
         })
     # 2026-08-01 — server-side funnel event.
+    # 2026-08-24 — dedupe fix: when `fs` is missing (unstitched popup
+    # navigations, retries) the old code let track_server_side mint a
+    # RANDOM srv:* session per hit, so one user retrying inflated
+    # oauth_redirect above cta_click (observed 13 vs 11 in production).
+    # Authenticated connects now fall back to a deterministic per-user
+    # session id, so the (session_id, stage) dedupe actually dedupes.
     await _funnel_track(
         "oauth_redirect", source=(fsrc or "settings_card"),
-        session_id=fs, user_id=user["user_id"],
+        session_id=fs or f"srv:uid:{user['user_id']}",
+        user_id=user["user_id"],
         meta={"mode": "connect"},
     )
     return RedirectResponse(url=auth_url(state, force_reauth=fr))

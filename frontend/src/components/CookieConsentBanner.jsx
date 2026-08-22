@@ -18,6 +18,7 @@
  */
 import React, { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
+import { Z_COOKIE_BANNER } from "../lib/zIndex";
 
 const STORAGE_KEY = "aurem_consent";
 const VERSION = 1;
@@ -203,7 +204,7 @@ export default function CookieConsentBanner() {
           bottom: 16,
           maxWidth: 620,
           margin: "0 auto",
-          zIndex: 10000,
+          zIndex: Z_COOKIE_BANNER,
           background: "rgba(12, 14, 18, 0.96)",
           backdropFilter: "blur(18px)",
           WebkitBackdropFilter: "blur(18px)",
