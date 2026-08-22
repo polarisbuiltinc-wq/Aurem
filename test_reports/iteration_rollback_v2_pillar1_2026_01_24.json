@@ -1,0 +1,25 @@
+{
+  "summary": "Independent adversarial verification of Pillar 1 (Rollback v2) — 25/25 backend tests PASS. Covered: (a) auth gating — all 7 endpoints [POST /snapshot, GET /snapshots, POST /preview, POST /execute, GET /attempts, POST /drill, GET /drills] correctly reject unauthenticated and non-admin callers with 401/403 (14 parametrized cases); (b) real snapshot creation against polarisbuiltinc-wq/auremdev main — snapshot_id 'snap_' prefix, r2_key present, base_commit_sha non-empty string, file_manifest shows backend/main.py present:true with sha256 and nonexistent/file.py present:false; (c) GET /snapshots contains the created snapshot, no _id leakage anywhere; (d) preview returns ok:true with preview_token and expires_in_min=15, backend/main.py status='unchanged' (no drift); (e) execute confirm:false → ok:false reason 'confirm_required'; (f) bogus preview_token → ok:false 'preview_token_invalid'; (g) real token + confirm:true → EXPECTED fail-closed: ok:false reason 'restore_commit_failed', attempt_id 'rba_' prefix, detail contains 403, no ghp_/github_pat_/env-token leakage in detail; (h) attempts ledger contains the failed attempt with mechanism='snapshot_restore', result='failed', failure_reason + timestamp populated, no _id; (i) same preview_token reused → ok:false 'preview_token_already_used' (single-use enforced); (j) POST /drill returns result 'blocked' with steps[0]={step:'config',status:'blocked'} and drill_id appears in GET /drills; (k) regression — /auth/login and /admin/synthetic-checks/heartbeat both 200.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_rollback_v2_pillar1.py",
+    "/app/test_reports/pytest/rollback_v2_pillar1.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "services/rollback_two_phase.py:128 — expiry check compares ISO-8601 strings via lexicographic '>', which is safe only because both timestamps are UTC 'Z-normalized' via datetime.isoformat() with tzinfo=utc (offset '+00:00'). Works today but a mixed-offset value would silently miscompare; safer to parse to datetime and compare.",
+    "services/rollback_two_phase.py:192-194 — secret scrubbing only replaces the exact `token` value passed in. Good, but if the GitHub library ever includes token fragments (partial), scrubbing won't catch it. Consider a regex sweep for ghp_/github_pat_/gho_ patterns in error detail before returning.",
+    "routers/rollback_v2.py:24-26 — _env_token() returns '' when both AUREM_DRILL_TOKEN and GITHUB_ACTIONS_TOKEN are unset; downstream services call GitHub with token='' which produces the 403 fail-closed observed here. Behavior is correct (fail-closed) but worth an explicit early-return with reason 'no_write_token_configured' on /execute for clearer operator UX.",
+    "services/rollback_snapshot.py:98 — env_config is just a copy of db_state['project_config'] rather than actual env fields; the key name is slightly misleading. Rename to project_config_snapshot or add real env allow-list.",
+    "Non-admin gating parametrized across all 7 endpoints returned 401/403 consistently — no bypass on GET vs POST."
+  ],
+  "updated_files": ["/app/backend/tests/test_rollback_v2_pillar1.py"],
+  "success_rate": {"backend": "100%", "frontend": "n/a (skipped per request)"},
+  "test_credentials": "admin: test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md). Non-admin: free-gate-test-0822@aurem.dev / FreeGateTest2026! logged in successfully.",
+  "seed_data_creation": "One real R2 snapshot object + rollback_snapshots row created (snap_*), one rollback_previews row (marked used=true after execute), one rollback_attempts ledger row (rba_*, result=failed), one rollback_drills row (result=blocked). All are natural artifacts of exercising the real endpoints and match the founder's zero-mocks contract; no cleanup required.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend base = REACT_APP_BACKEND_URL (from /app/frontend/.env). All Rollback v2 endpoints live under /api/aurem-dev/admin/rollback2/*, admin-gated at router level via Depends(require_admin_dep). Snapshot POST performs REAL GitHub reads + REAL R2 upload; allow 30-60s. Execute POST with a read-only token is EXPECTED to return ok:false reason 'restore_commit_failed' with a 403 detail — this is the desired fail-closed behavior, NOT a bug. Drill is founder-blocked pending AUREM_DRILL_REPO env; do NOT set it. Test file at /app/backend/tests/test_rollback_v2_pillar1.py — 25 tests, ~11s runtime.",
+  "rca of the issue": "N/A — no defects found. All 25 targeted assertions pass on first run against the real preview backend."
+}

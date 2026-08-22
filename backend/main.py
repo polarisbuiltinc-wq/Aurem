@@ -56,6 +56,7 @@ from routers.admin_analytics import router as admin_analytics_router  # 2026-02-
 from routers.admin_bi import router as admin_bi_router  # Slice A · BI Cockpit — /admin/bi/{stripe,inference,summary}
 from routers.admin_health_score import router as admin_health_score_router  # 2026-08-23 — Codebase Health Score widget
 from routers.founder_summary import router as founder_summary_router  # 2026-08-24 — Pillar 6, founder-language translation layer
+from routers.rollback_v2 import router as rollback_v2_router  # 2026-06 — Pillar 1, snapshot-based two-phase rollback + drill
 from routers.support import router as support_router
 from routers.payments import router as payments_router
 from routers.stripe_webhook_compat import router as stripe_webhook_compat_router  # Iter 388-ae — legacy /api/stripe/webhook alias (see Payments $0 root-cause memo)
@@ -3088,6 +3089,7 @@ app.include_router(admin_analytics_router,      prefix="/api/aurem-dev")  # 2026
 app.include_router(admin_bi_router,             prefix="/api/aurem-dev")  # Slice A · BI Cockpit
 app.include_router(admin_health_score_router,   prefix="/api/aurem-dev")  # 2026-08-23 — Codebase Health Score
 app.include_router(founder_summary_router,      prefix="/api/aurem-dev")  # 2026-08-24 — Pillar 6
+app.include_router(rollback_v2_router,          prefix="/api/aurem-dev")  # 2026-06 — Pillar 1
 app.include_router(support_router,       prefix="/api/aurem-dev")
 app.include_router(payments_router,      prefix="/api/aurem-dev")
 # Iter 388-ae · legacy Stripe dashboard path compatibility. Prod logs

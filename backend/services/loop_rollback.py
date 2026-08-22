@@ -231,6 +231,38 @@ async def run_rollback(
         rollback_commit_sha=commit_sha,
     )
 
+    # Pillar 1 (2026-06) — rollback_attempts ledger row for the legacy
+    # git-revert path (snapshot-based path writes its own rows in
+    # services/rollback_two_phase.py).
+    import uuid as _uuid
+    _attempt_id = f"rba_{_uuid.uuid4().hex[:16]}"
+    try:
+        _sess = await db.loop_sessions.find_one(
+            {"loop_id": loop_id}, {"pre_ship_snapshot_id": 1}) or {}
+        await db.rollback_attempts.insert_one({
+            "attempt_id":     _attempt_id,
+            "snapshot_id":    _sess.get("pre_ship_snapshot_id"),
+            "mechanism":      "git_revert",
+            "initiated_by":   f"loop_rollback:{loop_id}",
+            "target_commit":  commit_sha,
+            "result":         "running",
+            "failure_reason": None,
+            "timestamp":      _iso(),
+        })
+    except Exception as _le:  # noqa: BLE001
+        logger.warning("[loop-rollback %s] ledger insert failed: %r",
+                       loop_id, _le)
+
+    async def _ledger_final(result: str, **extra):
+        try:
+            await db.rollback_attempts.update_one(
+                {"attempt_id": _attempt_id},
+                {"$set": {"result": result, "finished_at": _iso(), **extra}},
+            )
+        except Exception as _le:  # noqa: BLE001
+            logger.warning("[loop-rollback %s] ledger update failed: %r",
+                           loop_id, _le)
+
     try:
         await _prog("kicking off revert via github api", "info")
         # Resolve real dev identity if not passed in.
@@ -266,6 +298,7 @@ async def run_rollback(
             rollback_completed_at=time.time(),
         )
         await _prog(f"reverted → {(rb_sha or '')[:7]}", "success")
+        await _ledger_final("success", restored_commit_sha=rb_sha)
         # Iter 330 · terminal SSE emit — carries state="completed"
         # which the frontend consumer uses to close its OperationHistory
         # live-op card and add it to the collapsed history stack. Also
@@ -289,6 +322,7 @@ async def run_rollback(
     except Exception as e:                                  # noqa: BLE001
         safe = _scrub(str(e))
         logger.exception("[loop-rollback %s] failed", loop_id)
+        await _ledger_final("failed", failure_reason=safe[:500])
         await _prog(f"❌ {safe}", "error")
         await _set_fields(
             db, loop_id,

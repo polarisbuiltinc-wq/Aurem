@@ -3271,6 +3271,40 @@ class LoopEngine:
             from services.git_identity import (
                 resolve_git_identity, build_commit_message,
             )
+            # Pillar 1 (2026-06) — pre-ship application snapshot.
+            # Captures byte-exact pre-ship contents of every file this
+            # commit touches (+ loop/project DB state) to R2, enabling
+            # snapshot-based rollback. Fail-open: snapshot infra must
+            # never block a ship, but failures are loudly recorded.
+            try:
+                from services.rollback_snapshot import create_snapshot
+                _snap = await create_snapshot(
+                    self.db, owner=owner, repo=repo, branch=branch,
+                    token=token, file_paths=list(files_dict.keys()),
+                    user_id=self.user_id,
+                    project_id=getattr(self, "project_id", "") or "",
+                    loop_id=self.loop_id, trigger="pre_ship",
+                )
+                await self.db.loop_sessions.update_one(
+                    {"loop_id": self.loop_id},
+                    {"$set": {"pre_ship_snapshot_id": _snap["snapshot_id"]}},
+                )
+                logger.info("[loop %s] pre-ship snapshot %s captured",
+                            self.loop_id, _snap["snapshot_id"])
+            except Exception as _snap_err:  # noqa: BLE001
+                logger.warning("[loop %s] pre-ship snapshot FAILED: %r",
+                               self.loop_id, _snap_err)
+                try:
+                    from services.founder_alerts import send_founder_alert
+                    await send_founder_alert(
+                        self.db,
+                        source_key=f"snapshot_fail:{self.loop_id}",
+                        title="Pre-ship snapshot FAILED",
+                        detail=f"Loop {self.loop_id}: {_snap_err!r}"[:500],
+                        level="warning", guard="P1",
+                    )
+                except Exception:
+                    pass
             # Iter 212m-218 — real developer identity + Conventional
             # Commits + Co-authored-by trailer. The commit_message
             # arriving here may be either the raw user task or an
