@@ -9,6 +9,7 @@
  */
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../lib/api";
+import { useAsyncState } from "../hooks/useAsyncState";
 
 const C = {
   panel:  "#101013",
@@ -119,7 +120,7 @@ export default function HealthScoreWidget() {
   const [expandedId, setExpandedId] = useState(null);
   const [running, setRunning] = useState(false);
   const [reviewNotes, setReviewNotes] = useState("");
-  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const review = useAsyncState(15000);
 
   const load = useCallback(async () => {
     try {
@@ -158,20 +159,17 @@ export default function HealthScoreWidget() {
 
   const submitReview = async () => {
     if (!reviewNotes.trim()) return;
-    setReviewSubmitting(true);
     try {
       // Real, deliberate rubric input only — no auto-generated numbers.
-      await api.post("/admin/health-score/architecture-review", {
+      await review.run(() => api.post("/admin/health-score/architecture-review", {
         reviewer: "founder-cockpit",
         notes: reviewNotes,
         rubric: { coupling: 70, spof: 70 },
-      });
+      }));
       setReviewNotes("");
       await load();
-    } catch (e) {
-      setErr(e?.message || "review submit failed");
-    } finally {
-      setReviewSubmitting(false);
+    } catch {
+      // review.error is already set by useAsyncState — nothing more to do.
     }
   };
 
@@ -253,15 +251,21 @@ export default function HealthScoreWidget() {
               <button
                 data-testid="health-score-review-submit-btn"
                 onClick={submitReview}
-                disabled={reviewSubmitting || !reviewNotes.trim()}
+                disabled={review.isProcessing || !reviewNotes.trim()}
                 style={{
                   fontSize: 11, background: "transparent", border: `1px solid ${C.border}`,
                   color: C.dim, padding: "6px 12px", borderRadius: 6,
-                  cursor: reviewSubmitting ? "wait" : "pointer", fontFamily: C.mono,
+                  cursor: review.isProcessing ? "wait" : "pointer", fontFamily: C.mono,
                 }}>
-                submit
+                {review.isProcessing ? "submitting…" : review.isTimeout ? "timed out — retry" : "submit"}
               </button>
             </div>
+            {review.isFailed && review.error && (
+              <div data-testid="health-score-review-error"
+                   style={{ fontSize: 10.5, color: C.red, marginTop: 6 }}>
+                [{review.error.category}] {review.error.message}
+              </div>
+            )}
           </div>
 
           <div style={{ fontSize: 9, color: C.faint, marginTop: 10, fontFamily: C.mono }}>

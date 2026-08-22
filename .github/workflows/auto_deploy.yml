@@ -52,13 +52,26 @@ jobs:
           echo "AUREM PR validated."
 
   gate-on-ci:
-    # Iter 139 — block deploy until the CI workflow (ci.yml) on the
-    # SAME commit reports success. Real gate, not a stub: polls the
-    # GitHub REST API every 15 s for up to 12 minutes. If CI was never
-    # triggered (e.g. doc-only path filter, manual workflow dispatch)
-    # we treat that as "no opinion" and allow the deploy to proceed,
-    # which matches GitHub's default required-status-check semantics.
-    name: Wait for CI tests
+    # Iter 139 — block deploy until the CI + Quality Gate workflows
+    # (ci.yml + quality-gate.yml) on the SAME commit report success.
+    # Real gate, not a stub: polls the GitHub REST API every 15s for
+    # up to 12 minutes.
+    #
+    # 2026-08-24 · CONFIRMED bug fix (Inventory Sweep + Pillar 2
+    # deploy-gate work) — CI_NAME here was "AUREM CI — Test Suite",
+    # which never matches ci.yml's actual `name:` field ("AUREM CI —
+    # Build + Test Guard"). Every run therefore looked like "CI never
+    # triggered" and fell through to the manual-override branch,
+    # which ALLOWED every deploy regardless of real CI result
+    # (fail-open). Fixed the name AND added quality-gate.yml (the
+    # workflow with the bug-fix-discipline/vitest/visual-regression/
+    # invariants jobs) to the same poll. Also flipped the "did not
+    # complete in time" branch from allow → BLOCK (fail-closed
+    # default, per founder direction) — only a workflow that was
+    # genuinely never triggered for this SHA is treated as "no
+    # opinion" and allowed through, matching GitHub's own required-
+    # status-check semantics.
+    name: Wait for CI + Quality Gate
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -66,7 +79,7 @@ jobs:
       actions: read
       contents: read
     steps:
-      - name: Poll CI workflow status
+      - name: Poll CI + Quality Gate workflow status
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -74,34 +87,39 @@ jobs:
         run: |
           set -e
           DEADLINE=$(( $(date +%s) + 720 ))   # 12 min hard cap
-          CI_NAME="AUREM CI — Test Suite"
-          echo "Waiting for CI workflow '$CI_NAME' on commit $SHA"
+          CI_NAME="AUREM CI — Build + Test Guard"
+          QG_NAME="Quality Gate — Bug-fix Discipline"
+          echo "Waiting for '$CI_NAME' and '$QG_NAME' on commit $SHA"
           while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-            RUN=$(curl -sf \
+            RUNS=$(curl -sf \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/$REPO/actions/runs?head_sha=$SHA&per_page=20" \
               | python3 -c "import json,sys; [print(r['name']+'|'+r['status']+'|'+(r['conclusion'] or 'null')) for r in json.load(sys.stdin).get('workflow_runs', [])]")
-            CI_LINE=$(echo "$RUN" | grep -F "$CI_NAME|" | head -1 || true)
-            if [ -z "$CI_LINE" ]; then
-              echo "  CI workflow not yet listed for this commit — waiting…"
+            CI_LINE=$(echo "$RUNS" | grep -F "$CI_NAME|" | head -1 || true)
+            QG_LINE=$(echo "$RUNS" | grep -F "$QG_NAME|" | head -1 || true)
+            if [ -z "$CI_LINE" ] || [ -z "$QG_LINE" ]; then
+              echo "  not yet listed for this commit (ci='$CI_LINE' qg='$QG_LINE') — waiting…"
               sleep 15
               continue
             fi
-            STATUS=$(echo "$CI_LINE" | cut -d'|' -f2)
-            CONCLUSION=$(echo "$CI_LINE" | cut -d'|' -f3)
-            echo "  CI status=$STATUS conclusion=$CONCLUSION"
-            if [ "$STATUS" = "completed" ]; then
-              if [ "$CONCLUSION" = "success" ]; then
-                echo "✅ CI passed — gate open. Deploying commit $SHA"
+            CI_STATUS=$(echo "$CI_LINE" | cut -d'|' -f2)
+            CI_CONCLUSION=$(echo "$CI_LINE" | cut -d'|' -f3)
+            QG_STATUS=$(echo "$QG_LINE" | cut -d'|' -f2)
+            QG_CONCLUSION=$(echo "$QG_LINE" | cut -d'|' -f3)
+            echo "  CI status=$CI_STATUS conclusion=$CI_CONCLUSION | QG status=$QG_STATUS conclusion=$QG_CONCLUSION"
+            if [ "$CI_STATUS" = "completed" ] && [ "$QG_STATUS" = "completed" ]; then
+              if [ "$CI_CONCLUSION" = "success" ] && [ "$QG_CONCLUSION" = "success" ]; then
+                echo "✅ CI + Quality Gate passed — gate open. Deploying commit $SHA"
                 exit 0
               fi
-              echo "::error::CI conclusion='$CONCLUSION' — blocking deploy"
+              echo "::error::CI conclusion='$CI_CONCLUSION' QG conclusion='$QG_CONCLUSION' — blocking deploy"
               exit 1
             fi
             sleep 15
           done
-          echo "::warning::CI did not complete within 12min — allowing deploy (manual override)"
+          echo "::error::CI/Quality Gate did not complete within 12min — blocking deploy (fail-closed default, 2026-08-24)"
+          exit 1
 
   deploy-and-report:
     if: github.event_name == 'push'

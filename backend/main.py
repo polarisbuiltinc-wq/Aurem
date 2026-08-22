@@ -55,6 +55,7 @@ from routers.admin_ops_config import router as admin_ops_config_router  # 2026-0
 from routers.admin_analytics import router as admin_analytics_router  # 2026-02-11 — Phase 2 split: /admin/dashboard, /audit, /loop-metrics, /council, /skills
 from routers.admin_bi import router as admin_bi_router  # Slice A · BI Cockpit — /admin/bi/{stripe,inference,summary}
 from routers.admin_health_score import router as admin_health_score_router  # 2026-08-23 — Codebase Health Score widget
+from routers.founder_summary import router as founder_summary_router  # 2026-08-24 — Pillar 6, founder-language translation layer
 from routers.support import router as support_router
 from routers.payments import router as payments_router
 from routers.stripe_webhook_compat import router as stripe_webhook_compat_router  # Iter 388-ae — legacy /api/stripe/webhook alias (see Payments $0 root-cause memo)
@@ -983,6 +984,28 @@ async def lifespan(app: FastAPI):
             logger.warning("restore drill cron not started: %r", e)
     else:
         app.state.restore_drill_task = None
+
+    # 2026-08-24 — CI ingest heartbeat (Pillar 3, Production-Readiness).
+    # G1/G15's registry checks only ever looked at the CONTENT of the
+    # last synthetic_checks row, never its age — a silently-stopped
+    # ingest pipeline (e.g. missing AUREM_CI_INGEST_TOKEN in prod,
+    # PRD "Finding B") would sit green forever. This alerts the
+    # founder the first time either kind goes stale.
+    if os.environ.get("ENABLE_CI_HEARTBEAT", "1").lower() in ("1", "true", "yes"):
+        try:
+            from services.ci_ingest_heartbeat import ci_ingest_heartbeat_cron, HEARTBEAT_INTERVAL_SECONDS
+            app.state.ci_heartbeat_task = _supervise(
+                ci_ingest_heartbeat_cron(db_getter=lambda: app.state.db),
+                name="ci_ingest_heartbeat",
+                db_getter=lambda: app.state.db,
+                long_lived=True,
+            )
+            logger.info("💓 ci-ingest heartbeat cron enabled (every %ds)", HEARTBEAT_INTERVAL_SECONDS)
+        except Exception as e:
+            app.state.ci_heartbeat_task = None
+            logger.warning("ci ingest heartbeat cron not started: %r", e)
+    else:
+        app.state.ci_heartbeat_task = None
 
     # 2026-08-23 — Health Score indexes. TTL on health_endpoint_latency
     # so the Performance-category sampler (added above) never grows
@@ -2391,9 +2414,39 @@ async def _global_exc_handler(request: _FastReq, exc: Exception):
         # because of a quota or config issue), we MUST still return a
         # Response or Starlette panics with "No response returned."
         pass
+    # 2026-08-24 · Pillar 5 — centralized error classification.
+    # network/auth/quota/internal categorized plain-language message;
+    # NEVER the raw exception string or a status code guess from it.
+    try:
+        from services.error_classifier import classify_error
+        classified = classify_error(exc)
+    except Exception:
+        classified = {"category": "internal",
+                      "user_message": "An internal error occurred. Please try again.",
+                      "http_status": 500}
     return _JsonResp(
-        status_code=500,
-        content={"detail": "An internal error occurred. Please try again."},
+        status_code=classified.get("http_status") or 500,
+        content={"detail": classified["user_message"],
+                 "error_category": classified["category"]},
+    )
+
+
+# 2026-08-24 · Pillar 5 — input-category handler for FastAPI's own
+# validation errors (422). Keeps the field-level detail (useful for
+# programmatic form-error mapping) but adds a plain-language
+# `user_message` + `error_category` so the frontend's shared
+# async-state component has one consistent shape across ALL error
+# paths, not just uncaught exceptions.
+from fastapi.exceptions import RequestValidationError as _ReqValErr
+
+
+@app.exception_handler(_ReqValErr)
+async def _validation_exc_handler(request: _FastReq, exc: _ReqValErr):
+    return _JsonResp(
+        status_code=422,
+        content={"detail": exc.errors(),
+                 "user_message": "That request couldn't be processed as sent. Please check the details and try again.",
+                 "error_category": "input"},
     )
 
 _BUILD_HASH: str | None = None
@@ -3034,6 +3087,7 @@ app.include_router(admin_ops_config_router,     prefix="/api/aurem-dev")  # 2026
 app.include_router(admin_analytics_router,      prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split
 app.include_router(admin_bi_router,             prefix="/api/aurem-dev")  # Slice A · BI Cockpit
 app.include_router(admin_health_score_router,   prefix="/api/aurem-dev")  # 2026-08-23 — Codebase Health Score
+app.include_router(founder_summary_router,      prefix="/api/aurem-dev")  # 2026-08-24 — Pillar 6
 app.include_router(support_router,       prefix="/api/aurem-dev")
 app.include_router(payments_router,      prefix="/api/aurem-dev")
 # Iter 388-ae · legacy Stripe dashboard path compatibility. Prod logs

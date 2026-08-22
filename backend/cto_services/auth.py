@@ -2,11 +2,14 @@
 cto_services/auth.py — AUREM Dev
 JWT authentication for developer routes.
 """
+import logging
 import os
 import time
 import jwt
 from fastapi import HTTPException, Header
 from typing import Optional
+
+logger = logging.getLogger("aurem.auth")
 
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 JWT_ALGORITHM = "HS256"
@@ -28,7 +31,12 @@ async def current_dev(authorization: Optional[str] = None) -> dict:
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
+        # 2026-08-24 · Pillar 5 fix — this used to interpolate the raw
+        # PyJWT exception string into `detail` (e.g. a decode error can
+        # include a raw-bytes codec message), leaking internal detail
+        # to the client. Log the real exception server-side only.
+        logger.info("current_dev: invalid token rejected: %r", e)
+        raise HTTPException(status_code=401, detail="Invalid token")
     # Iter 307 — JWT revocation gate. Two orthogonal checks, both cheap
     # (one indexed find_one each, sub-3ms combined on preview):
     #   1. jti in `revoked_tokens` collection → user hit /auth/logout

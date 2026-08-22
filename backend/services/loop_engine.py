@@ -3342,6 +3342,26 @@ class LoopEngine:
             "html_url":  html_url,
             "files":     list(files_dict.keys()),
         }
+        # 2026-08-24 · Pillar 4 — independent, non-blocking read-back
+        # verification (services/ship_verification_audit.py). Never
+        # gates completion — commit_files()'s own 2xx + real sha is
+        # already the primary proof; this is a safety-net audit that
+        # alerts the founder if a rare write/read mismatch ever
+        # occurs, without adding latency or risk to the ship path.
+        try:
+            import asyncio as _aio_ship_verify
+            from services.ship_verification_audit import verify_shipped_commit
+            _aio_ship_verify.create_task(
+                verify_shipped_commit(
+                    self.db, loop_id=self.loop_id, owner=owner, repo=repo,
+                    branch=branch, commit_sha=full_sha or short_sha,
+                    expected_file_paths=list(files_dict.keys()), token=token,
+                ),
+                name=f"ship-verify:{self.loop_id}",
+            )
+        except Exception as e:                                # noqa: BLE001
+            logger.debug("[loop %s] ship-verify task not started: %r",
+                        self.loop_id, e)
         # Clear the pending payload (contains the GitHub token).
         self.context.pop("ship_pending", None)
         self.state = LoopState.COMPLETED

@@ -19,8 +19,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 
+from cto_services.auth import require_admin_dep
 from cto_services.db import get_db
 from routers.vanguard_ci import _verify_ci_auth
 
@@ -63,3 +64,12 @@ async def ingest_synthetic_check(
 
     result = await db.synthetic_checks.insert_one(doc)
     return {"ok": True, "id": str(result.inserted_id)}
+
+
+@router.get("/heartbeat", dependencies=[Depends(require_admin_dep)])
+async def get_heartbeat() -> dict:
+    """Admin-facing read of the expected-vs-actual ingest heartbeat
+    (services/ci_ingest_heartbeat.py) — Pillar 3, 2026-08-24."""
+    from services.ci_ingest_heartbeat import heartbeat_status
+    db = get_db()
+    return await heartbeat_status(db)
