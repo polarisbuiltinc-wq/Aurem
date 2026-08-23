@@ -377,12 +377,22 @@ async def score_performance(db) -> dict:
     # score judges — the widget was scoring its own cost. They are
     # excluded from the SLA sample; the unfiltered p95 stays in evidence
     # for honesty.
-    excluded = tuple(
-        f"/api/aurem-dev{p}" for p in (
-            "/admin/health-score", "/admin/qa", "/admin/boundary-probes",
-            "/admin/founder-summary",
-        )
-    )
+    # 2026-08-23 — BUG FIX: that exclusion only covered 4 of the many
+    # admin-cockpit endpoints. The rest (PAT-inventory audit reports,
+    # rollback drills, admin status/BI dashboards, backup drills, etc.)
+    # were still counted — real evidence showed `/admin/github-auth/
+    # pat-inventory` alone runs a consistent ~4.5s median (48 samples),
+    # and `/admin/status/all` spikes to 6-8s on a fraction of calls.
+    # These are founder/ops-only tools (gated by admin auth — no real
+    # customer ever calls them) and were never meant to represent "how
+    # fast the product feels" to an actual user. Generalized the
+    # exclusion to the whole `/admin/` namespace instead of a partial
+    # hand-picked list, so this can't silently miss the next admin
+    # endpoint someone adds. Genuinely customer-facing endpoints
+    # (`/chat/send`, `/auth/login`, `/cto/projects/connection-status`,
+    # etc.) are deliberately NOT excluded — their latency is real
+    # product signal, not noise.
+    excluded = ("/api/aurem-dev/admin/",)
     samples = [s for s in raw
                if not str(s.get("path") or "").startswith(excluded)]
     excluded_count = len(raw) - len(samples)
