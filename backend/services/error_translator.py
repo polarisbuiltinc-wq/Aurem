@@ -165,6 +165,18 @@ _RULES: List[Dict[str, Any]] = [
         "suggestion": "Founder accounts (FOUNDER_EMAILS env var) have unlimited quota — talk to the admin if that fits your case.",
     },
 
+    # ── LLM / provider response parsing (2026-08-25 P0) ──────────
+    {
+        "pattern": re.compile(r"openrouter malformed response|deepseek-direct malformed response|message is \w+, expected dict", re.I),
+        "plain":   "The AI provider sent back a response in an unexpected shape — this is a backend parsing issue, not something in your task or repo.",
+        "steps":   [
+            "Hit Retry — this can still land on a different (working) provider",
+            "If it repeats on the exact same task, try rephrasing it slightly",
+            "If it keeps happening, send this to auremcto.com/support",
+        ],
+        "suggestion": "This has been fixed at the code level for future runs — if you still see it, the fix may not be deployed to this environment yet.",
+    },
+
     # ── Common test/lint ─────────────────────────────────────────
     {
         "pattern": re.compile(r"lint.*fail|eslint.*error|ruff.*error|syntax.*error", re.I),

@@ -2376,10 +2376,15 @@ async def _retry(coro_factory, *, what: str, task_id: str,
             return await coro_factory()
         except Exception as e:
             last_exc = e
+            # 2026-08-25 — never surface the raw exception string in
+            # the live worker tape (see root-cause note on the outer
+            # handlers below). A fast, non-LLM classification is
+            # enough for a mid-flight retry warning.
+            from services.error_classifier import classify_error
+            _safe_msg = classify_error(e)["user_message"]
             await _log(
                 task_id,
-                f"⏳ {what} failed (attempt {i}/{attempts}): "
-                f"{type(e).__name__}: {str(e)[:140]}",
+                f"⏳ {what} failed (attempt {i}/{attempts}): {_safe_msg}",
                 "warning",
             )
             if i < attempts:
@@ -3506,10 +3511,26 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
     except Exception as e:
         logger.exception(f"[cto-task-api {task_id}] failed")
         safe = str(e).replace(user_token or "", "***PAT***")
-        await _log(task_id, f"❌ {safe}", "error")
+        # 2026-08-25 — root-cause fix (customer-reported raw Python
+        # error exposed in chat: "'str' object has no attribute
+        # 'get'"). `safe` (the real exception text) is kept ONLY in
+        # the `error` DB field — used by error_translator's plain-
+        # English rewrite and the collapsed "Show technical details"
+        # toggle. It must NEVER be pushed to `_log`/`_emit`, which are
+        # rendered live, unfiltered, in the chat bubble's worker tape.
+        from services.error_classifier import classify_error
+        from services.failure_signature import compute_signature, record_and_check
+        _cat = classify_error(e)["category"]
+        _safe_msg = classify_error(e)["user_message"]
+        _sig = compute_signature(proj.get("project_id", ""), task, _cat, safe)
+        _sig_info = await record_and_check(
+            get_db(), project_id=proj.get("project_id", ""), signature=_sig)
+        await _log(task_id, f"❌ {_safe_msg}", "error")
         await _set_status(task_id, status="failed", error=safe,
+                          error_category=_cat, failure_signature=_sig,
+                          failure_repeat_count=_sig_info["repeat_count"],
                           completed_at=time.time())
-        await _emit(task_id, f"Failed — {safe[:80]}", kind="fail", pct=100)
+        await _emit(task_id, f"Failed — {_safe_msg}", kind="fail", pct=100)
         # Iter 48 — background-task crash goes to Sentry (bypasses HTTP
         # middleware so explicit capture needed).
         try:
@@ -3826,8 +3847,20 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
         # path already does this; the git path was leaking the token
         # through traceback strings into the task feed AND into Mongo.
         safe = _scrub(str(e))
-        await _log(task_id, f"❌ {safe}", "error")
+        # 2026-08-25 — same root-cause fix as the API-path handler
+        # above: never push the raw exception string to `_log` (live,
+        # unfiltered in the chat bubble) — only into the `error` field.
+        from services.error_classifier import classify_error
+        from services.failure_signature import compute_signature, record_and_check
+        _cat = classify_error(e)["category"]
+        _safe_msg = classify_error(e)["user_message"]
+        _sig = compute_signature(proj.get("project_id", ""), task, _cat, safe)
+        _sig_info = await record_and_check(
+            get_db(), project_id=proj.get("project_id", ""), signature=_sig)
+        await _log(task_id, f"❌ {_safe_msg}", "error")
         await _set_status(task_id, status="failed", error=safe[:2000],
+                          error_category=_cat, failure_signature=_sig,
+                          failure_repeat_count=_sig_info["repeat_count"],
                           completed_at=time.time())
         # Sentry capture for git-path worker crashes too.
         try:

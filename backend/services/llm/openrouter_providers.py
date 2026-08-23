@@ -355,7 +355,14 @@ async def _call_deepseek_direct(
         r = await c.post(_DEEPSEEK_DIRECT_URL, headers=headers, json=payload)
         r.raise_for_status()
         data = r.json()
-    return (data["choices"][0]["message"].get("content") or "").strip()
+    msg = data["choices"][0]["message"]
+    # 2026-08-25 — same defensive guard as `_call_deepseek` below: a
+    # non-dict `message` must raise a clean, expected error type (the
+    # caller's `except Exception` already handles this broadly), not
+    # an uncaught AttributeError.
+    if not isinstance(msg, dict):
+        raise TypeError(f"DeepSeek-direct malformed response: message is {type(msg).__name__}, not dict")
+    return (msg.get("content") or "").strip()
 
 
 async def _call_deepseek(messages: list, system: str = "",
@@ -598,6 +605,16 @@ async def _call_deepseek(messages: list, system: str = "",
         _set_last_provider("openrouter", served_by)
     try:
         msg = data["choices"][0]["message"]
+        # 2026-08-25 — root-cause fix (customer-reported "'str' object
+        # has no attribute 'get'" surfaced raw in chat). Some OpenRouter
+        # free/fallback backends return a non-standard shape where
+        # `message` is a bare string instead of {role, content}. Turn
+        # that into the SAME controlled TypeError the except clause
+        # below already handles, instead of letting `.get()` raise an
+        # uncaught AttributeError that leaks Python internals into the
+        # task-failure text shown live in the chat bubble.
+        if not isinstance(msg, dict):
+            raise TypeError(f"message is {type(msg).__name__}, expected dict")
         # If DeepSeek returned native tool_calls, serialize them back to
         # markdown fence so extract_tool_calls() in tools_bridge.py can
         # parse them with its existing Shape-1/2/3 logic.

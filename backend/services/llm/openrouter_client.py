@@ -184,7 +184,15 @@ async def call_openrouter_model(
                 r = await c.post(OPENROUTER_URL, headers=headers, json=payload)
                 r.raise_for_status()
                 data = r.json()
-            content = (data["choices"][0]["message"].get("content") or "").strip()
+            _msg = data["choices"][0]["message"]
+            # 2026-08-25 — defensive guard (see openrouter_providers.py
+            # `_call_deepseek` for the customer-facing incident this
+            # fixed): a non-dict `message` shape must raise a normal
+            # Exception the surrounding try/except already handles,
+            # not an uncaught AttributeError.
+            if not isinstance(_msg, dict):
+                raise TypeError(f"message is {type(_msg).__name__}, expected dict")
+            content = (_msg.get("content") or "").strip()
             # Iter 309 · Pre-Phase-1 — loop-token accounting.
             # No-op unless a loop context is active (see
             # loop_token_ledger.loop_call_context).

@@ -72,6 +72,14 @@ function FailedCard({ taskId, task, onOpenLivePopup }) {
   const plain = task.error_plain || "";
   const steps = Array.isArray(task.error_steps) ? task.error_steps : [];
   const suggestion = task.error_suggestion || "";
+  // 2026-08-25 — Phase 3.5: a task that keeps failing with the SAME
+  // signature on the SAME project is a deterministic code bug, not a
+  // transient blip — blind Retry can never fix it. Surface that
+  // distinction instead of offering an identical Retry for every
+  // failure kind.
+  const repeatCount = task.failure_repeat_count || 0;
+  const isRepeat = repeatCount >= 2;
+  const isDeterministic = task.error_category === "internal";
 
   return (
     <div data-testid={`ship-status-${taskId}`} style={{
@@ -99,6 +107,38 @@ function FailedCard({ taskId, task, onOpenLivePopup }) {
           {retrying ? "Re-queuing…" : "↻ Retry"}
         </button>
       </div>
+
+      {isRepeat && (
+        <div
+          data-testid={`ship-repeat-warning-${taskId}`}
+          style={{
+            marginTop: 8, padding: "6px 10px",
+            background: "rgba(255,197,96,0.1)",
+            border: "1px solid rgba(255,197,96,0.4)",
+            borderRadius: 4,
+            fontSize: 11, color: "var(--accent-2)",
+            fontFamily: "inherit", lineHeight: 1.5,
+          }}
+        >
+          ⚠️ This exact failure has happened {repeatCount}× on this project.
+          Retrying is unlikely to change the outcome — try rephrasing the
+          task, or contact support if it keeps happening.
+        </div>
+      )}
+
+      {!isRepeat && isDeterministic && (
+        <div
+          data-testid={`ship-deterministic-note-${taskId}`}
+          style={{
+            marginTop: 8, fontSize: 11, color: "var(--text-faint)",
+            fontFamily: "inherit", lineHeight: 1.5,
+          }}
+        >
+          This looks like a backend/code issue rather than a network blip —
+          Retry may reproduce it.
+        </div>
+      )}
+
 
       {plain && (
         <div

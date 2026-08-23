@@ -1,0 +1,38 @@
+{
+  "summary": "Verified the 2026-08-25 customer-reported raw-error-leak P0 fix. Wrote /app/backend/tests/test_iter_customer_raw_error_leak_fix.py with 14 tests covering: (1) `_call_deepseek` now converts non-dict `message` payload from AttributeError -> clean RuntimeError('OpenRouter malformed response...'), (2) `_call_deepseek_direct` raises TypeError on same shape, (3) happy-path unchanged, (4) `failure_signature.compute_signature` is stable across whitespace/case/hex-id noise and unique per (project, category), (5) `record_and_check` increments repeat_count and never raises on DB failure, (6) `classify_error` NEVER leaks raw exception text into user_message, (7) new `error_translator` static rule matches all 3 malformed-response phrasings, (8) existing static rules (rate-limit, lint, tokens_exhausted, merge_conflict, timeout, vault) still match — regression guard. ALL 14 NEW TESTS PASS. Additionally re-ran the required pre-existing regression suite (test_iter331_nonetype_guard, test_iter339k_null_turn_prompt_mode, test_iter341_predeploy): 8/8 PASS — no regression from the defensive dict-shape guard fix. Frontend landing page loads cleanly with no raw Python exception text visible and no console errors. Confirmed sanitized-message wiring in routers/cto_projects.py `_retry` (line 2383), `_run_task_via_api` outer except (line 3521-3533), and `_run_task_with_git` outer except (line 3853-3864) — all three sites now call `classify_error(e)['user_message']` before `_log`/`_emit`, and store failure_signature/failure_repeat_count/error_category on the task doc via `_set_status`. Verified TaskProgressCard.jsx FailedCard renders `ship-repeat-warning-{taskId}` when repeat_count>=2 and `ship-deterministic-note-{taskId}` when error_category='internal' — existing testids (ship-status, ship-retry, ship-error-plain/steps/suggestion, ship-show-raw, ship-error-raw) are untouched.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "N/A", "issue": "tests/test_iter212m12_error_translator.py has 2 stale tests (test_translate_no_pat_matches_static_rule, test_translate_invalid_token_matches_static_rule) that assert on the word 'PAT' / 'GitHub access token' in the plain text — but per the 2026-06 PAT-removal directive the messages now say 'AUREM GitHub App' instead. This is NOT caused by the current fix; it's a stale expectation from before PAT removal. Not blocking, but worth updating in a cleanup pass."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter_customer_raw_error_leak_fix.py",
+    "/app/test_reports/pytest/customer_raw_error_leak_fix.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Update stale assertions in tests/test_iter212m12_error_translator.py (test_translate_no_pat_matches_static_rule and test_translate_invalid_token_matches_static_rule) to expect 'App' instead of 'PAT'/'GitHub access token' — unrelated to this fix but surfaced during regression run.",
+    "For a TRUE live end-to-end repro of the malformed-response scenario in the UI, main agent would need either (a) a preview-only GitHub App-connected repo where OpenRouter can be forced to return a bare-string message, or (b) a preview toggle to inject the mocked shape. Not blocking — the unit-level repro (test_call_deepseek_non_dict_message_raises_runtime_error) proves AttributeError->RuntimeError conversion, and the sanitized _log wiring is verified at three code sites."
+  ],
+  "critical_code_review_comments": [
+    "Fix is well-scoped: isinstance(msg, dict) guard added at all THREE message-extraction sites (_call_deepseek, _call_deepseek_direct, call_openrouter_client). Consistent TypeError signal converted to controlled RuntimeError at the two call sites that have except clauses.",
+    "cto_projects.py: `safe = str(e)` (line 3513, 3849) is still stored in the DB `error` field, correctly kept out of `_log`/`_emit` — good separation between UI-visible text and technical detail on the collapsed toggle.",
+    "failure_signature.py normalization is solid — whitespace + case + hex-id collapse mean genuine repeats hash identically even when the surface exception text has a random SHA in it. Best-effort DB error swallowing is correct for a bookkeeping-only helper.",
+    "error_translator new rule uses `\\w+` after 'message is' which correctly matches 'str'/'list'/'NoneType' etc. and is safely bounded — regression tests confirm existing rules still fire."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter_customer_raw_error_leak_fix.py (NEW, 14 tests, all pass)"
+  ],
+  "success_rate": {"backend": "100% (14/14 new + 8/8 required-regression)", "frontend": "smoke-only (landing loads clean, no raw error visible, testids in FailedCard verified via static inspection)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! per /app/memory/test_credentials.md — not used since no auth-gated flow was exercised in this pass",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Root-cause AttributeError->RuntimeError conversion (openrouter_providers._call_deepseek / _call_deepseek_direct) is now unit-verified via mocked httpx client. Three _log/_emit sanitisation sites in cto_projects.py verified by static inspection + import-level tests. failure_signature bookkeeping + error_translator new static rule fully covered. If a future task actually wants a LIVE reproduction of the malformed-response case (not just the mocked unit), it will need a preview-only OpenRouter response injector or a debug-mode env flag — none currently exists.",
+  "rca of the issue": "openrouter_providers._call_deepseek's message-extraction block ran `msg.get('tool_calls')` and `msg.get('content')` without validating `msg` was a dict. When an OpenRouter free-fallback model (walked to on primary-model 402/429/5xx) returned the non-standard shape {'choices':[{'message':'<bare string>'}]}, `msg.get()` raised AttributeError which the surrounding except clause (KeyError, IndexError, TypeError) did NOT catch, so it propagated as an uncaught exception into the cto_projects.py `_run_task_via_api` / `_run_task_with_git` outer handlers. Those handlers previously did `_log(task_id, f'❌ {str(e)}', 'error')` and `_emit(task_id, f'Failed — {str(e)}', kind='fail')`, streaming the raw Python string via SSE into TaskLiveTape.jsx / LiveTaskPopup.jsx which rendered `s.step` verbatim in the chat bubble. Fix has 3 layers: (1) defensive isinstance(msg, dict) guard converts to controlled TypeError caught upstream, (2) sanitized _log/_emit calls use error_classifier.classify_error(e)['user_message'] (never raw), (3) failure_signature tracks whether the same shape is repeating and surfaces a UI banner for deterministic-code failures where blind Retry is futile."
+}

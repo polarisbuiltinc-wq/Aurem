@@ -5594,3 +5594,52 @@ Real production data (64 total accounts, 5 test/QA excluded via `is_test_email()
 - Bundled cosmetic fix: `RevokedRepoBanner.jsx` headline now says "GitHub App not connected" instead of the misleading "GitHub access revoked" for this exact reason code — shipped in Preview, queued for the next Save-to-GitHub push (no urgency).
 
 **Full onboarding-groups roadmap is now closed** — all 3 groups traced with real evidence and either confirmed healthy or remediated. No further action pending on this initiative.
+
+## 2026-08-25 — P0 customer incident CLOSED: raw Python error leak in chat/task pipeline (ReRootsBeauty/ReRoots-, task t_ce1520dc8319)
+
+**Root cause (CONFIRMED — code-verified + unit-repro'd, not theoretical):**
+`services/llm/openrouter_providers.py::_call_deepseek()` extracted `msg = data["choices"][0]["message"]`
+then called `msg.get("tool_calls")`/`msg.get("content")` without checking `msg` was a dict. When an
+OpenRouter free-fallback model (walked to when the primary model 402/429/5xx'd) returned the
+non-standard shape `{"choices":[{"message": "<bare string>"}]}`, this threw an **uncaught**
+`AttributeError: 'str' object has no attribute 'get'` (the surrounding `except (KeyError, IndexError,
+TypeError)` never listed AttributeError). It propagated to `cto_projects.py`'s outer exception handlers,
+which did `_log(task_id, f"❌ {str(e)}", "error")` — streamed raw via SSE into
+`TaskLiveTape.jsx`/`LiveTaskPopup.jsx` (`s.step` rendered verbatim, unfiltered) — this is exactly what the
+customer saw live in chat. Because the malformed-response shape is deterministic for that code path, every
+retry (internal `_retry()` and the user's manual Retry button) reproduced the identical failure — explains
+"retry never resolved it."
+
+**Fix shipped (3 layers) — testing_agent iteration_378: 14/14 new tests + 8/8 pre-existing regression pass:**
+1. `isinstance(msg, dict)` guard at all 3 message-extraction sites (`_call_deepseek`,
+   `_call_deepseek_direct` in openrouter_providers.py; `call_openrouter_model` in openrouter_client.py) —
+   converts the shape mismatch into a controlled `TypeError`/`RuntimeError`, never an uncaught AttributeError.
+2. `cto_projects.py` — `_retry()`'s per-attempt warning, and both outer exception handlers
+   (`_run_task_via_api`, `_run_task_with_git`), now push `error_classifier.classify_error(e)["user_message"]`
+   (pre-existing, zero-raw-text helper) to `_log()`/`_emit()` — raw `str(e)` stays ONLY in the DB `error`
+   field (used by `error_translator`'s `error_plain` + the collapsed "Show technical details" toggle).
+3. NEW `services/failure_signature.py` — hashes (project_id, normalized task, error_category, normalized
+   error text), upserts `task_failure_signatures`, stores `failure_signature`/`failure_repeat_count`/
+   `error_category` on `cto_tasks`. `TaskProgressCard.jsx` FailedCard now shows an amber repeat-failure
+   banner (`ship-repeat-warning-{taskId}`) when `repeat_count>=2` ("retry unlikely to help — rephrase or
+   contact support") and a deterministic-category note (`ship-deterministic-note-{taskId}`) on first
+   occurrence. New `error_translator.py` static rule added for this malformed-response text.
+
+**Proposed but explicitly NOT built this pass (founder direction — propose only):**
+- Checkpointed retry (resume from last completed step instead of restarting PULL→READ→THINK→WRITE→
+  VERIFY→COMMIT from zero). CONFIRMED via code read: `retry_task()` always creates a brand-new task and
+  restarts fully from scratch today — no checkpointing exists.
+- Human/support escalation UI wired to existing `/support` router + `admin_support.py` when a
+  repeat-failure signature is detected.
+- Production-wide repeated-failure scope query — would need a NEW read-only admin endpoint (mirroring
+  existing `/admin/*` patterns), not direct DB access. `failure_signature.py` is the Preview-only detection
+  logic; a Production rollout is a separate, explicitly-approved next step.
+- Wiring `failure_signature` repeat counts into the existing `services/incident_log.py` (Guard 20) once
+  repeat_count>=3, reusing `open_incident()` instead of a new system.
+- Mid-task pause/redirect capability (user currently has live visibility but no intervention control) —
+  flagged for future consideration.
+- "ORA answered two unrelated questions" symptom — **UNCERTAIN**, not independently confirmed this pass.
+  No Sentry read-access token was available from this Preview (only the write-only DSN) and the reported
+  Production project/task aren't present in this Preview's local Mongo. The raw-error-leak root cause above
+  is fully confirmed and fixed; whether the Q&A-mismatch is the same incident's visible confusion during
+  retries, or a distinct bug, needs an actual session/conversation trace if it recurs.
