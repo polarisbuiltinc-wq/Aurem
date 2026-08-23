@@ -1,0 +1,5 @@
+{
+  "overall_min_percent": 27.5,
+  "measured_2026-08-22": 27.55,
+  "note": "Baseline is the real coverage.json totals.percent_covered from the 2026-08-22 backend suite run (93603 statements, 25787 covered). Set 0.05pt below the exact measured value to avoid float-rounding flakiness. This value only moves UP, manually, after a reviewed real improvement — never auto-raised by CI."
+}

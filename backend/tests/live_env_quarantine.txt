@@ -17,6 +17,7 @@
 # A line WITHOUT "::" quarantines the whole file (used for module-level
 # live-URL fixtures that would crash at collection on a dead URL).
 tests/test_codebase_health_score.py
+tests/test_phase2c_codebase_health_live_e2e.py
 tests/test_pillars_2345_2026_08_24.py
 tests/test_aurem_backend.py
 tests/test_aurem_chat_persistence.py

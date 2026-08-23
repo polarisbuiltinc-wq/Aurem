@@ -243,6 +243,62 @@ jobs:
           python scripts/ci_check_test_style.py "$BASE_SHA" "$HEAD_SHA"
 
 
+  new-bloat-guard:
+    # Phase 0 (2026-08) — founder directive: stop the 173-bloated-file /
+    # 454-complex-function backlog from growing while Phase 2/3 pays it
+    # down. Blocks any NEW file (backend/{routers,services,core,
+    # cto_services}, frontend/src) over 300 real source lines, or any
+    # NEW Python function with cyclomatic complexity > 10.
+    #
+    # Runs on BOTH push and pull_request (unlike bug-fix-discipline /
+    # test-style-guard above, which are pull_request-only) — Emergent's
+    # "Save to GitHub" pushes directly with no PR, so a PR-only gate
+    # would never fire on the actual deploy path. Diff-range resolution
+    # mirrors ci.yml's delete-gate job for the same reason.
+    name: New-file bloat guard (size + complexity)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install radon
+        run: pip install radon==6.0.1 --quiet
+      - name: Resolve diff range + override + run guard
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -e
+          if [ "$EVENT" = "pull_request" ]; then
+            git fetch origin "$BASE_REF" --depth=50 || true
+            BASE_SHA="origin/$BASE_REF"
+            HEAD_SHA="HEAD"
+          else
+            if [ -z "$BEFORE" ] || echo "$BEFORE" | grep -q '^0*$'; then
+              BASE_SHA="HEAD~1"
+            else
+              BASE_SHA="$BEFORE"
+            fi
+            HEAD_SHA="$SHA"
+          fi
+          OVERRIDE=""
+          if [ "$EVENT" = "pull_request" ] && printf '%s' "$PR_LABELS" | grep -q '"bloat-approved"'; then
+            OVERRIDE="--override"
+          elif git log -1 --format=%B "$HEAD_SHA" | grep -q '\[bloat-approved\]'; then
+            OVERRIDE="--override"
+          fi
+          echo "Diffing $BASE_SHA..$HEAD_SHA (override: ${OVERRIDE:-none})"
+          python backend/scripts/ci_check_new_bloat.py "$BASE_SHA" "$HEAD_SHA" $OVERRIDE
+
+
   frontend-vitest:
     # Iter 302 — Frontend QA Charter Layer 1 + Layer 3 C2.
     # Runs the RTL state-sync suite AND the axe-core component-level

@@ -4,6 +4,8 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 
 **Total rows: 627** (173 file-level + 454 function-level).
 
+**Ledger reconciliation (2026-08-23, CONFIRMED via direct count, not re-estimated):** founder's earlier verbal figure was "173 bloated files + 451 complex functions = 624 rows, deduplicated where overlapping." Re-counted directly against this file: `grep -c '| [0-9]+ lines |'` → exactly 173 file-level rows; `grep -c 'CC='` → exactly 454 function-level rows; `grep` for repeated `Name` values → zero duplicate (name, metric) pairs found (only the repeated `| Name |` header row itself, expected across 8 section tables). So 173 + 454 = 627 is correct and internally consistent — there is no double-counting to dedupe. The 3-row gap vs the founder's spoken 624 is fully explained by 454 vs 451 complex-function hits: the founder's number was a preliminary/rounded estimate from an earlier pass of `architecture_health.py`'s radon scan; this ledger's 454 is the exact count from the final 2026-08-22 tool run committed to `/app/memory/architecture_audit/complexity_hits_454_grouped_2026_08_22.txt` (466 raw lines incl. group headers/blank lines, 454 actual CC-violation entries). Treat 627 as the reconciled, verified total going forward — not 624.
+
 **Known tool gap (CONFIRMED):** `architecture_health.py`'s complexity scanner is Python-only (uses `radon`) — JSX/JS complexity is NOT measured at all. Frontend rows below only ever appear in the file-size list, never the complexity list, which understates frontend risk. Flagged, not fixed in this pass.
 
 **Status values:** not started / in progress / covered (≥60%, no structural change yet) / refactored (structurally split, floor already met) / deliberately deferred (reason required).
@@ -353,7 +355,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/routers/ora_chat.py | 1589 lines | 19% | not started |
 | backend/routers/loop.py | 1337 lines | 14% | not started |
 | backend/routers/scaffold.py | 1270 lines | 17% | not started |
-| backend/routers/codebase_health.py | 1171 lines | 10% | in progress — 2c coverage wave |
+| backend/routers/codebase_health.py | 829 lines (was 1171 pre-Phase-2a; relocation moved ~342 lines to services/codebase_health_core.py) | 81% (2026-08-23, TestClient in-process suite, 28 tests, real assertions — see tests/test_phase2c_codebase_health_router.py) | **covered (≥60%)** — Phase 2c wave 1 done
 | backend/routers/admin_users.py | 1113 lines | 15% | not started |
 | backend/routers/security_scan.py | 1096 lines | 15% | Phase 1: _scan_text relocated out (2026-08-22) |
 | backend/routers/auth.py | 935 lines | 22% | not started |
@@ -390,9 +392,9 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/routers/payments.py::stripe_webhook (L491) | CC=43 | 40% | Phase 1: price-matcher relocated out (2026-08-22) |
 | backend/routers/admin_users.py::get_user (L226) | CC=40 | 15% | not started |
 | backend/routers/admin_users.py::admin_funnel_dashboard (L622) | CC=40 | 15% | not started |
-| backend/routers/codebase_health.py::scan (L653) | CC=39 | 10% | in progress — 2c coverage wave |
+| backend/routers/codebase_health.py::scan (L208, was L653 pre-Phase-2a) | CC=39 | covered — full success path + 5 error branches tested (missing linkage, project not found, rate-limit 429, GitHub-fetch-crash 502) | **covered** |
 | backend/routers/fix_pipeline.py::_run_bulk_job (L304) | CC=38 | 44% | not started |
-| backend/routers/codebase_health.py::request_fix (L996) | CC=36 | 10% | in progress — 2c coverage wave |
+| backend/routers/codebase_health.py::request_fix (L551, was L996 pre-Phase-2a) | CC=36 | covered — success path + 4 error branches (patch-did-not-resolve, github-creds-missing, unhandled exception, db-not-connected) | **covered** |
 | backend/routers/findings.py::backlog_list (L109) | CC=35 | 53% | not started |
 | backend/routers/admin.py::_compute_activation_funnel (L589) | CC=35 | 12% | not started |
 | backend/routers/admin_users.py::admin_send_user_offer (L822) | CC=34 | 15% | not started |
@@ -405,7 +407,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/routers/loop.py::pause_response (L521) | CC=30 | 14% | not started |
 | backend/routers/security_scan.py::_normalize_findings (L607) | CC=29 | 15% | Phase 1: _scan_text relocated out (2026-08-22) |
 | backend/routers/wrapped.py::my_wrapped (L50) | CC=29 | 16% | not started |
-| backend/routers/codebase_health.py::_build_text_cache (L533) | CC=28 | 10% | in progress — 2c coverage wave |
+| backend/routers/codebase_health.py::_build_text_cache (L88, was L533 pre-Phase-2a) | CC=28 | covered indirectly via scan() success-path tests (cache-miss branch); Redis cache-hit branch NOT exercised — preview Redis is disconnected, so that specific branch has zero real coverage anywhere right now, flagged honestly | partially covered |
 | backend/routers/mcp.py::_execute_vanguard_scan (L1010) | CC=27 | 23% | not started |
 | backend/routers/security_scan.py::_gh_get (L196) | CC=27 | 15% | Phase 1: _scan_text relocated out (2026-08-22) |
 | backend/routers/automations.py::github_webhook (L37) | CC=27 | 20% | not started |
@@ -435,13 +437,13 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/routers/upload.py::upload_convert (L156) | CC=19 | 26% | not started |
 | backend/routers/admin_analytics.py::loop_inspect (L2032) | CC=19 | 18% | in progress — 2c coverage wave |
 | backend/routers/mcp.py::_tool_get_recent_commits (L782) | CC=18 | 23% | not started |
-| backend/routers/codebase_health.py::_scan_security (L82) | CC=18 | 10% | in progress — 2c coverage wave |
+| backend/routers/codebase_health.py::_scan_security (L82) | CC=18 | N/A — stale row | **relocated** to services/codebase_health_core.py in the 2026-08-22 Phase 2a boundary-violation refactor; no longer exists in this file. Row kept for audit trail, not double-counted as covered/uncovered here. |
 | backend/routers/admin_health.py::status_all (L136) | CC=18 | 24% | not started |
 | backend/routers/loop.py::cancel_loop (L936) | CC=18 | 14% | not started |
 | backend/routers/repo_status.py::cleanup_delete (L335) | CC=18 | 17% | not started |
 | backend/routers/admin_bi.py::_subscription_monthly_usd (L60) | CC=18 | 14% | not started |
 | backend/routers/admin_analytics.py::admin_system_stats (L228) | CC=18 | 18% | in progress — 2c coverage wave |
-| backend/routers/codebase_health.py::_scan_dependencies (L308) | CC=17 | 10% | in progress — 2c coverage wave |
+| backend/routers/codebase_health.py::_scan_dependencies (L308) | CC=17 | N/A — stale row | **relocated** to services/codebase_health_core.py in the 2026-08-22 Phase 2a refactor; no longer exists in this file. |
 | backend/routers/admin_payments.py::admin_set_stripe_config (L333) | CC=17 | 21% | not started |
 | backend/routers/admin_ops_config.py::db_health (L358) | CC=17 | 24% | not started |
 | backend/routers/vanguard_ci.py::ingest_ci_findings (L119) | CC=17 | 17% | not started |
@@ -451,7 +453,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/routers/ora_chat.py::send_message (L287) | CC=17 | 19% | not started |
 | backend/routers/admin_analytics.py::agent_tokens (L669) | CC=17 | 18% | in progress — 2c coverage wave |
 | backend/routers/admin_analytics.py::scope_drift_audit (L2119) | CC=17 | 18% | in progress — 2c coverage wave |
-| backend/routers/codebase_health.py::_scan_code_quality (L219) | CC=16 | 10% | in progress — 2c coverage wave |
+| backend/routers/codebase_health.py::_scan_code_quality (L219) | CC=16 | N/A — stale row | **relocated** to services/codebase_health_core.py in the 2026-08-22 Phase 2a refactor; no longer exists in this file. |
 | backend/routers/loop.py::rollback_loop (L1149) | CC=16 | 14% | not started |
 | backend/routers/admin_ops_config.py::admin_github_app_diagnostics (L611) | CC=16 | 24% | not started |
 | backend/routers/fix_pipeline.py::preview_cost (L173) | CC=16 | 44% | not started |
@@ -469,7 +471,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/routers/user_rollback.py::revert_last_ship (L89) | CC=15 | 21% | not started |
 | backend/routers/auth.py::google_session (L344) | CC=15 | 22% | not started |
 | backend/routers/admin.py::_github_app_live_probe (L318) | CC=15 | 12% | not started |
-| backend/routers/codebase_health.py::scanner_feedback (L1171) | CC=14 | 10% | in progress — 2c coverage wave |
+| backend/routers/codebase_health.py::scanner_feedback (L726, was L1171 pre-Phase-2a) | CC=14 | covered — admin-gate + shape + days-clamp (both directions) tested; aggregation pipelines exercised with empty-result fake, not real grouping math | **covered** |
 | backend/routers/oauth.py::oauth_token (L347) | CC=14 | 28% | not started |
 | backend/routers/suggestions.py::_analyze_with_groq (L99) | CC=14 | 28% | not started |
 | backend/routers/loop.py::loop_history (L1262) | CC=14 | 14% | not started |
@@ -494,8 +496,8 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/routers/mcp.py::_tool_get_project_info (L1196) | CC=12 | 23% | not started |
 | backend/routers/mfa.py::disable (L178) | CC=12 | 28% | not started |
 | backend/routers/admin_first50_campaign.py::dispatch (L115) | CC=12 | 25% | not started |
-| backend/routers/codebase_health.py::_scan_performance (L171) | CC=12 | 10% | in progress — 2c coverage wave |
-| backend/routers/codebase_health.py::_scan_database (L361) | CC=12 | 10% | in progress — 2c coverage wave |
+| backend/routers/codebase_health.py::_scan_performance (L171) | CC=12 | N/A — stale row | **relocated** to services/codebase_health_core.py in the 2026-08-22 Phase 2a refactor; no longer exists in this file. |
+| backend/routers/codebase_health.py::_scan_database (L361) | CC=12 | N/A — stale row | **relocated** to services/codebase_health_core.py in the 2026-08-22 Phase 2a refactor; no longer exists in this file. |
 | backend/routers/cto_projects.py::build_project_brain (L191) | CC=12 | 9% | in progress — 2c coverage wave |
 | backend/routers/cto_projects.py::get_graph_tour (L619) | CC=12 | 9% | in progress — 2c coverage wave |
 | backend/routers/cto_projects.py::graph_impact (L712) | CC=12 | 9% | in progress — 2c coverage wave |
@@ -511,7 +513,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/routers/version.py::_fetch_last_github_push (L279) | CC=12 | 44% | Phase 1: github-push resolver relocated out (2026-08-22) |
 | backend/routers/github_funnel.py::funnel_stats (L135) | CC=12 | 48% | not started |
 | backend/routers/promo_first50.py::verify_email (L128) | CC=12 | 36% | not started |
-| backend/routers/codebase_health.py::_check_scan_rate_limit (L935) | CC=11 | 10% | in progress — 2c coverage wave |
+| backend/routers/codebase_health.py::_check_scan_rate_limit (L490, was L935 pre-Phase-2a) | CC=11 | covered — direct-import unit test against real local Mongo, caps-at-10 + multi-category independent windows both proven | **covered** |
 | backend/routers/cto_projects.py::update_project (L1495) | CC=11 | 9% | in progress — 2c coverage wave |
 | backend/routers/cto_projects.py::rollback_task (L1712) | CC=11 | 9% | in progress — 2c coverage wave |
 | backend/routers/founder_offer.py::claim_offer (L170) | CC=11 | 26% | not started |
