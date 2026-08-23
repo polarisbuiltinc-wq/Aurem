@@ -184,6 +184,16 @@ export default function NewUserWizard({ onComplete }) {
       url, "aurem_github_app_install",
       `width=${w},height=${h},left=${left},top=${top}`,
     );
+    // Rule 6 — no silent failures. A blocked popup makes `window.open`
+    // return null/undefined synchronously with no thrown error and no
+    // console message — same gap fixed in RevokedRepoBanner.jsx's
+    // `reconnect()`. Without this check, the wizard would silently
+    // poll for up to 180s with zero visible feedback, exactly what a
+    // fresh signup would see if their browser blocked the popup.
+    if (!appPopupRef.current) {
+      setErr("Popup blocked — please allow popups for this site and try again.");
+      return;
+    }
     // Polling fallback in case postMessage is dropped (some browsers
     // block cross-origin messages back to opener). Every 1.5s, refetch
     // the /installations list; if it grows, we know install completed.
@@ -268,6 +278,12 @@ export default function NewUserWizard({ onComplete }) {
       url, "aurem_github_oauth",
       `width=${w},height=${h},left=${left},top=${top}`,
     );
+    // Rule 6 — no silent failures. Same window.open() null-return gap
+    // as the App-install popup above.
+    if (!popupRef.current) {
+      setErr("Popup blocked — please allow popups for this site and try again.");
+      return;
+    }
     // Poll status every 2 s until either: connected, popup closed by user,
     // or 90 s timeout.  This is more reliable than postMessage across
     // GitHub's domain handoff.

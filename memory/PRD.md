@@ -5195,3 +5195,17 @@ Founder paused all queued items (build-from-scratch parked above, API architectu
 - **Net honest state**: the popup-fix and reconnect-CTA code are real and Preview-verified, but (a) their Production-live status is unconfirmed, (b) the founder's own reference GitHub account has no App installation at all — meaning a live end-to-end test on Production would currently fail at the connect step for that account until the founder installs the App, and (c) the ship-path bug fix (needed for a *complete* connect→ship acceptance test) is also Production-unconfirmed.
 - **No other queued item started** (build-from-scratch, API architecture, Data Export, Phase B backlog) — all remain paused per founder instruction.
 
+
+## 2026-08-25 — Build-hash check + found & fixed a REAL unpatched sibling of the popup-block bug
+
+Founder attempted a live click-test on Production ("Continue with GitHub App" in the fresh-signup wizard): no popup, no console error, no visible change — asked whether this is the known popup-block bug re-occurring, or an automation-click artifact (they would retest with a real click separately).
+
+- **Build hash confirmed via public `GET https://auremcto.com/api/health`**: `build_hash=951b3c573ad7`, `built_at=2026-08-23T16:32:57Z`, `env=production`. Cross-checked with `git merge-base --is-ancestor`: commit `7316fee` (added the original popup-block fix to `RevokedRepoBanner.jsx`) **is confirmed included** in this deployed commit.
+- **But `RevokedRepoBanner.jsx` is only used for reconnecting an EXISTING project** — not the fresh-signup wizard the founder actually clicked. Found the real root cause: the identical `window.open()`-returns-null-when-blocked gap existed, UNPATCHED, in 3 sibling call sites that were never touched by the original fix:
+  1. `NewUserWizard.jsx::openAppInstallPopup()` (fresh-signup "Continue with GitHub App" — the exact button the founder clicked)
+  2. `NewUserWizard.jsx::connectGithub()` (legacy OAuth connect button)
+  3. `AddProjectWizard.jsx::openAppInstallPopup()` (`/projects` "+ Add Project" flow)
+  All 3 previously had zero falsy-check on `window.open()`'s return — a blocked popup silently polled for up to 180s with no user-facing feedback, matching the founder's exact symptom.
+- **Fixed all 3, same proven pattern as `RevokedRepoBanner.jsx`** (`setErr`/`toast` with "Popup blocked — please allow popups for this site and try again." immediately on falsy return). **Live-reproduced in Preview**: forced `window.open` to return null via a Playwright init script, clicked the exact same wizard button the founder used — error now surfaces immediately instead of the prior silent 180s hang (screenshot confirmed).
+- **Preview-only, not yet on Production.** Does not rule out the founder's popup blocker being genuinely active during their test (hypothesis b) — but confirms a real, previously-unknown code gap existed regardless, which would have hidden this exact scenario from any real user too.
+- **Next**: founder to retry a real (non-automated) click after allowing popups, to see if they now get a real GitHub consent screen or a different issue. Still holding all other queued items (build-from-scratch, API architecture, Data Export, Phase B backlog) per standing instruction.

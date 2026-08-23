@@ -107,6 +107,14 @@ export default function AddProjectWizard({ onClose, onAdded }) {
       url, "aurem_github_app_install",
       `width=${w},height=${h},left=${left},top=${top}`,
     );
+    // Rule 6 — no silent failures. A blocked popup makes `window.open`
+    // return null/undefined with no thrown error and no console
+    // message — same gap fixed in RevokedRepoBanner.jsx's `reconnect()`
+    // and NewUserWizard.jsx's install/OAuth popups.
+    if (!appPopupRef.current) {
+      toast({ message: "Popup blocked — please allow popups for this site and try again.", kind: "error" });
+      return;
+    }
     // Polling fallback in case postMessage is dropped.
     const started = Date.now();
     const startCount = appInstalls.length;
