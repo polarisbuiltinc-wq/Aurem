@@ -28,14 +28,32 @@ const STAGES = [
   { key: "done",    label: "Pushed",             icon: "✅" },
 ];
 
-function FailedCard({ taskId, task }) {
+function FailedCard({ taskId, task, onOpenLivePopup }) {
   const [retrying, setRetrying] = useState(false);
   async function retry() {
     if (retrying) return;
     setRetrying(true);
     try {
-      await api.post(`/cto/tasks/${taskId}/retry`, {});
-      toast({ message: "Re-queued", kind: "success" });
+      const r = await api.post(`/cto/tasks/${taskId}/retry`, {});
+      const newTaskId = r?.data?.task_id;
+      if (newTaskId) {
+        toast({ message: "Re-queued", kind: "success" });
+      } else {
+        // 2026-08-23 — if the API ever stops returning task_id, fail
+        // LOUDLY instead of silently recreating the exact "re-queued
+        // but nothing visibly happens" bug this fix was for.
+        toast({ message: "Re-queued, but couldn't open live progress "
+          + "— refresh to check status", kind: "error" });
+      }
+      // 2026-08-23 — BUG FIX (founder-reported): the retry DID work on
+      // the backend (a real new task was queued + a background worker
+      // scheduled), but nothing here ever showed the user its progress
+      // — the UI kept displaying this same old FAILED card forever,
+      // looking exactly like "re-queued but doing nothing". Open the
+      // live progress popup for the NEW task so retries are visibly
+      // alive.
+      const newTaskId = r?.data?.task_id;
+      if (newTaskId) onOpenLivePopup?.(newTaskId);
     } catch (e) {
       toast({
         message: e?.response?.data?.detail || "Retry failed",
@@ -162,7 +180,7 @@ function FailedCard({ taskId, task }) {
   );
 }
 
-export default function TaskProgressCard({ taskId, task, project, onRollback }) {
+export default function TaskProgressCard({ taskId, task, project, onRollback, onOpenLivePopup }) {
   const status = task?.status || "queued";
   const rbStatus = task?.rollback_status;
   const rbRunning = rbStatus === "queued" || rbStatus === "running";
@@ -200,7 +218,7 @@ export default function TaskProgressCard({ taskId, task, project, onRollback }) 
 
   // Failed — own sub-component so hooks stay top-level
   if (status === "failed") {
-    return <FailedCard taskId={taskId} task={task} />;
+    return <FailedCard taskId={taskId} task={task} onOpenLivePopup={onOpenLivePopup} />;
   }
 
   // Success

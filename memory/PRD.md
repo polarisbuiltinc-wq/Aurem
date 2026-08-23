@@ -74,6 +74,49 @@ Open Advisor/Close work, no-project fallback verified by code
 inspection). One minor code-review note (unsafe data-testid slugs)
 fixed post-test.
 
+## 2026-08-23 (bug fix batch 2, from 2nd screen recording) — Double ship-confirm, floating popup covering Advisor, retry giving no feedback — all in the legacy manual-ship flow
+
+Founder shared a follow-up recording of the LEGACY `/cto/tasks`
+manual-ship flow (separate from Loop Mode). 3 real root causes, fixed
+at the source (not patched):
+
+**1. Double ship confirmation**: `MessageBubble.jsx`'s `shipViaCTO()`
+dispatched a window event opening a SEPARATE full-screen dark-overlay
+modal (`ShipConfirmModal`) asking the user to confirm shipping AGAIN,
+after they'd already clicked "🚀 Ship via CTO" once — and that modal
+didn't auto-dismiss. Fixed: `shipViaCTO()` now calls `doSubmit()`
+directly — one click really ships; progress shows inline via the
+existing `TaskProgressCard`. `ShipConfirmModal` itself untouched
+(still used for Loop-mode's *failed*-ship path only).
+
+**2. LiveTaskPopup covering Ask Advisor**: was `fixed`, `right:16`,
+`top:50%` — the same region as the Advisor toggle. Previous fix
+(batch 1) just raised the toggle's z-index above it; founder asked
+for a real relocation. Moved it to `left:24`, `bottom:96` (near the
+composer, "in the main chat window"), which can never collide with
+the always-right-anchored Advisor panel regardless of state. Also
+removed the now-stale `paddingRight:392` chat-scroll reservation that
+existed only for the old right-anchored position.
+
+**3. Retry gave zero visual feedback**: the backend retry endpoint
+(`POST /cto/tasks/{id}/retry`) genuinely worked (fresh token, real
+new task queued, `bg.add_task` scheduled) — but the frontend just
+toasted "Re-queued" and never showed the new task's progress anywhere,
+so it LOOKED like nothing happened. Fixed: threaded a new
+`onOpenLivePopup` callback prop chain (`FailedCard` → `TaskProgressCard`
+→ `ShipDialog`/`MessageBubble` → `ChatPanel.setLivePopupTaskId`) so a
+successful retry now opens `LiveTaskPopup` for the new task_id. If
+`task_id` is ever missing from the response, toasts an error instead
+of silently repeating the same "looks like nothing happened" bug.
+
+Tested: `testing_agent` — `/app/test_reports/iteration_377.json`. Fix
+#1 and #2 verified live (popup bounding box measured, no overlap with
+Advisor toggle). Fix #3 verified by full prop-chain code review (could
+not runtime-verify — preview test project's GitHub App access was
+revoked at test time, so no new legacy task could be submitted).
+2 minor review notes (stale padding, silent-fail toast) fixed
+immediately after.
+
 ## 2026-08-23 (bug fix, from screen recording) — "GitHub revoked mid-ship" + "Advisor sidebar collapsed, won't reopen" — 3 real root causes found & fixed
 
 Founder shared a screen recording: GitHub App showed disconnected/

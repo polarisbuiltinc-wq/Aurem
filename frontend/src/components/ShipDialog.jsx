@@ -32,6 +32,7 @@ export default function ShipDialog({
   onShip,
   onRollback,
   onOpenDeployTab,
+  onOpenLivePopup,
 }) {
   if (!handoffBrief) return null;
 
@@ -67,6 +68,7 @@ export default function ShipDialog({
             task={taskInfo}
             project={activeProject}
             onRollback={onRollback}
+            onOpenLivePopup={onOpenLivePopup}
           />
         </div>
       ) : (

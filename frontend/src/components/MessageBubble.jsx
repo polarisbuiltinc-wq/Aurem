@@ -352,7 +352,7 @@ function WatchdogPanel({ idx, wd, onRegenerate }) {
 export default function MessageBubble({
   idx, dbTurnIndex, m, onRegenerate, sessionId,
   activeProject, exhausted, onTaskCompleted,
-  onOpenDeployTab, collapseDefault = false,
+  onOpenDeployTab, collapseDefault = false, onOpenLivePopup,
 }) {
   const [copied, setCopied] = useState(false);
   const [vote, setVote] = useState(m.feedback?.vote || null);
@@ -589,8 +589,9 @@ export default function MessageBubble({
           message: taskId ? `Task queued — ${taskId}` : "Task queued",
           kind: "success", duration: 3000,
         });
-        // Iter 212m-88 — return task_id so ShipConfirmModal can poll
-        // and stream the post-push Vanguard scan + rollback affordance.
+        // Iter 212m-88 — task_id feeds the inline TaskProgressCard/
+        // TaskLiveTape (rendered by ShipDialog once shipState is
+        // "shipped") for post-push polling + rollback affordance.
         return { task_id: taskId };
       } catch (e) {
         const msg = e?.response?.data?.detail || e?.message || "Submit failed";
@@ -599,14 +600,15 @@ export default function MessageBubble({
         throw e;
       }
     };
-    window.dispatchEvent(new CustomEvent("aurem:open-ship-modal", {
-      detail: {
-        files,
-        vanguard: { critical: 0 },
-        project: activeProject,
-        onShip: doSubmit,
-      },
-    }));
+    // 2026-08-23 — BUG FIX (founder-reported, screen recording): this
+    // dispatched a SECOND confirmation (the dark-overlay
+    // ShipConfirmModal) after the user already clicked "🚀 Ship via
+    // CTO" once — a redundant double-confirm that didn't even
+    // auto-dismiss on its own. ShipDialog already shows the inline
+    // TaskProgressCard/TaskLiveTape once shipped, so the modal's
+    // post-ship UX was redundant too. One click now ships for real;
+    // no second popup.
+    await doSubmit().catch(() => { /* doSubmit already surfaced the error via toast + shipState */ });
   }
 
   return (
@@ -1105,6 +1107,7 @@ export default function MessageBubble({
           onShip={shipViaCTO}
           onRollback={rollbackShipped}
           onOpenDeployTab={onOpenDeployTab}
+          onOpenLivePopup={onOpenLivePopup}
         />
 
         {/* Iter 51 — Auto-handoff (Mode D→C, etc.) progress card.
@@ -1126,6 +1129,7 @@ export default function MessageBubble({
               task={taskInfo}
               project={activeProject}
               onRollback={rollbackShipped}
+              onOpenLivePopup={onOpenLivePopup}
             />
           </div>
         )}

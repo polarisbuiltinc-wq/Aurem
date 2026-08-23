@@ -164,11 +164,19 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
       data-testid="live-task-popup"
       style={{
         position: "fixed",
-        right: 16,
-        top: "50%",
-        transform: "translateY(-50%)",
-        width: "min(360px, calc(100vw - 32px))",
-        maxHeight: "70vh",
+        // 2026-08-23 — BUG FIX: this used to float at right:16/top:50%
+        // (vertically centered on the right edge) — the exact same
+        // screen region as the Ask Advisor sidebar, permanently
+        // covering it while any task was running. Founder asked for
+        // this to live "in the main chat window" instead. Anchored to
+        // the bottom-left, above the composer, within the chat
+        // column's own footprint — the Advisor panel is always
+        // right-edge-anchored, so this can never overlap it again
+        // regardless of whether Advisor is open or collapsed.
+        left: 24,
+        bottom: 96,
+        width: "min(380px, calc(100vw - 48px))",
+        maxHeight: "60vh",
         minHeight: 80,
         background: "rgba(10, 12, 20, 0.72)",
         backdropFilter: "blur(12px)",
@@ -183,11 +191,6 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
         overflowX: "hidden",
         fontFamily: "ui-monospace, Menlo, monospace",
         fontSize: 12,
-        // 2026-08-23 — must stay BELOW Z_ADVISOR_TOGGLE (see
-        // lib/zIndex.js) — this panel used to fully cover/eat clicks
-        // on the collapsed Advisor re-open tab (both fixed, right-
-        // anchored, vertically centered) with no way to bring the
-        // sidebar back until this popup cleared.
         zIndex: 7500,
         animation: "popup-slide-in 0.25s ease-out",
         pointerEvents: "auto",
@@ -196,11 +199,11 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
         @keyframes popup-slide-in {
           from {
             opacity: 0;
-            transform: translateY(-50%) translateX(20px);
+            transform: translateY(12px);
           }
           to {
             opacity: 1;
-            transform: translateY(-50%) translateX(0);
+            transform: translateY(0);
           }
         }
         @keyframes phase-pulse {

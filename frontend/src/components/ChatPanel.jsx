@@ -4160,11 +4160,12 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           minHeight: 0,
           // Iter 212m-134 / 212m-140 — Padding lives in index.css (CSS
           // container queries adapt 17.25% / 24px / 12px gutters as the
-          // chat panel shrinks). Only the live-popup right override
-          // stays inline because it's a JS-driven runtime state, not
-          // a layout-driven state — the popup overlaps the right edge
-          // and needs 392 px regardless of width.
-          ...(livePopupTaskId ? { paddingRight: 392 } : {}),
+          // chat panel shrinks).
+          // 2026-08-23 — removed the `paddingRight: 392` reservation
+          // that used to make room for LiveTaskPopup on the right
+          // edge — the popup now renders bottom-left (see
+          // LiveTaskPopup.jsx), so this gutter was stale and would
+          // have left a wide empty gap on the right while a task runs.
           display: "flex", flexDirection: "column", gap: 20,
           transition: "padding-right 0.2s ease",
         }}
@@ -4468,6 +4469,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                 onTaskCompleted={triggerTaskFollowup}
                 onOpenDeployTab={openDeployTab}
                 collapseDefault={i !== messages.length - 1}
+                onOpenLivePopup={setLivePopupTaskId}
               />
               {/* 2026-08-21 — Stream health pill, now anchored right
                   below THIS specific task's bubble (the one actually
