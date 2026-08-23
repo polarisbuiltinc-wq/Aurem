@@ -132,4 +132,5 @@ async def schedule_idle_spend_guard(db_getter) -> None:
         try:
             await asyncio.sleep(CHECK_INTERVAL_S)
         except asyncio.CancelledError:
-            return
+            # 2026-08-23 — same G-F1 false-positive fix as daily_digest.py
+            raise

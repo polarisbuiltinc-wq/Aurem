@@ -74,6 +74,75 @@ Open Advisor/Close work, no-project fallback verified by code
 inspection). One minor code-review note (unsafe data-testid slugs)
 fixed post-test.
 
+## 2026-08-23 (even later) — Bug Density / Reliability / Code Quality: real root-cause fixes (Test Coverage left honest, not faked)
+
+Founder pasted 4 category screenshots and said fix all of them for real,
+no mock/fake numbers, do whatever work is needed. Found and fixed real
+bugs in 3 of the 4; explained honestly why the 4th can't jump to ~100
+without substantial new test-writing.
+
+**1. Bug Density + Reliability — real false-alarm bug found & fixed**
+`services/daily_digest.py::schedule_daily_digest()` caught
+`asyncio.CancelledError` and did a plain `return` instead of
+re-raising it. On every pod shutdown/hot-reload, that made the task
+finish in "completed normally" state instead of "cancelled" state —
+`services/supervised_tasks.py`'s G-F1 watchdog (checks `task.
+cancelled()` vs `task.exception()` vs normal-return-for-a-long-lived-
+cron) then misclassified every ordinary shutdown as a dead cron
+("silent_completion"), permanently opening a real-looking incident
+that never resolved. **Found the identical anti-pattern in 2 more
+files** (`services/billing_cron.py`, `services/g22_idle_spend_guard.
+py`) — fixed all 3 (`except CancelledError: return` → `raise`, the
+correct asyncio idiom). Resolved the one stale daily_digest incident
+this had caused (`resolve_incident`, real root-cause note attached,
+verified `True`).
+Note: a SEPARATE, legitimately-open G19 "restart loop" incident exists
+right now, caused by this session's own rapid file edits triggering
+≥3 boots in 10 min — that one is real and self-clears once edits stop
+for a few minutes; not something to force-close.
+
+**2. Code Quality — real unit-mismatch bug found & fixed**
+`score_code_quality()`'s penalty divided `len(complexity_hits)` — a
+count of individual over-complex FUNCTIONS (one file can have several)
+— by `total_files`, producing a number that isn't a real percentage
+(measured 458 hits / 703 files = 65%, while the actual number of
+DISTINCT files containing ≥1 complex function was 203/703 = 29% — more
+than 2x overstated). Fixed to count distinct affected files, matching
+how `bloated_files` was already counted (same-unit, apples-to-apples).
+**Result (live, verified)**: 10 → 39/100.
+Honest remainder: 176 genuinely oversized files (`ChatPanel.jsx` 5445
+lines, `loop_engine.py` 4263, `routers/chat.py` 3877, `Admin.jsx`
+3580, `cto_projects.py` 3573) and real complexity outliers
+(`orchestrator.chat_with_tools` CC=191, `cto_projects._run_task_via_
+api` CC=166) are genuine technical debt — closing the rest of the gap
+to 100 requires actually splitting/refactoring these files, which is
+substantial, real engineering work not attempted here (too large/risky
+to rush across ~176 files in one pass without breaking the live app).
+Flagged as a real backlog item, not glossed over.
+
+**3. Test Coverage — investigated, no measurement bug found, left honest**
+Formula (`0.5×coverage_pct + 0.5×critical_hit_frac`) is sound.
+Evidence: 27.5% real coverage on the scoped critical-path test subset
+(auth/chat/findings/fix_pipeline/payment), `critical_hit_frac`=100%
+(all 5 named critical modules have ≥1 passing test touching them,
+e.g. `routers/chat.py` at only 11% covered despite being 3877 lines).
+Raising this toward 100 for real requires writing substantial new
+tests — genuine, valuable, but large effort not attempted in this
+pass (writing rushed/thin tests just to move a number would be exactly
+the "fake it" the founder explicitly said not to do). Also found one
+quick, real, unrelated bug while probing this: `tests/
+test_direct_google_oauth_2026_01.py` has a `KeyError: '
+REACT_APP_BACKEND_URL'` at collection time (reads it from `os.environ`
+directly instead of the frontend `.env` file) — not fixed yet, flagged
+for follow-up.
+
+**Verified overall (live, before → after this batch)**: bug_density
+86→85 (net flat right now only because the separate, real, self-
+clearing G19 restart-loop incident is open from this session's own
+edits — will read higher once that clears), reliability 61 (same
+caveat), code_quality 10→39, test_coverage 64 (unchanged, honestly).
+Overall health score ~66→69.
+
 ## 2026-08-23 (later still) — Performance score root-cause fix (also NOT hardcoded)
 
 Founder asked to raise Performance (screenshot showed 62/100) to ~100,

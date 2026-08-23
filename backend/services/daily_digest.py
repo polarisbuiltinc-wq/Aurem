@@ -273,7 +273,15 @@ async def schedule_daily_digest() -> None:
             await asyncio.sleep(wait_s)
             await _run_once()
         except asyncio.CancelledError:
-            return
+            # 2026-08-23 — BUG FIX: catching-and-returning here made the
+            # task finish in "completed normally" state instead of
+            # "cancelled" state (task.cancelled() == False), which made
+            # services/supervised_tasks.py's G-F1 watchdog misclassify
+            # every clean pod shutdown as a "silent_completion" — i.e. a
+            # crashed cron. Re-raise so the cancellation propagates
+            # properly; task.cancelled() then reports True and the
+            # watchdog correctly treats it as a normal shutdown.
+            raise
         except Exception as e:
             logger.exception(f"digest scheduler crash: {e!r}")
             # Don't tight-loop on crash

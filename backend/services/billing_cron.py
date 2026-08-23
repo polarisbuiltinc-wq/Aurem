@@ -315,7 +315,11 @@ async def schedule_maxx_overage_billing(get_db_callable) -> None:
         try:
             await asyncio.sleep(wait_s)
         except asyncio.CancelledError:
-            return
+            # 2026-08-23 — same G-F1 false-positive fix as daily_digest.py
+            # — re-raise so the task reports as genuinely cancelled on
+            # shutdown, instead of "completed normally" (misclassified
+            # as a dead cron by the supervised-task watchdog).
+            raise
         try:
             db = get_db_callable()
             if db is None:

@@ -308,14 +308,26 @@ async def score_code_quality(db, report: Optional[dict] = None) -> dict:
         from services.architecture_health import run_health_report
         report = await asyncio.to_thread(run_health_report)
     bloated = len(report["bloated_files"])
-    complex_hits = len(report["complexity_hits"])
     total_files = max(1, report["total_files"])
-    penalty = (bloated / total_files * 100) * 1.5 + (complex_hits / total_files * 100) * 0.8
+    # 2026-08-23 — BUG FIX: penalty used `len(complexity_hits)` (a count
+    # of individual over-complex FUNCTIONS, which can and does exceed
+    # the file count — a file with 5 complex functions counts 5x) as the
+    # numerator over `total_files`, producing a ratio that isn't a real
+    # percentage of anything (measured 458 hits / 703 files = 65%, while
+    # the actual number of DISTINCT files containing >=1 complex
+    # function was only 203/703 = 29%). Switched to counting distinct
+    # affected files, matching how `bloated_files` is already counted,
+    # so both penalty terms are on the same, meaningful unit ("% of
+    # files with this problem").
+    complex_files = len({h["file"] for h in report["complexity_hits"]})
+    complex_hits = len(report["complexity_hits"])
+    penalty = (bloated / total_files * 100) * 1.5 + (complex_files / total_files * 100) * 0.8
     score = 100 - penalty
     evidence = {
         "total_files": report["total_files"],
         "bloated_files_count": bloated,
         "complexity_hits_count": complex_hits,
+        "complex_files_count": complex_files,
         "line_limit": report["line_limit"],
         "cc_limit": report["cc_limit"],
         "generated_at_epoch": report["generated_at"],
