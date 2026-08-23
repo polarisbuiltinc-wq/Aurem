@@ -14,7 +14,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 
 | Name | Metric | Coverage | Status |
 |---|---|---|---|
-| backend/services/loop_engine.py | 4258 lines | 8% | in progress — 2c coverage wave |
+| backend/services/loop_engine.py | 4466 lines (ledger's earlier "4258 lines / 8%" was a stale/narrower measurement — see wave-3 note below for the real, freshly-measured baseline) | 63% (2026-08-23, measured via `pytest --cov=services.loop_engine` across all 69 pre-existing in-process test files + this wave's new `test_phase2c_loop_engine.py`) | **covered (≥60%)** — Phase 2c wave 3 done |
 | backend/services/orchestrator.py | 2557 lines | 40% | not started |
 | backend/services/local_tools.py | 2253 lines | 12% | in progress — 2c coverage wave |
 | backend/services/qa_matrix.py | 1047 lines | 25% | Phase 1: harvesters relocated in (2026-08-22) |
@@ -78,24 +78,24 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/services/bug_hunt_rules.py::scan_bug_hunt (L362) | CC=65 | 44% | not started |
 | backend/services/graph_builder.py::build_graph (L202) | CC=62 | 13% | not started |
 | backend/services/llm/_meta.py::_call_llm_with_meta_inner (L108) | CC=58 | 18% | not started |
-| backend/services/loop_engine.py::LoopEngine._do_execute (L1072) | CC=54 | 8% | in progress — 2c coverage wave |
+| backend/services/loop_engine.py::LoopEngine._do_execute (L1072) | CC=54 | not covered this wave — KNOWN GAP, scoped out (see wave-3 PRD note: LLM-generation / scan-heal tail, deferred) | deliberately deferred |
 | backend/services/tools_bridge.py::extract_tool_calls (L184) | CC=54 | 20% | not started |
 | backend/services/orchestrator.py::_synthesise_max_iters_summary (L193) | CC=52 | 40% | not started |
 | backend/services/funnel_nudge_cron.py::classify_users (L350) | CC=52 | 13% | not started |
-| backend/services/loop_engine.py::LoopEngine._do_ship (L2727) | CC=46 | 8% | in progress — 2c coverage wave |
+| backend/services/loop_engine.py::LoopEngine._do_ship (L2727) | CC=46 | covered — real success + error branches tested this wave | **covered** |
 | backend/services/finding_fix_applier.py::apply_finding_fix (L245) | CC=43 | 9% | not started |
 | backend/services/personal_track_smoke.py::run_smoke (L68) | CC=42 | 0% | not started |
 | backend/services/repo_heal.py::heal_project (L155) | CC=41 | 42% | not started |
 | backend/services/seo/orchestrator.py::run_seo_fixes (L86) | CC=41 | 23% | not started |
-| backend/services/loop_engine.py::LoopEngine.confirm_ship (L3187) | CC=40 | 8% | in progress — 2c coverage wave |
+| backend/services/loop_engine.py::LoopEngine.confirm_ship (L3187) | CC=40 | mostly covered — pre-existing in-process test suite already exercises this, only small gaps remain | **covered (pre-existing)** |
 | backend/services/local_tools.py::write_repo_file (L718) | CC=38 | 12% | in progress — 2c coverage wave |
 | backend/services/qa_matrix.py::matrix_coverage_gap (L220) | CC=37 | 25% | Phase 1: harvesters relocated in (2026-08-22) |
 | backend/services/dev_skills.py::detect_framework (L357) | CC=37 | 7% | not started |
 | backend/services/llm/openrouter_providers.py::_call_deepseek (L361) | CC=37 | 11% | not started |
 | backend/services/ora_chat/deep_research.py::orchestrate (L815) | CC=36 | 55% | not started |
-| backend/services/loop_engine.py::LoopEngine._do_verify (L1874) | CC=34 | 8% | in progress — 2c coverage wave |
+| backend/services/loop_engine.py::LoopEngine._do_verify (L1874) | CC=34 | mostly covered — pre-existing in-process test suite already exercises this, only small gaps remain | **covered (pre-existing)** |
 | backend/services/vanguard_verify_agent.py::_llm_review (L298) | CC=34 | 19% | not started |
-| backend/services/loop_engine.py::LoopEngine._do_plan (L522) | CC=33 | 8% | in progress — 2c coverage wave |
+| backend/services/loop_engine.py::LoopEngine._do_plan (L522) | CC=33 | mostly covered — pre-existing in-process test suite already exercises this, only small gaps remain | **covered (pre-existing)** |
 | backend/services/dev_skills.py::find_usages (L77) | CC=33 | 7% | not started |
 | backend/services/architecture_health.py::_scan_boundaries (L359) | CC=32 | 0% | not started |
 | backend/services/loop_speed_diagnostic.py::compute_speed_report (L300) | CC=31 | 0% | not started |
@@ -106,7 +106,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/services/local_tools.py::list_repo_files (L1074) | CC=29 | 12% | in progress — 2c coverage wave |
 | backend/services/ora_chat/canary.py::run_canary (L182) | CC=29 | 22% | not started |
 | backend/services/mode_d_debugger.py::run_debug_session (L537) | CC=28 | 25% | not started |
-| backend/services/loop_engine.py::LoopEngine._heal_full_scan_findings (L2582) | CC=28 | 8% | in progress — 2c coverage wave |
+| backend/services/loop_engine.py::LoopEngine._heal_full_scan_findings (L2582) | CC=28 | not covered this wave — KNOWN GAP, scoped out (see wave-3 PRD note: LLM-generation / scan-heal tail, deferred) | deliberately deferred |
 | backend/services/web_skills.py::fetch_url (L151) | CC=28 | 12% | not started |
 | backend/services/local_tools.py::_search_repo_via_api (L1496) | CC=28 | 12% | in progress — 2c coverage wave |
 | backend/services/vanguard_verify_agent.py::verify_patch (L509) | CC=28 | 19% | not started |
@@ -119,7 +119,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/services/dev_skills.py::list_issues (L533) | CC=25 | 7% | not started |
 | backend/services/deploy_readiness.py::get_deploy_readiness (L68) | CC=25 | 19% | not started |
 | backend/services/ora_chat/grounding_check.py::run_post_response_check (L386) | CC=25 | 31% | not started |
-| backend/services/loop_engine.py::_generate_plan (L3920) | CC=24 | 8% | in progress — 2c coverage wave |
+| backend/services/loop_engine.py::_generate_plan (L3920) | CC=24 | not covered this wave — KNOWN GAP, scoped out (see wave-3 PRD note: LLM-generation / scan-heal tail, deferred) | deliberately deferred |
 | backend/services/local_tools.py::read_repo_files (L618) | CC=24 | 12% | in progress — 2c coverage wave |
 | backend/services/local_tools.py::semantic_search_repo (L1637) | CC=24 | 12% | in progress — 2c coverage wave |
 | backend/services/local_tools.py::execute_bash (L2017) | CC=24 | 12% | in progress — 2c coverage wave |
@@ -135,9 +135,9 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/services/project_brain.py::update_brain_after_task (L783) | CC=22 | 10% | not started |
 | backend/services/loop_speed_diagnostic.py::_phase_durations_from_events (L107) | CC=22 | 0% | not started |
 | backend/services/ora_chat/adversarial_review.py::run_review (L163) | CC=22 | 19% | not started |
-| backend/services/loop_engine.py::_run_security_scan (L4097) | CC=21 | 8% | in progress — 2c coverage wave |
-| backend/services/loop_engine.py::_run_diff_security_scan (L4205) | CC=21 | 8% | in progress — 2c coverage wave |
-| backend/services/loop_engine.py::lookup_or_rehydrate (L4350) | CC=21 | 8% | in progress — 2c coverage wave |
+| backend/services/loop_engine.py::_run_security_scan (L4097) | CC=21 | covered — real success + error branches tested this wave | **covered** |
+| backend/services/loop_engine.py::_run_diff_security_scan (L4205) | CC=21 | covered — real success + error branches tested this wave | **covered** |
+| backend/services/loop_engine.py::lookup_or_rehydrate (L4350) | CC=21 | mostly covered — pre-existing in-process test suite already exercises this, only small gaps remain | **covered (pre-existing)** |
 | backend/services/web_skills.py::web_search_and_summarize (L226) | CC=21 | 12% | not started |
 | backend/services/payment_reconciliation.py::run_reconciliation (L39) | CC=21 | 12% | not started |
 | backend/services/repo_map.py::format_repo_map (L72) | CC=21 | 0% | not started |
@@ -177,7 +177,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/services/llm/__init__.py::call_emergent_watchdog (L320) | CC=18 | 45% | not started |
 | backend/services/ora_chat/session.py::maybe_update_summary (L224) | CC=18 | 37% | not started |
 | backend/services/ora_chat/deep_research.py::_fetch_github (L263) | CC=18 | 55% | not started |
-| backend/services/loop_engine.py::LoopEngine._run_full_scan_pass (L2447) | CC=17 | 8% | in progress — 2c coverage wave |
+| backend/services/loop_engine.py::LoopEngine._run_full_scan_pass (L2447) | CC=17 | not covered this wave — KNOWN GAP, scoped out (see wave-3 PRD note: LLM-generation / scan-heal tail, deferred) | deliberately deferred |
 | backend/services/health_coverage_scan.py::run_coverage_scan (L64) | CC=17 | 0% | not started |
 | backend/services/usage.py::get_usage (L81) | CC=17 | 53% | not started |
 | backend/services/fix_triage.py::_suggest_marker (L285) | CC=17 | 69% | not started |
@@ -192,9 +192,9 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/services/ora_chat/slash_commands.py::_loop_stats (L222) | CC=17 | 26% | not started |
 | backend/services/scaffold_security_gate.py::scan_files (L55) | CC=16 | 0% | not started |
 | backend/services/mode_d_debugger.py::llm_diagnosis (L460) | CC=16 | 25% | not started |
-| backend/services/loop_engine.py::LoopEngine (L402) | CC=16 | 8% | in progress — 2c coverage wave |
-| backend/services/loop_engine.py::LoopEngine._persist_chat_turns (L3604) | CC=16 | 8% | in progress — 2c coverage wave |
-| backend/services/loop_engine.py::LoopEngine._emit (L3652) | CC=16 | 8% | in progress — 2c coverage wave |
+| backend/services/loop_engine.py::LoopEngine (L402) | CC=16 | mostly covered — pre-existing in-process test suite already exercises this, only small gaps remain | **covered (pre-existing)** |
+| backend/services/loop_engine.py::LoopEngine._persist_chat_turns (L3604) | CC=16 | not covered this wave — KNOWN GAP, scoped out (see wave-3 PRD note: LLM-generation / scan-heal tail, deferred) | deliberately deferred |
+| backend/services/loop_engine.py::LoopEngine._emit (L3652) | CC=16 | mostly covered — pre-existing in-process test suite already exercises this, only small gaps remain | **covered (pre-existing)** |
 | backend/services/sandbox_runner.py::validate_generated_files (L151) | CC=16 | 12% | not started |
 | backend/services/local_tools.py::get_commit_diff (L1783) | CC=16 | 12% | in progress — 2c coverage wave |
 | backend/services/local_tools.py::save_finding (L1911) | CC=16 | 12% | in progress — 2c coverage wave |
@@ -227,8 +227,8 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/services/house_rules.py::set_house_rules_doc (L165) | CC=14 | 0% | not started |
 | backend/services/mode_classifier.py::classify_intent_v2 (L90) | CC=14 | 60% | not started |
 | backend/services/restore_drill_cron.py::run_restore_drill (L52) | CC=14 | 26% | not started |
-| backend/services/loop_engine.py::LoopEngine._apply_integrity_guard_to_report (L1809) | CC=14 | 8% | in progress — 2c coverage wave |
-| backend/services/loop_engine.py::LoopEngine._do_scan (L2280) | CC=14 | 8% | in progress — 2c coverage wave |
+| backend/services/loop_engine.py::LoopEngine._apply_integrity_guard_to_report (L1809) | CC=14 | mostly covered — pre-existing in-process test suite already exercises this, only small gaps remain | **covered (pre-existing)** |
+| backend/services/loop_engine.py::LoopEngine._do_scan (L2280) | CC=14 | not covered this wave — KNOWN GAP, scoped out (see wave-3 PRD note: LLM-generation / scan-heal tail, deferred) | deliberately deferred |
 | backend/services/error_translator.py::_llm_rewrite (L208) | CC=14 | 22% | not started |
 | backend/services/minimal_edit.py::try_minimal_edit (L166) | CC=14 | 15% | not started |
 | backend/services/correction_rules.py::match_rules (L162) | CC=14 | 22% | not started |
@@ -273,7 +273,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/services/scaffold_design_review.py::_parse (L97) | CC=12 | 31% | not started |
 | backend/services/scaffold_design_review.py::verify_scaffold (L124) | CC=12 | 31% | not started |
 | backend/services/welcome_email.py::_resend_send (L231) | CC=12 | 0% | not started |
-| backend/services/loop_engine.py::LoopEngine._with_budget (L887) | CC=12 | 8% | in progress — 2c coverage wave |
+| backend/services/loop_engine.py::LoopEngine._with_budget (L887) | CC=12 | mostly covered — pre-existing in-process test suite already exercises this, only small gaps remain | **covered (pre-existing)** |
 | backend/services/loop_ship_diff.py::compute_files_diff (L41) | CC=12 | 8% | not started |
 | backend/services/full_scan_orchestrator.py::_touches_web_or_dockerfile (L236) | CC=12 | 0% | not started |
 | backend/services/graph_builder.py::extract_symbols (L97) | CC=12 | 13% | not started |
@@ -350,7 +350,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 |---|---|---|---|
 | backend/routers/chat.py | 3877 lines | 11% | in progress — 2c coverage wave |
 | backend/routers/cto_projects.py | 3560 lines | 9% | in progress — 2c coverage wave |
-| backend/routers/admin_analytics.py | 1992 lines | 18% | in progress — 2c coverage wave |
+| backend/routers/admin_analytics.py | 2195 lines | 88% (2026-08-23, TestClient in-process suite, 51 tests, real assertions — tests/test_phase2c_admin_analytics_router.py) | **covered (≥60%)** — Phase 2c wave 2 done |
 | backend/routers/mcp.py | 1806 lines | 23% | not started |
 | backend/routers/ora_chat.py | 1589 lines | 19% | not started |
 | backend/routers/loop.py | 1337 lines | 14% | not started |
@@ -388,7 +388,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/routers/github_app.py::install_webhook (L383) | CC=60 | 21% | not started |
 | backend/routers/advisor_context.py::get_advisor_context (L74) | CC=52 | 12% | not started |
 | backend/routers/cto_projects.py::_run_task_with_git (L3517) | CC=51 | 9% | in progress — 2c coverage wave |
-| backend/routers/admin_analytics.py::loop_metrics (L1690) | CC=46 | 18% | in progress — 2c coverage wave |
+| backend/routers/admin_analytics.py::loop_metrics (L1690) | CC=46 | covered — full success path tested, see wave-2 note | **covered** |
 | backend/routers/payments.py::stripe_webhook (L491) | CC=43 | 40% | Phase 1: price-matcher relocated out (2026-08-22) |
 | backend/routers/admin_users.py::get_user (L226) | CC=40 | 15% | not started |
 | backend/routers/admin_users.py::admin_funnel_dashboard (L622) | CC=40 | 15% | not started |
@@ -407,7 +407,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/routers/loop.py::pause_response (L521) | CC=30 | 14% | not started |
 | backend/routers/security_scan.py::_normalize_findings (L607) | CC=29 | 15% | Phase 1: _scan_text relocated out (2026-08-22) |
 | backend/routers/wrapped.py::my_wrapped (L50) | CC=29 | 16% | not started |
-| backend/routers/codebase_health.py::_build_text_cache (L88, was L533 pre-Phase-2a) | CC=28 | covered indirectly via scan() success-path tests (cache-miss branch); Redis cache-hit branch NOT exercised — preview Redis is disconnected, so that specific branch has zero real coverage anywhere right now, flagged honestly | partially covered |
+| backend/routers/codebase_health.py::_build_text_cache (L88, was L533 pre-Phase-2a) | CC=28 | covered indirectly via scan() success-path tests (cache-miss branch); **KNOWN GAP, not silently closed:** Redis cache-hit branch (L127-148) has zero coverage anywhere in the codebase right now — preview Redis is disconnected, so no test (mine or any other) can currently exercise it | partially covered — known gap |
 | backend/routers/mcp.py::_execute_vanguard_scan (L1010) | CC=27 | 23% | not started |
 | backend/routers/security_scan.py::_gh_get (L196) | CC=27 | 15% | Phase 1: _scan_text relocated out (2026-08-22) |
 | backend/routers/automations.py::github_webhook (L37) | CC=27 | 20% | not started |
@@ -418,7 +418,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/routers/chat.py::draft_support_email (L3924) | CC=23 | 11% | in progress — 2c coverage wave |
 | backend/routers/admin_payments.py::admin_get_stripe_config (L229) | CC=22 | 21% | not started |
 | backend/routers/vanguard_ci.py::_normalise_trufflehog (L76) | CC=22 | 17% | not started |
-| backend/routers/admin_analytics.py::admin_overview_metrics (L1312) | CC=22 | 18% | in progress — 2c coverage wave |
+| backend/routers/admin_analytics.py::admin_overview_metrics (L1312) | CC=22 | covered — full success path tested, see wave-2 note | **covered** |
 | backend/routers/admin_payments.py::admin_set_stripe_prices (L479) | CC=21 | 21% | not started |
 | backend/routers/notify_interest.py::notify_interest (L63) | CC=21 | 32% | not started |
 | backend/routers/admin_ops_config.py::admin_set_github_app_config (L496) | CC=21 | 24% | not started |
@@ -435,14 +435,14 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/routers/github_bot.py::push (L74) | CC=19 | 37% | not started |
 | backend/routers/security_scan.py::_generate_remediation_report (L669) | CC=19 | 15% | Phase 1: _scan_text relocated out (2026-08-22) |
 | backend/routers/upload.py::upload_convert (L156) | CC=19 | 26% | not started |
-| backend/routers/admin_analytics.py::loop_inspect (L2032) | CC=19 | 18% | in progress — 2c coverage wave |
+| backend/routers/admin_analytics.py::loop_inspect (L2032) | CC=19 | covered — full success path tested, see wave-2 note | **covered** |
 | backend/routers/mcp.py::_tool_get_recent_commits (L782) | CC=18 | 23% | not started |
 | backend/routers/codebase_health.py::_scan_security (L82) | CC=18 | N/A — stale row | **relocated** to services/codebase_health_core.py in the 2026-08-22 Phase 2a boundary-violation refactor; no longer exists in this file. Row kept for audit trail, not double-counted as covered/uncovered here. |
 | backend/routers/admin_health.py::status_all (L136) | CC=18 | 24% | not started |
 | backend/routers/loop.py::cancel_loop (L936) | CC=18 | 14% | not started |
 | backend/routers/repo_status.py::cleanup_delete (L335) | CC=18 | 17% | not started |
 | backend/routers/admin_bi.py::_subscription_monthly_usd (L60) | CC=18 | 14% | not started |
-| backend/routers/admin_analytics.py::admin_system_stats (L228) | CC=18 | 18% | in progress — 2c coverage wave |
+| backend/routers/admin_analytics.py::admin_system_stats (L228) | CC=18 | covered — full success path tested, see wave-2 note | **covered** |
 | backend/routers/codebase_health.py::_scan_dependencies (L308) | CC=17 | N/A — stale row | **relocated** to services/codebase_health_core.py in the 2026-08-22 Phase 2a refactor; no longer exists in this file. |
 | backend/routers/admin_payments.py::admin_set_stripe_config (L333) | CC=17 | 21% | not started |
 | backend/routers/admin_ops_config.py::db_health (L358) | CC=17 | 24% | not started |
@@ -451,15 +451,15 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/routers/repo_status.py::cleanup_summary (L286) | CC=17 | 17% | not started |
 | backend/routers/ora_chat.py::run_slash (L152) | CC=17 | 19% | not started |
 | backend/routers/ora_chat.py::send_message (L287) | CC=17 | 19% | not started |
-| backend/routers/admin_analytics.py::agent_tokens (L669) | CC=17 | 18% | in progress — 2c coverage wave |
-| backend/routers/admin_analytics.py::scope_drift_audit (L2119) | CC=17 | 18% | in progress — 2c coverage wave |
+| backend/routers/admin_analytics.py::agent_tokens (L669) | CC=17 | covered — full success path tested, see wave-2 note | **covered** |
+| backend/routers/admin_analytics.py::scope_drift_audit (L2119) | CC=17 | covered — full success path tested, see wave-2 note | **covered** |
 | backend/routers/codebase_health.py::_scan_code_quality (L219) | CC=16 | N/A — stale row | **relocated** to services/codebase_health_core.py in the 2026-08-22 Phase 2a refactor; no longer exists in this file. |
 | backend/routers/loop.py::rollback_loop (L1149) | CC=16 | 14% | not started |
 | backend/routers/admin_ops_config.py::admin_github_app_diagnostics (L611) | CC=16 | 24% | not started |
 | backend/routers/fix_pipeline.py::preview_cost (L173) | CC=16 | 44% | not started |
 | backend/routers/fix_pipeline.py::restart_job (L819) | CC=16 | 44% | not started |
 | backend/routers/version.py::_read_commit (L96) | CC=16 | 44% | Phase 1: github-push resolver relocated out (2026-08-22) |
-| backend/routers/admin_analytics.py::learning_health (L781) | CC=16 | 18% | in progress — 2c coverage wave |
+| backend/routers/admin_analytics.py::learning_health (L781) | CC=16 | covered — full success path tested, see wave-2 note | **covered** |
 | backend/routers/cto_projects.py::test_project_pat (L1260) | CC=15 | 9% | in progress — 2c coverage wave |
 | backend/routers/cto_projects.py::get_project_file (L1436) | CC=15 | 9% | in progress — 2c coverage wave |
 | backend/routers/cto_projects.py::retry_task (L1972) | CC=15 | 9% | in progress — 2c coverage wave |
@@ -471,7 +471,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/routers/user_rollback.py::revert_last_ship (L89) | CC=15 | 21% | not started |
 | backend/routers/auth.py::google_session (L344) | CC=15 | 22% | not started |
 | backend/routers/admin.py::_github_app_live_probe (L318) | CC=15 | 12% | not started |
-| backend/routers/codebase_health.py::scanner_feedback (L726, was L1171 pre-Phase-2a) | CC=14 | covered — admin-gate + shape + days-clamp (both directions) tested; aggregation pipelines exercised with empty-result fake, not real grouping math | **covered** |
+| backend/routers/codebase_health.py::scanner_feedback (L726, was L1171 pre-Phase-2a) | CC=14 | covered — admin-gate + shape + days-clamp (both directions) tested; **KNOWN GAP, not silently closed:** aggregation pipelines exercised with an empty-result fake (proves every statement executes) — does NOT validate the real $group/$sort grouping math (by_rule/by_file/trend_daily), which would need seeded rows + assertions on the grouped output | covered — known gap (aggregation math unvalidated) |
 | backend/routers/oauth.py::oauth_token (L347) | CC=14 | 28% | not started |
 | backend/routers/suggestions.py::_analyze_with_groq (L99) | CC=14 | 28% | not started |
 | backend/routers/loop.py::loop_history (L1262) | CC=14 | 14% | not started |
@@ -483,7 +483,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/routers/admin_bin.py::llm_credits (L310) | CC=14 | 18% | not started |
 | backend/routers/auth.py::login_2fa_verify (L533) | CC=14 | 22% | not started |
 | backend/routers/github_oauth.py::connect (L110) | CC=14 | 51% | not started |
-| backend/routers/admin_analytics.py::token_pnl (L533) | CC=14 | 18% | in progress — 2c coverage wave |
+| backend/routers/admin_analytics.py::token_pnl (L533) | CC=14 | covered — full success path tested, see wave-2 note | **covered** |
 | backend/routers/admin_projects_brain.py::get_architecture (L88) | CC=14 | 23% | not started |
 | backend/routers/cto_projects.py::_hallucination_reasons (L2396) | CC=13 | 9% | in progress — 2c coverage wave |
 | backend/routers/onboarding.py::send_connect_nudge (L46) | CC=13 | 34% | not started |
