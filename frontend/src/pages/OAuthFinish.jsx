@@ -54,10 +54,16 @@ export default function OAuthFinish() {
             tier:             d.tier,
             tokens_remaining: d.tokens_remaining,
           });
+          // 2026-08-25 — root-cause fix: same class of bug fixed below
+          // in the GitHub/direct-Google branch — these were `await`ed
+          // sequentially before navigating, each eligible for the full
+          // 60s axios timeout, which could leave the user stuck on a
+          // blank page for minutes on a slow network. Fire in the
+          // background instead; neither is needed for the redirect.
           try {
             const ref = localStorage.getItem("aurem_ref");
             if (ref && ref !== d.user_id) {
-              await api.post("/referrals/attribute", { ref_code: ref });
+              api.post("/referrals/attribute", { ref_code: ref }).catch(() => {});
               localStorage.removeItem("aurem_ref");
             }
           } catch { /* non-blocking */ }
@@ -65,7 +71,7 @@ export default function OAuthFinish() {
           try {
             const raw = localStorage.getItem("aurem_ad_attr");
             if (raw) {
-              await api.post("/ads/attribute-click", JSON.parse(raw));
+              api.post("/ads/attribute-click", JSON.parse(raw)).catch(() => {});
               localStorage.removeItem("aurem_ad_attr");
             }
           } catch { /* non-blocking */ }
@@ -93,10 +99,19 @@ export default function OAuthFinish() {
           return;
         }
         setToken(token);
-        // Try to hydrate the user from /usage/me so the rest of the
-        // app has tier/email/tokens_remaining without a refresh.
-        try {
-          const me = await api.get("/usage/me");
+        // 2026-08-25 — root-cause fix: this used to `await` /usage/me
+        // and the ad-attribution POST sequentially BEFORE navigating,
+        // each with the shared 60s axios timeout. Any real slowness on
+        // either call (cold backend, slow network) left the user
+        // staring at a blank "Signing you in…" page for up to 2 minutes
+        // combined — exactly the "stuck on /oauth-finish" symptom
+        // reported live. Shell.jsx already refetches /usage/me right
+        // after landing on /dashboard anyway, so none of this needs to
+        // block the redirect — set a minimal user from the URL params
+        // we already have, fire the rest in the background, and
+        // navigate immediately.
+        setUser({ name: login || "developer" });
+        api.get("/usage/me").then((me) => {
           if (me?.data?.user) {
             setUser({
               user_id:          me.data.user.user_id,
@@ -106,17 +121,15 @@ export default function OAuthFinish() {
               tokens_remaining: me.data.user.tokens_remaining,
             });
           }
-        } catch {
-          // Non-fatal — Dashboard will refetch.
-          setUser({ name: login || "developer" });
-        }
+        }).catch(() => { /* non-fatal — Dashboard/Shell will refetch */ });
         // Flag for the PWA install popup so the Dashboard can prompt.
         try { localStorage.setItem("aurem_just_logged_in", "1"); } catch {}
-        // 2026-08-20 — Attribute ad click captured on landing.
+        // 2026-08-20 — Attribute ad click captured on landing. Fire in
+        // the background too — same reasoning as above.
         try {
           const raw = localStorage.getItem("aurem_ad_attr");
           if (raw) {
-            await api.post("/ads/attribute-click", JSON.parse(raw));
+            api.post("/ads/attribute-click", JSON.parse(raw)).catch(() => {});
             localStorage.removeItem("aurem_ad_attr");
           }
         } catch { /* non-blocking */ }

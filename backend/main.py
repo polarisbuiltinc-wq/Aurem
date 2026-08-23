@@ -1163,6 +1163,21 @@ async def lifespan(app: FastAPI):
             logger.info("🔥 warm_start_jobs TTL index ensured (1h)")
         except Exception as _e:
             logger.warning(f"warm_start_jobs TTL index failed: {_e}")
+        # 2026-08-25 — oauth_states TTL index. testing_agent flagged this
+        # collection (GitHub + Google OAuth CSRF state rows) had no
+        # auto-purge for abandoned flows (user never completes the
+        # popup/redirect) — only the callback path deletes its own row.
+        # 10 min covers the 5-min expiry check in both callbacks with
+        # margin.
+        try:
+            await app.state.db.oauth_states.create_index(
+                "created_at",
+                expireAfterSeconds=600,
+                background=True,
+            )
+            logger.info("🔐 oauth_states TTL index ensured (10m)")
+        except Exception as _e:
+            logger.warning(f"oauth_states TTL index failed: {_e}")
 
         # Iter 182 — OAuth 2.1 + PKCE TTL indexes (for Claude Directory).
         # oauth_codes self-purge 10 min after `expires_at`, api_keys after
