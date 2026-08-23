@@ -28,3 +28,18 @@ find /app/.git/objects -name "tmp_obj_*" -delete
   push, the Delete Gate CI job blocks undocumented deletions.
 - After any `vite build` verification, delete frontend/dist again.
 - Mongo rotated logs regrow ~51MB per rotation; re-run reclaim periodically.
+
+## 2026-08-24 recurrence — hit 100% again (git writes failing)
+Same device, same drivers. Reclaimed via the runbook above PLUS these
+additional safe items found this time (all cache/scratch, none are
+source or tracked): `/usr/local/share/.cache/yarn/v6` (1.2G),
+`/root/.cache/pip` + `/root/.cache/pip-audit` (50M), all
+`backend/**/__pycache__` + `backend/.pytest_cache` (~23M),
+`/app/vscode-extension/node_modules` (126M, rebuild with `yarn` if
+the extension is worked on again), and ~1.4G of leftover
+`/tmp/restore_restore_scratch_*.gz` + `/tmp/mongo_aurem_*.gz` rollback
+scratch files (temp download copies, not the actual R2-backed
+snapshots). Result: 100%→95%, 9.8G→498M free. Still tight — the
+6.8G `/data/db` Mongo data is the real long-term driver and still
+requires founder OK before touching. Re-run `df -h /app` before any
+broad/full-suite pytest attempt.
