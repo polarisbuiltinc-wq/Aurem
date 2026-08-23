@@ -31,8 +31,13 @@ def test_admin_qa_module_imports_ext_client():
 
 def test_admin_qa_github_actions_two_sites_migrated():
     """The two GitHub Actions API sites (workflow_runs + jobs) use
-    ext_client('github') with 6s timeout preserved."""
-    src = _read("/app/backend/routers/admin_qa.py")
+    ext_client('github') with 6s timeout preserved.
+
+    Iter arch-2a (2026-08-22) — `_harvest_ci_status` (and these two
+    call sites) relocated verbatim from routers/admin_qa.py to
+    services/qa_matrix.py to fix a service→router boundary
+    violation. Same literal call pattern, corrected ownership."""
+    src = _read("/app/backend/services/qa_matrix.py")
     # Both must use ext_client with github dep + 6s timeout.
     assert src.count('ext_client("github", timeout=httpx.Timeout(6.0))') >= 2, (
         "Both GitHub Actions probes must use ext_client('github', "
@@ -155,10 +160,16 @@ def test_fix_pipeline_commit_verify_migrated():
 def test_batch_8a_total_sites_migrated():
     """Sum across all 7 files must show at least 10 ext_client
     call sites migrated in this batch. Guards against a partial
-    revert where one file gets rolled back without the tests catching."""
+    revert where one file gets rolled back without the tests catching.
+
+    Iter arch-2a (2026-08-22) — 2 of admin_qa.py's 3 sites (the
+    GitHub Actions probes, inside `_harvest_ci_status`) relocated to
+    services/qa_matrix.py to fix a service→router boundary
+    violation. Added to this batch's file list so the total holds."""
     total = 0
     for path in (
         "/app/backend/routers/admin_qa.py",
+        "/app/backend/services/qa_matrix.py",
         "/app/backend/routers/admin_bin.py",
         "/app/backend/routers/admin_projects_brain.py",
         "/app/backend/routers/admin_ops_config.py",

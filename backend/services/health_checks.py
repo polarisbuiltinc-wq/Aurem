@@ -527,7 +527,7 @@ async def _check_ci_vs_local_drift() -> dict:
     # asyncio.to_thread. `_harvest_ci_status` is already async
     # (httpx.AsyncClient) so it's fine as-is.
     import asyncio
-    from routers.admin_qa import _harvest_counts, _harvest_ci_status
+    from services.qa_matrix import _harvest_counts, _harvest_ci_status
     local = (await asyncio.to_thread(_harvest_counts)) or {}
     ci    = await _harvest_ci_status()
     if not ci.get("available"):

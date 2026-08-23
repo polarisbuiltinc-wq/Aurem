@@ -427,3 +427,43 @@ async def compute_financials(db) -> dict:
         "projection":        projection,
         "generated_at":      datetime.now(timezone.utc).isoformat(),
     }
+
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Iter arch-2a — relocated VERBATIM from routers/payments.py (no
+# logic changes). services/integration_health.py needed
+# `_match_discovered_price` for its Stripe price-drift check and
+# previously imported it FROM the router — an inverted
+# (service→router) dependency flagged by
+# services/architecture_health.py's boundary scan.
+# routers/payments.py re-imports both below, unchanged behaviour.
+# ═══════════════════════════════════════════════════════════════════
+from typing import Optional as _Optional
+
+_PLAN_MATCH = {
+    "starter":        ("starter", "month"),
+    "pro":            ("pro", "month"),
+    "team":           ("team", "month"),
+    "starter_annual": ("starter", "year"),
+    "pro_annual":     ("pro", "year"),
+    "team_annual":    ("team", "year"),
+}
+
+
+def _match_discovered_price(prices_data: list, plan: str) -> _Optional[str]:
+    """Pure matcher: exactly one active USD price whose product name +
+    billing interval fit the plan, else None (ambiguity = no heal)."""
+    name, interval = _PLAN_MATCH.get(plan, (None, None))
+    if not name:
+        return None
+    matches = []
+    for p in prices_data or []:
+        prod = p.get("product") if isinstance(p, dict) else None
+        pname = ((prod or {}).get("name") or "").strip().lower() \
+            if isinstance(prod, dict) else ""
+        rec = (p.get("recurring") or {}) if isinstance(p, dict) else {}
+        if (pname == name and rec.get("interval") == interval
+                and p.get("currency") == "usd"):
+            matches.append(p["id"])
+    return matches[0] if len(matches) == 1 else None

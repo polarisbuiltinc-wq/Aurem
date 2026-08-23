@@ -23,6 +23,13 @@ Fix:
   • Wrap `_do_scan` in a fail-closed try/except: any exception
     transitions the loop to `FAILED` (kind='scan_exception'),
     ship-gate does NOT open.
+
+Iter arch-2a (2026-08-22) — `_scan_text` (+ its `_RULES` table) was
+relocated verbatim from routers/security_scan.py to the new
+services/security_text_scanner.py to fix a service→router boundary
+violation (this file, services/loop_engine.py, was importing FROM a
+router). Both call sites below now import from the new services
+module instead — same name, same behaviour, corrected ownership.
 """
 from __future__ import annotations
 
@@ -49,18 +56,18 @@ def test_scan_text_imported_into_run_security_scan():
     # module. Prefer explicit inside-function import to match the
     # pattern of the other lazy imports in this module.
     assert (
-        "from routers.security_scan import" in body and
-        "_scan_text" in body.split("from routers.security_scan import", 1)[1].split("\n", 1)[0]
+        "from services.security_text_scanner import" in body and
+        "_scan_text" in body.split("from services.security_text_scanner import", 1)[1].split("\n", 1)[0]
     ) or (
         # Fallback: importer is on its own line inside the body.
         re.search(
-            r"from routers\.security_scan import[^\n]*_scan_text",
+            r"from services\.security_text_scanner import[^\n]*_scan_text",
             body,
         ) is not None
     ), (
         "Bug 3: _run_security_scan calls _scan_text() but never "
         "imports it — this is the F821 the previous agent dismissed. "
-        "Add `_scan_text` to the routers.security_scan import block."
+        "Add `_scan_text` to the services.security_text_scanner import block."
     )
 
 
@@ -74,7 +81,7 @@ def test_scan_text_imported_into_run_diff_security_scan():
     body = m.group(0)
     assert "_scan_text(" in body
     assert re.search(
-        r"from routers\.security_scan import[^\n]*_scan_text",
+        r"from services\.security_text_scanner import[^\n]*_scan_text",
         body,
     ) is not None, (
         "Bug 3: _run_diff_security_scan calls _scan_text() but never "

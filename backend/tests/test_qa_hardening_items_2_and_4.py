@@ -73,9 +73,11 @@ def test_version_returns_last_github_push_key(client, monkeypatch):
     monkeypatch.delenv("GITHUB_ACTIONS_TOKEN", raising=False)
     monkeypatch.delenv("GITHUB_REPO", raising=False)
     # Bust the module-level cache written by any earlier test.
-    from routers import version as v
-    v._GH_PUSH_CACHE["value"] = None
-    v._GH_PUSH_CACHE["expires_at"] = 0.0
+    # Iter arch-2a — cache now lives in services/github_last_push.py
+    # (relocated out of the router to fix a boundary violation).
+    from services import github_last_push as glp
+    glp._GH_PUSH_CACHE["value"] = None
+    glp._GH_PUSH_CACHE["expires_at"] = 0.0
 
     r = client.get("/api/aurem-dev/version")
     assert r.status_code == 200, r.text
@@ -96,14 +98,18 @@ def test_version_returns_last_github_push_key(client, monkeypatch):
 
 def test_last_github_push_populated_when_creds_present(monkeypatch):
     """Contract check: with creds + a stubbed GitHub API, the
-    resolver returns a dict shaped for the frontend."""
+    resolver returns a dict shaped for the frontend.
+
+    Iter arch-2a (2026-08-22) — resolver + cache relocated verbatim
+    to services/github_last_push.py (was a router→raw-httpx boundary
+    violation). Same contract, corrected ownership."""
     import asyncio
-    from routers import version as v
+    from services import github_last_push as glp
 
     monkeypatch.setenv("GITHUB_ACTIONS_TOKEN", "gha_fake_token")
     monkeypatch.setenv("GITHUB_REPO", "owner/repo")
-    v._GH_PUSH_CACHE["value"] = None
-    v._GH_PUSH_CACHE["expires_at"] = 0.0
+    glp._GH_PUSH_CACHE["value"] = None
+    glp._GH_PUSH_CACHE["expires_at"] = 0.0
 
     class _Resp:
         status_code = 200
@@ -123,9 +129,9 @@ def test_last_github_push_populated_when_creds_present(monkeypatch):
         async def __aexit__(self, *a): return False
         async def get(self, *a, **k): return _Resp()
 
-    monkeypatch.setattr(v.httpx, "AsyncClient", _AC)
+    monkeypatch.setattr(glp.httpx, "AsyncClient", _AC)
 
-    result = asyncio.run(v._fetch_last_github_push())
+    result = asyncio.run(glp.fetch_last_github_push())
     assert result is not None
     assert result["commit_sha"] == "abcdef123456"    # trimmed to 12 chars
     assert result["pushed_at"]  == "2026-01-01T12:00:00Z"

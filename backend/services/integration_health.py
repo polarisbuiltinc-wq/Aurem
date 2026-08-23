@@ -244,7 +244,7 @@ async def _probe_stripe() -> dict:
             unhealed: list[str] = []
             healed_envs: list[str] = []
             try:
-                from routers.payments import _match_discovered_price
+                from services.financials import _match_discovered_price
                 _all = stripe.Price.list(active=True, limit=100,
                                          expand=["data.product"])
                 _data = [dict(p) for p in (_all.data or [])]

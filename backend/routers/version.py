@@ -264,71 +264,11 @@ router = APIRouter(prefix="/api/aurem-dev", tags=["version"])
 
 # ── QA-Hardening Item 4 — "Last GitHub push" resolver ─────────────
 #
-# Reads the newest commit's SHA + committed_at from GitHub's REST
-# API. Cached for 60 s so /version stays cheap (still gets hit by
-# the AdminSystemHealth 30 s poller + the front-page banner).
-# Honest-empty (returns None) when creds aren't wired — the frontend
-# already has fallback rendering for that case.
-
-import httpx  # noqa: E402 — kept local because /version import must stay quick
-
-_GH_PUSH_CACHE: dict = {"value": None, "expires_at": 0.0}
-_GH_PUSH_CACHE_TTL_S = int(os.environ.get("GH_PUSH_CACHE_TTL_S", "60"))
-
-
-async def _fetch_last_github_push() -> Optional[dict]:
-    """Return {'commit_sha', 'pushed_at', 'html_url', 'message'} for
-    the most recent commit on the tracked repo's default branch, or
-    None when GITHUB_ACTIONS_TOKEN / GITHUB_REPO are missing or the
-    upstream call fails. Cached to avoid hammering the GitHub REST API.
-    """
-    import time as _time
-    now = _time.time()
-    if _GH_PUSH_CACHE["value"] is not None and now < _GH_PUSH_CACHE["expires_at"]:
-        return _GH_PUSH_CACHE["value"]
-    token = os.environ.get("GITHUB_ACTIONS_TOKEN")
-    repo  = os.environ.get("GITHUB_REPO")
-    if not token or not repo:
-        # Cache the None too — otherwise every /version call retries
-        # a missing config, wastes CPU.
-        _GH_PUSH_CACHE["value"] = None
-        _GH_PUSH_CACHE["expires_at"] = now + _GH_PUSH_CACHE_TTL_S
-        return None
-    try:
-        url = f"https://api.github.com/repos/{repo}/commits?per_page=1"
-        async with httpx.AsyncClient(timeout=4.0) as client:
-            r = await client.get(url, headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {token}",
-                "X-GitHub-Api-Version": "2022-11-28",
-            })
-        if r.status_code != 200:
-            _GH_PUSH_CACHE["value"] = None
-            _GH_PUSH_CACHE["expires_at"] = now + _GH_PUSH_CACHE_TTL_S
-            return None
-        data = r.json() or []
-        if not data:
-            _GH_PUSH_CACHE["value"] = None
-            _GH_PUSH_CACHE["expires_at"] = now + _GH_PUSH_CACHE_TTL_S
-            return None
-        c = data[0]
-        # Public /version endpoint — drop `message` and `html_url` so
-        # private-repo commit context (ticket refs, internal naming)
-        # doesn't leak to unauthenticated visitors. `commit_sha` +
-        # `pushed_at` are enough for AdminSystemHealth's Deploy Sync
-        # card to render "Pushed to GitHub …".
-        payload = {
-            "commit_sha": (c.get("sha") or "")[:12],
-            "pushed_at":  ((c.get("commit") or {}).get("committer") or {})
-                          .get("date"),
-        }
-        _GH_PUSH_CACHE["value"] = payload
-        _GH_PUSH_CACHE["expires_at"] = now + _GH_PUSH_CACHE_TTL_S
-        return payload
-    except Exception:
-        _GH_PUSH_CACHE["value"] = None
-        _GH_PUSH_CACHE["expires_at"] = now + _GH_PUSH_CACHE_TTL_S
-        return None
+# Iter arch-2a — the raw httpx call used to live directly in this
+# router (flagged by services/architecture_health.py's
+# "http-call-outside-services" boundary rule). Relocated verbatim to
+# services/github_last_push.py; this router just calls it now.
+from services.github_last_push import fetch_last_github_push  # noqa: E402
 
 
 @router.get("/version")
@@ -357,7 +297,7 @@ async def get_version(request: Request) -> dict:
         # card, letting a stale Save-to-GitHub sit unnoticed for days
         # even though deploys were landing fine. Honest-empty when
         # GITHUB_ACTIONS_TOKEN / GITHUB_REPO aren't set.
-        "last_github_push": await _fetch_last_github_push(),
+        "last_github_push": await fetch_last_github_push(),
     }
 
 

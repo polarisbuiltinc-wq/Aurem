@@ -4114,7 +4114,10 @@ async def _run_security_scan(user_id: str,
     # This function references `_scan_text(...)` at the scan_one
     # inner call site; the import block that once carried it was
     # truncated, producing NameError in every scan on every loop.
-    from routers.security_scan import _scan_text
+    # Iter arch-2a — now sourced from services/security_text_scanner.py
+    # (was a service→router boundary violation importing from the
+    # router; the rule table + matcher moved there verbatim).
+    from services.security_text_scanner import _scan_text
     import httpx, asyncio as _asyncio
     db = get_db()
     if db is None:
@@ -4254,7 +4257,9 @@ async def _run_diff_security_scan(
     from services.pat_vault import get_repo_token
     # Iter 319 · Bug 3 — restore the missing `_scan_text` import
     # for the diff-only scan path. Same defect as `_run_security_scan`.
-    from routers.security_scan import _scan_text
+    # Iter arch-2a — now sourced from services/security_text_scanner.py
+    # (was a service→router boundary violation; see note above).
+    from services.security_text_scanner import _scan_text
     from services.github_api_writer import fetch_file as gh_fetch
     from services.vanguard_verify_agent import (
         changed_lines_for_file, filter_findings_to_changed_lines,

@@ -1,3 +1,7 @@
+# arch: allow-http — this file is boilerplate STAGED for injection into
+# OTHER generated Personal Track apps (its own destination path there is
+# already `services/generated_app_email.py`); it is not part of AUREM's
+# own running backend and has no access to AUREM's services/ layer.
 """
 services/generated_app_email.py — Iter 212m-239
 

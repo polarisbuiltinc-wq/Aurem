@@ -88,7 +88,12 @@ def test_admin_overview_shows_manifest_age_when_stale():
 def test_admin_qa_counts_endpoint_exposes_manifest_age():
     """When the endpoint falls back to build_manifest, it must expose
     `manifest_generated_at` so the frontend can render the age. Locked
-    against the shape the FE reads."""
+    against the shape the FE reads.
+
+    Iter arch-2a (2026-08-22) — `_harvest_counts` relocated verbatim
+    from routers/admin_qa.py to services/qa_matrix.py to fix a
+    service→router boundary violation. Same shape, corrected
+    ownership — this lock now points at the new file."""
     import sys
     sys.path.insert(0, "/app/backend")
     from routers.admin_qa import _harvest_counts
@@ -96,9 +101,9 @@ def test_admin_qa_counts_endpoint_exposes_manifest_age():
     # On preview we get live_fs (not manifest) — so we just verify
     # the shape is present in the codebase, not a runtime lookup here.
     src = pathlib.Path(
-        "/app/backend/routers/admin_qa.py"
+        "/app/backend/services/qa_matrix.py"
     ).read_text()
     assert 'out["manifest_generated_at"]' in src, (
-        "admin_qa._harvest_counts no longer emits manifest_generated_at "
+        "qa_matrix._harvest_counts no longer emits manifest_generated_at "
         "in the build_manifest fallback branch."
     )

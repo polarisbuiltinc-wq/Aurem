@@ -1,3 +1,7 @@
+# arch: allow-http — standalone diagnostic/validation harness, run
+# manually via `python -m scripts.iter309_sse_reconnect_harness`; it
+# never runs inside the request-serving backend process, so the
+# services/ HTTP-wrapper convention doesn't apply here.
 """
 scripts/iter309_sse_reconnect_harness.py — Iter 309 · SSE 25-min validation
 

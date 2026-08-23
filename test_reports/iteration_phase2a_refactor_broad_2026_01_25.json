@@ -1,0 +1,42 @@
+{
+  "summary": "Consolidated pre-'Save to GitHub' regression pass covering full current uncommitted diff — focus on Phase-2a service-layer refactor (8 boundary violations) plus liveness re-check of PAT-removal, connection-status honesty, and rollback surface. Phase-2a NEW modules verified present and importable: services/codebase_health_core.py (SCANNERS + _scan_security/_scan_performance/_scan_code_quality/_scan_dependencies/_scan_database/_scan_docker_cis/_is_dockerfile/_norm_sev/_score_for_findings/_category_label), services/security_text_scanner.py (_RULES + _scan_text), services/github_last_push.py (fetch_last_github_push), services/qa_matrix.py (_harvest_counts + _harvest_ci_status), services/financials.py (_PLAN_MATCH + _match_discovered_price). Router re-imports verified via grep: routers/codebase_health.py -> services.codebase_health_core, routers/security_scan.py -> services.security_text_scanner (_RULES + _scan_text), routers/admin_qa.py -> services.qa_matrix, routers/payments.py -> services.financials (_PLAN_MATCH + _match_discovered_price), routers/version.py -> services.github_last_push. services/loop_engine.py at lines 4120 and 4262 imports _scan_text from services.security_text_scanner (2 call sites confirmed — no residual routers.security_scan reference). services/health_checks.py, services/integration_health.py, services/project_onboarding_scan.py import paths all point at the new services/* locations. `python3 -c 'import main'` succeeded with zero errors. Backend supervisor is RUNNING. Live liveness checks against REACT_APP_BACKEND_URL: GET /api/aurem-dev/version returns 200 with populated last_github_push={commit_sha:'4ef9730474e5', pushed_at:'2026-08-22T23:27:16Z'} (confirms github_last_push.fetch_last_github_push wired). GET /api/aurem-dev/admin/qa/counts returns 200 with keys backend_pytest, frontend_vitest, playwright, reasoning_evals, grand_total_tests, source (confirms qa_matrix._harvest_counts). GET /api/aurem-dev/admin/qa/status returns 200 with keys generated_at, test_counts, test_style, a11y, ci_status (confirms qa_matrix._harvest_ci_status). POST /api/aurem-dev/codebase-health/scan and POST /api/aurem-dev/security-scan/run both resolve router + validation layer and return honest 400 {detail:'project_id required'} (preview account has 0 cto_projects, same as prior 2026_01_25 report — endpoints and their re-imported scanner functions are wired; deeper end-to-end scan not run because no fixture project exists on this preview backend). Connection-status returns 200 with 'disconnected' + reason codes 'app_installation_revoked' / 'app_installation_missing' — PAT-removal typed error path intact. Frontend homepage loads clean (title 'ORA by Aurem — developers choice', no .error elements). Pytest targeted run on the 4 test files main agent identified as touching the refactored code: 21/23 PASSED in 6.10s (test_iter319_scan_fail_closed 3/3 including test_scan_text_imported_into_run_security_scan + test_scan_text_imported_into_run_diff_security_scan — Iter-319 fail-closed regression class does NOT recur; test_phase3_http_wrapper_migration_batch8a 13/13; test_qa_hardening_items_2_and_4 3/3 including test_version_returns_last_github_push_key + test_last_github_push_populated_when_creds_present; test_session6_item6 2/4 — the 2 failures are the pre-existing stale qa_manifest.json / manifest-vs-live drift issues explicitly declared out-of-scope by main agent, unchanged by this refactor). Frontend `yarn test --coverage --run` in /app/frontend ran clean in 41.78s and produced coverage/coverage-summary.json with 74 file entries (widened well beyond the previous 3-file scope) plus total.lines.pct=27.76 — Iter arch-2b coverage instrumentation confirmed working, no crash from the documented glob/minimatch/brace-expansion resolutions conflict.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/test_reports/pytest/phase2a_refactor_2026_01_25.xml",
+    "/app/backend/tests/test_iter319_scan_fail_closed.py",
+    "/app/backend/tests/test_phase3_http_wrapper_migration_batch8a.py",
+    "/app/backend/tests/test_qa_hardening_items_2_and_4.py",
+    "/app/backend/tests/test_session6_item6_test_count_freshness.py",
+    "/app/frontend/coverage/coverage-summary.json"
+  ],
+  "results_summary": {
+    "phase2a_module_relocations": "5/5 new service modules present + importable (codebase_health_core, security_text_scanner, github_last_push, qa_matrix, financials) with all expected symbols",
+    "router_reimports": "5/5 routers re-import from new services/* paths (codebase_health, security_scan, admin_qa, payments, version)",
+    "loop_engine_scan_text": "Both call sites (~L4120 and L4262) import _scan_text from services.security_text_scanner — Iter-319 NameError class of bug cannot recur",
+    "full_import_graph": "`python3 -c 'import main'` — zero errors",
+    "live_endpoints": {
+      "GET /api/aurem-dev/version": "200 with last_github_push.commit_sha=4ef9730474e5, pushed_at populated",
+      "GET /api/aurem-dev/admin/qa/counts": "200 with 6 expected keys",
+      "GET /api/aurem-dev/admin/qa/status": "200 with test_counts + ci_status",
+      "POST /api/aurem-dev/codebase-health/scan": "400 project_id required (validation layer reached — refactor intact; deep scan skipped, no fixture project)",
+      "POST /api/aurem-dev/security-scan/run": "400 project_id required (same — validation reached)",
+      "GET /api/aurem-dev/cto/projects/connection-status": "200 disconnected+app_installation_missing / app_installation_revoked — typed PAT-removal codes intact"
+    },
+    "pytest_totals": "21 passed, 2 failed (both pre-existing out-of-scope qa_manifest freshness) in 6.10s",
+    "frontend_coverage": "yarn test --coverage --run OK in 41.78s, 74 files in coverage-summary.json, total lines pct=27.76"
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Preview account still has 0 cto_projects — fixture project p_6d0be78cdd mentioned in the request is NOT present on this preview (same finding as 2026_01_25 report). This is why codebase-health/scan and security-scan/run can only be verified at the routing+validation layer via live curl; the actual scanner execution is verified via pytest (test_iter319_scan_fail_closed proves _scan_text is importable + callable). Non-blocking.",
+    "backend/routers/cto_projects.py still ~3800 lines — split-file refactor still recommended (carried forward from prior report, still not blocking)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% for in-scope Phase-2a items (21/21 in-scope pytest + 6/6 live endpoint smoke) — 2/23 pre-existing out-of-scope failures excluded per main agent brief", "frontend": "100% (homepage load OK, coverage tooling produces per-file data across 74 files)"},
+  "test_credentials": "admin: test@aurem.dev / AuremTest2026! (preview) — from /app/memory/test_credentials.md",
+  "seed_data_creation": "None — no live rollback drill this pass (already covered by 2026_01_25 iteration).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase-2a service-layer refactor (arch-2a) is verified green on HEAD. Quick re-verify: `pytest backend/tests/test_iter319_scan_fail_closed.py backend/tests/test_phase3_http_wrapper_migration_batch8a.py backend/tests/test_qa_hardening_items_2_and_4.py -v` (~2s). Live check: `curl $BASE/api/aurem-dev/version` should show last_github_push populated. The 2 failing tests in test_session6_item6_test_count_freshness (test_qa_manifest_is_present_and_recent + test_qa_manifest_totals_match_live_harvest) are pre-existing stale-manifest failures — confirmed out-of-scope by main agent. Founder is cleared for 'Save to GitHub' from a testing perspective.",
+  "rca of the issue": "n/a — no regressions from Phase-2a refactor. All 8 relocated functions/constants (_scan_security, _scan_performance, _scan_code_quality, _scan_dependencies, _scan_database, _scan_docker_cis, _RULES/_scan_text, _harvest_counts/_harvest_ci_status, _match_discovered_price/_PLAN_MATCH, fetch_last_github_push) reachable via their new services/* locations; all router re-imports intact; all previously-updated pytest files locate the moved symbols correctly."
+}

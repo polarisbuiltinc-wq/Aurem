@@ -40,7 +40,14 @@ async def run_onboarding_scan(
     try:
         if not (github_token and github_owner and github_repo):
             return
-        from routers.codebase_health import _build_text_cache, SCANNERS
+        # Iter arch-2a — SCANNERS now lives in services/codebase_health_core.py
+        # (fixed half of this service→router violation). `_build_text_cache`
+        # still comes from the router — it depends on GitHub-tree-walking
+        # primitives (_list_repo_tree_with_sha/_fetch_file) that are
+        # themselves owned by routers/security_scan.py pending a larger,
+        # separately-scoped extraction (tracked, not silently patched).
+        from routers.codebase_health import _build_text_cache
+        from services.codebase_health_core import SCANNERS
         text_cache = await _build_text_cache(github_owner, github_repo, github_token)
         if not text_cache:
             return
