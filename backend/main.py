@@ -944,10 +944,24 @@ async def lifespan(app: FastAPI):
                 if _path:
                     try:
                         import subprocess as _sub
-                        _ver = _sub.run(
+                        # 2026-08-23 — BUG FIX: this synchronous
+                        # subprocess.run() ran directly inside `async def
+                        # lifespan`, blocking the event loop during boot
+                        # whenever these binaries exist in the deploy
+                        # image (they don't in preview, which is why this
+                        # was invisible there) — up to 5s per binary,
+                        # during which k8s/nginx health-check pings to
+                        # `/health` timed out ("upstream timed out",
+                        # "RuntimeError: No response returned"), exactly
+                        # the production deploy-log symptom reported.
+                        # Purely advisory/informational logging — offload
+                        # to a thread so it can never block startup.
+                        _ver_out = await _asyncio.to_thread(
+                            _sub.run,
                             [_path, "--version"], capture_output=True,
                             text=True, timeout=5,
-                        ).stdout.splitlines()[0][:80]
+                        )
+                        _ver = _ver_out.stdout.splitlines()[0][:80]
                     except Exception:
                         _ver = "(--version failed)"
                     logger.info("🗄️  found %s at %s — %s", _bin, _path, _ver)
@@ -2769,13 +2783,29 @@ async def health():
         # 2026-02-09 — Backup-tools presence diagnostic (advisory only —
         # see 2026-08-20 correction at boot time: the real backup/
         # restore pipeline is Python-native and does NOT need these).
-        "backup_tools": _backup_tools_snapshot(),
+        "backup_tools": await _backup_tools_snapshot(),
     }
 
 
-def _backup_tools_snapshot() -> dict:
+async def _backup_tools_snapshot() -> dict:
     """Return {'mongodump': {'path': ..., 'version': ...} | None, ...}
-    Called from /api/health — must be fast + never raise."""
+    Called from /api/health — must be fast + never raise.
+
+    2026-08-23 · CRITICAL BUG FIX — this ran `subprocess.run(...)`
+    SYNCHRONOUSLY inside `async def health()`, the exact endpoint
+    Kubernetes/nginx poll repeatedly as the liveness/readiness probe.
+    On any image where `mongodump`/`mongorestore` happen to be on
+    PATH (common on many base images, even though this pipeline is
+    100% Python-native and never calls them), EVERY `/api/health` hit
+    blocked the whole event loop for up to ~6s (2 binaries × 3s
+    timeout) — causing the exact production deploy-log symptom
+    reported: repeated nginx "upstream timed out ... /health" +
+    `_global_rate_limit_guard` "RuntimeError: No response returned"
+    on concurrent requests sharing the same blocked loop, which makes
+    Kubernetes mark the pod unhealthy and the deployment fail/restart-
+    loop. Offloaded to a thread so `/health` can never block on this
+    again — same fix pattern already applied to the boot-time
+    diagnostic version of this check, and to `/admin/health-score`."""
     import shutil as _shutil
     import subprocess as _sub
     out: dict = {}
@@ -2785,10 +2815,12 @@ def _backup_tools_snapshot() -> dict:
             out[name] = None
             continue
         try:
-            ver = _sub.run(
+            proc = await asyncio.to_thread(
+                _sub.run,
                 [path, "--version"], capture_output=True, text=True,
                 timeout=3,
-            ).stdout.splitlines()[0][:120]
+            )
+            ver = proc.stdout.splitlines()[0][:120]
         except Exception as e:
             ver = f"(--version failed: {e!r})"
         out[name] = {"path": path, "version": ver}

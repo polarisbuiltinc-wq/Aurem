@@ -74,6 +74,42 @@ Open Advisor/Close work, no-project fallback verified by code
 inspection). One minor code-review note (unsafe data-testid slugs)
 fixed post-test.
 
+## 2026-08-23 (deployment fix) — PRODUCTION deploy failure root-caused: `/api/health` was blocking the event loop on every poll
+
+Founder shared production deploy-build error logs: repeated nginx
+"upstream timed out ... /health", `_global_rate_limit_guard`
+"RuntimeError: No response returned" / anyio EndOfStream, during the
+deploy window — the classic event-loop-blocked signature already
+diagnosed once this session for `/admin/health-score`.
+
+**Root cause #1 (the big one)**: `main.py::_backup_tools_snapshot()`
+ran `subprocess.run([...,"--version"], timeout=3)` for `mongodump` AND
+`mongorestore` **synchronously inside `async def health()`** — the
+literal `/api/health` endpoint Kubernetes/nginx polls repeatedly as
+the liveness/readiness probe. Confirmed live in THIS preview pod that
+both binaries exist at `/bin/mongodump` / `/bin/mongorestore` (not a
+prod-only quirk) — every single `/api/health` hit blocked the event
+loop for up to ~6s, so concurrent requests (including the next health
+poll) piled up and timed out, and Kubernetes marks the pod unhealthy
+→ deploy fails / restart-loops. This backup/restore pipeline is 100%
+Python-native (motor/pymongo + boto3→R2) and never actually calls
+these binaries — the check is advisory-only logging.
+**Root cause #2 (same anti-pattern, smaller blast radius)**: the
+boot-time version of the same diagnostic (in `lifespan()`, logs
+mongodump/mongorestore presence once at startup) had the identical
+synchronous `subprocess.run()` call, blocking startup itself for up
+to ~10s — matches an earlier user-shared log snippet showing `/health`
+timeouts in the few seconds before "MongoDB ping OK".
+
+**Fix**: both call sites now `await asyncio.to_thread(subprocess.run,
+...)`. `_backup_tools_snapshot()` made `async def`; its one call site
+in `health()` updated to `await`.
+
+**Verified live**: `/api/health` now returns in ~0.2s with correctly
+resolved `backup_tools` versions; fired 8 concurrent `/api/health`
+requests — all returned in ~0.2s each (previously would have queued
+behind the blocking subprocess calls).
+
 ## 2026-08-23 (even later) — Bug Density / Reliability / Code Quality: real root-cause fixes (Test Coverage left honest, not faked)
 
 Founder pasted 4 category screenshots and said fix all of them for real,
