@@ -25,6 +25,7 @@ import ReferralShare from "../components/ReferralShare";
 import TrustLevelCard from "../components/TrustLevelCard";
 import DangerZone from "../components/DangerZone";
 import ChangePasswordCard from "../components/ChangePasswordCard";
+import PhoneNumberCard from "../components/PhoneNumberCard";
 import ShipWallOptInCard from "../components/ShipWallOptInCard";
 
 const TABS = [
@@ -373,6 +374,7 @@ export default function Settings() {
             {/* Iter 212m-235 — Switch between Personal and Developer Track.  */}
             <TrackSwitcher currentTrack={me?.track || "developer"} onSwitched={(t) => setMe((m) => m ? { ...m, track: t } : m)} />
 
+            <PhoneNumberCard me={me} onChange={(phone) => setMe((m) => m ? { ...m, phone } : m)} />
             {me?.has_password && <ChangePasswordCard />}
             <ShipWallOptInCard
               me={me}

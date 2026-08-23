@@ -5130,3 +5130,19 @@ Founder accepted Phase B as a genuine milestone (real coverage numbers, document
 
 No further agent action until founder resumes and picks from this list (or gives other instructions).
 
+## 2026-08-25 — Optional phone number (signup + Settings + Admin) + ORA copy fix — COMPLETE, testing_agent-verified
+
+Founder changed the earlier mandatory-phone requirement to fully OPTIONAL. Implemented and verified in Preview (NOT yet confirmed on Production — founder must redeploy):
+- **Email/password signup** (`Signup.jsx` + `auth.py`): optional `phone` field, never blocks signup when blank. Server validates via the real `phonenumbers` library (`_validate_phone_optional()` in `auth.py`, not regex), normalizes to E.164, stores on `dev_users.phone`. Client-side pre-check via `libphonenumber-js`.
+- **Settings → Profile → Phone number card** (NEW `frontend/src/components/PhoneNumberCard.jsx`, new `POST /auth/update-phone` backend endpoint): lets ANY user — including GitHub/Google OAuth signups who never saw the signup-form field — add/change/clear their phone after the fact. This resolves the OAuth open-question from the prior investigation: no OAuth interstitial/gate was added; OAuth users just use this card later if they want.
+- **Admin visibility**: `Admin.jsx` `UserDetail` card shows a `Phone` line (`data-testid="admin-user-phone"`) with `—` fallback. Users LIST table intentionally NOT changed (stays 8 columns, no clutter).
+- **Privacy policy**: `privacy-policy.md` now lists phone as optional account data.
+- **Cosmetic fix (unrelated, bundled same session)**: `backend/services/ora_context.py` — ORA's no-repo-connected system prompt said "+ New project"; corrected to "Add repository" to match current UI. `ConnectRepoBanner` promo copy itself was deliberately left unchanged (founder choice, promo still active) — see backlog below.
+- **testing_agent verified**: `/app/test_reports/iteration_optional_phone_2026_01.json` — 100% (11/11 backend, all frontend flows), 0 action items, 0 bugs. Covers blank/valid/invalid phone signup, existing signup/login regression (none found), update-phone set/change/clear/invalid/unauthenticated, Settings UI, Admin UI, Users-list-table-unchanged check.
+- **Preview vs Production**: all of the above is Preview-confirmed only. Founder must redeploy Preview → Production for this to go live; no claim is made about Production state.
+
+### Backlog items logged (not started, no go-ahead given)
+1. **Revisit `ConnectRepoBanner` copy** — currently growth-promo-specific ("free SEO fix" / "founder spots"). Revisit with neutral "connect repo when ready" wording once the founder-spots promo campaign ends.
+2. **Optional future idea only, NOT approved for implementation**: after a user hits GitHub-connect trouble, consider inviting them to add a phone number then (for support follow-up). Do not build this without explicit founder go-ahead.
+3. **Privacy policy / compliance gap (side-finding, real risk, separate from phone work)**: `privacy-policy.md` promises a Settings → Export Data capability; no such export endpoint exists in the codebase. Flagged for founder awareness — not fixed, out of scope for this task.
+

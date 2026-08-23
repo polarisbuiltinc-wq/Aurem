@@ -705,6 +705,7 @@ function UserDetail({ user, onBack }) {
           <h3 style={{ fontSize: 13, margin: "0 0 12px" }}>{d.email}</h3>
           <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.8 }}>
             <div><b>Name:</b> {d.name || "—"}</div>
+            <div data-testid="admin-user-phone"><b>Phone:</b> {d.phone || "—"}</div>
             <div><b>User ID:</b> <code style={{ fontSize: 11 }}>{d.user_id}</code></div>
             <div><b>Tier:</b> {d.tier || "free"}</div>
             <div><b>Status:</b> <Badge color={STATUS_COLOR[d.status || "active"]}>{d.status || "active"}</Badge></div>

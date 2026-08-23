@@ -1,5 +1,5 @@
 # Privacy Policy — ORA by Aurem
-**Last updated: June 16, 2026**
+**Last updated: August 25, 2026**
 **Effective: June 16, 2026**
 
 Polaris Built Inc ("we", "us") operates ORA by Aurem at auremcto.com. This policy explains what data we collect, how we use it, and your rights. ORA is an AI engineer that reads your GitHub repo, writes production code, and commits directly — no IDE needed.
@@ -10,6 +10,7 @@ Polaris Built Inc ("we", "us") operates ORA by Aurem at auremcto.com. This polic
 
 ### Account Data
 - GitHub username, email address, avatar
+- Phone number — **optional**, only if you choose to provide it at signup, used solely so we can follow up if you get stuck (e.g. with a GitHub connection issue) through a channel other than email
 - Subscription tier and billing status
 - Account creation date and last login
 

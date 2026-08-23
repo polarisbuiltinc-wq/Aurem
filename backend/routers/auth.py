@@ -153,6 +153,36 @@ def _email_ci(email: str) -> dict:
     return {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}}
 
 
+def _validate_phone_optional(phone: Optional[str]) -> Optional[str]:
+    """Validate + normalize an OPTIONAL signup phone number.
+
+    Returns None when nothing was provided (phone is never required —
+    founder decision, 2026-08-25). When a value IS provided, it must be
+    a real, dialable number (via the `phonenumbers` library — Google's
+    libphonenumber port, not a hand-rolled regex) and is normalized to
+    E.164 (e.g. "+14155552671") for consistent storage/display.
+    """
+    phone = (phone or "").strip()
+    if not phone:
+        return None
+    import phonenumbers
+    try:
+        parsed = phonenumbers.parse(phone, None)
+    except phonenumbers.NumberParseException:
+        raise HTTPException(
+            400,
+            "That phone number doesn't look valid — please include the "
+            "country code (e.g. +1 415 555 2671), or leave it blank.",
+        )
+    if not phonenumbers.is_valid_number(parsed):
+        raise HTTPException(
+            400,
+            "That phone number doesn't look valid — please double-check "
+            "it, or leave it blank.",
+        )
+    return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+
+
 @router.get("/robot-guide")
 async def robot_guide_public() -> dict:
     """Public — custom ORA robot welcome messages for /signup + /login.
@@ -175,6 +205,12 @@ class SignupBody(BaseModel):
     email: str
     password: str
     name: Optional[str] = None
+    # 2026-08-25 — OPTIONAL phone number. Founder decision: never
+    # required/blocking on signup; used only if the user chooses to
+    # provide it, so support can follow up beyond email if they get
+    # stuck. See memory/code_quality_ledger.md for the privacy-policy
+    # flag tied to this field.
+    phone: Optional[str] = None
     # Iter 365 · signup abuse guards — Phase 2.
     # `honeypot` is a hidden field in the signup form; humans leave it
     # blank, bots fill it. `form_age_ms` is how many ms elapsed
@@ -237,6 +273,7 @@ async def signup(body: SignupBody, request: Request) -> dict:
     )
     if existing:
         raise HTTPException(409, "Email already registered")
+    phone = _validate_phone_optional(body.phone)
     hashed = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode()
     user_id = uuid.uuid4().hex
     # Founder allow-list: anyone on the list signs up directly into the
@@ -259,6 +296,8 @@ async def signup(body: SignupBody, request: Request) -> dict:
         "email": email,
         "name": body.name or email.split("@")[0],
         "password": hashed,
+        # Optional — None when not provided. Never blocks signup.
+        "phone": phone,
         "tier": tier,
         "tokens_remaining": starting_tokens,
         "is_admin": is_founder,
@@ -749,6 +788,30 @@ async def change_password(
         {"user_id": payload["user_id"]}, {"$set": {"password": hashed}},
     )
     return {"ok": True}
+
+
+class UpdatePhoneBody(BaseModel):
+    phone: Optional[str] = None
+
+
+@router.post("/update-phone")
+async def update_phone(
+    body: UpdatePhoneBody, authorization: Optional[str] = Header(None),
+) -> dict:
+    """2026-08-25 — Settings → Profile: add/change/clear the OPTIONAL
+    phone number after signup (e.g. for OAuth users who had no signup
+    form field for it). Never required — an empty/blank value clears
+    the field back to None rather than erroring.
+    """
+    payload = await current_dev(authorization)
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "Database not connected")
+    phone = _validate_phone_optional(body.phone)
+    await db.dev_users.update_one(
+        {"user_id": payload["user_id"]}, {"$set": {"phone": phone}},
+    )
+    return {"ok": True, "phone": phone}
 
 
 @router.get("/me")

@@ -13,6 +13,7 @@ import GoogleIcon from "../components/GoogleIcon";
 import { scorePassword, MIN_ACCEPTABLE_SCORE } from "../lib/passwordStrength";
 import PasswordInput from "../components/PasswordInput";
 import PasswordStrengthMeter from "../components/PasswordStrengthMeter";
+import { isValidPhoneNumber } from "libphonenumber-js";
 
 export default function Signup() {
   usePageMeta({
@@ -24,7 +25,7 @@ export default function Signup() {
   const [searchParams] = useSearchParams();
   const rawNext = searchParams.get("next") || "";
   const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
-  const [form, setForm] = useState({ name: "", email: "", password: "", password_confirm: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", password_confirm: "" });
   const [agreed, setAgreed] = useState(false);
   // Iter 212m-187 — admin-editable welcome message
   const [welcomeMsg, setWelcomeMsg] = useState("");
@@ -60,6 +61,15 @@ export default function Signup() {
       );
       return;
     }
+    // Phone is OPTIONAL — never blocks signup when left blank. If the
+    // user does type something, validate it for real (not a regex) so
+    // we don't store garbage; libphonenumber-js is the same library
+    // family the backend uses (Google's libphonenumber).
+    const phone = form.phone.trim();
+    if (phone && !isValidPhoneNumber(phone)) {
+      setError("That phone number doesn't look valid — include the country code (e.g. +1 415 555 2671), or leave it blank.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -67,6 +77,7 @@ export default function Signup() {
         email: form.email.trim(),
         password: form.password,
         name: form.name.trim() || undefined,
+        phone: phone || undefined,
       });
       setToken(r.data.token);
       setUser({
@@ -249,6 +260,21 @@ export default function Signup() {
                 onChange={(e) => u("email", e.target.value)}
                 placeholder="you@company.com"
               />
+            </label>
+
+            <label>
+              <span className="label-mini">Phone number (optional)</span>
+              <input
+                data-testid="signup-phone"
+                className="input"
+                type="tel"
+                value={form.phone}
+                onChange={(e) => u("phone", e.target.value)}
+                placeholder="+1 415 555 2671"
+              />
+              <span style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 4, display: "block" }}>
+                Only if you want us to follow up beyond email — never required.
+              </span>
             </label>
 
             <label>

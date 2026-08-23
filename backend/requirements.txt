@@ -87,7 +87,7 @@ langfuse==4.12.0
 librt==0.11.0
 license-expression==30.4.4
 limits==5.8.0
-litellm==1.80.0
+litellm @ https://customer-assets.emergentagent.com/internal-asset/library/litellm-1.80.0-py3-none-any.whl#sha256=adf398c513273de9341f61822296c6b2145f7f2dc4a69daf3ac04829f5bde3f8
 lxml==6.1.1
 magika==0.6.3
 mammoth==1.11.0
@@ -117,6 +117,8 @@ opentelemetry-exporter-otlp-proto-http==1.43.0
 opentelemetry-proto==1.43.0
 opentelemetry-sdk==1.43.0
 opentelemetry-semantic-conventions==0.64b0
+# Editable Git install with no remote (ora-grounding==0.1.0)
+-e /app/_extract
 packageurl-python==0.17.6
 packaging==26.2
 paramiko==3.5.0
@@ -124,6 +126,7 @@ passlib==1.7.4
 pathspec==1.1.1
 pdfminer.six==20251230
 pdfplumber==0.11.9
+phonenumbers==9.0.37
 pillow==12.3.0
 pip-api==0.0.34
 pip-requirements-parser==32.0.1

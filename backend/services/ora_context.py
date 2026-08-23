@@ -151,7 +151,7 @@ ORA_BOUNDARY_NO_REPO_RULE = """\
 
 1. You are ORA.  No GitHub repository is currently connected to
    this chat.  Direct the user to connect one via Settings → GitHub
-   or the sidebar's "+ New project" flow.
+   or the "Add repository" option in the sidebar.
 
 2. You have NO access to the AUREM server pod's local filesystem.
    Paths under `/app`, `/tmp`, `/var`, `/etc`, `/usr`, `/root`,
