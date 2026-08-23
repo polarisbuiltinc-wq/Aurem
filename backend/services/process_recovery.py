@@ -274,7 +274,23 @@ async def resolve_if_stable(db) -> bool:
 
 async def recovery_status(db) -> dict:
     """QA row payload: restarts (7d), last boot reason/time, loop trips
-    (7d), heartbeat age, current window boot count."""
+    (7d), heartbeat age, current window boot count.
+
+    2026-08-23 · BUG FIX — `restarts_7d`/`loop_trips_7d` counted EVERY
+    boot regardless of `reason`, including `clean_restart` (routine
+    supervisor-managed restarts, e.g. dev hot-reload on every file
+    save) and `deploy_new_code` (intentional deploys). In a preview
+    pod under active development that's dozens of benign restarts per
+    hour, none of which reflect actual instability — it was drowning
+    out the real signal and tanking the Reliability score for reasons
+    that have nothing to do with reliability. Production doesn't hot-
+    reload, so this noise is preview-specific (exactly the gap the
+    score's own caveat flagged as unverified). Added
+    `restarts_7d_crash_only` / `loop_trips_7d_crash_only`, counting
+    ONLY `reason == "crash_or_kill"` boots — the actual reliability
+    signal — for `health_score.py::score_reliability()` to consume.
+    Raw `restarts_7d`/`loop_trips_7d` are kept unchanged for anyone
+    who wants the full operational picture."""
     out = {
         "guard": "G19",
         "supervisor_autorestart": True,   # pod conf: autorestart=true (read-only)
@@ -283,9 +299,11 @@ async def recovery_status(db) -> dict:
         "loop_window_s": LOOP_WINDOW_S,
         "loop_threshold": LOOP_THRESHOLD,
         "restarts_7d": None,
+        "restarts_7d_crash_only": None,
         "boots_in_window": None,
         "last_boot": None,
         "loop_trips_7d": None,
+        "loop_trips_7d_crash_only": None,
         "loop_active": False,
     }
     if db is None:
@@ -307,6 +325,21 @@ async def recovery_status(db) -> dict:
         out["loop_active"] = bool(await db.topup_alerts.find_one(
             {"integration_id": "process_recovery", "status": "active"},
             {"_id": 1}))
+
+        crash_ts = [
+            d["ts"] async for d in db.process_boots.find(
+                {"ts": {"$gte": week}, "reason": "crash_or_kill"},
+                {"_id": 0, "ts": 1},
+            ).sort("ts", 1)
+        ]
+        out["restarts_7d_crash_only"] = len(crash_ts)
+        trips = 0
+        for i, t in enumerate(crash_ts):
+            window_start = t - LOOP_WINDOW_S
+            in_window = sum(1 for x in crash_ts[: i + 1] if x >= window_start)
+            if in_window >= LOOP_THRESHOLD:
+                trips += 1
+        out["loop_trips_7d_crash_only"] = trips
     except Exception as e:                                    # noqa: BLE001
         logger.warning("[G19] recovery_status failure: %r", e)
     return out

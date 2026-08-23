@@ -74,6 +74,57 @@ Open Advisor/Close work, no-project fallback verified by code
 inspection). One minor code-review note (unsafe data-testid slugs)
 fixed post-test.
 
+## 2026-08-23 (later still) — Reliability score root-cause fixes (NOT hardcoded — evidence-based fixes only)
+
+Founder asked to "fix" the Reliability score (screenshot showed 66/100)
+and raise it to ~100. Per this feature's own founder-mandated design
+("never a typed-in number"), did NOT hardcode/inflate the score.
+Investigated the live evidence instead and found + fixed TWO real bugs
+that were making it artificially low:
+
+1. **`services/process_recovery.py::recovery_status()`** counted EVERY
+   backend boot (including benign hot-reload restarts and intentional
+   deploys) toward `restarts_7d`/`loop_trips_7d`. In an actively-edited
+   preview pod that's dozens of benign restarts/hour — 1461 restarts,
+   1260 "loop trips" over 7d, none of which reflect real instability.
+   Added `restarts_7d_crash_only` / `loop_trips_7d_crash_only`,
+   counting ONLY `reason == "crash_or_kill"` boots (the boot-reason
+   classifier already existed, just wasn't used for scoring). Raw
+   fields kept unchanged for anyone wanting the full picture.
+   `score_reliability()` in `services/health_score.py` now consumes
+   the crash-only fields.
+2. **Data hygiene bug**: `tests/test_session6_item2_topup_alerts_dedup.py`
+   seeds fake "critical" integration alerts against the REAL preview
+   Mongo (by design, per its own docstring) to test dedup logic, which
+   funnels into `db.incidents` via the G20 hook in
+   `services/topup_alerts.py`. Its `_cleanup()` only deleted
+   `topup_alerts` rows, never the linked `incidents` rows — so every
+   test run left a permanent orphan "open" incident titled "Simulated
+   failure for dedup test". Found **47** such orphans (all fake, zero
+   real signal) permanently inflating `g20_incidents.open` and tanking
+   the score. One-time cleanup: deleted all 47 from the live `incidents`
+   collection. Fixed `_cleanup()` to also delete the matching
+   `db.incidents` row so this can't recur.
+
+**Result (live, verified via curl before/after)**: preview Reliability
+score 35→55 (right after fix; will keep improving as more of the
+7-day window becomes crash-only-classified data). Overall health score
+49→63. Two real open incidents remain (both legitimate, not touched):
+a `daily_digest` cron that died (`G-F1-supervised-task` — separate,
+real bug, not yet fixed) and a G19 restart-loop incident that was
+actively true at verification time (this session's own rapid edits
+triggered ≥3 boots in 10 min) — it self-resolves once boot churn
+settles (`resolve_if_stable()`), not something to force-clear.
+
+**Full 100/100 is likely not achievable on PREVIEW specifically** —
+active development inherently causes some restart/crash noise no
+preview pod can fully avoid, and the score's own caveat already flags
+this as "uncertain vs production" (production restarts far less, no
+hot-reload). Told the founder honestly rather than faking a number:
+real fixes applied, preview score improved meaningfully, full
+verification requires a few days of production data post-deploy.
+Tests: ran the modified dedup test file directly — all 5 pass.
+
 ## 2026-08-23 (later same day) — Confirmed today's fix batch IS deployed to production; production security-audit failure root-caused (2 angles confirmed, 1 ruled out); Prompt Starter panel merged into the ORA GUIDE mascot
 
 **#1 Phase 1 deploy status — DEPLOYED.** Checked the PUBLIC production

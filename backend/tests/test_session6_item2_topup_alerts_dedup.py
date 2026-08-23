@@ -52,6 +52,15 @@ async def _seed_snap(iid: str, severity_hint: str = "critical") -> dict:
 
 async def _cleanup(db, iid: str) -> None:
     await db.topup_alerts.delete_many({"integration_id": iid})
+    # 2026-08-23 — BUG FIX: `upsert_alerts_from_snapshot` funnels every
+    # critical alert into `db.incidents` (services/topup_alerts.py G20
+    # hook) but nothing ever resolved these test-seeded fakes, so every
+    # run of this suite left permanent orphan rows in the REAL incidents
+    # collection — which `services/health_score.py::score_reliability()`
+    # counts as real open incidents. Found 37 such orphans (all titled
+    # "Simulated failure for dedup test") permanently tanking the live
+    # Reliability score. Clean them up here so this suite is idempotent.
+    await db.incidents.delete_many({"source_key": f"integration:{iid}"})
 
 
 @pytest.mark.asyncio

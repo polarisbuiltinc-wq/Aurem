@@ -209,8 +209,18 @@ async def score_reliability(db) -> dict:
     total_trips_7d = sum(trips_7d.values())
     g17_score = max(0, 100 - len(open_breakers) * 30 - total_trips_7d * 5)
 
-    loop_trips = g19.get("loop_trips_7d") or 0
-    restarts = g19.get("restarts_7d") or 0
+    # 2026-08-23 — BUG FIX: was reading `loop_trips_7d`/`restarts_7d`,
+    # which count EVERY boot (including benign dev hot-reload restarts
+    # and intentional deploys). Switched to the `*_crash_only` fields
+    # (see services/process_recovery.py::recovery_status) so this score
+    # reflects actual instability, not preview-pod dev churn. Falls back
+    # to the raw fields if crash-only is unavailable (older data shape).
+    loop_trips = g19.get("loop_trips_7d_crash_only")
+    if loop_trips is None:
+        loop_trips = g19.get("loop_trips_7d") or 0
+    restarts = g19.get("restarts_7d_crash_only")
+    if restarts is None:
+        restarts = g19.get("restarts_7d") or 0
     # 2026-08-24 — founder-approved recalibration against real production
     # data (138 restarts/7d, 6 loop-trips/7d, healthy): allow 1 deploy-
     # burst trip/day and 30 restarts/day of normal platform churn before
@@ -233,7 +243,9 @@ async def score_reliability(db) -> dict:
                 "PRD Inventory Sweep 2026-08-24. No HTTP 5xx-rate "
                 "aggregation exists yet; Sentry (live, real exception "
                 "capture) identified as the natural next addition but "
-                "deferred by founder decision for now.",
+                "deferred by founder decision for now. 2026-08-23: g19 "
+                "now scores on crash-only restarts/loop-trips — see "
+                "g19_process_recovery.restarts_7d_crash_only.",
     }
     result = _scored(score, evidence, _iso_now(), live=True)
     result["caveat"] = _RELIABILITY_BUG_DENSITY_CAVEAT
