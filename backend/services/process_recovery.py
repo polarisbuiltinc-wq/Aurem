@@ -174,39 +174,48 @@ async def _trip_loop(db, boots: int, sha: str) -> None:
     # Surface in the EXISTING critical-alerts banner. Dedup: skip if an
     # active loop alert already exists (auto-resolves via QA/cron only
     # when boots settle — see resolve_if_stable).
+    # 2026-08-25 — root-cause fix: the previous find-then-insert had a
+    # TOCTOU race. Multiple boots landing within the same tight window
+    # (e.g. several rolling-restart pods during a deploy) could each
+    # see "no active alert yet" and both attempt `insert_one` with the
+    # same day-scoped `alert_key` — the 2nd one threw E11000
+    # DuplicateKeyError. It was caught (non-fatal, just a logged
+    # warning), so it never crashed the process — but it did mean the
+    # banner's `seen_count`/`last_seen` silently failed to update on
+    # that boot. A single atomic upsert keyed on `alert_key` removes
+    # the race entirely: whichever boot gets there first creates the
+    # row, every later one in the same day just bumps it.
+    day = datetime.fromtimestamp(now, tz=timezone.utc).strftime("%Y-%m-%d")
+    alert_key = f"process_recovery::critical::{day}"
     try:
-        existing = await db.topup_alerts.find_one(
-            {"integration_id": "process_recovery", "status": "active"},
-            {"_id": 1})
-        if existing:
-            await db.topup_alerts.update_one(
-                {"integration_id": "process_recovery", "status": "active"},
-                {"$set": {"last_seen": now,
-                          "summary": f"Restart loop: {boots} boots in "
-                                     f"{LOOP_WINDOW_S // 60}min"},
-                 "$inc": {"seen_count": 1}})
-            return
-        day = datetime.fromtimestamp(now, tz=timezone.utc).strftime("%Y-%m-%d")
-        await db.topup_alerts.insert_one({
-            "alert_id": f"al_{uuid.uuid4().hex[:10]}",
-            "alert_key": f"process_recovery::critical::{day}",
-            "integration_id": "process_recovery",
-            "integration_name": "Process Auto-Recovery",
-            "severity": "critical",
-            "summary": f"Restart loop: {boots} boots in {LOOP_WINDOW_S // 60}min",
-            "detail": (f"Backend restarted {boots} times inside "
-                       f"{LOOP_WINDOW_S}s (sha={sha}). Supervisor keeps "
-                       f"restarting a crashing process — this masks a hard "
-                       f"boot failure (bad migration, import error, OOM). "
-                       f"Check backend.err.log."),
-            "fix_hint": "tail -n 200 /var/log/supervisor/backend.err.log",
-            "day_key": day,
-            "first_seen": now,
-            "last_seen": now,
-            "seen_count": 1,
-            "status": "active",
-            "email_sent": False,
-        })
+        await db.topup_alerts.update_one(
+            {"alert_key": alert_key},
+            {
+                "$set": {
+                    "integration_id":   "process_recovery",
+                    "integration_name": "Process Auto-Recovery",
+                    "severity":         "critical",
+                    "summary":          f"Restart loop: {boots} boots in {LOOP_WINDOW_S // 60}min",
+                    "detail": (f"Backend restarted {boots} times inside "
+                               f"{LOOP_WINDOW_S}s (sha={sha}). Supervisor keeps "
+                               f"restarting a crashing process — this masks a hard "
+                               f"boot failure (bad migration, import error, OOM). "
+                               f"Check backend.err.log."),
+                    "fix_hint":  "tail -n 200 /var/log/supervisor/backend.err.log",
+                    "day_key":   day,
+                    "last_seen": now,
+                    "status":    "active",
+                },
+                "$setOnInsert": {
+                    "alert_id":    f"al_{uuid.uuid4().hex[:10]}",
+                    "alert_key":   alert_key,
+                    "first_seen":  now,
+                    "email_sent":  False,
+                },
+                "$inc": {"seen_count": 1},
+            },
+            upsert=True,
+        )
     except Exception as e:                                    # noqa: BLE001
         logger.warning("[G19] critical-alert raise failure: %r", e)
 

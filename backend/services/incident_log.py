@@ -36,36 +36,49 @@ async def open_incident(db, *, guard: str, title: str, detail: str,
         return None
     now = time.time()
     try:
-        existing = await db.incidents.find_one(
-            {"source_key": source_key, "status": "open"}, {"_id": 0})
-        if existing:
-            await db.incidents.update_one(
-                {"incident_id": existing["incident_id"]},
-                {"$set": {"last_seen": now, "last_seen_iso": _iso(now)},
-                 "$inc": {"recurrence": 1}})
-            return existing
-        doc = {
-            "incident_id": f"inc_{uuid.uuid4().hex[:10]}",
-            "guard": guard,
-            "severity": severity,
-            "title": title[:200],
-            "detail": detail[:800],
-            "source_key": source_key,
-            "status": "open",
-            "detected_at": now,
-            "detected_at_iso": _iso(now),
-            "last_seen": now,
-            "last_seen_iso": _iso(now),
-            "recurrence": 0,
-            "root_cause": None,
-            "resolution": None,
-            "follow_up": follow_up[:400],
-            "resolved_at": None,
-            "mttr_s": None,
-        }
-        await db.incidents.insert_one(dict(doc))
-        logger.warning("[G20] incident opened [%s] %s (guard=%s)",
-                       doc["incident_id"], title[:80], guard)
+        # 2026-08-25 — root-cause fix: the previous find-then-insert had
+        # a TOCTOU race — concurrent callers (e.g. several boots landing
+        # close together) could both see "no open incident yet" and both
+        # `insert_one`, colliding on the `uniq_open_source_key` index and
+        # throwing E11000 (caught below, non-fatal, but silently dropped
+        # the recurrence bump). A single atomic pipeline-style upsert
+        # removes the race entirely: first caller creates the row, every
+        # later one in the same open window just bumps recurrence. A
+        # plain `$set`+`$inc`+`$setOnInsert` upsert was tried first but
+        # MongoDB rejects `$inc` and `$setOnInsert` targeting the same
+        # field ("ConflictingUpdateOperators") — a pipeline update has
+        # no such restriction, so `$ifNull` does the same "-1 then +1 =
+        # 0 for a brand-new doc" trick in one `$set` stage instead.
+        from pymongo import ReturnDocument
+        incident_id = f"inc_{uuid.uuid4().hex[:10]}"
+        doc = await db.incidents.find_one_and_update(
+            {"source_key": source_key, "status": "open"},
+            [{"$set": {
+                "incident_id":     {"$ifNull": ["$incident_id", incident_id]},
+                "guard":           {"$ifNull": ["$guard", guard]},
+                "severity":        {"$ifNull": ["$severity", severity]},
+                "title":           {"$ifNull": ["$title", title[:200]]},
+                "detail":          {"$ifNull": ["$detail", detail[:800]]},
+                "source_key":      {"$ifNull": ["$source_key", source_key]},
+                "status":          {"$ifNull": ["$status", "open"]},
+                "detected_at":     {"$ifNull": ["$detected_at", now]},
+                "detected_at_iso": {"$ifNull": ["$detected_at_iso", _iso(now)]},
+                "root_cause":      {"$ifNull": ["$root_cause", None]},
+                "resolution":      {"$ifNull": ["$resolution", None]},
+                "follow_up":       {"$ifNull": ["$follow_up", follow_up[:400]]},
+                "resolved_at":     {"$ifNull": ["$resolved_at", None]},
+                "mttr_s":          {"$ifNull": ["$mttr_s", None]},
+                "recurrence":      {"$add": [{"$ifNull": ["$recurrence", -1]}, 1]},
+                "last_seen":       now,
+                "last_seen_iso":   _iso(now),
+            }}],
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+            projection={"_id": 0},
+        )
+        if doc.get("recurrence", 0) == 0:
+            logger.warning("[G20] incident opened [%s] %s (guard=%s)",
+                           doc["incident_id"], title[:80], guard)
         return doc
     except Exception as e:                                    # noqa: BLE001
         logger.warning("[G20] open_incident best-effort failure: %r", e)
