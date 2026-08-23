@@ -14,16 +14,21 @@ stored (OAuth-only flow).
 
 Iter 212m-225 (boundary refactor) moved the PAT helpers from
 `routers/cto_projects.py` into `services/pat_vault.py` so tools no
-longer reach across the router/service boundary. This test was updated
-to patch the new canonical location (`services.pat_vault.decrypt_pat`
-and `services.pat_vault.get_user_gh_token`) — the old patch target
-still exists as a re-export shim but does NOT intercept the lazy
-`from services.pat_vault import …` inside `_resolve_project`.
+longer reach across the router/service boundary.
+
+2026-06 PAT-removal update: `decrypt_pat`/`get_user_gh_token` (and any
+OAuth fallback) no longer exist — App-only auth means
+`pat_vault.get_repo_token_or_error(proj)` is the only resolver, and it
+either mints a fresh GitHub App installation token or returns a typed
+error code, never a decrypted PAT. These tests were rewritten to patch
+that actual current call site instead of asserting the removed
+decrypt/OAuth-fallback contract.
 
 These tests cover the contract:
-  - decrypts ciphertext stored in proj.github_token
-  - falls through to OAuth access_token when project has no PAT
-  - never returns the raw `v1:…` ciphertext to the caller
+  - `_resolve_project` attaches the App-installation token
+    `get_repo_token_or_error` returns
+  - when the App isn't connected, `github_token` is None (logged, not
+    raised) — no PAT/OAuth fallback exists any more
 """
 from __future__ import annotations
 
@@ -47,65 +52,63 @@ def fake_db():
 
 
 @pytest.mark.asyncio
-async def test_local_tools_resolve_decrypts_pat(fake_db):
+async def test_local_tools_resolve_uses_app_token(fake_db):
+    """App-only (2026-06+): _resolve_project attaches whatever
+    get_repo_token_or_error mints — no PAT decryption exists any more."""
     from services import local_tools
 
     fake_db.cto_projects.find_one.return_value = {
-        "project_id":   "p1",
-        "user_id":      "u1",
-        "github_token": "v1:ENCRYPTED_BLOB",
-        "github_owner": "tejisandhu",
-        "github_repo":  "auremcto",
+        "project_id":      "p1",
+        "user_id":         "u1",
+        "auth_method":     "github_app",
+        "installation_id": 42,
+        "github_owner":    "tejisandhu",
+        "github_repo":     "auremcto",
     }
 
     with patch.object(local_tools, "get_db", return_value=fake_db), \
-         patch("services.pat_vault.decrypt_pat",
-               new=AsyncMock(return_value="ghp_REAL_DECRYPTED_TOKEN")), \
-         patch("services.pat_vault.get_user_gh_token",
-               new=AsyncMock(return_value=None)):
+         patch("services.pat_vault.get_repo_token_or_error",
+               new=AsyncMock(return_value=("ghs_APP_TOKEN", None, None))):
         proj = await local_tools._resolve_project("u1", "p1")
 
     assert proj is not None
-    # Critical: the encrypted ciphertext must be replaced with the
-    # decrypted token before downstream tools see it.
-    assert proj["github_token"] == "ghp_REAL_DECRYPTED_TOKEN"
-    assert not proj["github_token"].startswith("v1:")
+    assert proj["github_token"] == "ghs_APP_TOKEN"
 
 
 @pytest.mark.asyncio
-async def test_local_tools_resolve_falls_back_to_oauth(fake_db):
-    """OAuth-only flow — project has no PAT, fall back to dev_users.github.access_token."""
+async def test_local_tools_resolve_none_token_when_app_not_connected(fake_db):
+    """Project not connected via the GitHub App — github_token is None
+    (logged, not raised). No PAT/OAuth fallback exists any more."""
     from services import local_tools
 
     fake_db.cto_projects.find_one.return_value = {
         "project_id":   "p1",
         "user_id":      "u1",
-        "github_token": "",          # no PAT stored
         "github_owner": "x",
         "github_repo":  "y",
     }
 
     with patch.object(local_tools, "get_db", return_value=fake_db), \
-         patch("services.pat_vault.decrypt_pat",
-               new=AsyncMock(return_value=None)), \
-         patch("services.pat_vault.get_user_gh_token",
-               new=AsyncMock(return_value="gho_OAUTH_TOKEN")):
+         patch("services.pat_vault.get_repo_token_or_error",
+               new=AsyncMock(return_value=(
+                   None, "app_installation_missing", "not connected"))):
         proj = await local_tools._resolve_project("u1", "p1")
 
     assert proj is not None
-    assert proj["github_token"] == "gho_OAUTH_TOKEN"
+    assert proj["github_token"] is None
 
 
 @pytest.mark.asyncio
-async def test_dev_skills_resolve_decrypts_pat(fake_db):
+async def test_dev_skills_resolve_uses_app_token(fake_db):
     from services import dev_skills
 
     fake_db.cto_projects.find_one.return_value = {
-        "project_id":   "p1",
-        "user_id":      "u1",
-        "github_token": "v1:ENCRYPTED_DEV_SKILL",
-        "github_owner": "x",
-        "github_repo":  "y",
+        "project_id":      "p1",
+        "user_id":         "u1",
+        "auth_method":     "github_app",
+        "installation_id": 7,
+        "github_owner":    "x",
+        "github_repo":     "y",
     }
 
     # Iter 212m-139 — dev_skills._resolve_project delegates to
@@ -114,14 +117,12 @@ async def test_dev_skills_resolve_decrypts_pat(fake_db):
     from services import local_tools as _lt
     with patch.object(dev_skills, "get_db", return_value=fake_db), \
          patch.object(_lt, "get_db", return_value=fake_db), \
-         patch("services.pat_vault.decrypt_pat",
-               new=AsyncMock(return_value="ghp_DEV_DECRYPTED")), \
-         patch("services.pat_vault.get_user_gh_token",
-               new=AsyncMock(return_value=None)):
+         patch("services.pat_vault.get_repo_token_or_error",
+               new=AsyncMock(return_value=("ghs_DEV_TOKEN", None, None))):
         proj = await dev_skills._resolve_project("u1", "p1")
 
     assert proj is not None
-    assert proj["github_token"] == "ghp_DEV_DECRYPTED"
+    assert proj["github_token"] == "ghs_DEV_TOKEN"
 
 
 @pytest.mark.asyncio

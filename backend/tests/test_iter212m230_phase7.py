@@ -38,15 +38,14 @@ def test_backend_has_zero_circular_imports():
 
 # ── pat_vault canonical implementation ───────────────────────────
 def test_pat_vault_owns_canonical_impl():
-    """pat_vault must define _decrypt_pat / _encrypt_pat / _user_gh_token
+    """pat_vault must own the canonical App-only get_repo_token impl
     itself, NOT delegate to routers.cto_projects (which was the source
-    of the original cycle)."""
+    of the original cycle). 2026-06 PAT-removal update: `_decrypt_pat`/
+    `_encrypt_pat` no longer exist anywhere — App-only auth removed
+    PAT decryption entirely, it isn't just relocated."""
     src = open("/app/backend/services/pat_vault.py").read()
-    assert "async def _decrypt_pat" in src, (
-        "pat_vault must own the canonical _decrypt_pat"
-    )
-    assert "async def _encrypt_pat" in src, (
-        "pat_vault must own the canonical _encrypt_pat"
+    assert "async def get_repo_token" in src, (
+        "pat_vault must own the canonical get_repo_token"
     )
     assert "from routers.cto_projects" not in src, (
         "pat_vault must NOT import from routers/ — that's the "
@@ -55,12 +54,12 @@ def test_pat_vault_owns_canonical_impl():
 
 
 def test_cto_projects_reexports_from_pat_vault():
-    """The router-side names still exist for backward-compatibility,
-    but they now delegate DOWN to services/pat_vault, not the other
-    way around."""
+    """The router-side get_repo_token still exists for backward-
+    compatibility, but delegates DOWN to services/pat_vault, not the
+    other way around (dependency direction is routers → services)."""
     src = open("/app/backend/routers/cto_projects.py").read()
-    assert "from services.pat_vault import _decrypt_pat" in src, (
-        "routers.cto_projects must import _decrypt_pat FROM pat_vault "
+    assert "from services.pat_vault import get_repo_token" in src, (
+        "routers.cto_projects must import get_repo_token FROM pat_vault "
         "(dependency direction is routers → services)"
     )
 

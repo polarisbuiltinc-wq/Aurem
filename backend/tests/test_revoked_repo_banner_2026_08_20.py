@@ -12,7 +12,15 @@ import os
 import pytest
 import requests
 
-BASE = os.environ["REACT_APP_BACKEND_URL"].rstrip("/") + "/api/aurem-dev"
+_RAW_BASE = os.environ.get("REACT_APP_BACKEND_URL")
+if not _RAW_BASE:
+    # live_env test (see tests/live_env_quarantine.txt) — skip cleanly
+    # at collection time instead of a bare KeyError, which used to
+    # abort the ENTIRE pytest session (Interrupted: 1 error during
+    # collection) when this file ran alongside others in one process.
+    pytest.skip("REACT_APP_BACKEND_URL not set — live_env test",
+                allow_module_level=True)
+BASE = _RAW_BASE.rstrip("/") + "/api/aurem-dev"
 EMAIL = "test@aurem.dev"
 PASSWORD = "AuremTest2026!"
 

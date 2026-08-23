@@ -68,6 +68,13 @@ def _harvest_test_style_ratio() -> dict:
         r = analyze_suite()
     except Exception as e:                                # noqa: BLE001
         return {"available": False, "reason": f"analyzer error: {e!r}"}
+    if not r.get("ok"):
+        # analyze_suite() returns ok=False (no exception) when the tests
+        # dir doesn't exist on disk — e.g. Production, where backend/tests
+        # is excluded from the Docker image (.dockerignore). Without this
+        # check we silently rendered "0 tests analysed" as if it were a
+        # real, passing measurement instead of an honest "unavailable".
+        return {"available": False, "reason": r.get("reason") or "analyzer returned not-ok"}
     counts = r.get("counts") or {}
     total  = r.get("total_tests") or 0
     static_grep = counts.get("STATIC_GREP", 0)

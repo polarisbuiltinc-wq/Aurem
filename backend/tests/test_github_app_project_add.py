@@ -201,9 +201,10 @@ class TestGateBranches:
         detail = r.json()["detail"]
         assert detail["error"] == "auth_required"
 
-    def test_pat_only_legacy_path_unchanged(self, configured, client, fake_db,
-                                             monkeypatch):
-        # Enable test-bypass so we skip the live GitHub call.
+    def test_pat_only_now_rejected(self, configured, client, fake_db,
+                                    monkeypatch):
+        """2026-06 PAT-removal: a PAT-only submission (no installation_id)
+        is honestly rejected, not silently accepted as auth_method="pat"."""
         monkeypatch.setenv("AUREM_TEST_MODE", "1")
         r = client.post(
             "/api/aurem-dev/cto/projects/add",
@@ -214,20 +215,9 @@ class TestGateBranches:
                 "github_token": "github_pat_TEST_abc",
             },
         )
-        assert r.status_code == 200, r.text
-        body = r.json()
-        assert body["auth_method"] == "pat"
-        assert body["pat_verified"] is True
-        assert "installation_id" not in body
-
-        row = fake_db.cto_projects.rows[0]
-        assert row["auth_method"] == "pat"
-        assert row["installation_id"] is None
-        # PAT is persisted encrypted (v1:-prefixed) OR plaintext for
-        # legacy-migration paths — either way it's non-empty.
-        assert row["github_token"]
-        assert (row["github_token"].startswith("v1:")
-                or row["github_token"] == "github_pat_TEST_abc")
+        assert r.status_code == 400, r.text
+        assert r.json()["detail"]["error"] == "pat_not_supported"
+        assert len(fake_db.cto_projects.rows) == 0
 
     def test_installation_id_happy_path(self, configured, client, fake_db):
         # Seed installation row owned by user-a
@@ -393,26 +383,28 @@ class TestGateBranches:
 
 class TestGetRepoToken:
     @pytest.mark.asyncio
-    async def test_legacy_row_defaults_to_pat(self, configured):
-        # Legacy row = no `auth_method` field. Should decrypt the
-        # stored PAT (or pass through plaintext for pre-encryption rows).
+    async def test_legacy_row_no_auth_method_raises_missing(self, configured):
+        """2026-06 PAT-removal: a legacy row with no auth_method is
+        NOT auto-treated as PAT any more — no PAT fallback exists,
+        get_repo_token raises app_installation_missing."""
         row = {
             "user_id":      "u1",
             "github_token": "ghp_legacy_plaintext",
-            # auth_method absent — treated as PAT
         }
-        tok = await _pv.get_repo_token(row)
-        assert tok == "ghp_legacy_plaintext"
+        with pytest.raises(_pv.GithubAppAuthError) as exc:
+            await _pv.get_repo_token(row)
+        assert exc.value.code == "app_installation_missing"
 
     @pytest.mark.asyncio
-    async def test_explicit_pat_method(self, configured):
+    async def test_explicit_pat_method_raises_missing(self, configured):
         row = {
             "user_id":      "u1",
             "auth_method":  "pat",
             "github_token": "github_pat_11xxxx",
         }
-        tok = await _pv.get_repo_token(row)
-        assert tok == "github_pat_11xxxx"
+        with pytest.raises(_pv.GithubAppAuthError) as exc:
+            await _pv.get_repo_token(row)
+        assert exc.value.code == "app_installation_missing"
 
     @pytest.mark.asyncio
     async def test_github_app_method_mints_fresh(self, configured):
@@ -437,38 +429,43 @@ class TestGetRepoToken:
         assert tok == "ghs_freshly_minted"
 
     @pytest.mark.asyncio
-    async def test_github_app_no_installation_id_returns_none(self, configured):
-        """Malformed row — never raises, returns None so caller falls
-        through to `_user_gh_token(user_id)` org fallback safely."""
+    async def test_github_app_no_installation_id_raises_missing(self, configured):
+        """Malformed row (github_app but no installation_id) raises
+        app_installation_missing — App-only has no fallback to swallow it."""
         row = {
             "user_id":         "u1",
             "auth_method":     "github_app",
             # installation_id absent — misconfigured
         }
-        tok = await _pv.get_repo_token(row)
-        assert tok is None
+        with pytest.raises(_pv.GithubAppAuthError) as exc:
+            await _pv.get_repo_token(row)
+        assert exc.value.code == "app_installation_missing"
 
     @pytest.mark.asyncio
-    async def test_pat_method_no_token_returns_none(self, configured):
+    async def test_pat_method_no_token_raises_missing(self, configured):
         row = {
             "user_id":     "u1",
             "auth_method": "pat",
             # github_token absent
         }
-        tok = await _pv.get_repo_token(row)
-        # _decrypt_pat returns None for empty input
-        assert tok in (None, "")
+        with pytest.raises(_pv.GithubAppAuthError) as exc:
+            await _pv.get_repo_token(row)
+        assert exc.value.code == "app_installation_missing"
 
     @pytest.mark.asyncio
-    async def test_empty_project_returns_none(self, configured):
-        assert await _pv.get_repo_token(None) is None
-        assert await _pv.get_repo_token({}) in (None, "")
+    async def test_empty_project_raises_missing(self, configured):
+        with pytest.raises(_pv.GithubAppAuthError) as exc:
+            await _pv.get_repo_token(None)
+        assert exc.value.code == "app_installation_missing"
+        with pytest.raises(_pv.GithubAppAuthError) as exc2:
+            await _pv.get_repo_token({})
+        assert exc2.value.code == "app_installation_missing"
 
     @pytest.mark.asyncio
-    async def test_github_app_revoked_installation_returns_none(self, configured):
+    async def test_github_app_revoked_installation_raises_revoked(self, configured):
         """When GitHub returns 401/404 on token mint (installation
-        deleted or App uninstalled), helper returns None — never raises
-        — so caller falls through to org-token fallback."""
+        deleted or App uninstalled), helper raises app_installation_revoked
+        — App-only fails closed, it never falls through to another auth."""
         row = {
             "user_id":         "u1",
             "auth_method":     "github_app",
@@ -479,5 +476,6 @@ class TestGetRepoToken:
             return httpx.Response(404, json={"message": "Not Found"})
 
         with patch.object(httpx, "AsyncClient", _make_mock_client(handler)):
-            tok = await _pv.get_repo_token(row)
-        assert tok is None
+            with pytest.raises(_pv.GithubAppAuthError) as exc:
+                await _pv.get_repo_token(row)
+        assert exc.value.code == "app_installation_revoked"

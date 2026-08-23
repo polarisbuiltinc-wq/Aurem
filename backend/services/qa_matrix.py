@@ -1254,6 +1254,22 @@ _JOB_NAMES_WE_CARE_ABOUT = (
     "visual-regression",
 )
 
+# The GitHub Actions API returns each job's *display* name (the
+# workflow YAML's `name:` field), never its job id — and every job in
+# quality-gate.yml sets a custom `name:` that differs from its id.
+# Matching `j.get("name")` against the id-strings above therefore
+# NEVER matched anything (confirmed live 2026-08-24, run 32615685645),
+# which is why the dashboard always showed all 5 as "unknown". Map id
+# -> the real display name so lookups actually match the API response.
+_JOB_DISPLAY_NAMES = {
+    "bug-fix-discipline": "PR must include a test change (or explicit override)",
+    "invariants":          "Fitness-function invariants (always green on main)",
+    "test-style-guard":    "Static-grep threshold on new tests",
+    "frontend-vitest":     "Vitest (RTL state-sync + axe component a11y)",
+    "visual-regression":   "Visual regression (Playwright chromium)",
+}
+_DISPLAY_NAME_TO_JOB_ID = {v: k for k, v in _JOB_DISPLAY_NAMES.items()}
+
 
 async def _harvest_ci_status() -> dict:
     token = os.environ.get("GITHUB_ACTIONS_TOKEN")
@@ -1318,9 +1334,9 @@ async def _harvest_ci_status() -> dict:
 
     jobs_map = {}
     for j in job_data:
-        name = j.get("name")
-        if name in _JOB_NAMES_WE_CARE_ABOUT:
-            jobs_map[name] = {
+        job_id = _DISPLAY_NAME_TO_JOB_ID.get(j.get("name"))
+        if job_id:
+            jobs_map[job_id] = {
                 "status":     j.get("status"),           # queued/in_progress/completed
                 "conclusion": j.get("conclusion"),       # success/failure/cancelled/None
                 "started_at": j.get("started_at"),

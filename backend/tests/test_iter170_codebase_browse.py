@@ -35,14 +35,20 @@ def _client_with_seeded_project():
         return {"user_id": "u_test", "email": "t@t.t"}
     cp.current_dev = fake_current_dev
 
-    # Stub DB to return a project with github connection
+    # Stub DB to return a project with github connection.
+    # 2026-06 PAT-removal — App-only auth: get_repo_token_or_error()
+    # requires auth_method="github_app" + installation_id, else it
+    # raises app_installation_missing (403), so the seeded project must
+    # carry those fields; the actual token mint is stubbed separately
+    # below rather than mocking the real GitHub HTTP call here.
     project_doc = {
         "project_id": "p_test",
         "user_id": "u_test",
         "github_owner": "octo",
         "github_repo": "demo",
         "branch": "main",
-        "github_token": "ghp_fakebutshort",   # not v1: prefix → passes through
+        "auth_method": "github_app",
+        "installation_id": 9001,
         "name": "demo",
     }
     fake_db = MagicMock()
@@ -50,6 +56,11 @@ def _client_with_seeded_project():
     fake_db.cto_projects.find_one = AsyncMock(return_value=project_doc)
     cp.require_db = lambda: fake_db
     cp.get_db = lambda: fake_db
+
+    from services import pat_vault as _pv
+    async def _fake_get_repo_token_or_error(_proj):
+        return "ghs_fake_app_token", None, None
+    _pv.get_repo_token_or_error = _fake_get_repo_token_or_error
 
     return TestClient(app), project_doc
 
