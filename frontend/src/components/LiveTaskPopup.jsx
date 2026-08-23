@@ -183,6 +183,11 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
         overflowX: "hidden",
         fontFamily: "ui-monospace, Menlo, monospace",
         fontSize: 12,
+        // 2026-08-23 — must stay BELOW Z_ADVISOR_TOGGLE (see
+        // lib/zIndex.js) — this panel used to fully cover/eat clicks
+        // on the collapsed Advisor re-open tab (both fixed, right-
+        // anchored, vertically centered) with no way to bring the
+        // sidebar back until this popup cleared.
         zIndex: 7500,
         animation: "popup-slide-in 0.25s ease-out",
         pointerEvents: "auto",

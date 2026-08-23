@@ -96,8 +96,44 @@ async def get_repo_token(project: dict) -> str:
                                  _UNREACHABLE_DETAIL) from e
     except httpx.HTTPStatusError as e:
         if e.response.status_code in (401, 403, 404):
-            raise GithubAppAuthError("app_installation_revoked",
-                                     _REVOKED_DETAIL) from e
+            # 2026-08-23 — BUG FIX: a 401/403/404 minting a FRESH
+            # installation token does NOT reliably mean the App
+            # installation was revoked. GitHub App auth for the mint
+            # call itself goes through a short-lived App-level JWT
+            # (regenerated per call) — any transient clock-skew/JWT/
+            # GitHub-side hiccup on THAT call can 401/403 even for a
+            # perfectly healthy installation. The AUTHORITATIVE signal
+            # for a real revocation is the webhook-maintained
+            # `github_installations.suspended_at`/`deleted_at` fields
+            # (routers/github_app.py's installation.suspend/deleted
+            # handlers) — check those before concluding "revoked". A
+            # real user hit this exact false alarm mid-ship (GitHub
+            # App showed "disconnected" while actively shipping a
+            # task, even though nothing was ever actually revoked on
+            # GitHub's side).
+            is_really_revoked = True
+            try:
+                from cto_services.db import get_db
+                _db = get_db()
+                if _db is not None:
+                    inst = await _db.github_installations.find_one(
+                        {"installation_id": int(iid)},
+                        {"_id": 0, "suspended_at": 1, "deleted_at": 1},
+                    )
+                    is_really_revoked = bool(
+                        inst and (inst.get("suspended_at") or inst.get("deleted_at"))
+                    )
+            except Exception:
+                pass  # fail closed to the pre-existing "revoked" behaviour
+            if is_really_revoked:
+                raise GithubAppAuthError("app_installation_revoked",
+                                         _REVOKED_DETAIL) from e
+            raise GithubAppAuthError(
+                "github_rejected",
+                f"GitHub returned HTTP {e.response.status_code} while minting "
+                "the App installation token, but our own records show this "
+                "installation is still active — likely transient. "
+                "Retry shortly.") from e
         raise GithubAppAuthError(
             "github_rejected",
             f"GitHub returned HTTP {e.response.status_code} while minting "

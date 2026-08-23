@@ -74,6 +74,62 @@ Open Advisor/Close work, no-project fallback verified by code
 inspection). One minor code-review note (unsafe data-testid slugs)
 fixed post-test.
 
+## 2026-08-23 (bug fix, from screen recording) — "GitHub revoked mid-ship" + "Advisor sidebar collapsed, won't reopen" — 3 real root causes found & fixed
+
+Founder shared a screen recording: GitHub App showed disconnected/
+revoked WHILE actively shipping a task (had happened once before,
+ignored; recurred), and the Ask Advisor sidebar auto-collapsed and
+wouldn't reopen. Explicitly asked to fix at the root/stem, not patch
+symptoms. Traced 3 independent, real bugs via code investigation (no
+guessing):
+
+**1. False "revoked" classification** (`services/pat_vault.py`):
+`get_repo_token()` treated ANY 401/403/404 from the App-JWT
+installation-token MINT call as a PERMANENT revocation. But that
+endpoint's auth is a short-lived App-level JWT regenerated per call —
+a transient clock-skew/GitHub-side hiccup can 401 even for a
+perfectly healthy installation. The only AUTHORITATIVE signal for a
+real revocation is the webhook-driven `github_installations.
+suspended_at`/`deleted_at` (set only by `routers/github_app.py`'s
+`installation.suspend`/`deleted` handlers). Fixed: check those DB
+fields before concluding "revoked"; otherwise raise the retryable
+`github_rejected` code instead. Fails closed (keeps old "revoked"
+behaviour) if the DB check itself errors.
+
+**2. Stale token reused at ship time** (`services/loop_engine.py`):
+The GitHub installation token is minted ONCE at loop start and cached
+in `bin_ctx.pat` / `ship_pending["token"]` for the WHOLE loop
+lifetime (PLAN→EXECUTE→VERIFY→SCAN→SHIP — can run long with self-heal
+retries or the user pausing before confirming ship). Installation
+tokens expire in ≤1h; a stale one made the real `commit_files()`
+write 401 mid-ship — surfacing as the scary "GitHub disconnected"
+message even though nothing was ever revoked. Fixed: re-mint a fresh
+token (cheap — `get_installation_token`'s own cache returns instantly
+if still valid) right before the real commit, at both the initial
+ship path and the `confirm_ship()` resume path. Safe fallback to the
+cached token if the refresh itself errors.
+
+**3. Sidebar toggle covered by the live-ship popup**
+(`AskAdvisorReal.jsx` + `LiveTaskPopup.jsx`): the collapsed "ADVISOR"
+re-open tab was `fixed`, vertically-centered, right-edge, `z-30`.
+`LiveTaskPopup` (the live ship/task progress panel — visible during
+exactly the "shipping" moment the user described) is ALSO `fixed`,
+`right:16`, `top:50%`, but `zIndex:7500` — same screen region, 250x
+higher z-index. It completely covered and swallowed clicks on the
+toggle, so once the sidebar auto-collapsed (existing, intentional
+focus-mode behaviour) during an active ship, there was NO way to
+bring it back until the popup cleared. Fixed: added
+`Z_ADVISOR_TOGGLE=10002` to the shared `lib/zIndex.js` registry
+(above all known floating overlays) and switched the toggle to use it.
+
+Tested: `testing_agent` — `/app/test_reports/iteration_376.json`.
+Verified live: simulated a LiveTaskPopup-covering element at the same
+z-index/position, confirmed `elementFromPoint` still resolves to the
+Advisor toggle and clicking it opens the panel; code-reviewed the two
+backend fixes as correct and fail-closed. One minor NameError edge
+case flagged (empty-token path referencing undefined `_auth_err`) —
+fixed immediately after.
+
 ## 2026-08-23 (deployment fix) — PRODUCTION deploy failure root-caused: `/api/health` was blocking the event loop on every poll
 
 Founder shared production deploy-build error logs: repeated nginx

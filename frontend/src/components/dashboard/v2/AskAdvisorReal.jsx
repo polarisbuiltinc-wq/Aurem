@@ -21,6 +21,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { cn } from "./cn";
 import { streamChat, api } from "../../../lib/api";
 import { getActiveProjectId } from "../../TabBar";
+import { Z_ADVISOR_TOGGLE } from "../../../lib/zIndex";
 import { CharCounter, formatTooLongError } from "../../CharCounter";
 import {
   Lightbulb, ArrowUp, ChevronRight, Square,
@@ -288,8 +289,9 @@ export default function AskAdvisorReal({ collapsed = false, onCollapse, projectI
           no ancestor layout math involved at all. */}
       <button onClick={() => onCollapse?.(false)} aria-label="Open Advisor panel"
         data-testid="ds2-advisor-open"
+        style={{ zIndex: Z_ADVISOR_TOGGLE }}
         className={cn(
-          "fixed top-1/2 -translate-y-1/2 z-30 flex h-[96px] w-[26px] flex-col items-center justify-center gap-1.5 rounded-l-lg border border-r-0 border-border bg-card px-1.5 py-3 shadow-lg transition-all duration-200 ease-in-out hover:bg-secondary",
+          "fixed top-1/2 -translate-y-1/2 flex h-[96px] w-[26px] flex-col items-center justify-center gap-1.5 rounded-l-lg border border-r-0 border-border bg-card px-1.5 py-3 shadow-lg transition-all duration-200 ease-in-out hover:bg-secondary",
           collapsed ? "right-0 opacity-100 pointer-events-auto"
                     : "right-[-40px] opacity-0 pointer-events-none",
         )}>

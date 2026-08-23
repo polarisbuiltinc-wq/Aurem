@@ -2764,11 +2764,43 @@ class LoopEngine:
 
         # Iter 212m-169 — Use BINContext directly.  No DB re-fetch,
         # no re-decrypt.  bin_ctx was validated at loop start.
+        # 2026-08-23 — pre-init so the guard below can't NameError if
+        # the bin_ctx branch's own refresh leaves `token` empty (e.g.
+        # installation_id missing on the project row) — flagged by
+        # testing_agent review.
+        _auth_err = _auth_detail = None
         if self.bin_ctx is not None:
             owner  = self.bin_ctx.repo_owner
             repo   = self.bin_ctx.repo_name
             branch = self.bin_ctx.branch
             token  = self.bin_ctx.pat
+            # 2026-08-23 — BUG FIX: `bin_ctx.pat` is minted ONCE at
+            # loop start and cached for the loop's ENTIRE lifetime
+            # (PLAN → EXECUTE → VERIFY → SCAN → SHIP, which can run
+            # long with self-heal retries / user confirmation delays).
+            # GitHub App installation tokens expire in ≤1h — reusing a
+            # stale one here made the actual commit_files() write 401
+            # mid-ship, which then surfaced to the user as a scary
+            # "GitHub disconnected/revoked" failure even though the
+            # installation was never actually revoked. Re-mint right
+            # before the real write: cheap (get_installation_token's
+            # own cache returns instantly if still valid) and always
+            # correct.
+            try:
+                _proj_for_token = await self.db.cto_projects.find_one(
+                    {"project_id": self.project_id, "user_id": self.user_id},
+                    {"_id": 0, "auth_method": 1, "installation_id": 1},
+                )
+                if _proj_for_token:
+                    from services.pat_vault import get_repo_token_or_error
+                    _fresh_tok, _fresh_err, _ = await get_repo_token_or_error(
+                        _proj_for_token)
+                    if _fresh_tok:
+                        token = _fresh_tok
+            except Exception as _tok_refresh_err:                    # noqa: BLE001
+                logger.warning(
+                    "[loop %s] ship token refresh failed, falling back to "
+                    "cached bin_ctx token: %r", self.loop_id, _tok_refresh_err)
         else:
             # Legacy fallback (should never trigger post Iter 212m-169).
             logger.warning(
@@ -3252,6 +3284,26 @@ class LoopEngine:
         token   = pending["token"]
         files_dict      = pending["files"]
         commit_message  = pending["commit_message"]
+        # 2026-08-23 — same staleness fix as the initial ship path
+        # above: `pending["token"]` was minted whenever ship was first
+        # staged. If the user paused before confirming, re-mint fresh
+        # right before the real commit rather than trusting a token
+        # that may now be expired.
+        try:
+            _proj_for_token = await self.db.cto_projects.find_one(
+                {"project_id": self.project_id, "user_id": self.user_id},
+                {"_id": 0, "auth_method": 1, "installation_id": 1},
+            )
+            if _proj_for_token:
+                from services.pat_vault import get_repo_token_or_error
+                _fresh_tok, _fresh_err, _ = await get_repo_token_or_error(
+                    _proj_for_token)
+                if _fresh_tok:
+                    token = _fresh_tok
+        except Exception as _tok_refresh_err:                        # noqa: BLE001
+            logger.warning(
+                "[loop %s] ship-resume token refresh failed, falling back "
+                "to pending token: %r", self.loop_id, _tok_refresh_err)
         logger.info("[loop %s] SHIP CONFIRMED — pushing %s/%s@%s with %d file(s)",
                     self.loop_id, owner, repo, branch, len(files_dict))
         await self._emit(LoopState.SHIPPING, "ship",

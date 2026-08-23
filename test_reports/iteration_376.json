@@ -1,0 +1,31 @@
+{
+  "summary": "Verified the three bug-fixes for the 2026-08-23 GitHub-App-revoked + Advisor-unreachable session: (1) frontend regression on /dashboard clean, Advisor collapsed toggle visible/clickable/open+close roundtrip works; (2) Z_ADVISOR_TOGGLE=10002 verified in DOM (computed zIndex=10002 on ds2-advisor-open) — with a simulated LiveTaskPopup injected at right:16/top:50%/zIndex:7500 covering the same screen region, document.elementFromPoint() at the toggle's center still returns the ds2-advisor-open button (not the popup), and clicking through opens the Advisor panel (width goes 0 → 300); (3) pat_vault.get_repo_token() 401/403/404 handler now consults db.github_installations.suspended_at/deleted_at before raising app_installation_revoked, else raises github_rejected — reviewed line-by-line, logic is correct and fails-closed to the pre-existing behaviour on DB errors; (4) loop_engine ship path (line 2767 initial ship + line 3273 confirm_ship resume) both re-mint a fresh installation token via get_repo_token_or_error() right before commit_files(), with safe fallback to the cached token if the refresh itself errors. Did NOT trigger a real ship on the founder-connected funnel-repro project (per request: code review is preferred; a real ship would create an actual commit on a live repo).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "services/loop_engine.py:2820", "issue": "In the `if self.bin_ctx is not None:` branch, if bin_ctx.pat is falsy AND the refresh block doesn't set token (e.g. project row missing installation_id), the guard `if not (owner and repo and token)` fires and references `_auth_err`/`_auth_detail` which are only defined in the `else` legacy-fallback branch — would raise NameError instead of a clean _fail_ship message. Extremely low-probability (bin_ctx is only set when we already have a valid pat at loop start) but worth initializing _auth_err=_auth_detail=None before the if/else."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/test_reports/screenshots/advisor_test.png", "/app/test_reports/screenshots/dashboard.png"],
+  "action_items": [
+    "Optional hardening: pre-initialize _auth_err/_auth_detail to None before the bin_ctx if/else in loop_engine.py ship path so the guard at line 2820 can't NameError in the (rare) empty-token edge."
+  ],
+  "critical_code_review_comments": [
+    "pat_vault.py:98-140 — the 401/403/404 branch now correctly distinguishes real revocation (webhook-driven suspended_at/deleted_at in db.github_installations) from transient GitHub-side rejections. Fail-closed on DB errors preserves prior behaviour. LGTM.",
+    "loop_engine.py:2784-2798 and 3287-3301 — re-mint before commit_files() is idempotent-cheap (get_installation_token has its own cache) and correctly falls back to the cached token on refresh failure. LGTM.",
+    "zIndex.js:Z_ADVISOR_TOGGLE=10002 sits above Z_COOKIE_BANNER(10000), Z_FLOATING_GUIDE(10001), and LiveTaskPopup's hardcoded 7500. No other floating overlay ≥10002 was observed on the dashboard during testing."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (static + smoke; login/session works, chat state fetched)", "frontend": "100% (advisor open/close/z-index-over-popup all pass)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! — worked on preview URL",
+  "seed_data_creation": "None; injected an ephemeral fake `[data-testid=live-task-popup-fake]` div at zIndex 7500 during the browser test to simulate LiveTaskPopup coverage, removed at end of test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The three fixes for iter 2026-08-23 (Z_ADVISOR_TOGGLE, pat_vault DB check, loop_engine token re-mint) are verified. A real end-to-end ship on funnel-repro was intentionally NOT performed to avoid a real commit on the founder's live repo — if a future test needs it, use a throwaway test project instead. Only minor follow-up is the _auth_err NameError edge in loop_engine.py:2820.",
+  "rca of the issue": "Root cause 1 (Advisor unreachable mid-ship): the collapsed Advisor toggle button used Tailwind z-30 while LiveTaskPopup was fixed at right:16/top:50% zIndex:7500 in the same screen region — the popup fully covered and swallowed clicks on the toggle. Fixed by hoisting the toggle to Z_ADVISOR_TOGGLE=10002 via inline style (and defining the constant in the new zIndex.js single-source-of-truth to prevent future silent regressions). Root cause 2 (false 'GitHub revoked'): pat_vault.get_repo_token() treated ANY 401/403/404 from the App-JWT installation-token MINT call as a permanent revocation, but that endpoint can 401 transiently (JWT clock skew, GitHub-side hiccups) — real revocation is only truthful when the installation.suspended/deleted webhook has flipped db.github_installations.suspended_at/deleted_at. Fixed by consulting those fields before raising app_installation_revoked, else raising the retryable github_rejected code. Root cause 3 (stale token mid-ship): loop_engine cached bin_ctx.pat at loop start; long loops (self-heal + user confirmation delays) could push commit_files() past the ~1h installation-token TTL. Fixed by re-minting right before commit_files() in both the initial ship path and the confirm_ship resume path."
+}
