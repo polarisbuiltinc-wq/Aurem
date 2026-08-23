@@ -1,0 +1,28 @@
+{
+  "summary": "Backend-only regression verification for Phase 2C Wave 2/3 unit tests. Ran the 3 new test files (test_phase2c_chat_router_wave3.py, test_phase2c_cto_projects_router_wave2.py, test_phase2c_local_tools_wave2.py) individually and the pre-existing wave-1 suite as sanity. All targets pass with zero failures. No production code changes needed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_execution": {
+    "test_phase2c_chat_router_wave3.py": "33 passed / 33 collected (100%)",
+    "test_phase2c_cto_projects_router_wave2.py": "3 passed / 3 collected (100%)",
+    "test_phase2c_local_tools_wave2.py": "39 passed / 39 collected (100%)",
+    "wave1_sanity_combined (4 files)": "323 passed / 323 collected (100%) — no regressions"
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase2c_chat_router_wave3.py",
+    "/app/backend/tests/test_phase2c_cto_projects_router_wave2.py",
+    "/app/backend/tests/test_phase2c_local_tools_wave2.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Non-blocking warnings: several tests in cto_projects wave2 leave background asyncio coroutines (agent_brain/agent_recent/agent_structure/agent_stack/agent_graph) un-awaited when the warm-agents dispatcher is triggered, and one test in local_tools_wave2 leaves a Process.communicate coroutine dangling causing an 'Event loop is closed' shutdown message. Tests pass but the fixture teardown could cancel/await these to silence the noise.",
+    "backend/routers/chat.py still uses Pydantic v1 style @validator decorators (deprecation warnings on ChatBody.prompt and task_type). Should migrate to @field_validator before Pydantic V3."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "n/a (not requested)"},
+  "test_credentials": "none required",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 2C wave-3 chat + wave-2 cto_projects + wave-2 local_tools unit tests are all green (75/75 new, 323/323 wave-1 sanity). Only style/warning items remain (pydantic v1 validators, dangling coroutines in a couple of tests). No production regressions."
+}

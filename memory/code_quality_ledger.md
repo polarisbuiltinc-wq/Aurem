@@ -16,7 +16,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 |---|---|---|---|
 | backend/services/loop_engine.py | 4466 lines (ledger's earlier "4258 lines / 8%" was a stale/narrower measurement — see wave-3 note below for the real, freshly-measured baseline) | 63% (2026-08-23, re-confirmed independently: `pytest --cov=services.loop_engine` across all 69 pre-existing in-process test files + `test_phase2c_loop_engine.py` → `1425 stmts, 523 missed, 63%`) | **covered (≥60%)** — Phase 2c wave 3 done. **CONFIRMED caveat (2026-08-24):** that same 69-file combined run has 25 pre-existing FAILURES (e.g. `test_iter212m170_ora_context_isolation.py` 8/25, `test_iter309_phase03_self_heal_paused.py`, `test_iter332_ship_gate_skip.py`, `test_iter_feb2026_verify_terminal_fail.py`) — reproduced in isolation (same 8 failures with zero other files loaded), root cause is `services/bin_context.py:198` raising 403 "GitHub App access isn't available" during credential resolution for a seeded legacy-PAT test project — an environment/PAT-migration-era issue, NOT caused by `test_phase2c_loop_engine.py` (which is 20/20 green standalone) and NOT touched by this wave. Flagged for separate investigation, not fixed here per founder's explicit instruction not to context-switch during the 5-file loop. |
 | backend/services/orchestrator.py | 2557 lines | 40% | not started |
-| backend/services/local_tools.py | 2253 lines (2501 raw) | 62.1% (2026-08-24, real `pytest --cov=services.local_tools`: pre-existing 42-file suite alone (measured before writing anything new) = 53.46% (`911 stmts, 424 missed`, 527 passed / 33 failed / 13 skipped / 16 deselected); `test_phase2c_local_tools.py` alone (this wave's own new-work contribution) = 21% (46 tests, all pass); **combined** = `911 stmts, 345 missed, 62.13%` (566/911), 573 passed / 33 failed / 13 skipped / 16 deselected) | **covered (≥60%)** — Phase 2c wave 6 (FINAL FILE) done. **CONFIRMED caveat:** all 33 combined-suite failures share the same GitHub-App/PAT-migration root cause already documented for every other Phase 2c wave — reproduced with the IDENTICAL 33-failure set before and after this wave's 46 new tests (zero pollution). Given the strong pre-existing baseline (53.46%), this wave targeted the pure/near-pure context-resolution helpers (`_is_safe_repo_path`, `_run_syntax_check`, `_resolve_project`, `_repo_ctx_from`, `_verify_ctx`) plus `get_commit_diff`/`get_repo_info`/`save_finding`'s guard clauses — comfortably closing the gap to 60%+ without needing the much larger `write_repo_file` (217 lines)/`list_repo_files` (118 lines)/`execute_bash` (213 lines) bodies, which remain the file's largest honest gaps (documented, not hidden). |
+| backend/services/local_tools.py | 2253 lines (2501 raw) | **80% combined (2026-08-25, Phase B wave 2 — real `pytest --cov=services.local_tools`: full 39-file pre-existing suite + `test_phase2c_local_tools.py` (wave 1) + `test_phase2c_local_tools_wave2.py`): `911 stmts, 178 missed, 80%`, 570 passed / 25 pre-existing failures (SAME GitHub-App/PAT-migration root cause, reproduced identically before and after — zero pollution from this wave's 39 new tests) / 13 skipped / 15 deselected.** No heavy-I/O exception needed for this file — everything is mockable. This wave newly covered `read_repo_files` (had ZERO tests before), `write_repo_file`'s remaining branches, `list_repo_files`'s remaining branches, `_search_repo_via_api` (direct call), `_ensure_repo_snapshot` (incl. one test with a REAL in-memory gzip tarball extracted to real disk — only the network layer is mocked), `save_finding`'s remaining branches, `execute_bash`'s remaining branches, and `search_repo`'s dispatcher (also had ZERO tests before). Honest remaining gaps, all small and lower-value: `semantic_search_repo`/`_index_tfidf_search` (L1637-1911, GitHub code-search API + local TF-IDF index — not yet attempted), `_search_snapshot_sync` (L1349-1418, the sync ripgrep/os.walk snapshot grep — not yet attempted), `_fetch_subtree_contents`/`_repo_head_sha` (only reached through mocks so far, never exercised directly), a handful of dead/unreachable defensive `except` branches identical in spirit to the ones already documented for chat.py/cto_projects.py (e.g. `_ext = path[_dot:]` can't raise, `os.unlink` on an already-closed tempfile rarely raises). |
 | backend/services/qa_matrix.py | 1047 lines | 25% | Phase 1: harvesters relocated in (2026-08-22) |
 | backend/services/ora_chat/deep_research.py | 928 lines | 55% | not started |
 | backend/services/dev_skills.py | 886 lines | 7% | not started |
@@ -88,7 +88,7 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/services/repo_heal.py::heal_project (L155) | CC=41 | 42% | not started |
 | backend/services/seo/orchestrator.py::run_seo_fixes (L86) | CC=41 | 23% | not started |
 | backend/services/loop_engine.py::LoopEngine.confirm_ship (L3187) | CC=40 | mostly covered — pre-existing in-process test suite already exercises this, only small gaps remain | **covered (pre-existing)** |
-| backend/services/local_tools.py::write_repo_file (L718) | CC=38 | pre-existing baseline only — not touched this wave (see file-level note) | not started |
+| backend/services/local_tools.py::write_repo_file (L718) | CC=38 | **~90%+ (2026-08-25) — remaining branches covered this wave** (missing token, vanguard-block, vanguard-scan-crash-swallowed, syntax-gate-block, syntax-gate-skipped, db-identity-crash-swallowed, commit-crash, cache-invalidation-crash-swallowed) | **covered** |
 | backend/services/qa_matrix.py::matrix_coverage_gap (L220) | CC=37 | 25% | Phase 1: harvesters relocated in (2026-08-22) |
 | backend/services/dev_skills.py::detect_framework (L357) | CC=37 | 7% | not started |
 | backend/services/llm/openrouter_providers.py::_call_deepseek (L361) | CC=37 | 11% | not started |
@@ -103,12 +103,12 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/services/repo_context.py::_build_blob (L287) | CC=30 | 12% | not started |
 | backend/services/topup_alerts.py::upsert_alerts_from_snapshot (L97) | CC=30 | 14% | not started |
 | backend/services/dev_skills.py::get_dependencies (L193) | CC=30 | 7% | not started |
-| backend/services/local_tools.py::list_repo_files (L1074) | CC=29 | pre-existing baseline only — not touched this wave (see file-level note) | not started |
+| backend/services/local_tools.py::list_repo_files (L1074) | CC=29 | **covered this wave** (missing owner/repo, 401/403 revoked, network error, subtree+pattern filter, truncated-tree rescue fallback) | **covered** |
 | backend/services/ora_chat/canary.py::run_canary (L182) | CC=29 | 22% | not started |
 | backend/services/mode_d_debugger.py::run_debug_session (L537) | CC=28 | 25% | not started |
 | backend/services/loop_engine.py::LoopEngine._heal_full_scan_findings (L2582) | CC=28 | not covered this wave — KNOWN GAP, scoped out (see wave-3 PRD note: LLM-generation / scan-heal tail, deferred) | deliberately deferred |
 | backend/services/web_skills.py::fetch_url (L151) | CC=28 | 12% | not started |
-| backend/services/local_tools.py::_search_repo_via_api (L1496) | CC=28 | pre-existing baseline only — not touched this wave (see file-level note) | not started |
+| backend/services/local_tools.py::_search_repo_via_api (L1496) | CC=28 | **covered this wave** (direct call — network error, subtree+ext filters) | **covered** |
 | backend/services/vanguard_verify_agent.py::verify_patch (L509) | CC=28 | 19% | not started |
 | backend/services/minimal_edit.py::_apply_op (L75) | CC=27 | 15% | not started |
 | backend/services/repo_indexing.py::_analyse_tree (L289) | CC=27 | 11% | not started |
@@ -120,9 +120,9 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 | backend/services/deploy_readiness.py::get_deploy_readiness (L68) | CC=25 | 19% | not started |
 | backend/services/ora_chat/grounding_check.py::run_post_response_check (L386) | CC=25 | 31% | not started |
 | backend/services/loop_engine.py::_generate_plan (L3920) | CC=24 | not covered this wave — KNOWN GAP, scoped out (see wave-3 PRD note: LLM-generation / scan-heal tail, deferred) | deliberately deferred |
-| backend/services/local_tools.py::read_repo_files (L618) | CC=24 | pre-existing baseline only — not touched this wave (see file-level note) | not started |
-| backend/services/local_tools.py::semantic_search_repo (L1637) | CC=24 | pre-existing baseline only — not touched this wave (see file-level note) | not started |
-| backend/services/local_tools.py::execute_bash (L2017) | CC=24 | pre-existing baseline only — not touched this wave (see file-level note) | not started |
+| backend/services/local_tools.py::read_repo_files (L618) | CC=24 | **covered this wave — had ZERO tests before** (missing paths, no bin_ctx, missing owner/repo, success+dropped-paths warning, hallucination-risk warning, GithubAuthError, generic exception, invalid path) | **covered** |
+| backend/services/local_tools.py::semantic_search_repo (L1637) | CC=24 | not attempted this wave — remaining honest gap (see file-level note) | not started |
+| backend/services/local_tools.py::execute_bash (L2017) | CC=24 | **mostly covered this wave** (non-founder w/ bin_ctx, shlex-parse-error, subprocess-timeout; pre-existing suite already covers allowlist/metachar/ora-boundary gates) | **covered** |
 | backend/services/reasoning_evals.py::validate_plan_shape (L57) | CC=24 | 16% | not started |
 | backend/services/dev_skills.py::get_pr_comments (L611) | CC=24 | 7% | not started |
 | backend/services/qa_matrix.py::run_regression_locks (L1007) | CC=23 | 25% | Phase 1: harvesters relocated in (2026-08-22) |
@@ -348,8 +348,8 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 
 | Name | Metric | Coverage | Status |
 |---|---|---|---|
-| backend/routers/chat.py | 3877 lines (4086 raw lines incl. blank/comment) | 60.4% (2026-08-24, real `pytest --cov=routers.chat`: pre-existing 19-file chat suite alone = 47%; `test_phase2c_chat_router.py` alone = 42% (65 tests, own new-work contribution); **combined** (pre-existing 19 files + this wave's new tests) = `1266 stmts, 502 missed, 60%` (60.35% precise) — see tests/test_phase2c_chat_router.py) | **covered (≥60%)** — Phase 2c wave 4 done. Deliberately scoped out: `chat_stream`'s SSE tool-calling generator body (L1716-3519, ~1800 lines) — documented known gap, not silently closed (see module docstring); driving it to green would need deep multi-round tool-call + SSE-consumption mocking, materially bigger/riskier than the 60% floor requires. |
-| backend/routers/cto_projects.py | 3560 lines | 60.2% (2026-08-24, real `pytest --cov=routers.cto_projects`: pre-existing 20-file suite alone (measured before writing anything new) = 24%; `test_phase2c_cto_projects_router.py` alone (this wave's own new-work contribution) = 60% (185 tests); **combined** (pre-existing 20 files + this wave's new tests) = `1652 stmts, 658 missed, 60.17%` (994/1652), 343 passed / 30 failed / 12 skipped) | **covered (≥60%)** — Phase 2c wave 5 done. **CONFIRMED caveat:** all 30 combined-suite failures are the SAME pre-existing GitHub-App/PAT-migration issue already documented for loop_engine.py's wave (`app_installation_missing` on legacy PAT test fixtures) — reproduced with zero pollution from this wave's own 185 tests (identical 30-failure set before and after every incremental test addition in this wave). Deliberately scoped out: `_run_task_via_api` (CC=166, 477 stmts) and `_run_task_with_git` (CC=51, 165 stmts) — the actual git clone/generate/verify/commit/push worker pipelines, same posture as chat.py's `chat_stream` / loop_engine.py's `_do_execute`. Honest remaining gaps outside the scoped functions: `task_stream`'s live-queue polling loop body (only the terminal/immediate-frame paths are tested, not the 2s-timeout Mongo-poll branch — needs real wall-clock time to exercise safely), 3 of `_run_warm_agents`'s per-agent `except Exception` branches (unreachable via `asyncio.gather(..., return_exceptions=True)`'s exception-swallowing without forcing a failure inside the post-gather `db.update_one` call itself, which was done for the `brain` agent only as a representative case). |
+| backend/routers/chat.py | 3877 lines (4086 raw lines incl. blank/comment) | **71% combined (2026-08-25, Phase B wave — real `pytest --cov=routers.chat` across the full 19-file pre-existing chat suite + `test_phase2c_chat_router.py` + `_wave2.py` + `_wave3.py`): `1266 stmts, 365 missed, 71%`, 323 passed / 1 pre-existing-unrelated failure (`test_pat_cta_short_circuits_when_project_has_pat` — asserts a literal string inside a frontend `.jsx` file, not backend logic; failing identically before any wave-B work) / 1 deselected.** | **RIGOROUS, DOCUMENTED EXCEPTION (founder-approved 2026-08-25) — see "Phase B heavy-I/O exception" note below this table for the full writeup.** Outside the exempted region, only 2 lines remain uncovered: `_is_transient_proxy_error`'s `except Exception: b = ""` decode-failure branch (L429-430) — `bytes.decode(errors="ignore")` cannot actually raise, so this is dead defensive code, not a real gap. |
+| backend/routers/cto_projects.py | 3560 lines | **61% combined (2026-08-25, Phase B wave — real `pytest --cov=routers.cto_projects` across the full 20-file pre-existing suite + `test_phase2c_cto_projects_router.py` + `_wave2.py`): `1652 stmts, 647 missed, 61%`, 361 passed / 15 pre-existing failures (SAME GitHub-App/PAT-migration `app_installation_missing` root cause already documented — re-confirmed identical failure set, e.g. `test_iter67_recurring_pattern_fixes.py::test_retry_endpoint_carries_real_failure_into_new_task` fails with the real fixture's stale-PAT project 403'ing, not a wave-B regression) / 12 skipped / 5 deselected.** | **RIGOROUS, DOCUMENTED EXCEPTION (founder-approved 2026-08-25) — see "Phase B heavy-I/O exception" note below this table.** Outside the exempted region, only 5 lines remain: `_GIT_AVAILABLE` import-time warning (L40, only fires when `git` isn't installed — this Preview pod has `git`, so exercising it needs an `importlib.reload` of a large stateful router module, too invasive for 1 log line); `_emit`'s queue-full-AND-recovery-also-fails race-condition safety net (L124-125, needs a concurrent producer racing between `get_nowait`/`put_nowait`); `add_project`'s dead `_ix_token = pat` else-branch (L1025 — unreachable: both non-`github_app` auth paths (`elif pat:` / `else:`) always raise via `_fail(...)` before this line, since PAT auth was removed; flagging as **discovered dead code**, not a coverage gap to fake-test around); `task_stream`'s Mongo-poll `continue` (L2165, needs a real 2s+ wall-clock wait per iteration of `asyncio.wait_for(q.get(), timeout=2.0)` to exercise safely without mocking away the very behavior being tested).|
 | backend/routers/admin_analytics.py | 2195 lines | 88% (2026-08-23, TestClient in-process suite, 51 tests, real assertions — tests/test_phase2c_admin_analytics_router.py) | **covered (≥60%)** — Phase 2c wave 2 done |
 | backend/routers/mcp.py | 1806 lines | 23% | not started |
 | backend/routers/ora_chat.py | 1589 lines | 19% | not started |
@@ -676,3 +676,89 @@ Generated 2026-08-22 (Phase 0/1 baseline). One row per bloated file (173, tool c
 |---|---|---|---|
 | frontend/src/App.jsx | 498 lines | n/a (frontend — see coverage-summary.json) | not started |
 | frontend/src/lib/api.js | 392 lines | n/a (frontend — see coverage-summary.json) | not started |
+
+
+## Phase B heavy-I/O exception — chat.py `chat_stream` gen / cto_projects.py `_run_task_via_api` + `_run_task_with_git` (2026-08-25, founder-approved)
+
+**Excluded functions, exact lines, statement counts:**
+- `backend/routers/chat.py::chat_stream` nested generator `gen()` and its inner
+  closures `_step`, `_activity`, `_llm_retry` — lines **1716-3523** (~1800
+  physical lines, 363 statements still uncovered in the combined run). This is
+  the SSE multi-round tool-calling loop: per-token streaming, tool dispatch,
+  LLM retry/backoff, and activity-frame emission.
+- `backend/routers/cto_projects.py::_run_task_via_api` — lines **2432-3524**
+  (~1093 lines, CC=166). The pure-GitHub-REST-API ship worker (no git binary):
+  reads files via the Contents API, generates edits via LLM, verifies syntax,
+  commits via the Git Data API, handles conflicts/retries.
+- `backend/routers/cto_projects.py::_run_task_with_git` — lines **3528-3844**
+  (~317 lines, CC=51). The git-subprocess ship worker used when `git` IS on
+  PATH (true in this Preview pod): clone → LLM edit → verify → commit → push,
+  plus the rollback counterpart's subprocess calls.
+
+**Why deep unit mocking is excluded (reason, not an excuse):** these three
+functions are dominated by orchestration around THREE independently-flaky
+external systems at once — the GitHub REST/Git-Data API, the `git` CLI
+subprocess, and a multi-round LLM tool-calling loop. Unit-mocking all three
+simultaneously to walk every branch would mean asserting on the SHAPE of our
+own mocks (e.g. "if `httpx.post` returns X, does our code call `httpx.patch`
+with Y") rather than on real behavior — brittle, and it provides near-zero
+confidence that the real GitHub API contract, the real `git` stderr format,
+or the real LLM tool-call protocol are actually handled correctly. A crash in
+a mocked assertion here would not have caught the real bug this wave found
+(the malformed `https://{token}@github.com` clone URL — see the git-ship-auth
+fix earlier in this ledger) precisely because that bug was in how we talk to
+the REAL systems, which mocks by definition don't exercise.
+
+**Substitute evidence — real E2E, Preview only, reproduced 2026-08-25:**
+
+Using the existing seeded Preview project `funnel-repro` (`p_6d0be78cdd` →
+`polarisbuiltinc-wq/aurem-rollback-testbed` via real GitHub App installation
+`152797252`, owned by `test@aurem.dev` — see `memory/test_credentials.md`):
+
+1. **GitHub API rejection.** Temporarily set `installation_id: 999999999`
+   (real PATCH `/cto/projects/{id}`) — an installation ID that does not
+   exist. `POST /cto/tasks/submit` against the same project returned a real
+   403 from the ORAContext gate that calls the GitHub App API upstream of
+   the ship worker: `"This project's GitHub App access isn't available —
+   the installation may have been revoked or doesn't cover this repo. Open
+   Projects → APP to reconnect via the AUREM GitHub App."` No task row was
+   even created — fails closed before any LLM/git cost is spent. Installation
+   ID reverted to `152797252` immediately after and confirmed via
+   `GET /cto/projects/list`.
+2. **Git subprocess failure.** Set `branch: "does-not-exist-xyz-branch"` on
+   the same project (this field is NOT validated at submit time, only at
+   worker-run time — a genuinely different failure surface than #1).
+   `POST /cto/tasks/submit` → task `t_9dcd31032bcc` accepted, then the real
+   `git clone` subprocess inside `_run_task_with_git` failed with the actual
+   git stderr: `"fatal: Remote branch does-not-exist-xyz-branch not found in
+   upstream origin"`. Task status correctly became `failed`, `error` field
+   holds the raw git stderr verbatim, and the UX layer separately produced
+   `error_plain: "The branch ORA was about to push to no longer exists in the
+   repo."` with actionable `error_steps`. No hang, no silent success.
+3. **Retry behavior.** Reverted `branch` back to `"main"` (the actual root
+   cause fix), then called `POST /cto/tasks/t_9dcd31032bcc/retry` → returned
+   a NEW task `t_fca580759981` with `retry_of: "t_9dcd31032bcc"` and
+   `carried_failure_context: true`. Polled it to completion: real `git
+   clone` of `main` succeeded, real DeepSeek edit of `README.md`, real
+   commit + push — `commit_sha: "fc804cd"`,
+   `github_url: ".../commit/fc804cd7b190b7b905cc67d7755ee7a71483da63"`. This
+   proves the retry path correctly re-attempts the SAME worker function
+   after a real transient-style failure is fixed, not just that it accepts a
+   retry request.
+
+Project state fully restored afterward (`branch: main`,
+`installation_id: 152797252`, `installation_active: true` — confirmed via a
+final `GET /cto/projects/list`). No Preview app data was left mutated.
+
+**Independent verification:** per the founder's standing rule that ship/
+rollback-adjacent changes require `testing_agent` regardless of Preview vs.
+Production or blast radius, `testing_agent` was run against this exact
+scenario set and independently reproduced all 3 scenarios fresh (new task
+IDs `t_a3b7fd1b8da7` failed / `t_2e19f9c4dfbd` done, commit `d67935c`) — see
+`test_reports/iteration_heavy_io_ship_e2e_2026_01.json`. All PASS, project
+state confirmed restored, 313-test regression suite green. One review
+comment flagged "ORA" in the branch-not-found error message as a possible
+leaked template placeholder — checked and confirmed FALSE POSITIVE: "ORA" is
+the product's actual AI-agent brand name, used consistently throughout
+chat.py (e.g. "You are ORA, an AI engineering lead", UI label "ORA"), not a
+placeholder. No code change made.

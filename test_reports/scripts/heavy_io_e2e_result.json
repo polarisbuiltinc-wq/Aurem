@@ -1,0 +1,123 @@
+{
+  "steps": [
+    {
+      "step": "login",
+      "ok": true,
+      "details": "keys=['ok', 'token', 'user_id', 'email', 'name', 'tier', 'tokens_remaining', 'is_admin', 'is_unlimited']"
+    },
+    {
+      "step": "initial_project_fetch",
+      "ok": true,
+      "details": {
+        "branch": "main",
+        "installation_id": 152797252,
+        "installation_active": true
+      }
+    },
+    {
+      "step": "s1_patch_bad_installation",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "body": "{\"ok\":true,\"updated_fields\":[\"installation_id\",\"auth_method\"]}"
+      }
+    },
+    {
+      "step": "s1_submit_expect_403_no_task_id",
+      "ok": true,
+      "details": {
+        "status": 403,
+        "body": {
+          "detail": "This project's GitHub App access isn't available \u2014 the installation may have been revoked or doesn't cover this repo. Open Projects \u2192 APP to reconnect via the AUREM GitHub App."
+        }
+      }
+    },
+    {
+      "step": "s1_restore_installation",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "step": "s1_verify_restored",
+      "ok": true,
+      "details": {
+        "installation_id": 152797252,
+        "installation_active": true
+      }
+    },
+    {
+      "step": "s2_patch_bad_branch",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "step": "s2_submit_accepted_with_task_id",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "task_id": "t_a3b7fd1b8da7"
+      }
+    },
+    {
+      "step": "s2_task_failed_with_git_stderr",
+      "ok": false,
+      "details": {
+        "status": null,
+        "error_snippet": null,
+        "error_plain": null,
+        "error_suggestion": null
+      }
+    },
+    {
+      "step": "s2_user_facing_error_present",
+      "ok": false,
+      "details": {
+        "error_plain": null,
+        "error_suggestion": null
+      }
+    },
+    {
+      "step": "s3_patch_branch_back_to_main",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "step": "s3_retry_endpoint_response",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "body": {
+          "ok": true,
+          "task_id": "t_2e19f9c4dfbd",
+          "retry_of": "t_a3b7fd1b8da7",
+          "carried_failure_context": true
+        }
+      }
+    },
+    {
+      "step": "s3_retry_task_done_with_commit",
+      "ok": false,
+      "details": {
+        "status": null,
+        "commit_sha": null,
+        "github_url": null
+      }
+    },
+    {
+      "step": "final_project_state_restored",
+      "ok": true,
+      "details": {
+        "branch": "main",
+        "installation_id": 152797252,
+        "installation_active": true
+      }
+    }
+  ],
+  "pass": false
+}

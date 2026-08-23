@@ -1,0 +1,65 @@
+{
+  "summary": "Independent re-verification of AUREM CTO heavy-I/O ship/rollback exception scenarios on project p_6d0be78cdd (funnel-repro). All 3 real-network scenarios (GitHub App rejection, git subprocess failure, retry-after-fix) reproduced and passed. Project state fully restored at end. Regression suite (313 tests across 5 phase2c files) green.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "scenario_results": {
+    "s1_github_installation_rejection": {
+      "pass": true,
+      "http_status": 403,
+      "task_id_present_in_response": false,
+      "detail_message": "This project's GitHub App access isn't available — the installation may have been revoked or doesn't cover this repo. Open Projects → APP to reconnect via the AUREM GitHub App.",
+      "restored_after": {"installation_id": 152797252, "installation_active": true}
+    },
+    "s2_git_subprocess_failure": {
+      "pass": true,
+      "task_id": "t_a3b7fd1b8da7",
+      "final_status": "failed",
+      "error_raw_snippet": "git clone failed: ... fatal: Remote branch does-not-exist-xyz-branch not found in upstream origin",
+      "error_plain": "The branch ORA was about to push to no longer exists in the repo.",
+      "error_source": "static_table",
+      "error_suggestion": "Keeping 'main' as the default branch is safest — some repos still use 'master'.",
+      "error_steps_provided": true
+    },
+    "s3_retry_after_fix": {
+      "pass": true,
+      "retry_response": {"ok": true, "task_id": "t_2e19f9c4dfbd", "retry_of": "t_a3b7fd1b8da7", "carried_failure_context": true},
+      "final_status": "done",
+      "commit_sha": "d67935c",
+      "github_url": "https://github.com/polarisbuiltinc-wq/aurem-rollback-testbed/commit/d67935c19cdda3e6003b889880d5e2408f7b0ebc",
+      "context_carried_snippet": "Previous attempt failed: ... Do NOT repeat that failure."
+    },
+    "final_state_restoration": {
+      "pass": true,
+      "branch": "main",
+      "installation_id": 152797252,
+      "installation_active": true
+    },
+    "regression_pytest": {
+      "pass": true,
+      "files": ["test_phase2c_chat_router.py", "test_phase2c_chat_router_wave2.py", "test_phase2c_chat_router_wave3.py", "test_phase2c_cto_projects_router.py", "test_phase2c_cto_projects_router_wave2.py"],
+      "result": "313 passed in 9.66s (19 warnings, all benign coroutine-never-awaited from mocks)"
+    }
+  },
+  "test_report_links": ["/app/test_reports/scripts/heavy_io_e2e_verify.py", "/app/test_reports/scripts/heavy_io_e2e_result.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Task GET endpoint returns nested {ok, task:{...}} envelope — main agent's own tooling / any consumer must drill into .task; this differs from some sibling endpoints that return the task fields flat. Minor consistency note, not a bug.",
+    "Error surface for failed ship tasks is well-formed: raw error, error_plain, error_source, error_suggestion, error_steps all populated — good UX handoff.",
+    "s2 error_plain says 'The branch ORA was about to push to no longer exists' — 'ORA' appears to be a template placeholder that leaked; likely intended 'AUREM' or a project name substitution. Cosmetic but user-facing. Recommend main agent grep for 'ORA' placeholder in error_plain static_table."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "n/a (backend-only scope)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (login endpoint returns {token, ...})",
+  "seed_data_creation": "None — used existing project p_6d0be78cdd; created 2 ephemeral tasks (t_a3b7fd1b8da7 failed, t_2e19f9c4dfbd done with commit d67935c). Real commit pushed to disposable test repo polarisbuiltinc-wq/aurem-rollback-testbed as expected.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Heavy-I/O ship/rollback E2E exception scope fully verified: (1) GitHub App installation rejection returns 403 with clear user message and does NOT create a task row; (2) bad-branch ship is accepted, then fails with real git stderr and produces user-facing error_plain/error_suggestion/error_steps; (3) retry endpoint returns {ok,task_id,retry_of,carried_failure_context:true}, spawns a new worker that succeeds and produces real commit_sha + github_url. Project state was left restored (branch=main, installation_id=152797252, installation_active=true). Minor cosmetic: error_plain contains a leaked 'ORA' placeholder string.",
+  "rca of the issue": "N/A — no bugs found. Only cosmetic 'ORA' placeholder in the static error_plain string for the 'branch missing' error path (see backend/routers/cto_projects.py static error table)."
+}
