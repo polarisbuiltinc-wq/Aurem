@@ -1,0 +1,36 @@
+{
+  "summary": "Verified live preview behavior of backend/routers/cto_projects.py per E1 review scope. 13 targeted pytest cases against the live preview host all PASSED (list no-token-leak, add auth_required + pat_not_supported rejection paths, check-pat / test-pat sensible responses without 500, DELETE deleted:0 for unknown id, rollback confirm-gate 400 for missing/wrong confirm and 404 with correct confirm, GET task 404 for unknown, submit clean 4xx for unknown project). Frontend Projects page loaded cleanly with 0 console errors — 'Add Project' wizard step 1 renders correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/projects sidebar", "issues": ["Preview DB polluted with 30+ TEST_Proj_* leftover rows created by prior in-process TestClient runs against a shared/preview Mongo. Not a bug in cto_projects.py itself, but the test suite is not cleaning up. Consider cleanup fixture or TEST_ prefix sweep."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration_cto_projects_live.py",
+    "/app/test_reports/pytest/cto_projects_live.xml"
+  ],
+  "action_items": [
+    "None — all requested behaviors verified on live preview. Optional: add a teardown fixture in backend/tests/test_phase2c_cto_projects_router.py to purge TEST_Proj_* rows from cto_projects collection to stop polluting the preview DB."
+  ],
+  "critical_code_review_comments": [
+    "check-pat and test-pat both return well-structured JSON with 'ok'/'state' or 'ok'/'error' shapes — no crashes when installation absent; test-pat's docstring says HTTP is always 200 but implementation raises 403 when pat_vault returns _auth_err, minor inconsistency but frontend handles both.",
+    "Rollback endpoint correctly checks confirm=='ROLLBACK' BEFORE looking up the task, but missing 'confirm' field returns 422 (pydantic) rather than 400 — E1 request states 'returns 400 for any other confirm value or missing field'; 422 is the FastAPI default for missing required body field. Not a bug (still a 4xx), but consider adding confirm: str = Field(...) with a custom validator if strict 400 is required.",
+    "Preview DB (shared Mongo) contains many TEST_Proj_* rows from the new 185-test in-process TestClient suite — those tests should clean up after themselves via a fixture."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration_cto_projects_live.py (new)"
+  ],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100% smoke"},
+  "test_credentials": "Preview: test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None; tests only read state or hit unknown IDs. No projects/tasks created (live GitHub App installation not available in preview per PRD.md known gap).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "cto_projects.py wave verified clean on preview host. Next file per E1's Phase 2c loop is local_tools.py. Preview DB has significant TEST_Proj_* pollution — expect noisy /projects/list responses. Login via POST /api/aurem-dev/auth/login with test@aurem.dev creds returns a Bearer token used for all cto/* endpoints.",
+  "rca of the issue": "N/A — no bugs found in cto_projects.py behavior during this wave."
+}

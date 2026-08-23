@@ -28,6 +28,7 @@ uncovered), `chat_task_followup` (~67 lines uncovered), and
 """
 from __future__ import annotations
 
+import asyncio
 import time
 
 import pytest
@@ -69,10 +70,32 @@ class _FakeCollection:
         matched = [r for r in self.rows if self._match(r, query)]
         return dict(matched[0]) if matched else None
 
+    def _eval_expr(self, expr, row):
+        if isinstance(expr, dict):
+            if "$max" in expr:
+                return max(self._eval_expr(x, row) for x in expr["$max"])
+            if "$subtract" in expr:
+                a, b = expr["$subtract"]
+                return self._eval_expr(a, row) - self._eval_expr(b, row)
+            if "$ifNull" in expr:
+                a, default = expr["$ifNull"]
+                val = self._eval_expr(a, row)
+                return val if val is not None else default
+            return expr
+        if isinstance(expr, str) and expr.startswith("$"):
+            return row.get(expr[1:])
+        return expr
+
     async def update_one(self, query, update, upsert=False):
         import types
         for r in self.rows:
             if self._match(r, query):
+                if isinstance(update, list):
+                    # Aggregation-pipeline style update (e.g. $max/$subtract clamp).
+                    for stage in update:
+                        for k, v in (stage.get("$set") or {}).items():
+                            r[k] = self._eval_expr(v, r)
+                    return types.SimpleNamespace(matched_count=1, modified_count=1)
                 for k, v in (update.get("$set") or {}).items():
                     if "." in k:
                         top, idx, field = k.split(".", 2)
@@ -87,6 +110,14 @@ class _FakeCollection:
                     each = v.get("$each", [])
                     r.setdefault(k, []).extend(each)
                 return types.SimpleNamespace(matched_count=1, modified_count=1)
+        if upsert and not isinstance(update, list):
+            new_row = dict(query or {})
+            new_row.update(update.get("$setOnInsert") or {})
+            new_row.update(update.get("$set") or {})
+            for k, v in (update.get("$push") or {}).items():
+                new_row[k] = list(v.get("$each", []))
+            self.rows.append(new_row)
+            return types.SimpleNamespace(matched_count=0, modified_count=0, upserted_id="new")
         return types.SimpleNamespace(matched_count=0, modified_count=0)
 
     def find(self, query=None, projection=None, sort=None, limit=None):
@@ -569,6 +600,277 @@ class TestSmallHelpers:
         from routers import chat as router_mod
         assert router_mod._strip_council_block("unchanged", "") == "unchanged"
 
+    def test_generate_title_empty_llm_content_returns_empty(self):
+        import asyncio as _aio
+        from routers import chat as router_mod
+        with patch("routers.chat.call_llm_with_meta",
+                  AsyncMock(return_value={"content": "   "})):
+            title = _aio.run(router_mod._generate_title("hi"))
+        assert title == ""
+
+    def test_maybe_set_title_missing_session_noop(self, fake_db):
+        import asyncio as _aio
+        from routers import chat as router_mod
+        from cto_services import db as _dbmod
+        _dbmod.set_db(fake_db)
+        try:
+            _aio.run(router_mod._maybe_set_title("u1", "does-not-exist", "hi"))
+        finally:
+            _dbmod.set_db(None)
+        assert fake_db.chat_sessions.rows == []
+
+    def test_maybe_set_title_skips_before_second_turn(self, fake_db):
+        import asyncio as _aio
+        from routers import chat as router_mod
+        from cto_services import db as _dbmod
+        fake_db.chat_sessions.rows.append({
+            "session_id": "s1", "user_id": "u1", "turns": [{}],
+        })
+        _dbmod.set_db(fake_db)
+        try:
+            _aio.run(router_mod._maybe_set_title("u1", "s1", "hi"))
+        finally:
+            _dbmod.set_db(None)
+        assert "title" not in fake_db.chat_sessions.rows[0]
+
+    def test_maybe_set_title_generated_title_empty_noop(self, fake_db):
+        import asyncio as _aio
+        from routers import chat as router_mod
+        from cto_services import db as _dbmod
+        fake_db.chat_sessions.rows.append({
+            "session_id": "s1", "user_id": "u1", "turns": [{}, {}],
+        })
+        _dbmod.set_db(fake_db)
+        try:
+            with patch("routers.chat._generate_title", AsyncMock(return_value="")):
+                _aio.run(router_mod._maybe_set_title("u1", "s1", "hi"))
+        finally:
+            _dbmod.set_db(None)
+        assert "title" not in fake_db.chat_sessions.rows[0]
+
+    @pytest.mark.asyncio
+    async def test_regenerate_without_recall_success(self):
+        from routers import chat as router_mod
+        with patch("routers.chat.chat_with_tools",
+                  AsyncMock(return_value={"content": "fixed answer", "provider": "claude"})):
+            content, provider = await router_mod._regenerate_without_recall(
+                prompt="fix it", jwt_token="tok", extra_sys_no_council="",
+                max_iters=2, session_id="s1", user_id="u1", project_id="home",
+                mode="swift", task_type=None, is_founder=False, bin_ctx=None,
+            )
+        assert content == "fixed answer"
+        assert provider == "claude"
+
+    @pytest.mark.asyncio
+    async def test_regenerate_without_recall_swallows_exception(self):
+        from routers import chat as router_mod
+        with patch("routers.chat.chat_with_tools",
+                  AsyncMock(side_effect=RuntimeError("down"))):
+            content, provider = await router_mod._regenerate_without_recall(
+                prompt="fix it", jwt_token="tok", extra_sys_no_council="",
+                max_iters=2, session_id="s1", user_id="u1", project_id="home",
+                mode="swift", task_type=None, is_founder=False, bin_ctx=None,
+            )
+        assert content == "" and provider == ""
+
+    @pytest.mark.asyncio
+    async def test_persist_turn_no_db_noop(self):
+        from routers import chat as router_mod
+        from cto_services import db as _dbmod
+        _dbmod.set_db(None)
+        await router_mod._persist_turn("u1", "s1", "hi", "hello", "deepseek")
+
+    @pytest.mark.asyncio
+    async def test_persist_turn_no_session_id_noop(self, fake_db):
+        from routers import chat as router_mod
+        from cto_services import db as _dbmod
+        _dbmod.set_db(fake_db)
+        try:
+            await router_mod._persist_turn("u1", "", "hi", "hello", "deepseek")
+        finally:
+            _dbmod.set_db(None)
+        assert fake_db.chat_sessions.rows == []
+
+    @pytest.mark.asyncio
+    async def test_persist_turn_pins_shipped_task_id_and_steps(self, fake_db):
+        from routers import chat as router_mod
+        from cto_services import db as _dbmod
+        _dbmod.set_db(fake_db)
+        try:
+            await router_mod._persist_turn(
+                "u1", "s1", "hi", "shipped it", "deepseek",
+                shipped_task_id="t1", steps=[{"type": "step"}],
+                low_confidence=True, ship_suppressed=True,
+            )
+        finally:
+            _dbmod.set_db(None)
+        turn = fake_db.chat_sessions.rows[0]["turns"][-1]
+        assert turn["shipped_task_id"] == "t1"
+        assert turn["steps"] == [{"type": "step"}]
+        assert turn["low_confidence"] is True
+        assert turn["ship_suppressed"] is True
+
+
+# ═════════════════════════════════════════════════════════════════════
+# Pure helper functions — mode classifier, F12 signal filtering,
+# transient-proxy detection, token deduction. No mocking needed;
+# these are straight unit tests of previously-untested branches.
+# ═════════════════════════════════════════════════════════════════════
+
+class TestPureHelpers:
+    def test_is_fix_confirmation_matches(self):
+        from routers import chat as router_mod
+        assert router_mod.is_fix_confirmation("yes go ahead") is True
+        assert router_mod.is_fix_confirmation("what is this") is False
+
+    def test_safe_provenance_returns_dict_on_import_error(self):
+        from routers import chat as router_mod
+        with patch("services.llm.get_last_provider", side_effect=RuntimeError("boom")):
+            prov = router_mod._safe_provenance()
+        assert prov == {"provider": "openrouter", "model": "", "is_emergency": False}
+
+    def test_f12_has_real_signal_non_dict_payload(self):
+        from routers import chat as router_mod
+        assert router_mod._f12_has_real_signal("not a dict") is False
+
+    def test_f12_has_real_signal_console_error(self):
+        from routers import chat as router_mod
+        payload = {"console_errors": [{"message": "TypeError: x is undefined"}]}
+        assert router_mod._f12_has_real_signal(payload) is True
+
+    def test_f12_has_real_signal_ignores_aborted_console_noise(self):
+        from routers import chat as router_mod
+        payload = {"console_errors": [{"message": "request aborted"}]}
+        assert router_mod._f12_has_real_signal(payload) is False
+
+    def test_f12_has_real_signal_real_network_error(self):
+        from routers import chat as router_mod
+        payload = {"network_errors": [{"status": 500, "url": "/api/x",
+                                       "response_body": "{\"detail\":\"boom\"}"}]}
+        assert router_mod._f12_has_real_signal(payload) is True
+
+    def test_f12_has_real_signal_ignores_transient_proxy_network_error(self):
+        from routers import chat as router_mod
+        payload = {"network_errors": [{"status": 502, "url": "/api/x",
+                                       "response_body": ""}]}
+        assert router_mod._f12_has_real_signal(payload) is False
+
+    def test_f12_has_real_signal_stack_trace(self):
+        from routers import chat as router_mod
+        assert router_mod._f12_has_real_signal({"stack_traces": ["at foo.js:1"]}) is True
+
+    def test_f12_has_real_signal_empty_payload(self):
+        from routers import chat as router_mod
+        assert router_mod._f12_has_real_signal({}) is False
+
+    def test_is_transient_proxy_error_499_always_transient(self):
+        from routers import chat as router_mod
+        assert router_mod._is_transient_proxy_error(499, '{"detail":"x"}') is True
+
+    def test_is_transient_proxy_error_non_proxy_status(self):
+        from routers import chat as router_mod
+        assert router_mod._is_transient_proxy_error(500, "<html>") is False
+
+    def test_is_transient_proxy_error_html_body(self):
+        from routers import chat as router_mod
+        assert router_mod._is_transient_proxy_error(502, "<!doctype html><body>bad gw</body>") is True
+
+    def test_is_transient_proxy_error_empty_body(self):
+        from routers import chat as router_mod
+        assert router_mod._is_transient_proxy_error(503, "") is True
+
+    def test_is_transient_proxy_error_bytes_body(self):
+        from routers import chat as router_mod
+        assert router_mod._is_transient_proxy_error(520, b"<html>cloudflare</html>") is True
+
+    def test_is_transient_proxy_error_real_json_body_not_transient(self):
+        from routers import chat as router_mod
+        assert router_mod._is_transient_proxy_error(502, '{"detail":"real app error"}') is False
+
+    def test_classify_intent_greeting_is_mode_a(self):
+        from routers import chat as router_mod
+        assert router_mod.classify_intent("hi there", None) == "A"
+
+    def test_classify_intent_f12_signal_is_mode_d(self):
+        from routers import chat as router_mod
+        payload = {"console_errors": [{"message": "TypeError: crash"}]}
+        assert router_mod.classify_intent("something broke", payload) == "D"
+
+    def test_classify_intent_debug_request_is_mode_d(self):
+        from routers import chat as router_mod
+        with patch("services.mode_d_debugger.is_debug_request", return_value=True):
+            assert router_mod.classify_intent("debug my app", None) == "D"
+
+    def test_classify_intent_audit_request_is_mode_e(self):
+        from routers import chat as router_mod
+        with patch("services.mode_d_debugger.is_debug_request", return_value=False), \
+             patch("services.mode_e_auditor.is_audit_request", return_value=True):
+            assert router_mod.classify_intent("audit my security posture", None) == "E"
+
+    def test_classify_intent_engage_request_is_mode_f(self):
+        from routers import chat as router_mod
+        with patch("services.mode_d_debugger.is_debug_request", return_value=False), \
+             patch("services.mode_e_auditor.is_audit_request", return_value=False), \
+             patch("services.mode_f_engage.is_engage_request", return_value=True):
+            assert router_mod.classify_intent("write me a launch tweet", None) == "F"
+
+    def test_classify_intent_ship_phrase_is_mode_c(self):
+        from routers import chat as router_mod
+        with patch("services.mode_d_debugger.is_debug_request", return_value=False), \
+             patch("services.mode_e_auditor.is_audit_request", return_value=False), \
+             patch("services.mode_f_engage.is_engage_request", return_value=False):
+            assert router_mod.classify_intent("ship this to my repo now", None) == "C"
+
+    def test_classify_intent_should_i_is_mode_b(self):
+        from routers import chat as router_mod
+        with patch("services.mode_d_debugger.is_debug_request", return_value=False), \
+             patch("services.mode_e_auditor.is_audit_request", return_value=False), \
+             patch("services.mode_f_engage.is_engage_request", return_value=False):
+            assert router_mod.classify_intent("should I pivot or persevere", None) == "B"
+
+    def test_classify_intent_falls_through_to_mode_a(self):
+        from routers import chat as router_mod
+        with patch("services.mode_d_debugger.is_debug_request", return_value=False), \
+             patch("services.mode_e_auditor.is_audit_request", return_value=False), \
+             patch("services.mode_f_engage.is_engage_request", return_value=False):
+            assert router_mod.classify_intent("random unrelated sentence", None) == "A"
+
+    @pytest.mark.asyncio
+    async def test_deduct_tokens_no_db_returns_zero(self):
+        from routers import chat as router_mod
+        from cto_services import db as _dbmod
+        _dbmod.set_db(None)
+        assert await router_mod._deduct_tokens("u1", "hello world") == 0
+
+    @pytest.mark.asyncio
+    async def test_deduct_tokens_clamps_and_returns_balance(self, fake_db):
+        from routers import chat as router_mod
+        from cto_services import db as _dbmod
+        fake_db.dev_users.rows.append({"user_id": "u1", "tokens_remaining": 100})
+        _dbmod.set_db(fake_db)
+        try:
+            result = await router_mod._deduct_tokens("u1", "one two three four five six")
+        finally:
+            _dbmod.set_db(None)
+        assert result == fake_db.dev_users.rows[0]["tokens_remaining"]
+
+    @pytest.mark.asyncio
+    async def test_deduct_tokens_db_error_returns_zero(self, fake_db):
+        from routers import chat as router_mod
+        from cto_services import db as _dbmod
+
+        class _Boom:
+            async def update_one(self, *a, **k):
+                raise RuntimeError("mongo down")
+
+        fake_db._cols["dev_users"] = _Boom()
+        _dbmod.set_db(fake_db)
+        try:
+            result = await router_mod._deduct_tokens("u1", "hi")
+        finally:
+            _dbmod.set_db(None)
+        assert result == 0
+
 
 # ═════════════════════════════════════════════════════════════════════
 # POST /chat/stream — setup-phase coverage only (constructing the
@@ -594,7 +896,7 @@ class TestChatStreamSetup:
 
         with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
              patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)):
-            resp = asyncio.get_event_loop().run_until_complete(go())
+            resp = asyncio.run(go())
 
         from starlette.responses import StreamingResponse
         assert isinstance(resp, StreamingResponse)
@@ -615,8 +917,5 @@ class TestChatStreamSetup:
                 return await router_mod.chat_stream(fake_request, body, "Bearer u1")
 
         with pytest.raises(Exception) as exc_info:
-            asyncio.get_event_loop().run_until_complete(go())
+            asyncio.run(go())
         assert "400" in str(exc_info.value) or "cannot be processed" in str(exc_info.value)
-
-
-import asyncio  # noqa: E402 — used by TestChatStreamSetup above

@@ -1848,7 +1848,17 @@ async def _run_rollback_with_git(task_id: str, proj: dict, commit_sha: str,
     owner = proj["github_owner"]
     repo = proj["github_repo"]
     branch = proj.get("branch", "main")
-    clone_url = f"https://{user_token}@github.com/{owner}/{repo}.git"
+    # 2026-08-24 fix — GitHub App installation tokens must be passed as
+    # the HTTPS PASSWORD (username "x-access-token"), not as the
+    # username-only PAT-style embed. The old `https://{token}@github.com`
+    # form makes git treat the token as a username with a blank
+    # password, which then tries an interactive password prompt and
+    # fails non-interactively ("could not read Password ... No such
+    # device or address"). Confirmed via a real Preview/testbed E2E
+    # ship drill (task submitted against polarisbuiltinc-wq/aurem-
+    # rollback-testbed via App installation 152797252).
+    clone_url = (f"https://x-access-token:{user_token}@github.com/{owner}/{repo}.git"
+                if user_token else f"https://github.com/{owner}/{repo}.git")
 
     db = get_db()
 
@@ -3529,7 +3539,10 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
     ws.mkdir(parents=True, exist_ok=True)
     repo_path = ws / "repo"
     owner, repo, branch = proj["github_owner"], proj["github_repo"], proj.get("branch", "main")
-    clone_url = (f"https://{user_token}@github.com/{owner}/{repo}.git"
+    # 2026-08-24 fix — see matching fix in _run_rollback_with_git above:
+    # GitHub App installation tokens are the HTTPS PASSWORD (username
+    # "x-access-token"), not a username-only PAT-style embed.
+    clone_url = (f"https://x-access-token:{user_token}@github.com/{owner}/{repo}.git"
                  if user_token else f"https://github.com/{owner}/{repo}.git")
 
     try:

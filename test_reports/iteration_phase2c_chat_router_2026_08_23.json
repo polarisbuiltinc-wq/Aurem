@@ -1,0 +1,33 @@
+{
+  "summary": "Phase 2c chat.py coverage-wave functional/behavioral testing. Backend: created live-preview pytest file that exercises the deployed chat endpoints end-to-end (8/8 PASSED). Frontend: smoke-tested the real ChatPanel UI — login, composer input, send button, streaming SSE response, error rendering all work. No regressions in chat.py behavior found. The frontend 403 shown in the UI screenshot is chat.py's build_ora_context correctly rejecting a project with a revoked GitHub App installation (NOT a bug in chat.py, orthogonal to this wave — same PRE-EXISTING GH App/PAT issue documented in memory/PRD.md).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/live/test_phase2c_chat_live_smoke.py",
+    "/app/test_reports/pytest/chat_live_smoke.xml"
+  ],
+  "action_items": [
+    "None. Chat.py wave is functionally green in the preview environment. Main agent can proceed to next file (cto_projects.py)."
+  ],
+  "critical_code_review_comments": [
+    "backend/routers/chat.py is 4086 lines — recommend a follow-up refactor wave to split chat_send / chat_stream / task_followup / draft_support_email into modules once coverage floors are cleared (already flagged in this wave's docstring as scoped-out for now).",
+    "chat_stream at 2234 lines (L1302-3536) is a maintenance risk — single SSE handler doing routing + tool-calling + phase transitions + persistence."
+  ],
+  "updated_files": [
+    "/app/backend/tests/live/test_phase2c_chat_live_smoke.py (NEW — 8 live smoke tests)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (chat UI loads, composer works, send fires, response renders)"},
+  "test_credentials": "Preview: test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md, verified working)",
+  "seed_data_creation": "Created a few TEST_-prefixed chat sessions in preview MongoDB via chat/send during the multi-turn history test (session_ids TEST_hist_* / TEST_sid_* / TEST_stream_* / TEST_inj_* / TEST_tf_*). Small, ignorable — no repos/projects created.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "For the next chat.py-adjacent wave, reuse /app/backend/tests/live/test_phase2c_chat_live_smoke.py as a live regression harness — it takes ~10s and exercises: 401 gate, /chat/send happy path, /chat/stream SSE frames, prompt-injection guard, /chat/ora/draft-support-email (400 + happy), /chat/task-followup route existence (note real path uses hyphen not slash), and multi-turn /chat/history persistence.",
+  "rca_of_the_issue": "N/A — no regressions found. The 403 rendered in the frontend chat UI screenshots is expected behavior from chat.py's ownership/PAT preflight (build_ora_context) against a project whose GitHub App install was revoked — chat.py returns the correct 403 and the frontend renders it as a proper reconnect banner. Not a defect."
+}
