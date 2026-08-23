@@ -33,6 +33,7 @@ from routers.mfa import router as mfa_router  # Iter 212m-20 — admin 2FA
 from routers.chat import router as chat_router
 from routers.dev_tools import router as dev_tools_router  # Iter 388t · Bug 20 · founder /podshell
 from routers.github_oauth import router as github_oauth_router
+from routers.google_oauth import router as google_oauth_router
 from routers.github_funnel import router as github_funnel_router  # 2026-08-01 CTA drop-off telemetry
 from routers.github_app import router as github_app_router  # 2026-02-10 · Phase 2 · install router + webhook
 from routers.cto_projects import router as cto_projects_router
@@ -3076,6 +3077,7 @@ app.include_router(mfa_router,          prefix="/api/aurem-dev")  # Iter 212m-20
 app.include_router(chat_router,         prefix="/api/aurem-dev")
 app.include_router(dev_tools_router,    prefix="/api/aurem-dev")  # Iter 388t · Bug 20 · founder /podshell
 app.include_router(github_oauth_router, prefix="/api/aurem-dev")
+app.include_router(google_oauth_router, prefix="/api/aurem-dev")
 app.include_router(github_funnel_router, prefix="/api/aurem-dev")  # 2026-08-01 CTA drop-off telemetry
 app.include_router(github_app_router, prefix="/api/aurem-dev")  # 2026-02-10 · Phase 2 · install router + webhook
 app.include_router(cto_projects_router, prefix="/api/aurem-dev")
