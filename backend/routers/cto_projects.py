@@ -3125,39 +3125,108 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
             await _log(task_id, f"🛡️ Verify: {verify_result['summary']}",
                        "info" if verify_result["pass"] else "error")
             if not verify_result["pass"]:
-                # iter 112 — persist the blocked commit to vanguard_audit
+                # 2026-08-25 — Priority 1 (customer-driven correction,
+                # PRD "Mode D auto-fix" investigation): a Vanguard/E2B
+                # block on the CUSTOMER'S OWN generated code is exactly
+                # the class of failure AUREM's agent genuinely CAN
+                # diagnose and fix (unlike infra-level bugs in AUREM's
+                # own backend, which are out of this agent's
+                # jurisdiction — see PRD). ONE automatic self-
+                # correction pass: feed the LLM the EXACT findings,
+                # regenerate only the affected files, re-verify. Ship
+                # if it now passes; otherwise fail exactly as before
+                # (translated, never raw), noting the attempt.
+                _findings_for_fix = verify_result.get("findings", []) or []
+                _e2b_pre = verify_result.get("e2b") or {}
+                _fix_lines = [
+                    f"- {f.get('file','?')}:{f.get('line','?')} "
+                    f"[{f.get('severity','?')}] {f.get('rule', f.get('name','issue'))}: "
+                    f"{f.get('message','')[:200]}"
+                    for f in _findings_for_fix[:10]
+                ]
+                if not _e2b_pre.get("pass", True) and not _e2b_pre.get("skipped", True):
+                    _fix_lines.append(
+                        f"- E2B smoke-import failed: {(_e2b_pre.get('stderr') or '')[:300]}"
+                    )
+                await _log(
+                    task_id,
+                    "🔧 Vanguard/E2B blocked the commit — attempting one "
+                    "automatic fix before failing…",
+                    "warning",
+                )
+                _vg_nudge = (
+                    "The previous version of your patch was BLOCKED by a "
+                    "security/quality review with these EXACT findings:\n"
+                    + "\n".join(_fix_lines)
+                    + "\n\nFix EVERY finding above. Output the COMPLETE "
+                      "corrected file(s) using the same FILE: <path>\n```\n…\n``` "
+                      "format. Only re-output files that need the fix."
+                )
+                verify_result_2 = verify_result
                 try:
-                    from services.vanguard_audit import log_blocked_commit
-                    _db = get_db()
-                    if _db is not None:
-                        await log_blocked_commit(
-                            _db,
-                            user_id=str(proj.get("user_id") or "unknown"),
-                            project=f"{owner}/{repo}@{branch}",
-                            verify_result=verify_result,
-                            project_id=str(proj.get("project_id")) if proj.get("project_id") else None,
-                            task_id=task_id,
+                    _vg_reply = await _retry(
+                        lambda: call_llm(
+                            messages=[{"role": "user",
+                                       "content": user_msg + "\n\n" + _vg_nudge}],
+                            system=_AI_SYS, max_tokens=3500, temperature=0.0,
+                        ),
+                        what="Vanguard auto-fix retry", task_id=task_id,
+                    )
+                    from services.llm_file_parser import parse_file_blocks as _pfb2
+                    _vg_edits = _pfb2(_vg_reply)
+                    if _vg_edits:
+                        edits.update(_vg_edits)
+                        verify_result_2 = await verify_patch(
+                            edits, repo_ctx=f"{owner}/{repo}@{branch}",
+                            mode=_vg_mode, base_blocks=contents,
                         )
-                except Exception as _ae:
-                    logger.warning("vanguard_audit log failed: %r", _ae)
-                # Surface up to 5 critical/high findings in the log
-                critical = [f for f in verify_result.get("findings", [])
-                             if f.get("severity") in ("CRITICAL", "HIGH")][:5]
-                for f in critical:
+                except Exception as _vgfe:
+                    logger.warning("Vanguard auto-fix attempt crashed: %r", _vgfe)
+
+                if verify_result_2["pass"]:
                     await _log(
                         task_id,
-                        f"  • [{f.get('severity')}] {f.get('file','?')}"
-                        f":{f.get('line','?')} — {f.get('rule', f.get('name','issue'))}"
-                        f" — {f.get('message','')[:120]}",
-                        "error",
+                        "✅ Auto-fix resolved the blocked finding(s) — "
+                        "re-verified clean, proceeding to commit.",
+                        "success",
                     )
-                await _set_status(
-                    task_id, status="failed",
-                    error=("Vanguard verify agent blocked commit:\n"
-                           + verify_result.get("summary", ""))[:2000],
-                    completed_at=time.time(),
-                )
-                return
+                    verify_result = verify_result_2
+                else:
+                    # Still blocked after a genuine fix attempt — fail,
+                    # same as before, but note the attempt happened.
+                    try:
+                        from services.vanguard_audit import log_blocked_commit
+                        _db = get_db()
+                        if _db is not None:
+                            await log_blocked_commit(
+                                _db,
+                                user_id=str(proj.get("user_id") or "unknown"),
+                                project=f"{owner}/{repo}@{branch}",
+                                verify_result=verify_result_2,
+                                project_id=str(proj.get("project_id")) if proj.get("project_id") else None,
+                                task_id=task_id,
+                            )
+                    except Exception as _ae:
+                        logger.warning("vanguard_audit log failed: %r", _ae)
+                    # Surface up to 5 critical/high findings in the log
+                    critical = [f for f in verify_result_2.get("findings", [])
+                                 if f.get("severity") in ("CRITICAL", "HIGH")][:5]
+                    for f in critical:
+                        await _log(
+                            task_id,
+                            f"  • [{f.get('severity')}] {f.get('file','?')}"
+                            f":{f.get('line','?')} — {f.get('rule', f.get('name','issue'))}"
+                            f" — {f.get('message','')[:120]}",
+                            "error",
+                        )
+                    await _set_status(
+                        task_id, status="failed",
+                        error=("Vanguard verify agent blocked commit "
+                               "(auto-fix attempted, still blocked):\n"
+                               + verify_result_2.get("summary", ""))[:2000],
+                        completed_at=time.time(),
+                    )
+                    return
         except Exception as _ve:
             # Verify-agent infra error is NOT a security finding — fall
             # through but log loudly so we know it isn't gating commits.
@@ -3696,6 +3765,119 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
             return
         await _log(task_id, f"✏️ {len(edits)} files to update", "success")
 
+        # iter 111 / 2026-08-25 parity fix — the git-subprocess path was
+        # MISSING the Vanguard verify agent entirely (it only ran on the
+        # git-less API fallback path). Since `_run_task_with_git` is the
+        # worker every host with `git` installed actually uses (i.e. the
+        # real runtime path), this is where the security gate — and the
+        # new auto-fix-and-reverify self-correction loop — must live for
+        # the feature to genuinely fire in production, not just on the
+        # rarely-used fallback.
+        try:
+            await _log(task_id, "🛡️ Vanguard verify agent reviewing patch…")
+            from services.vanguard_verify_agent import verify_patch
+            _vg_mode = "maxx" if maxx_mode else "swift"
+            verify_result = await verify_patch(
+                edits, repo_ctx=f"{owner}/{repo}@{branch}",
+                mode=_vg_mode, base_blocks=contents,
+            )
+            await _log(task_id, f"🛡️ Verify: {verify_result['summary']}",
+                       "info" if verify_result["pass"] else "error")
+            if not verify_result["pass"]:
+                # 2026-08-25 — same genuine self-correction pass as the
+                # API path: feed the LLM the EXACT findings, regenerate
+                # only the affected files, re-verify once before failing.
+                _findings_for_fix = verify_result.get("findings", []) or []
+                _e2b_pre = verify_result.get("e2b") or {}
+                _fix_lines = [
+                    f"- {f.get('file','?')}:{f.get('line','?')} "
+                    f"[{f.get('severity','?')}] {f.get('rule', f.get('name','issue'))}: "
+                    f"{f.get('message','')[:200]}"
+                    for f in _findings_for_fix[:10]
+                ]
+                if not _e2b_pre.get("pass", True) and not _e2b_pre.get("skipped", True):
+                    _fix_lines.append(
+                        f"- E2B smoke-import failed: {(_e2b_pre.get('stderr') or '')[:300]}"
+                    )
+                await _log(
+                    task_id,
+                    "🔧 Vanguard/E2B blocked the commit — attempting one "
+                    "automatic fix before failing…",
+                    "warning",
+                )
+                _vg_nudge = (
+                    "The previous version of your patch was BLOCKED by a "
+                    "security/quality review with these EXACT findings:\n"
+                    + "\n".join(_fix_lines)
+                    + "\n\nFix EVERY finding above. Output the COMPLETE "
+                      "corrected file(s) using the same FILE: <path>\n```\n…\n``` "
+                      "format. Only re-output files that need the fix."
+                )
+                verify_result_2 = verify_result
+                try:
+                    _vg_reply = await _retry(
+                        lambda: call_llm(
+                            messages=[{"role": "user",
+                                       "content": user_msg + "\n\n" + _vg_nudge}],
+                            system=_AI_SYS, max_tokens=3500, temperature=0.0,
+                        ),
+                        what="Vanguard auto-fix retry", task_id=task_id,
+                    )
+                    _vg_edits = parse_file_blocks(_vg_reply)
+                    if _vg_edits:
+                        edits.update(_vg_edits)
+                        verify_result_2 = await verify_patch(
+                            edits, repo_ctx=f"{owner}/{repo}@{branch}",
+                            mode=_vg_mode, base_blocks=contents,
+                        )
+                except Exception as _vgfe:
+                    logger.warning("Vanguard auto-fix attempt (git path) crashed: %r", _vgfe)
+
+                if verify_result_2["pass"]:
+                    await _log(
+                        task_id,
+                        "✅ Auto-fix resolved the blocked finding(s) — "
+                        "re-verified clean, proceeding to commit.",
+                        "success",
+                    )
+                    verify_result = verify_result_2
+                else:
+                    try:
+                        from services.vanguard_audit import log_blocked_commit
+                        _db = get_db()
+                        if _db is not None:
+                            await log_blocked_commit(
+                                _db,
+                                user_id=str(proj.get("user_id") or "unknown"),
+                                project=f"{owner}/{repo}@{branch}",
+                                verify_result=verify_result_2,
+                                project_id=str(proj.get("project_id")) if proj.get("project_id") else None,
+                                task_id=task_id,
+                            )
+                    except Exception as _ae:
+                        logger.warning("vanguard_audit log failed: %r", _ae)
+                    critical = [f for f in verify_result_2.get("findings", [])
+                                 if f.get("severity") in ("CRITICAL", "HIGH")][:5]
+                    for f in critical:
+                        await _log(
+                            task_id,
+                            f"  • [{f.get('severity')}] {f.get('file','?')}"
+                            f":{f.get('line','?')} — {f.get('rule', f.get('name','issue'))}"
+                            f" — {f.get('message','')[:120]}",
+                            "error",
+                        )
+                    await _set_status(
+                        task_id, status="failed",
+                        error=("Vanguard verify agent blocked commit "
+                               "(auto-fix attempted, still blocked):\n"
+                               + verify_result_2.get("summary", ""))[:2000],
+                        completed_at=time.time(),
+                    )
+                    return
+        except Exception as _ve:
+            logger.warning("vanguard verify agent (git path) crashed: %r", _ve)
+            await _log(task_id, f"⚠️ Vanguard verify agent crashed: {type(_ve).__name__}", "warning")
+
         # 4) write
         for path, content in edits.items():
             fp = repo_path / path
@@ -3739,7 +3921,12 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
             )
             from services.ora_chat.tool_output_wrapper import wrap_edited_files
             rich_changes = build_files_changed(contents, edits)
-            findings_clean = shape_vanguard_findings([], status="fixed")
+            findings_clean = shape_vanguard_findings(
+                (verify_result.get("findings", []) if "verify_result" in locals() else []),
+                status=("blocked" if "verify_result" in locals()
+                        and not verify_result.get("pass", True)
+                        else "fixed"),
+            )
             hunk_files = []
             for _path, _after in (edits or {}).items():
                 _before = (contents or {}).get(_path)

@@ -5643,3 +5643,53 @@ retry (internal `_retry()` and the user's manual Retry button) reproduced the id
   Production project/task aren't present in this Preview's local Mongo. The raw-error-leak root cause above
   is fully confirmed and fixed; whether the Q&A-mismatch is the same incident's visible confusion during
   retries, or a distinct bug, needs an actual session/conversation trace if it recurs.
+
+## 2026-08-25 (continued) — Priority correction: real diagnose-and-fix, not escalation-first
+
+Founder corrected priority: circuit-breaker/human-escalation is a LAST RESORT, never the primary
+response — AUREM's differentiation is fixing code itself, not "contact support."
+
+**Honest evidence on the core question (Mode D auto-trigger on failure):**
+- CONFIRMED via code (routers/chat.py:441-454, 1923-1975): Mode D only fires on a chat-message debug
+  signal, never auto-triggered by a `cto_tasks` failure — this was a real gap.
+- CONFIRMED: for the SPECIFIC 'str' object has no attribute 'get' bug, no version of "auto-trigger Mode D"
+  would have helped — the bug lived in AUREM's own backend (openrouter_providers.py), and Mode D's
+  `read_file()` / Mode C's commit path both operate ONLY on the customer's connected repo via their GitHub
+  App token, by design (a customer-facing agent must never have write access to AUREM's own production
+  infra — hard security boundary, not a capability gap). The correct/only fix path for that bug was exactly
+  what happened: a main-agent code change to AUREM's own source.
+- LIKELY (not confirmed — needs an actual conversation trace): Mode D's diagnosis prompt explicitly tells
+  the LLM to "prefer a probing answer over a refusal" even with weak signal — flagged as a real,
+  independent trust concern (should prefer honest "not enough information" over a wrong guess when signal
+  is weak) — logged as a small non-urgent follow-up, not built this pass.
+- Fixed a second raw-error leak of the same class at chat.py:1976 (Mode D's own exception handler embedded
+  `str(_de)` raw into the chat reply) — now uses `error_classifier.classify_error()`.
+
+**Real, correctly-scoped Priority 1 — shipped + testing_agent verified (iteration_379 found a critical
+parity gap, iteration_380 confirmed the fix, 14/14 pass):**
+- NEW genuine self-correction loop: when Vanguard verify agent blocks a commit OR E2B smoke-import fails
+  on the CUSTOMER's own generated code (this — unlike AUREM's own infra bugs — is squarely within the
+  task-execution agent's real jurisdiction), the worker now makes ONE automatic fix attempt: feeds the LLM
+  the EXACT findings (file:line/severity/rule/message + E2B stderr), regenerates only the affected files,
+  and re-runs `verify_patch()`. If it now passes, the task proceeds to commit/ship normally. If still
+  blocked, it fails with "(auto-fix attempted, still blocked)" — always through error_translator, never raw.
+- Shipped in BOTH task workers: `_run_task_via_api` (git-less fallback) AND `_run_task_with_git` (the real
+  runtime path on any host with git installed — iteration_379 caught that the first pass only landed in the
+  API-only path, which is dead code on virtually every real host; iteration_380 confirmed parity).
+- Downstream `shape_vanguard_findings` on the git path was also hardcoded to `[]`/"fixed" regardless of
+  outcome — now reports the real findings and real pass/fail status, and correctly reflects the post-fix
+  result (not the stale pre-fix blocked result) when auto-fix succeeds.
+- NEW `services/failure_signature.py`-adjacent read-only admin endpoints:
+  `GET /admin/users/{user_id}/chat-sessions` and `GET /admin/chat-sessions/{session_id}` — founder can pull
+  a session's full `turns` array from the browser (admin-gated) to trace the still-open "ORA answered an
+  unrelated question" symptom directly, without needing raw DB access or agent-mediated data.
+
+**Still NOT built this pass (unchanged from earlier — proposal only, explicit founder direction):**
+- Checkpointed OUTER retry (the user-facing Retry button still creates a brand-new task from scratch;
+  the INNER auto-fix loops above do NOT restart from scratch since they're additional LLM calls within the
+  same task run — so Priority 2's concern is naturally satisfied for the new diagnose-and-fix loop itself).
+- Human/support escalation UI, production-wide failure-signature query endpoint, incident_log wiring,
+  Mode D "prefer honest uncertainty over a guess" prompt tweak — all logged, not built.
+- "ORA answered two unrelated questions" — still UNCERTAIN. Founder is pulling the actual `chat_sessions`
+  turns array via the new admin endpoints above (browser-side, admin-only) and will paste redacted data for
+  a follow-up trace.

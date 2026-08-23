@@ -826,3 +826,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `AUREM_DRILL_INSTALLATION_ID` — auto-detected in backend/services/rollback_drill.py (verify) (default: unset) [Iter 0, 2026-08-22T20:14:04.623106Z] <!-- inv:envvar:AUREM_DRILL_INSTALLATION_ID -->
 - `AUREM_DRILL_TOKEN` — auto-detected in backend/services/rollback_drill.py (verify) (default: unset) [Iter 0, 2026-08-22T20:14:04.623134Z] <!-- inv:envvar:AUREM_DRILL_TOKEN -->
 | `routers/github_auth_migration.py` | `/admin/github-auth` | 2 | auto-detected new router (verify) (Iter 0, 2026-08-22T21:13:41.643891Z) | <!-- inv:router:routers/github_auth_migration.py -->
+
+### Iter 0 · 2026-08-23
+
+- `services/failure_signature.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-23T23:42:42.760231Z] <!-- inv:service:services/failure_signature.py -->

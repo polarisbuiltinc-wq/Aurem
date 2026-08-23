@@ -1,0 +1,27 @@
+{
+  "summary": "Verified iter 380 parity fix: Vanguard verify_patch + auto-fix-and-reverify loop now wired into _run_task_with_git (the real runtime path when git is available) at parity with _run_task_via_api, and downstream shape_vanguard_findings now uses REAL findings + real pass/fail status instead of the previous hardcoded `[] , status='fixed'`. Extended the existing test file with 3 new deep source-level assertions. 14/14 tests pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter_vanguard_autofix_and_admin_chat.py",
+    "/app/test_reports/pytest/iter_vanguard_autofix_v2.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Verified: still-blocked branch on git path executes `return` BEFORE any `git add`/`git commit`/`git push` — no risk of a blocked patch being pushed.",
+    "Verified: on auto-fix success, `verify_result = verify_result_2` reassignment happens so downstream shape_vanguard_findings reports 'fixed' with resolved (post-fix) findings, not the stale pre-fix blocked findings.",
+    "Verified: shape_vanguard_findings call on git path (line ~3924) uses `verify_result.get('findings', [])` with a ternary status ('blocked' if not verify_result.get('pass', True) else 'fixed'); the previously hardcoded `shape_vanguard_findings([], status='fixed')` is gone.",
+    "Verified: iter 378 regressions intact — services/llm/openrouter_providers.py isinstance dict-guard present; services/error_classifier.py and services/failure_signature.py both still present.",
+    "LIVE end-to-end reproduction remains blocked by the pre-existing environment limitation from iter 379 (GitHub App/PAT installations rejected by pre-flight validation as 'installation may have been revoked'). Depth of proof is source-level + mechanism-wired, identical to what was accepted for the API path in iter 379."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter_vanguard_autofix_and_admin_chat.py"
+  ],
+  "success_rate": {"backend": "100% (14/14)", "frontend": "n/a (backend-only test)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (test_admin_001, is_admin=true) — auth-fixture-backed tests all passed",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_iter_vanguard_autofix_and_admin_chat.py now has 14 tests covering: (a) API-path auto-fix source lock, (b) git-path auto-fix source lock with 3 new deep parity assertions including return-before-git-add ordering + shape_vanguard_findings real-findings usage + iter 378 non-regression, (c) chat.py Mode D classify_error usage, (d) admin chat-session endpoints live HTTP (auth, 404, shape, public-URL registration). Runtime path is _run_task_with_git since _GIT_AVAILABLE=True in this environment.",
+  "rca of the issue": "iter 379 root cause was scope: the auto-fix block existed only in _run_task_via_api, but _run_task (dispatcher) selects _run_task_with_git whenever git is installed (true on this preview and virtually every host). Fix: insert the identical verify_patch + auto-fix-and-reverify block into _run_task_with_git between the 'files to update' log and the file-write loop, and update the downstream shape_vanguard_findings call to use real findings + real status. Verified by source-level parity assertions on both paths."
+}

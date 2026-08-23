@@ -1,0 +1,42 @@
+{
+  "summary": "Tested the 2026-08-25 (post-378) additive changes: (A) Vanguard/E2B auto-fix-and-reverify loop in cto_projects._run_task_via_api, (B) chat.py Mode D exception raw-error leak fix #2, (C) two new read-only admin chat-session endpoints in admin_users.py. Wrote /app/backend/tests/test_iter_vanguard_autofix_and_admin_chat.py — 11 tests, 10 PASS, 1 FAIL (the failure is an intentional PARITY-GAP assertion and is the single biggest finding of this round). Live task-submit reproduction of the eval() prompt was NOT possible: every candidate project for test_admin_001 (p_demo_a github_app, p_norepotest, and all p_* PAT-mode projects with owner='owner'/repo='test-repo') is currently rejected by the pre-flight GitHub App / PAT validation guard with `This project's GitHub App access isn't available — the installation may have been revoked...` — confirming the pre-existing 'no real GitHub write access in this preview' constraint the request warned about. Per request I therefore fell back to source-lock proofs.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "routers/cto_projects.py :: _run_task_with_git (~line 3617-3947)",
+        "issue": "PARITY GAP — the NEW Vanguard/E2B auto-fix loop lives ONLY inside `_run_task_via_api` (line 3121-3229). `_run_task_with_git` (the git-subprocess worker) has NO `verify_patch()` call AT ALL — no Vanguard verify agent, no E2B smoke-import, and therefore no auto-fix branch. The dispatcher `_run_task` at line 2399 picks `_run_task_with_git` whenever `_GIT_AVAILABLE` is True, and git IS installed in this preview (`/usr/bin/git` present, `_GIT_AVAILABLE = True` confirmed via import). This means on any host that has git (i.e. the actual production/preview runtime), submitting a Ship-via-CTO task with a Vanguard-tripping prompt bypasses the Vanguard verify agent entirely and will never enter the new auto-fix branch — the customer-facing self-correction feature does not fire on the real runtime code path. The change as-shipped only takes effect on hosts where git is NOT installed (the API-only fallback path). This directly contradicts the acceptance bar of the request.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter_vanguard_autofix_and_admin_chat.py",
+    "/app/test_reports/pytest/vanguard_autofix_and_admin_chat.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Move (or duplicate) the Vanguard verify_patch() call + the new auto-fix retry loop from `_run_task_via_api` into `_run_task_with_git` so the feature actually runs on the git-subprocess path — otherwise on every host with git installed (which is the norm) the auto-fix branch is dead code. Suggested insertion point: after the parse_file_blocks/edits block around line 3766 in `_run_task_with_git`, right before the `git add` step at line 3779. The verify_patch call needs `edits` + `contents` (both already in scope) + `_vg_mode` derived from `maxx_mode`. On successful re-verify, fall through to the existing commit/push; on still-blocked, `_set_status(status='failed', error=...)` and return before the git-add — same shape as the API-path branch.",
+    "OPTIONAL: Once the git-path parity fix lands, main agent should re-run this same test file — the `test_run_task_with_git_verify_patch_parity` assertion will flip to PASS automatically.",
+    "OPTIONAL live-repro: Provision a real preview-scoped GitHub App installation on a throwaway repo so the auto-fix branch can be exercised end-to-end (currently no project for test_admin_001 has real write access — pre-flight guard rejects every candidate)."
+  ],
+  "critical_code_review_comments": [
+    "The auto-fix branch in `_run_task_via_api` (line 3127-3229) is well-structured: correct findings-summary nudge (file:line/severity/rule/message + E2B stderr), single genuine LLM retry via `_retry(call_llm(...), what='Vanguard auto-fix retry')`, `edits.update(_vg_edits)` merge, second real `verify_patch()` call, and clear success-vs-still-blocked branching with the required user-facing phrasing ('auto-fix attempted, still blocked'). The mechanism is genuine, not cosmetic.",
+    "Parity gap (see CRITICAL above): the exact same code path does not exist in `_run_task_with_git`, which is the runtime worker on 99% of hosts. This is the single biggest miss of the round.",
+    "chat.py Mode D leak fix #2 is correct: raw f-string `f\"Couldn't diagnose: {_de}\"` replaced with `classify_error(_de)['user_message']` sanitisation, same pattern as iter 378. Verified via source-lock test.",
+    "admin_users.py endpoints: `admin_list_chat_sessions` strips the `turns` array from the list projection but computes `turn_count` from it before stripping — correct trade-off (no leak of message bodies in the list view). `admin_get_chat_session` returns full doc with `_id` excluded and 404s on missing. Both are gated by both router-level `Depends(require_admin_dep)` AND the inline `await _require_admin(authorization)` (defence-in-depth). Confirmed 401/403 without token, 200 with correct shape for admin token, 404 for unknown session_id."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter_vanguard_autofix_and_admin_chat.py (NEW, 11 tests: 10 pass + 1 intentional-fail parity guard)"
+  ],
+  "success_rate": {
+    "backend": "10/11 tests pass (91%) — the 1 failure is an intentional parity-gap assertion flagging the CRITICAL bug above",
+    "frontend": "not tested (backend-only round per request)"
+  },
+  "test_credentials": "test@aurem.dev / AuremTest2026! (test_admin_001, is_admin=true, tier=founder — confirmed via /auth/login response)",
+  "seed_data_creation": "none",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The auto-fix loop code inside `_run_task_via_api` (cto_projects.py line 3127-3229) is verified correct at the source level — it genuinely (1) logs the '🔧 attempting one automatic fix' step, (2) embeds real findings into the nudge, (3) calls the LLM again with what='Vanguard auto-fix retry', (4) merges edits and re-runs verify_patch, (5) branches to success (fall-through, verify_result=verify_result_2) or still-blocked failure ('auto-fix attempted, still blocked'). BUT the runtime dispatcher `_run_task` picks `_run_task_with_git` whenever `_GIT_AVAILABLE=True` (which it is in this preview and every production host with git), and `_run_task_with_git` has NO verify_patch call. So the feature does not fire in practice. Once main agent adds parity, retest with the same test file — the parity assertion will auto-flip to PASS. LIVE task-submit repro on this preview is blocked by pre-flight GitHub App validation on every project belonging to test_admin_001; the /cto/tasks/submit endpoint returns HTTP 400 with 'This project's GitHub App access isn't available' before any worker code runs, so a real repro requires a fresh preview-only GitHub App installation.",
+  "rca of the issue": "The developer implemented the Vanguard auto-fix loop ONLY inside `_run_task_via_api` (the API-only worker). The dispatcher `_run_task` at line 2399 delegates to `_run_task_with_git` whenever git is present on PATH — and that path never had a Vanguard verify_patch call (see grep: `verify_patch(` occurrences are all inside lines 3121-3229, i.e. inside `_run_task_via_api`). Root cause: parity-gap — a feature meant for BOTH workers was added to only one. Fix: replicate the Vanguard verify + auto-fix block after `parse_file_blocks` and before the `git add` step in `_run_task_with_git`, using the already-in-scope `edits`, `contents`, `owner`, `repo`, `branch`, `maxx_mode` and `_AI_SYS`, `user_msg`, `call_llm`, `_retry`."
+}

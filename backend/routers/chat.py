@@ -1974,8 +1974,12 @@ async def chat_stream(
                                 github_pat=pat,
                             )
                         except Exception as _de:
+                            # 2026-08-25 — same root-cause fix as the
+                            # cto_projects.py task pipeline: never embed a
+                            # raw exception string in a reply the user sees.
+                            from services.error_classifier import classify_error
                             d_result = {
-                                "ora_reply": f"Couldn't diagnose: {_de}",
+                                "ora_reply": f"Couldn't diagnose: {classify_error(_de)['user_message']}",
                                 "can_auto_fix": False, "commit_task": "",
                                 "severity": "unknown", "fast_path_used": False,
                             }

@@ -1225,3 +1225,43 @@ async def admin_dev_users_created_at_health(
         "healthy": (by_type.get("date", 0) == 0
                     and by_type.get("missing", 0) == 0),
     }
+
+
+@router.get("/users/{user_id}/chat-sessions")
+async def admin_list_chat_sessions(
+    user_id: str, authorization: Optional[str] = Header(None),
+) -> dict:
+    """2026-08-25 — read-only admin lookup so a founder can find the
+    right `session_id` to inspect for a support/incident investigation
+    (e.g. tracing a reported mismatched-answer bug), without needing
+    direct DB access. Returns newest-first, capped at 50."""
+    await _require_admin(authorization)
+    db = require_db()
+    rows = await db.chat_sessions.find(
+        {"user_id": user_id},
+        {"_id": 0, "session_id": 1, "title": 1, "created_at": 1,
+         "updated_at": 1, "project_id": 1, "turns": 1},
+    ).sort("updated_at", -1).limit(50).to_list(50)
+    for r in rows:
+        r["turn_count"] = len(r.pop("turns", None) or [])
+    return {"ok": True, "sessions": rows}
+
+
+@router.get("/chat-sessions/{session_id}")
+async def admin_get_chat_session(
+    session_id: str, authorization: Optional[str] = Header(None),
+) -> dict:
+    """2026-08-25 — read-only admin lookup of a single session's full
+    `turns` array. Founder-only (same guard as every other /admin/*
+    route). Used for incident investigation, e.g. confirming/denying a
+    reported "ORA answered an unrelated question" mismatch by
+    inspecting the actual turn history and timestamps."""
+    await _require_admin(authorization)
+    db = require_db()
+    doc = await db.chat_sessions.find_one(
+        {"session_id": session_id}, {"_id": 0},
+    )
+    if not doc:
+        raise HTTPException(404, "Session not found")
+    return {"ok": True, "session": doc}
+
