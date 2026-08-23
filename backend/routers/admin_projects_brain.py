@@ -351,10 +351,14 @@ async def architecture_health(
                        (useful for one-line Admin tab headlines).
     """
     await _require_admin(authorization)
+    import asyncio
     from services.architecture_health import (
         run_health_report, summarise,
     )
-    report = run_health_report()
+    # 2026-08-23 — was calling run_health_report() synchronously inside
+    # this async handler, blocking the event loop for the whole scan.
+    # See services/health_score.py for the full incident writeup.
+    report = await asyncio.to_thread(run_health_report)
     if summary:
         return {"ok": True, "summary": summarise(report),
                 "counts": {

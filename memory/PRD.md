@@ -4,6 +4,40 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
 
+## 2026-08-23 (later still) — BUG FIX: "Codebase Health Score timeout of 40000ms exceeded"
+
+**Root cause (confirmed live)**: `services/health_score.py`'s
+`score_code_quality()` and `score_architecture()` each called
+`architecture_health.run_health_report()` — a fully synchronous,
+multi-pass full-codebase file walk (line-count + radon complexity +
+import-graph scans of `/app/backend` AND `/app/frontend/src`, each
+file read up to 3-4× total) — directly inside an `async def` handler,
+with NO thread offload. This ran the whole scan TWICE per
+`GET /admin/health-score` request and blocked the single uvicorn
+event loop for its entire duration, starving every other concurrent
+request on the pod (including nginx's own `/health` liveness probe →
+"upstream timed out" errors, and other in-flight requests → the
+`RuntimeError('No response returned.')` seen in `_global_rate_limit_
+guard`, which is the middleware's symptom once a client — the frontend
+axios call with a 40000ms timeout — gives up and disconnects mid-wait).
+Same synchronous-call bug also existed in `routers/admin_projects_
+brain.py`'s `/admin/architecture-health` endpoint.
+
+**Fix**:
+- `score_code_quality()` / `score_architecture()` now run
+  `run_health_report()` via `asyncio.to_thread()` (same pattern
+  `score_security()`'s g21 scan already used correctly).
+- `get_health_score()` now runs the scan ONCE and shares the report
+  between `code_quality` + `architecture` (previously ran twice).
+- `routers/admin_projects_brain.py::architecture_health()` — same
+  `asyncio.to_thread()` fix.
+
+**Verified live** (preview): concurrent test — fired
+`GET /admin/health-score` in the background while polling `GET
+/health` every second. `/health` stayed 100-190ms throughout; the
+health-score call itself completed in 6.8s (well under the 40s client
+timeout), returning a valid `overall_score` with all 9 categories.
+
 ## 2026-08-23 (later) — ORA GUIDE suggestions moved from Ask Advisor sidebar → floating mascot bubble
 
 Founder request (Urdu/Hinglish): move the red-circled "ORA GUIDE"

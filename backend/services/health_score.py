@@ -280,9 +280,21 @@ async def score_test_coverage(db) -> dict:
 
 
 # ── 5. Code Quality — LIVE, run_health_report() re-scans on every call ─
-async def score_code_quality(db) -> dict:
-    from services.architecture_health import run_health_report
-    report = run_health_report()
+# 2026-08-23 · BUG FIX — run_health_report() walks + reads every backend
+# AND frontend source file (multiple passes: line-count, radon
+# complexity, import graph). Calling it synchronously inside an async
+# def handler blocks the whole uvicorn event loop for the entire scan
+# (10-30s+), starving every other concurrent request AND nginx's own
+# /health liveness probe — this is exactly what produced "timeout of
+# 40000ms exceeded" on the frontend plus "No response returned" /
+# "upstream timed out" errors on unrelated requests. Fixed by running
+# it in a worker thread (asyncio.to_thread — same pattern score_security
+# already used for g21) so the event loop stays responsive.
+async def score_code_quality(db, report: Optional[dict] = None) -> dict:
+    if report is None:
+        import asyncio
+        from services.architecture_health import run_health_report
+        report = await asyncio.to_thread(run_health_report)
     bloated = len(report["bloated_files"])
     complex_hits = len(report["complexity_hits"])
     total_files = max(1, report["total_files"])
@@ -412,9 +424,15 @@ async def score_performance(db) -> dict:
 
 
 # ── 8. Architecture — automated half LIVE + qualitative review-log ────
-async def score_architecture(db) -> dict:
-    from services.architecture_health import run_health_report
-    report = run_health_report()
+# 2026-08-23 · same event-loop-blocking bug as score_code_quality above
+# — offloaded to a worker thread; also accepts a pre-computed `report`
+# so get_health_score() can run the (expensive) scan ONCE and share it
+# with score_code_quality instead of scanning the whole codebase twice.
+async def score_architecture(db, report: Optional[dict] = None) -> dict:
+    if report is None:
+        import asyncio
+        from services.architecture_health import run_health_report
+        report = await asyncio.to_thread(run_health_report)
     circ = len(report["circular_imports"])
     bnd = len(report["boundary_violations"])
     auto_score = 100 - (circ * 15 + bnd * 3)
@@ -574,15 +592,22 @@ async def _ci_pass_rate_30d() -> dict:
 
 # ── overall roll-up ─────────────────────────────────────────────────────
 async def get_health_score(db) -> dict:
+    import asyncio
+    from services.architecture_health import run_health_report
+    # Run the expensive full-codebase scan ONCE, off the event loop, and
+    # share it between code_quality + architecture (previously each ran
+    # its own synchronous, on-event-loop copy of this scan — see the
+    # 2026-08-23 fix notes on both functions above).
+    shared_report = await asyncio.to_thread(run_health_report)
     categories = {
         "security":      await score_security(db),
         "bug_density":   await score_bug_density(db),
         "reliability":   await score_reliability(db),
         "test_coverage": await score_test_coverage(db),
-        "code_quality":  await score_code_quality(db),
+        "code_quality":  await score_code_quality(db, report=shared_report),
         "data_handling": await score_data_handling(db),
         "performance":   await score_performance(db),
-        "architecture":  await score_architecture(db),
+        "architecture":  await score_architecture(db, report=shared_report),
         "devops_infra":  await score_devops_infra(db),
     }
     scored_weight = sum(WEIGHTS[k] for k, v in categories.items() if v["status"] == "scored")
