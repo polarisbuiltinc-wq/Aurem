@@ -236,6 +236,21 @@ async def restore_to_scratch(
     except Exception as e:
         logger.exception("restore_to_scratch failed")
         result["error"] = repr(e)
+        # 2026-08-24 root-cause fix: cleanup used to run ONLY on the
+        # success path (step 3 above) — any drill that failed or timed
+        # out partway through the parse+insert loop left its entire
+        # scratch copy permanently orphaned (this is exactly how we
+        # accumulated 48,297 leftover `_restore_scratch_*` collections
+        # / ~6.5GB before this fix). Drop them here too, scoped strictly
+        # to `scratch_prefix` — never touches real data.
+        try:
+            cleanup_client = AsyncIOMotorClient(mongo_url)
+            try:
+                await _drop_prefixed(cleanup_client[source_db])
+            finally:
+                cleanup_client.close()
+        except Exception:
+            pass
         return result
     finally:
         try:

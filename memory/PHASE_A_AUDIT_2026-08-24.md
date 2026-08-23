@@ -179,4 +179,23 @@ This is the proof requested: order no longer changes the outcome at all. The rem
 - A handful of `test_iter173_mcp_server.py`/`test_iter174_mcp_apikey.py` failures are pre-existing product-branding string drift (`"ORA by Aurem"` vs `"ORA by Aurem CTO"` in `.well-known/mcp` responses) — confirmed via `git diff` that this session's edits to those 2 files touched only the new autouse fixture, nothing else; unrelated to Category C.
 - The rest are the same pre-existing failures documented earlier in this file (Category A/B-adjacent files not yet fixed in this batch, e.g. `test_iter211`, `test_iter212m114/169/170/173/225`, `test_iter367`, `test_pat_removal_full_2026_01`).
 
-**Ledger note:** `memory/code_quality_ledger.md` doesn't track test-suite-hygiene rows (it's a coverage/complexity ledger for source files), so this fix is recorded here in the audit doc rather than the ledger. `memory/PRD.md` updated with a pointer to this file.
+## 2026-08-24, round 4 — /data/db disk incident: root cause found, fixed, verified
+
+**What happened:** while investigating the requested collection breakdown, `/app`'s disk (shared 9.8G device with `/data/db`) hit literal 0 bytes free and mongod crash-looped repeatedly. Founder approved (in order): clearing `/data/db/journal/` (364MB of WiredTiger WAL, not data) to let mongod restart at all, then the investigation itself once stable.
+
+**Real breakdown (via `dbStats` + `collStats`, mongod confirmed healthy first via a real `ping`+`serverStatus` query, not just process-running):**
+- `_restore_scratch_*` collections: **48,297** — storage ~4.72GB, index ~1.89GB. 100% disposable.
+- `_test_bson_*`/`_test_empty_*`/`_test_large_*`: 38 collections, ~7MB. Disposable test-harness leftovers.
+- Real app collections: **157**, only 12.8MB storage / 25MB data / **69,268 real documents** (`dev_users`, `cto_projects`, `chat_sessions`, etc.) — untouched, verified intact after cleanup (`dev_users`: 605 docs, `cto_projects`: 31 docs).
+
+**Root cause:** `backend/services/restore_drill_cron.py` (weekly cron, or once per pod boot in dev) calls `db_restore.restore_to_scratch()`, which copies the whole DB into `_restore_scratch_<timestamp>_*` collections for verification, then is *supposed* to drop them. The cleanup call only ran on the success path — the `except Exception` handler had no cleanup fallback, so any failed/timed-out drill (confirmed via `restore_drill_history`: repeated `R2 download 404` errors, 43 logged runs) left its scratch copy permanently orphaned. Each run's prefix is a unique timestamp, so no future run ever cleans up a previous run's leftovers — structurally guaranteed to only accumulate. ~57 failed generations accumulated this.
+
+**Fixed:** `backend/services/db_restore.py`'s `except Exception` handler now also calls `_drop_prefixed()` via a fresh Motor client, scoped strictly to that run's `scratch_prefix` — never touches real collections.
+
+**Live-reproduced:**
+- Deletion: `dbStats.collections` 48,492 → **157** exactly (48,297 + 38 dropped, 0 remaining). `storageSize` 4740MB → 12.87MB, `indexSize` 1900MB → 12.98MB.
+- Real disk freed: `/app` avail **63MB → 3.4GB free** (35% used, down from 100%) — real, verified, not estimated.
+- Bug fix: simulated a mid-insert failure (truncated/corrupt archive → `unexpected EOF`, `result["ok"]=False`) via a fake R2 client — confirmed **zero leftover scratch collections** after the simulated failure (previously this exact failure shape is what created the 48K-collection pileup).
+- mongod stability: same PID held for 9+ minutes post-recovery, real `ping`/`serverStatus` queries succeeding throughout, no further crashes.
+
+**Disk headroom now**: 6.4GB free (down from a dangerous ~0). Resuming Phase B (chat.py/cto_projects.py coverage push to 80% tier target) with this headroom, but will keep monitoring since `/data/db` growth is still the long-term structural risk if the drill runs again and any OTHER failure mode exists beyond what was fixed.
