@@ -36,6 +36,7 @@ export default function RevokedRepoBanner({ activeProject }) {
   const [reason, setReason]     = useState(null);
   const [installationId, setInstallationId] = useState(null);
   const [reconnecting, setReconnecting] = useState(false);
+  const [popupBlocked, setPopupBlocked] = useState(false);
   const popupRef = useRef(null);
 
   const projectId = activeProject?.project_id;
@@ -72,6 +73,7 @@ export default function RevokedRepoBanner({ activeProject }) {
   async function reconnect() {
     const token = getToken();
     if (!token) return;
+    setPopupBlocked(false);
     setReconnecting(true);
     const url = `${API_BASE}/github/app/install?auth=${encodeURIComponent(token)}`;
     const w = 720, h = 800;
@@ -81,6 +83,17 @@ export default function RevokedRepoBanner({ activeProject }) {
       url, "aurem_github_app_reconnect",
       `width=${w},height=${h},left=${left},top=${top}`,
     );
+
+    // Rule 6 — no silent failures. A blocked popup makes `window.open`
+    // return null/undefined synchronously with no thrown error and no
+    // console message, so this is the ONLY reliable place to detect it.
+    // Without this check, `reconnecting` would stay true and silently
+    // poll for up to 180s with no visible feedback to the user.
+    if (!popupRef.current) {
+      setReconnecting(false);
+      setPopupBlocked(true);
+      return;
+    }
 
     const finishIfCovered = async () => {
       try {
@@ -152,6 +165,7 @@ export default function RevokedRepoBanner({ activeProject }) {
   const suspended = reason === "installation_suspended";
 
   return (
+    <>
     <div
       data-testid="revoked-repo-banner"
       style={{
@@ -212,5 +226,21 @@ export default function RevokedRepoBanner({ activeProject }) {
         </button>
       )}
     </div>
+    {popupBlocked && (
+      <div
+        data-testid="revoked-repo-popup-blocked"
+        style={{
+          display: "flex", alignItems: "center", gap: 8,
+          margin: "0 0 10px", padding: "8px 14px",
+          background: "rgba(245,158,11,0.08)",
+          border: "1px solid rgba(245,158,11,0.35)",
+          borderRadius: 8, fontSize: 12.5, color: "#fbbf24",
+        }}
+      >
+        <AlertTriangle size={14} style={{ flexShrink: 0 }} />
+        Popup blocked — please allow popups for this site and try again.
+      </div>
+    )}
+    </>
   );
 }
