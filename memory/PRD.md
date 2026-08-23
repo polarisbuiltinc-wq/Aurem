@@ -5221,3 +5221,14 @@ Founder shared boot logs from a deploy attempt showing ERROR-level lines ("RESTA
 - Fixed `incident_log.py` with an atomic pipeline-style `find_one_and_update(upsert=True)` (plain $set+$inc+$setOnInsert on the same field is rejected by MongoDB as `ConflictingUpdateOperators` — confirmed by a live test — so a pipeline update with $ifNull was used instead to preserve "new incident starts at recurrence=0" semantics).
 - **Verified live**: ran 3 concurrent calls against real Preview Mongo for both — zero exceptions, correct counters, single row created and reused. Backend restarted clean, `/health` 200 OK.
 - DB_NAME confirmed read cleanly from env var (`os.getenv("DB_NAME", "aurem_dev")`) with no pod-prefix construction in code — the "launch-pad-237-aurem_dev" name in the shared logs is an artifact of how this specific preview pod's Mongo was provisioned, not something the app builds; will not carry over to the Atlas-backed production DB_NAME.
+
+## 2026-08-25 — Onboarding-groups roadmap CLOSED (Group A/B/C real production segmentation)
+
+Real production data (64 total accounts, 5 test/QA excluded via `is_test_email()`, 59 real users) segmented into 3 groups, each traced and resolved:
+
+- **Group A — 46 users, zero connected projects.** CONFIRMED no action needed — `ConnectRepoBanner` + `NewUserWizard` Skip-for-now flow is reliable for all 46 by construction (pure "0 projects" check, no per-user flag that could selectively fail); live-tested end-to-end on a genuinely fresh Production signup this session.
+- **Group B — 10 users, healthy GitHub App connections** (`installation_active: true`). Confirmed no action, not touched.
+- **Group C — 3 users, stuck on legacy/never-migrated connections** (`installation_active: null`, `auth_method != "github_app"`), including the founder's own account. Root-caused via `pat_vault.py`'s `app_installation_missing` check — confirmed the existing "Reconnect GitHub App" button (already fixed for the popup-block bug earlier this session) fully resolves this, no separate migration step needed. **RESOLVED 2026-08-25**: 2 of the 3 (arsh9896sandhu@gmail.com, jvineet1025@gmail.com) sent a real targeted re-link email via the existing `POST /admin/users/email-offer` endpoint — founder-confirmed real send, `sent: 2, failed: 0`. The 3rd (founder's own account, teji.ss1986@gmail.com) intentionally excluded from the email batch — founder will reconnect directly.
+- Bundled cosmetic fix: `RevokedRepoBanner.jsx` headline now says "GitHub App not connected" instead of the misleading "GitHub access revoked" for this exact reason code — shipped in Preview, queued for the next Save-to-GitHub push (no urgency).
+
+**Full onboarding-groups roadmap is now closed** — all 3 groups traced with real evidence and either confirmed healthy or remediated. No further action pending on this initiative.
