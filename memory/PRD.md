@@ -5116,3 +5116,17 @@ Full detail in `memory/PHASE_A_AUDIT_2026-08-24.md`. Summary:
 
 ## 2026-08-24 — /data/db disk incident: root cause found + fixed, ~6.5GB reclaimed
 Full detail in `memory/PHASE_A_AUDIT_2026-08-24.md`. Preview's shared 9.8G device hit 0 bytes free (mongod crash-looping) while investigating founder's requested Mongo breakdown. Root cause: `restore_drill_cron.py`'s scratch-restore verification (`db_restore.py`) only cleaned up `_restore_scratch_*` collections on success — any failed/timed-out drill (43 logged runs, mostly `R2 download 404`) left its full-DB scratch copy permanently orphaned, since each run's prefix is a unique timestamp no future run ever revisits. Accumulated to **48,297 scratch collections + 38 test-harness leftovers = 96%+ of all disk usage**, vs only 157 real collections / 69,268 real documents / 12.8MB of actual app data. Founder approved: cleared `/data/db/journal/` (WAL, not data) to unblock mongod restart, deleted all 48,335 disposable collections (verified `dbStats.collections` 48,492→157, real docs intact), fixed `db_restore.py`'s exception handler to always run cleanup (live-simulated a failed drill — confirmed zero leftovers now). Real disk freed: 63MB→3.4GB free. mongod stable 9+ min post-fix, real ping/serverStatus confirmed.
+
+## 2026-08-25 — Phase B (chat.py/cto_projects.py exception + local_tools.py wave 2) ACCEPTED by founder — queued backlog, PAUSED pending go-ahead
+
+Founder accepted Phase B as a genuine milestone (real coverage numbers, documented exception with real E2E failure/retry evidence, testing_agent-verified twice — see `memory/CHANGELOG.md` 2026-08-25 entry and `memory/code_quality_ledger.md`'s "Phase B heavy-I/O exception" section for full detail).
+
+**Founder explicitly said: do NOT start any of the following yet. These are QUEUED BACKLOG ONLY, in this order, awaiting explicit go-ahead:**
+
+1. **Semantic Search Coverage** — add tests for `backend/services/local_tools.py`'s `semantic_search_repo` / `_index_tfidf_search` (the last documented real gap in that file; `_search_snapshot_sync` also still untested).
+2. **Loop Engine Next** — resume the tiered coverage pass on `backend/services/loop_engine.py`'s remaining scanned functions per the Phase B backlog.
+3. **CI Guardrail Check** — re-run the live GitHub Actions status check to confirm the 5 quality-gate jobs reflect this wave's changes.
+4. **Ship Reliability Dashboard** — surface the retry-after-failure pattern (branch/installation errors) as a friendly banner so founders self-diagnose before contacting support.
+
+No further agent action until founder resumes and picks from this list (or gives other instructions).
+
