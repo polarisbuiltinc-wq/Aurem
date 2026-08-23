@@ -163,6 +163,11 @@ export default function RevokedRepoBanner({ activeProject }) {
 
   const appLevel = APP_LEVEL_REASONS.has(reason);
   const suspended = reason === "installation_suspended";
+  // 2026-08-25 — cosmetic accuracy fix: "app_installation_missing" means
+  // this project was never connected via the App (legacy/pre-App-era
+  // row) — nothing was ever "revoked" here, so that headline was
+  // misleading. Give it its own accurate label.
+  const neverConnected = reason === "app_installation_missing";
 
   return (
     <>
@@ -181,9 +186,11 @@ export default function RevokedRepoBanner({ activeProject }) {
         <strong style={{ color: "#fff" }}>
           {suspended
             ? "GitHub App access paused"
-            : appLevel
-              ? "GitHub App installation removed"
-              : "GitHub access revoked"}
+            : neverConnected
+              ? "GitHub App not connected"
+              : appLevel
+                ? "GitHub App installation removed"
+                : "GitHub access revoked"}
         </strong>{" "}
         for{" "}
         <code>{activeProject?.github_owner}/{activeProject?.github_repo}</code>
