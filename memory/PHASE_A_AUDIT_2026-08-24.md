@@ -150,3 +150,33 @@ directly on the **imported module object** (`from routers import cto_projects as
 **What this means for the ~230-"uncertain" bucket (Phase A §6):** confirmed the pollution mechanism is real, deterministic, and traced to a specific, nameable code anti-pattern repeated in 8 files — not vague "test flakiness". Not yet quantified how many of the ~230 uncertain failures this specific mechanism explains; that would require repeating this bisection process against the full uncertain list, not attempted this round.
 
 **Recommended fix shape (not applied — awaiting founder decision):** convert each of the 8 files' `client` fixture from `return TestClient(app)` to `yield TestClient(app)` + capture/restore the pre-overwrite values (`old_get_db = router_mod.get_db` etc.) after the yield — exactly the pattern Phase 2c's own fixtures already use. Mechanical, low-risk, same shape in all 8 files; still 8 separate edits + a full-suite-adjacent regression check once approved.
+
+---
+
+## 2026-08-24, round 3 — Category C fixed in all 8 files, proof both orderings are now clean
+
+All 8 files converted to save-old/restore-after-yield (`test_iter172_shell_handoff_guard.py` and `test_session4_p0_ora_breaker_surface.py` were re-checked and turned out to be **false positives** on the original grep — they already used correct per-call `try/finally` restores; no change needed there):
+
+1. `test_github_app_project_add.py` — `client` fixture: added save/restore for `_dbmod.get_db`/`require_db`, `router_mod.get_db`/`require_db`/`current_dev`/`_run_project_indexing` (6 names), converted `return` → `yield`.
+2. `test_github_app_router.py` — `client` fixture already restored `_dbmod.get_db`/`require_db` but NOT `router_mod.get_db`/`require_db`/`current_dev`/`_funnel_track` (partial leak) — added the missing 4 restores.
+3. `test_iter170_codebase_browse.py` — added a new `@pytest.fixture(autouse=True)` that saves/restores `cp.current_dev`/`require_db`/`get_db` + `pat_vault.get_repo_token_or_error` around every test (the existing `_client_with_seeded_project()` helper is a plain function, not a fixture, so it can't `yield` itself — the autouse wrapper achieves the same save-before/restore-after shape).
+4. `test_iter173_mcp_server.py` — same autouse-wrapper shape, restores `mcp_mod.current_dev`/`get_db`.
+5. `test_iter174_mcp_apikey.py` — same.
+6. `test_iter212m175_mcp_scoped.py` — same.
+
+### Live-reproduced proof — both orderings, before vs after
+
+**Before fix** (already shown round 2): Order A (17 others → 4 Phase2c) = 116 failed incl. 22 Phase2c tests; Order B (4 Phase2c → 17 others) = 0 Phase2c failures. **Different result depending on order = the pollution.**
+
+**After fix**, same 21-file batch, both orders:
+- Order A (others → Phase2c): `29 failed, 399 passed, 13 skipped, 5 deselected, 11 errors`
+- Order B (Phase2c → others): `29 failed, 399 passed, 13 skipped, 5 deselected, 11 errors`
+- `diff` of the two orders' full FAILED/ERROR test-id lists: **empty (exit code 0) — byte-identical.**
+- **Zero `test_phase2c_*` failures in either order** (grep for `FAILED tests/test_phase2c` returns nothing in both logs).
+
+This is the proof requested: order no longer changes the outcome at all. The remaining 29 failed + 11 errors are unrelated, pre-existing, and now stable regardless of order:
+- 11 errors = the already-documented `TestClient`-lifespan/anyio race in `test_iter363_phase3b_github_app_dispatch.py::test_*_app_installed` (a different, known mechanism, not this leak).
+- A handful of `test_iter173_mcp_server.py`/`test_iter174_mcp_apikey.py` failures are pre-existing product-branding string drift (`"ORA by Aurem"` vs `"ORA by Aurem CTO"` in `.well-known/mcp` responses) — confirmed via `git diff` that this session's edits to those 2 files touched only the new autouse fixture, nothing else; unrelated to Category C.
+- The rest are the same pre-existing failures documented earlier in this file (Category A/B-adjacent files not yet fixed in this batch, e.g. `test_iter211`, `test_iter212m114/169/170/173/225`, `test_iter367`, `test_pat_removal_full_2026_01`).
+
+**Ledger note:** `memory/code_quality_ledger.md` doesn't track test-suite-hygiene rows (it's a coverage/complexity ledger for source files), so this fix is recorded here in the audit doc rather than the ledger. `memory/PRD.md` updated with a pointer to this file.

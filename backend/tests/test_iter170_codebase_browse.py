@@ -24,6 +24,29 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from fastapi.testclient import TestClient
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _restore_cto_projects_module_state():
+    """`_client_with_seeded_project()` below patches routers.cto_projects
+    + services.pat_vault module attributes directly with no per-call
+    teardown of its own. This autouse fixture saves/restores them
+    around EVERY test in this file so the mutation never leaks into
+    other test files sharing the same pytest process — see
+    memory/PHASE_A_AUDIT_2026-08-24.md Category C."""
+    from routers import cto_projects as cp
+    from services import pat_vault as _pv
+    old_current_dev = cp.current_dev
+    old_require_db = cp.require_db
+    old_get_db = cp.get_db
+    old_get_repo_token_or_error = _pv.get_repo_token_or_error
+    yield
+    cp.current_dev = old_current_dev
+    cp.require_db = old_require_db
+    cp.get_db = old_get_db
+    _pv.get_repo_token_or_error = old_get_repo_token_or_error
+
 
 def _client_with_seeded_project():
     """Boot the app with an in-memory project that has fake GitHub creds."""

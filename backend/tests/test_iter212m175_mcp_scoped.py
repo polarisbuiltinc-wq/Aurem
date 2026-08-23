@@ -27,6 +27,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from fastapi.testclient import TestClient
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _restore_mcp_module_state():
+    """`_client()` below patches routers.mcp module attributes directly
+    with no teardown of its own. Save/restore around EVERY test so the
+    mutation never leaks into other test files sharing the same pytest
+    process — see memory/PHASE_A_AUDIT_2026-08-24.md Category C."""
+    from routers import mcp as mcp_mod
+    old_current_dev = mcp_mod.current_dev
+    old_get_db = mcp_mod.get_db
+    yield
+    mcp_mod.current_dev = old_current_dev
+    mcp_mod.get_db = old_get_db
 
 
 # ─────────────────────────────────────────────────────────────────────

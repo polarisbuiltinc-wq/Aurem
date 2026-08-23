@@ -166,6 +166,18 @@ def client(fake_db):
     from routers import cto_projects as router_mod
     from cto_services import db as _dbmod
 
+    # Iter212n — save every name we're about to overwrite and restore
+    # it after the test (yield-based, same pattern as Phase 2c's own
+    # fixtures). Direct, un-restored module-attribute overwrites here
+    # used to leak into every test file that ran afterward in the same
+    # pytest process — see memory/PHASE_A_AUDIT_2026-08-24.md Category C.
+    old_dbmod_get_db      = _dbmod.get_db
+    old_dbmod_require_db  = _dbmod.require_db
+    old_get_db            = router_mod.get_db
+    old_require_db        = router_mod.require_db
+    old_current_dev       = router_mod.current_dev
+    old_run_project_indexing = router_mod._run_project_indexing
+
     _dbmod.get_db = lambda: fake_db
     _dbmod.require_db = lambda: fake_db
     router_mod.get_db = lambda: fake_db
@@ -186,7 +198,14 @@ def client(fake_db):
 
     app = FastAPI()
     app.include_router(router_mod.router, prefix="/api/aurem-dev")
-    return TestClient(app)
+    yield TestClient(app)
+
+    _dbmod.get_db = old_dbmod_get_db
+    _dbmod.require_db = old_dbmod_require_db
+    router_mod.get_db = old_get_db
+    router_mod.require_db = old_require_db
+    router_mod.current_dev = old_current_dev
+    router_mod._run_project_indexing = old_run_project_indexing
 
 
 class TestGateBranches:

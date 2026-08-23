@@ -202,6 +202,8 @@ def client(fake_db):
     _dbmod.require_db = lambda: fake_db
 
     # Also patch the imports the router grabbed at module load time.
+    old_router_get_db = router_mod.get_db
+    old_router_require_db = router_mod.require_db
     router_mod.get_db = lambda: fake_db
     router_mod.require_db = lambda: fake_db
 
@@ -214,11 +216,13 @@ def client(fake_db):
         # Tokens map directly to user_id in tests.
         return {"user_id": token, "email": f"{token}@example.com"}
 
+    old_current_dev = router_mod.current_dev
     router_mod.current_dev = _fake_current_dev
 
     # Silence funnel tracking so tests don't need to import anything else.
     async def _noop_track(*a, **kw):
         return None
+    old_funnel_track = router_mod._funnel_track
     router_mod._funnel_track = _noop_track
 
     app = FastAPI()
@@ -228,6 +232,13 @@ def client(fake_db):
 
     _dbmod.get_db = old_get_db
     _dbmod.require_db = old_require_db
+    # Iter212n — these 3 used to be left unrestored, leaking into every
+    # test file that ran afterward — see memory/PHASE_A_AUDIT_2026-08-24.md
+    # Category C.
+    router_mod.get_db = old_router_get_db
+    router_mod.require_db = old_router_require_db
+    router_mod.current_dev = old_current_dev
+    router_mod._funnel_track = old_funnel_track
 
 
 def _make_mock_client(handler):
