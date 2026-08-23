@@ -23,11 +23,27 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { Sparkles, Bug, CheckCircle2, Zap, ShieldCheck } from "lucide-react";
 import { api } from "../lib/api";
 import { useGuideSpotlight, GuideSpotlightStyle } from "../hooks/useGuideSpotlight.jsx";
 import { shouldHide } from "./GlobalHelpFAB";
+import { useActiveProject } from "./TabBar";
 import { Z_FLOATING_GUIDE } from "../lib/zIndex";
 import { toast } from "./Toast";
+
+// 2026-08-23 — founder direction: the "ORA GUIDE" suggestions card that
+// used to live pinned in the Ask Advisor sidebar now lives HERE instead.
+// Once onboarding is done (no pending stage bubble) and a project is
+// active, this mascot shows project-scoped suggestions/issues instead
+// of the generic "How can I help?" menu — same underlying data source
+// PromptStarterPanel used (`/findings/starter-suggestions`).
+const SUGGESTION_ICONS = { sparkles: Sparkles, bug: Bug, check: CheckCircle2, zap: Zap, shield: ShieldCheck };
+const FALLBACK_SUGGESTIONS = [
+  { slug: "build-something-new", icon_hint: "sparkles", label: "Build something new", example: "I want a contact form on my website" },
+  { slug: "somethings-broken", icon_hint: "bug", label: "Something's broken", example: "The login button doesn't work, please fix it" },
+  { slug: "check-everything-working", icon_hint: "check", label: "Check everything is working", example: "Check my whole website for any bugs" },
+  { slug: "security-check", icon_hint: "shield", label: "Security check", example: "Check my code for any security problems" },
+];
 
 const STAGE_COPY = {
   // stage1_github_started and stage4_fully_inactive collapse into the
@@ -70,8 +86,11 @@ export default function OraGuideMascot() {
   const [loggedIn, setLoggedIn] = useState(() => !!localStorage.getItem("aurem_token"));
   const [open, setOpen] = useState(false);
   const [autoGroup, setAutoGroup] = useState(null);  // stage-triggered bubble
-  const [panelMode, setPanelMode] = useState("stage"); // "stage" | "general" | "escalating" | "escalated"
+  const [panelMode, setPanelMode] = useState("stage"); // "stage" | "general" | "suggestions" | "escalating" | "escalated"
   const pollRef = useRef(null);
+  const activeProject = useActiveProject();
+  const effectiveProjectId = activeProject?.project_id || null;
+  const [projectSuggestions, setProjectSuggestions] = useState(FALLBACK_SUGGESTIONS);
 
   useEffect(() => {
     setLoggedIn(!!localStorage.getItem("aurem_token"));
@@ -116,13 +135,31 @@ export default function OraGuideMascot() {
   const stageInfo = autoGroup ? STAGE_COPY[autoGroup] : null;
   useGuideSpotlight(open && panelMode === "stage" ? stageInfo?.target : null);
 
+  // Once onboarding no longer has a pending stage bubble, and there's a
+  // real project to talk about, pull the same personalized
+  // findings-based prompts PromptStarterPanel used to show in the
+  // sidebar. Falls back to the generic pool on error/empty/no-project.
+  useEffect(() => {
+    let cancelled = false;
+    if (!effectiveProjectId) { setProjectSuggestions(FALLBACK_SUGGESTIONS); return undefined; }
+    api.get(`/findings/starter-suggestions?project_id=${encodeURIComponent(effectiveProjectId)}&limit=4`)
+      .then((res) => {
+        if (cancelled) return;
+        const s = res?.data?.suggestions;
+        setProjectSuggestions(Array.isArray(s) && s.length >= 3 ? s.slice(0, 4) : FALLBACK_SUGGESTIONS);
+      })
+      .catch(() => { if (!cancelled) setProjectSuggestions(FALLBACK_SUGGESTIONS); });
+    return () => { cancelled = true; };
+  }, [effectiveProjectId]);
+
   if (hidden) return null;
 
   function toggleOpen() {
     if (open) { setOpen(false); return; }
-    // Manual click always shows the general help state UNLESS an
-    // auto-triggered stage bubble is still pending for this session.
-    setPanelMode(autoGroup ? "stage" : "general");
+    // Manual click shows the onboarding stage bubble if one's still
+    // pending; otherwise, once a project is active, shows project
+    // suggestions/issues; otherwise the generic help menu.
+    setPanelMode(autoGroup ? "stage" : (effectiveProjectId ? "suggestions" : "general"));
     setOpen(true);
   }
 
@@ -133,6 +170,16 @@ export default function OraGuideMascot() {
 
   function openAdvisor() {
     window.dispatchEvent(new Event("aurem:ora-open"));
+    dismiss();
+  }
+
+  // Same handoff PromptStarterPanel used — prefills the main chat
+  // composer (ChatPanel listens for this event), then closes the bubble
+  // so the user sees what they picked.
+  function pickSuggestion(example) {
+    try {
+      window.dispatchEvent(new CustomEvent("aurem:starter-pick", { detail: { prompt: example } }));
+    } catch { /* noop */ }
     dismiss();
   }
 
@@ -179,7 +226,7 @@ export default function OraGuideMascot() {
           data-testid="ora-guide-bubble"
           style={{
             position: "absolute", bottom: 52, right: 0,
-            width: 280, background: "#141414",
+            width: panelMode === "suggestions" ? 300 : 280, background: "#141414",
             border: "1px solid rgba(255,102,8,0.28)",
             borderRadius: 12, padding: "14px 16px",
             boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
@@ -224,6 +271,61 @@ export default function OraGuideMascot() {
                 <button data-testid="ora-guide-contact-support" type="button"
                         onClick={reportSomethingWrong} style={menuBtnStyle}>
                   Contact support
+                </button>
+                <button data-testid="ora-guide-close" type="button" onClick={dismiss} style={linkBtnStyle}>
+                  Close
+                </button>
+              </div>
+            </>
+          )}
+
+          {panelMode === "suggestions" && (
+            <>
+              <div data-testid="ora-guide-suggestions-intro"
+                   style={{ fontSize: 12, color: "#f8fafc", lineHeight: 1.5, marginBottom: 10 }}>
+                {projectSuggestions.some((s) => s.personalized)
+                  ? "Here's what I found in your repo — pick one, or type your own:"
+                  : "Not sure what to ask? Pick one, or describe what you want:"}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                {projectSuggestions.map(({ slug, icon_hint, label, example, personalized }, idx) => {
+                  const Icon = SUGGESTION_ICONS[icon_hint] || Sparkles;
+                  // Backend finding slugs can contain spaces/punctuation —
+                  // keep data-testid CSS-selector-safe regardless of source.
+                  const safeSlug = String(slug || idx).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `item-${idx}`;
+                  return (
+                    <button
+                      key={`${slug}-${idx}`}
+                      type="button"
+                      data-testid={`ora-guide-suggestion-${safeSlug}`}
+                      onClick={() => pickSuggestion(example)}
+                      title={`Click to try: "${example}"`}
+                      style={suggestionBtnStyle}
+                    >
+                      <Icon size={12} strokeWidth={2.2} style={{ flexShrink: 0, marginTop: 2, color: "#ffb37a" }} />
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "#f8fafc" }}>{label}</span>
+                          {personalized && (
+                            <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.04em",
+                                           color: "#4ade80", background: "rgba(74,222,128,0.12)",
+                                           borderRadius: 4, padding: "1px 4px" }}>
+                              FROM YOUR REPO
+                            </span>
+                          )}
+                        </span>
+                        <span style={{ display: "block", fontSize: 11, color: "#9aa0aa", fontStyle: "italic",
+                                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          &ldquo;{example}&rdquo;
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <button data-testid="ora-guide-open-advisor" type="button" onClick={openAdvisor} style={linkBtnStyle}>
+                  Open Advisor
                 </button>
                 <button data-testid="ora-guide-close" type="button" onClick={dismiss} style={linkBtnStyle}>
                   Close
@@ -284,6 +386,12 @@ const menuBtnStyle = {
 const linkBtnStyle = {
   background: "transparent", color: "var(--text-faint, #999)",
   border: "none", fontSize: 11, cursor: "pointer", padding: 4,
+};
+const suggestionBtnStyle = {
+  display: "flex", gap: 8, alignItems: "flex-start", textAlign: "left",
+  padding: "8px 10px", borderRadius: 8, width: "100%",
+  background: "rgba(255,102,8,0.08)", border: "1px solid rgba(255,102,8,0.22)",
+  cursor: "pointer",
 };
 
 const MASCOT_KEYFRAMES = `

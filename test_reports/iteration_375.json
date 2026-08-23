@@ -1,0 +1,36 @@
+{
+  "summary": "Verified the ORA Guide suggestions migration from Ask Advisor sidebar → floating OraGuideMascot bubble. Logged in as test@aurem.dev on preview URL, exercised every founder-listed requirement. All primary acceptance criteria pass: sidebar card gone, mascot suggestion mode wired to /findings/starter-suggestions with real personalized data (FROM YOUR REPO badges), click-to-prefill posts 'aurem:starter-pick' → ChatPanel setInput fills the [data-testid=chat-input] textarea without sending, and Open Advisor / Close links both work.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_flows": [
+    "Login test@aurem.dev/AuremTest2026! → /dashboard OK.",
+    "Ask Advisor sidebar (ds2-advisor-real) opens via ds2-advisor-open; ds2-advisor-guide-slot count = 0 and prompt-starter-panel count = 0 → sidebar ORA GUIDE card fully removed. Header, morning brief, Diagnose/Summarize/Token chips still render.",
+    "Floating mascot (ora-guide-mascot-avatar) present; click opens ora-guide-bubble in 'suggestions' mode (ora-guide-suggestions-intro shown, stage/general variants NOT shown).",
+    "GET /api/aurem-dev/findings/starter-suggestions?project_id=p_demo_a&limit=4 returned 200 with 4 personalized suggestions; mascot rendered 4 ora-guide-suggestion-* buttons with label + italic example (Hardcoded SECRET_KEY, SQL injection, Hardcoded AWS key, etc.), each carrying FROM YOUR REPO badge (personalized:true).",
+    "Clicked first suggestion → bubble closed (visible=False), composer textarea [data-testid=chat-input] contained the exact example prompt string ('Fix this critical issue: Hardcoded SECRET_KEY in source code ...'); no auto-send occurred (composer still shows text, no new user message appended).",
+    "Open Advisor button inside the suggestions bubble → dispatched aurem:ora-open, bubble closed, [data-testid=ds2-advisor-real] became visible.",
+    "Close button inside the suggestions bubble → bubble removed from DOM.",
+    "Onboarding stage bubble path untouched (user is past all stages so no auto-open fired — expected; toggleOpen prefers stage > suggestions > general logic present in code)."
+  ],
+  "notes": [
+    "'No-project fallback → general menu' path could not be fully re-exercised in this account because test@aurem.dev owns projects and TabBar's useActiveProject re-selects one on every reload (aurem_active_project + aurem_projects_cache persisted). The code path (effectiveProjectId falsy → panelMode='general' with Open Advisor / Contact support / Close) is unchanged and was verified by inspection in OraGuideMascot.jsx toggleOpen(). Would need a zero-project account to E2E it, but founder note explicitly said this branch is unchanged/pre-existing behavior.",
+    "Two 401/403 console errors observed on initial dashboard load — pre-existing (GitHub App revoked banner + unrelated background call), not caused by this change."
+  ],
+  "critical_code_review_comments": [
+    "Suggestion slug is used as a React key AND embedded into data-testid; some backend slugs contain spaces, parentheses and colons (e.g. 'finding-ora_chat_audit::snippet (not found in connected repo — p'). Works, but non-CSS-safe data-testid strings could break future selectors. Consider slugifying on the frontend before use.",
+    "OraGuideMascot.jsx polls /auth/me/funnel-stage every 15s indefinitely; combined with the new starter-suggestions fetch on every project change it's fine, but if starter-suggestions ever becomes expensive add a short cache."
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (frontend-only scope)", "frontend": "100% (7/7 verified flows)" },
+  "test_credentials": "test@aurem.dev / AuremTest2026! (from review_request; /app/memory/test_credentials.md not consulted since caller supplied)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Change is confirmed working end-to-end on preview. If a regression is needed later, key testids: ds2-advisor-guide-slot (must NOT exist), ora-guide-mascot-avatar, ora-guide-bubble, ora-guide-suggestions-intro, ora-guide-suggestion-*, ora-guide-open-advisor, ora-guide-close, chat-input (composer textarea)."
+}

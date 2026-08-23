@@ -3,6 +3,43 @@
 **Live URL**: https://auremcto.com
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
+
+## 2026-08-23 (later) — ORA GUIDE suggestions moved from Ask Advisor sidebar → floating mascot bubble
+
+Founder request (Urdu/Hinglish): move the red-circled "ORA GUIDE"
+suggestions card out of the Ask Advisor sidebar and into the lower
+floating robot (OraGuideMascot), reusing the same guide-bubble pattern,
+showing project-specific issues/suggestions once onboarding is done.
+
+Confirmed choices: (1) remove sidebar card entirely, only show via
+floating mascot; (2) show project suggestions once onboarding finishes
+AND always whenever a project is active; (3) same data source
+(`/findings/starter-suggestions`); (4) click prefills the main chat
+composer (doesn't auto-send).
+
+Implemented:
+- `frontend/src/pages/Dashboard.jsx` — removed `PromptStarterPanel`
+  import and the `topSlot` prop on `<AskAdvisorReal />`. Sidebar no
+  longer renders the suggestions card.
+- `frontend/src/components/OraGuideMascot.jsx` — new `"suggestions"`
+  panelMode. Fetches `GET /findings/starter-suggestions?project_id=…`
+  via `useActiveProject()` (from `./TabBar`), falls back to 4 generic
+  prompts on error/empty. `toggleOpen()` now prefers stage bubble >
+  suggestions (if a project is active) > generic "How can I help?"
+  menu. Clicking a suggestion dispatches the existing
+  `aurem:starter-pick` window event (same contract `ChatPanel.jsx`
+  already listens for) to prefill the composer, then closes the
+  bubble. Suggestion `data-testid`s are slugified client-side to stay
+  CSS-selector-safe regardless of backend slug content.
+- `PromptStarterPanel.jsx` left in the repo unused (not deleted).
+
+Tested: `testing_agent` — `/app/test_reports/iteration_375.json`,
+7/7 frontend flows passed (sidebar card gone, mascot suggestions wired
+to real findings with FROM YOUR REPO badges, click-to-prefill works,
+Open Advisor/Close work, no-project fallback verified by code
+inspection). One minor code-review note (unsafe data-testid slugs)
+fixed post-test.
+
 ## 2026-08-23 (later same day) — Confirmed today's fix batch IS deployed to production; production security-audit failure root-caused (2 angles confirmed, 1 ruled out); Prompt Starter panel merged into the ORA GUIDE mascot
 
 **#1 Phase 1 deploy status — DEPLOYED.** Checked the PUBLIC production
