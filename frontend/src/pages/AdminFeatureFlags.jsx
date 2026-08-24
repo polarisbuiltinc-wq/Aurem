@@ -37,6 +37,7 @@ function Toggle({ enabled, onChange, disabled, testid }) {
 function FlagRow({ flag, onToggle, onDelete }) {
   const overrides = Object.entries(flag.user_overrides || {});
   const [busy, setBusy] = useState(false);
+  const rolloutPct = flag.rollout_pct ?? 100;
   const doToggle = async () => {
     setBusy(true);
     try {
@@ -65,6 +66,12 @@ function FlagRow({ flag, onToggle, onDelete }) {
             tiers: {flag.tier_allowlist.join(", ")}
           </div>
         )}
+        {rolloutPct < 100 && (
+          <div data-testid={`flag-rollout-${flag.flag}`}
+               style={{ fontSize: 10, color: "#38bdf8", marginTop: 4 }}>
+            🐤 canary: {rolloutPct}% of users
+          </div>
+        )}
         {overrides.length > 0 && (
           <div style={{ marginTop: 6, fontSize: 10, color: "#fbbf24" }}>
             {overrides.length} user override{overrides.length > 1 ? "s" : ""}
@@ -87,6 +94,7 @@ function CreateFlagCard({ onCreated }) {
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [tiers, setTiers] = useState("");
+  const [rolloutPct, setRolloutPct] = useState("100");
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     if (!name.trim()) return;
@@ -97,9 +105,10 @@ function CreateFlagCard({ onCreated }) {
         description: desc.trim(),
         enabled: false,
         tier_allowlist: tiers.split(",").map(s => s.trim()).filter(Boolean),
+        rollout_pct: Number(rolloutPct) || 0,
       });
       toast({ message: "Flag created", kind: "success" });
-      setName(""); setDesc(""); setTiers("");
+      setName(""); setDesc(""); setTiers(""); setRolloutPct("100");
       onCreated();
     } catch (e) { toast({ message: "Create failed", kind: "error" }); }
     finally { setBusy(false); }
@@ -114,7 +123,7 @@ function CreateFlagCard({ onCreated }) {
         <Plus size={11} style={{ verticalAlign: "middle", marginRight: 6 }} />
         Create new flag
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 80px",
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 90px 80px",
                      gap: 8 }}>
         <input data-testid="flag-name-input"
                placeholder="flag_name" value={name}
@@ -130,6 +139,14 @@ function CreateFlagCard({ onCreated }) {
                         border: "1px solid var(--border)", borderRadius: 3 }} />
         <input placeholder="tiers (comma) e.g. pro,team" value={tiers}
                onChange={(e) => setTiers(e.target.value)}
+               style={{ padding: "6px 8px", fontSize: 11,
+                        background: "var(--bg-elev)", color: "var(--text)",
+                        border: "1px solid var(--border)", borderRadius: 3 }} />
+        <input data-testid="flag-rollout-input"
+               type="number" min="0" max="100"
+               placeholder="rollout %" value={rolloutPct}
+               onChange={(e) => setRolloutPct(e.target.value)}
+               title="Canary rollout — % of eligible users who get this flag, deterministic per user"
                style={{ padding: "6px 8px", fontSize: 11,
                         background: "var(--bg-elev)", color: "var(--text)",
                         border: "1px solid var(--border)", borderRadius: 3 }} />

@@ -160,6 +160,12 @@ async def create_feature_flag(
     flag = (body.get("flag") or "").strip()
     if not flag:
         raise HTTPException(400, "flag name required")
+    # 2026-08-24 — canary rollout_pct (0-100), clamp defensively.
+    rollout_pct = body.get("rollout_pct", 100)
+    try:
+        rollout_pct = max(0, min(100, int(rollout_pct)))
+    except (TypeError, ValueError):
+        rollout_pct = 100
     await db.feature_flags.update_one(
         {"flag": flag},
         {"$set": {
@@ -167,6 +173,7 @@ async def create_feature_flag(
             "enabled": bool(body.get("enabled", False)),
             "tier_allowlist": list(body.get("tier_allowlist") or []),
             "user_allowlist": list(body.get("user_allowlist") or []),
+            "rollout_pct": rollout_pct,
             "description": str(body.get("description") or ""),
         }},
         upsert=True,

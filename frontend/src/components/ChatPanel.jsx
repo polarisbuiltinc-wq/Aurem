@@ -278,6 +278,15 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     }).catch(() => {});
   }, []);
 
+  // 2026-08-24 · Guard 22 — funnel event: chat_opened. Fired once per
+  // account (backend dedupes via a one-shot flag) the first time the
+  // composer actually mounts, closing the "connected repo but no
+  // signal at all past repo_selected" blind spot for the activation
+  // funnel. Best-effort — a failed call here must never block chat.
+  useEffect(() => {
+    api.post("/chat/opened", { project_id: activeProject?.project_id || null }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ora:prefill — fired by BrainDump's "Show diff →" buttons and any
   // other surface that wants to drop the user into chat with a primed
   // prompt. Listener lives here because ChatPanel owns the input state.

@@ -36,6 +36,37 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
 
+class ChatOpenedBody(BaseModel):
+    project_id: Optional[str] = None
+
+
+@router.post("/opened")
+async def chat_opened(body: ChatOpenedBody, authorization: str = Header(None)) -> dict:
+    """2026-08-24 · Guard 22 — funnel event: chat_opened (idempotent,
+    one-shot). Closes the "opened chat but sent nothing" blind spot —
+    previously there was zero signal between repo_selected and
+    first_chat_sent; a user who opens the composer and leaves was
+    indistinguishable from one who never came back at all."""
+    user = await current_dev(authorization)
+    db = get_db()
+    if db is not None:
+        try:
+            stamped = await db.dev_users.find_one_and_update(
+                {"user_id": user["user_id"], "first_chat_opened_at": {"$exists": False}},
+                {"$set": {"first_chat_opened_at": time.time()}},
+                projection={"_id": 0, "user_id": 1},
+            )
+            if stamped:
+                from services.signup_guards import emit_funnel_event
+                await emit_funnel_event(
+                    db, user_id=user["user_id"], event_type="chat_opened",
+                    metadata={"project_id": body.project_id},
+                )
+        except Exception as e:
+            logging.getLogger(__name__).debug("chat_opened funnel emit failed: %r", e)
+    return {"ok": True}
+
+
 # Heuristic: prompt mentions build/create/fix/write code/etc → bump cap
 _CODE_HINTS = ("```", "build", "create", "fix", "write", "implement",
                "function", "class", "refactor", "debug", "snippet", "code")

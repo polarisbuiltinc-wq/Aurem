@@ -31,12 +31,30 @@ api.interceptors.request.use((config) => {
 // indefinitely while idle / leaked tokens die within the window).
 // Any other endpoint that returns `{ token: "..." }` in the body is
 // likewise treated as an authoritative re-issue.
+//
+// 2026-08-24 — Guard 22: also auto-refresh the cached `aurem_user`
+// object whenever a response carries one. Root cause of a real
+// customer-facing bug: `isLoopUnlockedSync()` (used to decide Loop
+// Mode eligibility client-side) reads `localStorage.aurem_user` — a
+// snapshot saved once at login, never live-refreshed anywhere. If a
+// user's tier changed mid-session (e.g. Pro/Team unlock), the cached
+// object stayed stale and Loop Mode silently never turned on until a
+// manual logout/login. `/auth/me` (already called on app boot + on
+// window focus) returns a fresh `user` object — this just makes sure
+// that fresh copy actually reaches the cache every other reader uses,
+// instead of being read once and discarded by whichever page called it.
 api.interceptors.response.use((response) => {
   try {
     const t = response?.data?.token;
     if (typeof t === "string" && t.length > 20 && t.split(".").length === 3) {
       const current = localStorage.getItem("aurem_token");
       if (t !== current) localStorage.setItem("aurem_token", t);
+    }
+  } catch { /* never let interceptor errors break the call */ }
+  try {
+    const u = response?.data?.user;
+    if (u && typeof u === "object" && u.user_id) {
+      setUser(u);
     }
   } catch { /* never let interceptor errors break the call */ }
   return response;

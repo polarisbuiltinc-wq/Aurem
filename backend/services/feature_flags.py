@@ -10,6 +10,7 @@ live in the `feature_flags` collection:
         "enabled":         bool,          # master switch
         "tier_allowlist":  list[str],     # [] = all tiers
         "user_allowlist":  list[str],     # explicit user_ids
+        "rollout_pct":     int,           # 0-100, deterministic bucket
         "description":     str,
     }
 
@@ -22,9 +23,15 @@ Usage at a call site:
 A 60s process-local cache avoids hitting Mongo on every check; the
 admin toggle endpoint invalidates by clearing `_cache` directly so
 the next read repopulates.
+
+2026-08-24 — Guard: canary/staged rollout (Phase 5.4 of the blueprint).
+`rollout_pct` (0-100) adds a deterministic per-user bucket on top of
+the existing tier/user allowlists, reusing this SAME collection/cache
+— no new schema, no new admin surface beyond one numeric field.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 from typing import Optional
@@ -75,9 +82,30 @@ async def is_enabled(
         return True
     # Tier allowlist — empty means all tiers
     tier_list = doc.get("tier_allowlist") or []
-    if not tier_list:
+    if tier_list and (tier or "free") not in tier_list:
+        return False
+    # 2026-08-24 — deterministic canary bucket. Same user always lands
+    # in the same bucket for a given flag (no flapping between
+    # requests). 100 (default) means "no rollout gate" — everyone who
+    # passed the tier/allowlist check above gets it, same as before
+    # this field existed.
+    pct = doc.get("rollout_pct")
+    if pct is None:
         return True
-    return (tier or "free") in tier_list
+    pct = max(0, min(100, int(pct)))
+    if pct >= 100:
+        return True
+    # No user_id to bucket on (anonymous call) + a partial rollout ->
+    # intentionally OFF, not a random coin-flip. Canary rollout is
+    # meant to be deterministic per-user; an anonymous request has no
+    # stable identity to bucket consistently, so it can't participate
+    # in a <100% rollout at all (it always gets the pre-rollout "off"
+    # default). Call sites that need anonymous users included in the
+    # canary must pass a stable id (e.g. a session id) as user_id.
+    if pct <= 0 or not user_id:
+        return pct >= 100
+    bucket = int(hashlib.sha1(f"{user_id}:{flag}".encode()).hexdigest(), 16) % 100
+    return bucket < pct
 
 
 async def get_all_flags() -> list[dict]:

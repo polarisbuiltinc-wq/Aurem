@@ -1740,6 +1740,28 @@ async def submit_task(
         "maxx_mode": bool(body.maxx_mode),
         "created_at": time.time(),
     })
+    # 2026-08-24 · Guard 22 — funnel event: task_submitted (idempotent
+    # via one-shot flag). Closes the "connected but Recent Tasks: no
+    # data yet" blind spot — cto_tasks already tracks every individual
+    # attempt's status, this just marks the FIRST time a user reaches
+    # this stage for the aggregate activation-funnel view. Distinct
+    # from first_task_shipped (loop_engine.py), which only fires on a
+    # SUCCESSFUL ship — a user who submits but never ships was
+    # previously invisible between repo_selected and shipped_code.
+    try:
+        _stamped_sub = await db.dev_users.find_one_and_update(
+            {"user_id": me["user_id"], "first_task_submitted_at": {"$exists": False}},
+            {"$set": {"first_task_submitted_at": time.time()}},
+            projection={"_id": 0, "user_id": 1},
+        )
+        if _stamped_sub:
+            from services.signup_guards import emit_funnel_event
+            await emit_funnel_event(
+                db, user_id=me["user_id"], event_type="task_submitted",
+                metadata={"project_id": body.project_id, "task_id": task_id},
+            )
+    except Exception as _fne:
+        logger.debug("task_submitted funnel emit failed: %r", _fne)
     # Iter 212m-169 — PAT comes from bin_ctx (already decrypted +
     # validated), no more independent _decrypt_pat call.
     user_token = bin_ctx.pat

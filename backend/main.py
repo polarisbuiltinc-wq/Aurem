@@ -1003,6 +1003,31 @@ async def lifespan(app: FastAPI):
     else:
         app.state.restore_drill_task = None
 
+    # 2026-08-24 — Guard 22: recurring, automated rollback drill.
+    # services/rollback_drill.py's full harness (snapshot -> ship-bad
+    # -> rollback -> byte-exact verify) was manual-trigger-only, so
+    # "rollback works" was proven exactly once, ever (this session's
+    # live drill). Same fix as the restore-drill block above: run it
+    # weekly with zero manual action.
+    if os.environ.get("ENABLE_ROLLBACK_DRILL", "1").lower() in ("1", "true", "yes"):
+        try:
+            from services.rollback_drill_cron import rollback_drill_cron, DRILL_INTERVAL_SECONDS as _RB_INT
+            app.state.rollback_drill_task = _supervise(
+                rollback_drill_cron(db_getter=lambda: app.state.db),
+                name="rollback_drill",
+                db_getter=lambda: app.state.db,
+                long_lived=True,
+            )
+            logger.info(
+                "🛟 rollback-drill cron enabled (every %ds ≈ %.1f days)",
+                _RB_INT, _RB_INT / 86400,
+            )
+        except Exception as e:
+            app.state.rollback_drill_task = None
+            logger.warning("rollback drill cron not started: %r", e)
+    else:
+        app.state.rollback_drill_task = None
+
     # 2026-08-24 — CI ingest heartbeat (Pillar 3, Production-Readiness).
     # G1/G15's registry checks only ever looked at the CONTENT of the
     # last synthetic_checks row, never its age — a silently-stopped
