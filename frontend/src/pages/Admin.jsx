@@ -1316,15 +1316,15 @@ function AgentPerformancePage() {
       </h3>
       <Card>
         <Table
-          cols={["Model", "Calls", "Done", "Success", "Avg latency"]}
+          cols={["Model", "Calls", "Total Cost", "Avg Input Tok", "Avg Output Tok"]}
           rows={rows.map((r) => [
             <span key="m" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
               {r.model || "—"}
             </span>,
             r.calls,
-            r.done,
-            r.calls ? `${Math.round(100 * r.done / r.calls)}%` : "—",
-            r.avg_secs ? `${r.avg_secs}s` : "—",
+            typeof r.total_cost_usd === "number" ? `$${r.total_cost_usd.toFixed(4)}` : "—",
+            r.avg_input_tokens ?? "—",
+            r.avg_output_tokens ?? "—",
           ])}
         />
       </Card>

@@ -69,6 +69,13 @@ function CIJobChip({ name, job }) {
   if (conc === "success")        { bg = "#0a2416"; fg = "#4ade80"; label = "pass"; }
   else if (conc === "failure")   { bg = "#2b0a0a"; fg = "#f87171"; label = "fail"; }
   else if (conc === "cancelled") { bg = "#2b230a"; fg = "#facc15"; label = "cancelled"; }
+  // 2026-08-26 — bug-fix-discipline + test-style-guard are diff-based
+  // gates gated `if: github.event_name == 'pull_request'`. This repo
+  // pushes straight to main (no PR flow), so GitHub always reports
+  // them `conclusion: "skipped"` — that's a real, expected outcome,
+  // not a monitoring gap. Previously fell through to the default
+  // "unknown" chip, which read as a broken check.
+  else if (conc === "skipped")   { bg = "#1a1a1a"; fg = "#94a3b8"; label = "skipped (PR-only gate)"; }
   else if (status === "in_progress") { bg = "#0a1e2b"; fg = "#60a5fa"; label = "running"; }
   else if (status === "queued")  { bg = "#1a1a1a"; fg = "#94a3b8"; label = "queued"; }
   return (

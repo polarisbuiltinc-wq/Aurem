@@ -1611,7 +1611,19 @@ async def admin_graph_status(
 async def admin_agent_performance(
     authorization: Optional[str] = Header(None),
 ):
-    """Smart-router agent stats — model usage + per-mode latency."""
+    """Smart-router agent stats — real per-model call volume + cost.
+
+    2026-08-26 — ROOT FIX: this previously aggregated `cto_tasks` on a
+    `model` field that DOESN'T EXIST on any document in that collection
+    (cto_tasks only holds health_fix admin auto-remediation rows — no
+    model attribution, ever). Result: always `per_model_30d: []`,
+    contradicting the Cockpit's LLM Credits / Cost-by-Model widgets,
+    which correctly read `customer_chat_cost` (the real per-call LLM
+    usage ledger — same source `admin_bi.py::_fetch_inference_metrics`
+    already uses for its by-model breakdown). Switched to the same
+    real source. `done`/`avg_secs` (task success rate / latency) had
+    no real backing data at this granularity either — dropped rather
+    than fabricated; replaced with real cost + token fields."""
     await _require_admin(authorization)
     db = require_db()
     now = time.time()
@@ -1620,32 +1632,30 @@ async def admin_agent_performance(
     per_model: list[dict] = []
     try:
         pipeline = [
-            {"$match": {"created_at": {"$gte": month_ago},
+            {"$match": {"ts": {"$gte": month_ago},
                         "model": {"$ne": None}}},
             {"$group": {
                 "_id": "$model",
                 "n": {"$sum": 1},
-                "avg_secs": {"$avg": {
-                    "$subtract": ["$finished_at", "$created_at"]
-                }},
-                "done": {
-                    "$sum": {"$cond": [{"$eq": ["$status", "done"]}, 1, 0]}
-                },
+                "total_cost_usd": {"$sum": "$cost_usd"},
+                "avg_input_tokens": {"$avg": "$input_tokens"},
+                "avg_output_tokens": {"$avg": "$output_tokens"},
             }},
             {"$sort": {"n": -1}},
             {"$limit": 20},
         ]
-        async for row in db.cto_tasks.aggregate(pipeline):
+        async for row in db.customer_chat_cost.aggregate(pipeline):
             per_model.append({
-                "model":     row.get("_id"),
-                "calls":     int(row.get("n") or 0),
-                "done":      int(row.get("done") or 0),
-                "avg_secs":  round(float(row.get("avg_secs") or 0), 2),
+                "model":              row.get("_id"),
+                "calls":              int(row.get("n") or 0),
+                "total_cost_usd":     round(float(row.get("total_cost_usd") or 0), 4),
+                "avg_input_tokens":   round(float(row.get("avg_input_tokens") or 0)),
+                "avg_output_tokens":  round(float(row.get("avg_output_tokens") or 0)),
             })
     except Exception as e:
         logger.warning("admin/agent-performance: %r", e)
 
-    return {"per_model_30d": per_model}
+    return {"per_model_30d": per_model, "source": "customer_chat_cost"}
 
 
 class _SeoRunPayload(BaseModel):

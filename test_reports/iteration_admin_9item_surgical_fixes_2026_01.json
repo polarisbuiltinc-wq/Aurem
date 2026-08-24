@@ -1,0 +1,34 @@
+{
+  "summary": "Verified 7 code-side surgical admin fixes (agent-performance, architecture ensure_configured_from_db, dry-run orphan repair, health-score devops_infra, QA dashboard skipped chip, and no-regression on dashboard/pulse/llm-credits). All backend endpoints return 200 with valid shapes; all frontend routes render with real data and no JS crashes.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_surgical_fixes.py",
+    "/app/test_reports/pytest/admin_surgical_fixes.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Admin.jsx is 3732 lines — recommend splitting per-page components (AgentPerformancePage, McpUsagePage, etc.) into files under src/pages/admin/ for maintainability. Not blocking.",
+    "Two harmless 401/403 console errors observed on every admin page load (some background fetch, unrelated to this batch). Consider suppressing or gating those calls behind role check to keep console clean.",
+    "AgentPerformancePage: r.total_cost_usd.toFixed(4) will throw if backend returns non-number; guard with typeof check. Currently backend returns numbers so no issue in preview, but defensive."
+  ],
+  "updated_files": ["/app/backend/tests/test_admin_surgical_fixes.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (all target pages render, real data, no crash)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview only, from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — used existing customer_chat_cost data (677 glm-5.2 calls, 263 deepseek calls).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Route for QA dashboard is /admin/qa (NOT /admin/qa-dashboard). Backend admin API prefix is /api/aurem-dev/admin/*. Agent-performance response shape: {per_model_30d: [...], source: 'customer_chat_cost'}. devops_infra score=0 with total_runs_30d=130, pass_rate=0.0 is EXPECTED (real historical CI failures, not a bug).",
+  "verification_details": {
+    "agent_performance": "Returns per_model_30d with 2 entries: z-ai/glm-5.2 (677 calls, $0.0544) and deepseek/deepseek-chat (263 calls, $0.0182). source='customer_chat_cost'. Table renders all 5 columns.",
+    "architecture": "200 OK. integrations.github_app present, services present. ensure_configured_from_db hydration is no-op safe.",
+    "repair_orphaned_dry_run": "200 OK. dry_run=true, repaired=[], repaired_count=0, still_broken and scanned present. No mutation.",
+    "health_score": "200 OK. devops_infra.score=0, evidence.ci.total_runs_30d=130, pass_rate=0.0 — matches spec.",
+    "qa_dashboard_ci_chips": "5 chips rendered. bug-fix-discipline and test-style-guard both show 'skipped (PR-only gate)' gray label with data-ci-conclusion='skipped'.",
+    "no_regression": "/admin/dashboard, /admin/pulse, /admin/llm-credits all 200 OK with valid JSON."
+  }
+}

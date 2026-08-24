@@ -93,6 +93,23 @@ async def get_architecture(authorization: Optional[str] = Header(None)):
         REGISTRY, is_configured, should_probe,
     )
     db = get_db()
+    # 2026-08-26 — ROOT FIX: `github_app` is:configured came from the
+    # sync `is_configured()` check, which only reads the in-process
+    # `_RUNTIME_GITHUB_APP` module cache — populated once at lifespan
+    # boot. If that boot-time hydration raced an empty DB write (or
+    # simply happened before the config doc existed), the cache stays
+    # empty for the process's ENTIRE lifetime and the Architecture
+    # panel shows "github_app: missing" forever, even with a valid
+    # config sitting in `admin_settings._id="github_app_config"` —
+    # independent of the per-project `installation_active` bug. The
+    # lazy DB-hydration fallback already exists
+    # (`ensure_configured_from_db`) but nothing on this read path
+    # called it. Do so here before evaluating the registry.
+    try:
+        from services.github_app_config import ensure_configured_from_db
+        await ensure_configured_from_db(db)
+    except Exception:
+        pass
     # 2026-08-26 — was `"live" if db is not None else "down"` — the
     # client handle almost never becomes None after boot (motor
     # auto-reconnects), so this could show "live" straight through a

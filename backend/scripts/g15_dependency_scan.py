@@ -183,7 +183,13 @@ def _persist_result(findings: list[dict], hard_fails: list[dict]) -> None:
     import urllib.request
 
     token = os.environ.get("AUREM_CI_INGEST_TOKEN")
-    api_url = os.environ.get("AUREM_API_URL", "https://auremcto.com")
+    # 2026-08-26 — BUG FIX: `.get("AUREM_API_URL", default)` only falls
+    # back when the key is ABSENT. The `vars.AUREM_API_URL` repo
+    # variable is unset, so GH Actions exports the key with an empty
+    # string — `.get()` then returns "" (not the default), producing a
+    # relative URL that crashed `urllib.request.Request()` with an
+    # uncaught ValueError and failed the ENTIRE dependency-audit gate.
+    api_url = os.environ.get("AUREM_API_URL") or "https://auremcto.com"
     if not token:
         print("[g15] AUREM_CI_INGEST_TOKEN not set — skipping result persistence")
         return
@@ -193,14 +199,14 @@ def _persist_result(findings: list[dict], hard_fails: list[dict]) -> None:
         "high_critical":  len(hard_fails),
         "findings":       findings[:100],
     }
-    req = urllib.request.Request(
-        f"{api_url}/api/aurem-dev/admin/synthetic-checks/ingest",
-        data=json.dumps(body).encode(),
-        method="POST",
-        headers={"Content-Type": "application/json",
-                 "Authorization": f"Bearer {token}"},
-    )
     try:
+        req = urllib.request.Request(
+            f"{api_url}/api/aurem-dev/admin/synthetic-checks/ingest",
+            data=json.dumps(body).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json",
+                     "Authorization": f"Bearer {token}"},
+        )
         with urllib.request.urlopen(req, timeout=15) as r:
             print(f"[g15] persisted result: {r.status}")
     except Exception as e:

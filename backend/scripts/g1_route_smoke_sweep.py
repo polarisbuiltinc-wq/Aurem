@@ -129,7 +129,10 @@ async def _persist_result(result: dict) -> None:
     import urllib.request
 
     token = os.environ.get("AUREM_CI_INGEST_TOKEN")
-    api_url = os.environ.get("AUREM_API_URL", "https://auremcto.com")
+    # 2026-08-26 — same bug fix as g15_dependency_scan.py::_persist_result
+    # (see that file's comment) — `.get()` doesn't fall back on an
+    # empty-string env var, only an absent one.
+    api_url = os.environ.get("AUREM_API_URL") or "https://auremcto.com"
     if not token:
         print("[g1] AUREM_CI_INGEST_TOKEN not set — skipping result persistence")
         return
@@ -140,14 +143,14 @@ async def _persist_result(result: dict) -> None:
         "failed":   result["failed"],
         "results":  result["results"],
     }
-    req = urllib.request.Request(
-        f"{api_url}/api/aurem-dev/admin/synthetic-checks/ingest",
-        data=json.dumps(body).encode(),
-        method="POST",
-        headers={"Content-Type": "application/json",
-                 "Authorization": f"Bearer {token}"},
-    )
     try:
+        req = urllib.request.Request(
+            f"{api_url}/api/aurem-dev/admin/synthetic-checks/ingest",
+            data=json.dumps(body).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json",
+                     "Authorization": f"Bearer {token}"},
+        )
         with urllib.request.urlopen(req, timeout=15) as r:
             print(f"[g1] persisted result: {r.status}")
     except Exception as e:
