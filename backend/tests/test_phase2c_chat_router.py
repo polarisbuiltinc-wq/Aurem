@@ -308,7 +308,7 @@ class TestChatTaskFollowup:
             "result": "added a button", "task": "add a button",
             "commit_sha": "abc123", "files_changed": ["App.jsx"],
         })
-        with patch("routers.chat.call_llm_with_meta",
+        with patch("services.chat_helpers.call_llm_with_meta",
                   AsyncMock(side_effect=RuntimeError("llm down"))):
             r = client.post("/api/aurem-dev/chat/task-followup", headers=AUTH,
                             json=self._body())
@@ -531,7 +531,7 @@ class TestSmallHelpers:
     def test_generate_title_success(self):
         import asyncio as _aio
         from routers import chat as router_mod
-        with patch("routers.chat.call_llm_with_meta",
+        with patch("services.chat_helpers.call_llm_with_meta",
                   AsyncMock(return_value={"content": '"Fix Login Bug"'})):
             title = _aio.run(router_mod._generate_title("please fix my login bug"))
         assert title == "Fix Login Bug"
@@ -539,7 +539,7 @@ class TestSmallHelpers:
     def test_generate_title_llm_crash_returns_empty(self):
         import asyncio as _aio
         from routers import chat as router_mod
-        with patch("routers.chat.call_llm_with_meta",
+        with patch("services.chat_helpers.call_llm_with_meta",
                   AsyncMock(side_effect=RuntimeError("down"))):
             title = _aio.run(router_mod._generate_title("hi"))
         assert title == ""
@@ -548,7 +548,7 @@ class TestSmallHelpers:
         import asyncio as _aio
         from routers import chat as router_mod
         long_title = "A" * 100
-        with patch("routers.chat.call_llm_with_meta",
+        with patch("services.chat_helpers.call_llm_with_meta",
                   AsyncMock(return_value={"content": long_title})):
             title = _aio.run(router_mod._generate_title("hi"))
         assert len(title) == 58
@@ -585,7 +585,7 @@ class TestSmallHelpers:
         })
         _dbmod.set_db(fake_db)
         try:
-            with patch("routers.chat._generate_title", AsyncMock(return_value="Fix Login Bug")):
+            with patch("services.chat_helpers._generate_title", AsyncMock(return_value="Fix Login Bug")):
                 _aio.run(router_mod._maybe_set_title("u1", "s1", "fix login"))
         finally:
             _dbmod.set_db(None)
@@ -603,7 +603,7 @@ class TestSmallHelpers:
     def test_generate_title_empty_llm_content_returns_empty(self):
         import asyncio as _aio
         from routers import chat as router_mod
-        with patch("routers.chat.call_llm_with_meta",
+        with patch("services.chat_helpers.call_llm_with_meta",
                   AsyncMock(return_value={"content": "   "})):
             title = _aio.run(router_mod._generate_title("hi"))
         assert title == ""
@@ -642,7 +642,7 @@ class TestSmallHelpers:
         })
         _dbmod.set_db(fake_db)
         try:
-            with patch("routers.chat._generate_title", AsyncMock(return_value="")):
+            with patch("services.chat_helpers._generate_title", AsyncMock(return_value="")):
                 _aio.run(router_mod._maybe_set_title("u1", "s1", "hi"))
         finally:
             _dbmod.set_db(None)
@@ -651,7 +651,7 @@ class TestSmallHelpers:
     @pytest.mark.asyncio
     async def test_regenerate_without_recall_success(self):
         from routers import chat as router_mod
-        with patch("routers.chat.chat_with_tools",
+        with patch("services.chat_helpers.chat_with_tools",
                   AsyncMock(return_value={"content": "fixed answer", "provider": "claude"})):
             content, provider = await router_mod._regenerate_without_recall(
                 prompt="fix it", jwt_token="tok", extra_sys_no_council="",
@@ -664,7 +664,7 @@ class TestSmallHelpers:
     @pytest.mark.asyncio
     async def test_regenerate_without_recall_swallows_exception(self):
         from routers import chat as router_mod
-        with patch("routers.chat.chat_with_tools",
+        with patch("services.chat_helpers.chat_with_tools",
                   AsyncMock(side_effect=RuntimeError("down"))):
             content, provider = await router_mod._regenerate_without_recall(
                 prompt="fix it", jwt_token="tok", extra_sys_no_council="",

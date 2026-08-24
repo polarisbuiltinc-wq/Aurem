@@ -1,0 +1,30 @@
+{
+  "summary": "Phase 3a admin-only additive features (GET /admin/duplication + GET /admin/churn-risk backend endpoints and DuplicationWidget + ChurnRiskWidget on /admin/cockpit) tested end-to-end. All 6 pytest cases passed. Frontend renders both widgets with real, live numbers (duplication 1.62% / 288 clones / 572 files scanned; churn-risk 292/1634 flagged, top row backend/main.py risk_score=501). Refresh buttons work, no regression on existing HealthScoreWidget or the health-bars section, no new console errors from the two new components.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase3a_duplication_churn.py",
+    "/app/test_reports/pytest/phase3a_dup_churn.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "churn_risk.py uses a dynamic dict key `commits_last_%dd % days` (e.g. commits_last_90d) — works, but the frontend already hardcodes `commits_last_${data.window_days}d`. Would be more consistent to use a stable key like `commits` and expose `window_days` separately at row level; low priority since it works today.",
+    "duplication_scanner.py timeout is 60s while frontend useAsyncState is 30s. On a cold `npx` fetch (first install of jscpd@5.0.16 in a fresh env) this could mismatch; on this preview it completed in ~2s so it's fine, just worth noting.",
+    "Both endpoints call `run_health_report()` / jscpd on every request with no caching. Acceptable for admin-only reads but on a busy Cockpit reload it will re-scan the whole codebase each time (~2-3s each). Same posture as existing /architecture-health so consistent, but a shared cache TTL would be a nice future optimisation."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100%"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md, preview only)",
+  "seed_data_creation": "None. Both endpoints are pure read-only (jscpd shell-out + git log parse).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend paths are /api/aurem-dev/admin/duplication and /api/aurem-dev/admin/churn-risk (Bearer token from /api/aurem-dev/auth/login). Frontend widget testids: churn-risk-widget, duplication-widget, churn-risk-refresh-button, duplication-refresh-button, duplication-pct, churn-risk-row-<file>, duplication-cluster-<i>. To exercise /admin/cockpit, seed localStorage.aurem_token AND localStorage.aurem_user (with is_admin=true or tier='founder') before navigating — AdminRoute reads both via isAdminOrFounder().",
+  "rca of the issue": "N/A — no issues found."
+}

@@ -20,6 +20,8 @@ import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import LiveBusinessIntelligence from "../components/LiveBusinessIntelligence";
 import HealthScoreWidget from "../components/HealthScoreWidget";
+import ChurnRiskWidget from "../components/ChurnRiskWidget";
+import DuplicationWidget from "../components/DuplicationWidget";
 
 const C = {
   bg:     "#0a0a0a",
@@ -520,6 +522,18 @@ export default function AdminCockpit() {
             scores AUREM's OWN codebase (security/coverage/perf/etc),
             not live production checks. */}
         <HealthScoreWidget />
+
+        {/* 2026-08-26 — Phase 3a follow-up: churn × complexity risk
+            ranking (services/churn_risk.py), directly under the Health
+            Score section since it's the same "scan our own codebase"
+            family, not a production/business metric. */}
+        <ChurnRiskWidget />
+
+        {/* 2026-08-26 — Phase 3a follow-up: code duplication (jscpd).
+            Kept as its own small Cockpit card rather than growing
+            AdminQADashboard.jsx further (already flagged approaching
+            the file-size guideline in the last code review). */}
+        <DuplicationWidget />
       </div>
     </div>
   );

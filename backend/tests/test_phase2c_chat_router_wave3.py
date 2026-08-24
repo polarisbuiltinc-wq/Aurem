@@ -543,7 +543,7 @@ class TestSmallRemainingBranches:
     @pytest.mark.asyncio
     async def test_generate_done_followup_empty_llm_returns_fallback(self):
         from routers import chat as router_mod
-        with patch("routers.chat.call_llm_with_meta",
+        with patch("services.chat_helpers.call_llm_with_meta",
                   AsyncMock(return_value={"content": "   "})):
             result = await router_mod._generate_done_followup(
                 original="fix the bug", summary="fixed", files=["a.py"], sha="abc123")

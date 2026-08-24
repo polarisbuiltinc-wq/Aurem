@@ -32,7 +32,10 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 # ── Static lock — source contains -200, not -40 ──────────────────────
 def test_persist_turn_slice_is_200_not_40():
-    src = (Path(__file__).resolve().parents[1] / "routers" / "chat.py").read_text(
+    # 2026-08-26 — `_persist_turn` was mechanically moved from
+    # routers/chat.py to services/chat_helpers.py (zero logic change,
+    # see PRD.md); the static lock now checks its real location.
+    src = (Path(__file__).resolve().parents[1] / "services" / "chat_helpers.py").read_text(
         encoding="utf-8",
     )
     # We check both the constant and the tracking comment.

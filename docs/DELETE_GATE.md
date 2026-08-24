@@ -36,6 +36,21 @@ Approved by: [name]
 Date: [date]
 ```
 
+### 2026-08-26 — automated push-flow verdict
+
+This repo pushes straight to `main` (no PR flow), so the manual template
+above was easy to forget in an auto-committed push. The `delete-gate` CI
+job (`.github/workflows/ci.yml`) now closes that gap itself: if a push
+deletes source files and this same push did NOT already update this doc,
+the job runs `check-safe-to-delete.sh` on every deleted file and:
+- if **every** file comes back "✅ ZERO references found" — it appends
+  an auto-generated verdict block below (bot commit, `[delete-gate-bot]`)
+  and the gate passes. The audit trail is never skipped.
+- if **any** file still has real references — the gate **fails for
+  real**, same as before. This only automates the safe case; a risky
+  deletion still needs a human/agent to look at it and either restore
+  the file or manually record a verdict.
+
 ## Layer 3 — Quarantine instead of hard-delete
 
 Even with a ✅ verdict, never hard-delete immediately:

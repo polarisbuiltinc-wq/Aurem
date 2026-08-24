@@ -11,6 +11,7 @@ Contains 16 handler(s)/helper(s):
   POST /admin/brain/{project_id}/replay
   GET  /admin/brain/{project_id}/recent-commits
   GET  /admin/code-surface   GET /admin/architecture-health
+  GET  /admin/duplication   GET /admin/churn-risk
   GET  /admin/postscan-issues
 
 Every handler + helper is COPIED VERBATIM from the pre-split admin.py.
@@ -400,6 +401,33 @@ async def architecture_health(
                     "violations":  len(report["boundary_violations"]),
                 }}
     return {"ok": True, "report": report}
+
+
+@router.get("/duplication")
+async def code_duplication(authorization: Optional[str] = Header(None)):
+    """Code-duplication scan (jscpd) — see services/duplication_scanner.py.
+
+    2026-08-26 — Phase 3a follow-up. Fast enough (~1-2s) to run live on
+    every call, same posture as /architecture-health above."""
+    await _require_admin(authorization)
+    from services.duplication_scanner import run_duplication_scan
+    result = await asyncio.to_thread(run_duplication_scan)
+    return result
+
+
+@router.get("/churn-risk")
+async def churn_risk(days: int = 90, authorization: Optional[str] = Header(None)):
+    """Git-churn × complexity/bloat risk ranking.
+
+    2026-08-26 — Phase 3a follow-up. Reuses the same architecture_health
+    scan already run for /architecture-health so this costs one extra
+    `git log` parse, not a second full-codebase scan."""
+    await _require_admin(authorization)
+    from services.architecture_health import run_health_report
+    from services.churn_risk import compute_churn_risk
+    report = await asyncio.to_thread(run_health_report)
+    result = await asyncio.to_thread(compute_churn_risk, days, 15, report)
+    return result
 
 
 @router.get("/brain/{project_id}/recent-commits")

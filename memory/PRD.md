@@ -4,6 +4,120 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
 
+## 2026-08-26 (latest) — Safe mechanical extraction: routers/chat.py + services/loop_engine.py — testing_agent live E2E 100%, 0 issues
+
+Founder-approved continuation of the coverage-floor split work (`chat.py`
+and `loop_engine.py` both cleared the 60% floor; `cto_projects.py` is at
+58.0%, held per founder decision). Scope explicitly limited to a SAFE
+MECHANICAL EXTRACTION — zero logic changes, no attempt to break up the
+`LoopEngine` class itself (see "Deferred" below).
+
+**routers/chat.py: 4160 → 3634 lines (526 lines / 12.6% cut).** New
+`services/chat_helpers.py` now holds every pure/standalone helper NOT
+part of `chat_send`/`chat_stream`'s own endpoint bodies and NOT checked
+by a literal source-text test (see below): `_detect_mode`,
+`_deduct_tokens`, `is_fix_confirmation`, `_safe_provenance`,
+`detect_prompt_injection`, `_f12_has_real_signal`,
+`_is_transient_proxy_error`, `_TRANSIENT_PROXY_CODES`, `classify_intent`,
+`_TITLE_SYSTEM`/`_generate_title`/`_maybe_set_title`,
+`_regenerate_without_recall`/`_strip_council_block`, `_persist_turn`,
+`_build_failed_followup`/`_build_done_fallback`/`_FOLLOWUP_SYS`/
+`_generate_done_followup`. All re-exported via a single `from
+services.chat_helpers import (...)` block near the top of `chat.py` so
+every existing bare-name call site inside `chat_send`/`chat_stream`,
+every `from routers.chat import X`, and every `patch("routers.chat.X",
+...)` in the pre-existing test suite keep working unchanged (Python
+re-export semantics — the name just has to be bound in `chat.py`'s
+namespace, not defined there). `chat_send`, `chat_stream` (~2280 lines,
+untouched), `ORA_PANEL_TONE`, `ChatBody`, the shell-handoff guard
+(`_maybe_guard_shell_handoff_followup`/`_handoff_brief_is_shell_command`/
+`_HANDOFF_FENCE_RE`), and every router endpoint/decorator stay in
+`chat.py` — **deliberately NOT moved** because 3 existing tests do a
+literal `open(chat.py).read()` source-text check for
+`"_HANDOFF_FENCE_RE = re.compile("` / `"ORA_PANEL_TONE = ("` /
+`"async def _maybe_guard_shell_handoff_followup"` (verified via a full
+grep sweep of `tests/*.py` before extracting — moving those would have
+broken 2 test files for zero benefit).
+
+**services/loop_engine.py: 4517 → 4214 lines (303 lines / 6.7% cut —
+correctly "modest", per founder's own framing.** New
+`services/loop_engine_helpers.py` holds standalone helpers that don't
+touch `LoopEngine`'s internal state or the module-level `_LIVE`
+in-process registry: `_now`/`_iso`/`_new_event`, `_persist_session`,
+`_log_error`, `_save_plan`/`_td`, `record_backup`/`rollback`,
+`new_loop_id`, `load_session`, `_commit_message`,
+`_run_security_scan`/`_run_diff_security_scan`. Same re-export pattern
+as chat.py. **Deliberately NOT moved**: `_generate_plan` (2 existing
+tests do a literal source-text `.split("async def _generate_plan(",
+1)` on `loop_engine.py` — moving it breaks them for zero benefit);
+`resume_stale`/`sweep_expired_awaiting_confirmations` (both directly
+manipulate the module-level `_LIVE` dict, which also backs
+`register`/`deregister`/`lookup` — kept together to avoid splitting
+mutable shared state across two modules); the `LoopState` enum and
+phase-timeout constants (imported by 5+ other files); and — the big
+one — **the `LoopEngine` class itself, still ~3570 lines / ~85% of the
+file**. One real wrinkle caught before it shipped: `_save_plan`
+originally referenced the module constant `PLAN_TTL_S` — pulling that
+into the new helpers module via a normal top-level import would have
+created a circular import (`loop_engine.py` imports
+`loop_engine_helpers.py` which would import `loop_engine.py` back).
+Fixed with a lazy `from services.loop_engine import PLAN_TTL_S` inside
+the function body itself (only resolved at call time, long after both
+modules have finished loading) — verified working under live load by
+the testing agent.
+
+**Test-suite fallout (structural, not behavioural) — found & fixed
+before calling the testing agent**: ~10 test cases in
+`test_phase2c_chat_router.py`/`_wave3.py` patched
+`patch("routers.chat.call_llm_with_meta", ...)` /
+`patch("routers.chat._generate_title", ...)` /
+`patch("routers.chat.chat_with_tools", ...)` expecting the *now-moved*
+`_generate_title`/`_maybe_set_title`/`_regenerate_without_recall`/
+`_generate_done_followup` to look up those dependencies inside
+`routers.chat`'s namespace — but a moved function resolves its own
+bare-name globals from the module it's actually *defined* in
+(`services.chat_helpers`), not the module that merely re-imports it.
+Retargeted all 10 patches to `services.chat_helpers.X`; also retargeted
+one literal source-text lock
+(`test_iter329_chat_history_write_cap.py`, guarding the historic
+"-40 vs -200" chat-cap regression) from reading `routers/chat.py` to
+reading `services/chat_helpers.py`, since that's where `_persist_turn`
+actually lives now. All are mechanical test-infrastructure fixes, zero
+production-behavior change.
+
+**Verified**: scoped pytest — `test_phase2c_chat_router*.py` 125/125,
+`test_iter212m131_loop_engine_rca.py` + `_generate_plan`/`_save_plan`
+source-lock tests + `build_commit_message` caller-lock test 87/87, full
+`loop_engine`/`loop_rollback` keyword sweep 70/70 — all passing after
+the patch-target fixes above. A `git stash` A/B comparison confirmed
+~23 other failing tests across the wider suite are pre-existing
+(REACT_APP_BACKEND_URL env-var collection issues, unrelated house-
+rules/frontend-source-text checks, a pre-existing bin_context/PAT-
+decrypt test-env issue) — identical failures on the unmodified code,
+not caused by this batch. Backend boots clean (`/api/health` 200, no
+import/circular-import errors). **`testing_agent`** —
+`/app/test_reports/iteration_chat_loop_extraction_2026_08_26.json` —
+100% backend + 100% frontend, **0 critical/minor issues from this
+extraction**: live `/chat/send` + `/chat/stream` produced real
+streamed replies with mode/provider/provenance intact, `/chat/history`
+round-tripped a real turn AND the auto-generated title (proves
+`_persist_turn` + `_maybe_set_title` wired end-to-end from the new
+module), all other chat endpoints 200, `/loop/start` + `/loop/active`
+confirmed loop_engine + loop_engine_helpers import cleanly with no
+circular-import. One informational note (an orphaned stale loop lock
+on the preview account, pre-existing, unrelated) — not a code issue.
+
+**Deferred (explicit future item, not started today)**: the
+`LoopEngine` class itself (~3570 lines / ~85% of `loop_engine.py`) is
+the single largest remaining maintainability lever in the codebase and
+was intentionally NOT touched this pass — it is highly stateful
+(pipeline task refs, phase transitions, self-heal retries, the
+`_LIVE` registry) and any breakup needs its own dedicated, carefully-
+scoped pass with its own regression plan, not a mechanical cut.
+`cto_projects.py` (58.0% coverage, just under the 60% floor) also
+remains on hold per founder's standing rule — no structural split
+until it clears 60%.
+
 ## 2026-08-26 (later still) — Admin data-integrity audit fixes + GitHub App reconnect root-cause fix (founder-diagnosed) — testing_agent 8/8, 0 issues
 
 Founder-driven audit (admin panel, README, homepage) surfaced 6 real
