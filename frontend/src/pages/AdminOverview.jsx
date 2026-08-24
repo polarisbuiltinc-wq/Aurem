@@ -8,6 +8,7 @@
  * Add to AuremAdminPanel.jsx as the first tab: "Overview"
  */
 import React, { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, getToken } from "../lib/api";
 import { LLMCreditMonitor } from "./AdminLLMCredits";       // Iter 212m-171
 import { BoundaryProbesTile } from "../components/BoundaryProbesTile";  // Iter 212m-171
@@ -2036,7 +2037,27 @@ function SloCard({ data }) {
 // services/cost_revenue_alert_cron.py fires this every 30 min and
 // (log-only by default in preview) records a finding here even
 // without emailing the founder.
+function CostSparkline({ series }) {
+  if (!series || series.length < 2) return null;
+  const W = 260, H = 46, PAD = 2;
+  const allVals = series.flatMap((d) => [d.cost, d.revenue]);
+  const max = Math.max(1, ...allVals);
+  const stepX = (W - PAD * 2) / (series.length - 1);
+  const toPts = (key) => series.map((d, i) => {
+    const x = PAD + i * stepX;
+    const y = H - PAD - (Math.min(d[key], max) / max) * (H - PAD * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  return (
+    <svg data-testid="cost-alert-sparkline" width={W} height={H} style={{ display: "block", marginTop: 8 }}>
+      <polyline points={toPts("revenue")} fill="none" stroke="#3ecf8e" strokeWidth="1.5" opacity="0.85" />
+      <polyline points={toPts("cost")} fill="none" stroke="#ff8a8a" strokeWidth="1.5" opacity="0.85" />
+    </svg>
+  );
+}
+
 function CostAlertCard({ data }) {
+  const navigate = useNavigate();
   const breach = data.aggregate_breach;
   const offenders = data.offenders || [];
   return (
@@ -2060,6 +2081,11 @@ function CostAlertCard({ data }) {
           <div style={{ fontSize: 10.5, color: "var(--text-faint)", marginTop: 4 }}>
             {data.paying_customers} paying customer(s) in window
           </div>
+          <CostSparkline series={data.daily_series} />
+          <div style={{ fontSize: 9.5, color: "var(--text-faint)", marginTop: 2 }}>
+            <span style={{ color: "#ff8a8a" }}>■</span> cost &nbsp;
+            <span style={{ color: "#3ecf8e" }}>■</span> revenue &nbsp;· last {(data.daily_series || []).length}d
+          </div>
         </div>
         <div data-testid="cost-alert-offenders-tile" style={{
           padding: "12px 14px", borderRadius: 6,
@@ -2080,14 +2106,23 @@ function CostAlertCard({ data }) {
       {offenders.length > 0 && (
         <div data-testid="cost-alert-offenders-list" style={{ marginTop: 10 }}>
           {offenders.slice(0, 5).map((o) => (
-            <div key={o.user_id} style={{
-              display: "flex", justifyContent: "space-between",
-              fontSize: 11.5, color: "var(--text-dim)", padding: "6px 2px",
-              borderBottom: "1px solid var(--border)",
-            }}>
-              <span>{o.email || o.user_id}</span>
+            <button
+              key={o.user_id}
+              type="button"
+              data-testid={`cost-alert-offender-row-${o.user_id}`}
+              onClick={() => navigate(`/admin/users?drill_user=${encodeURIComponent(o.user_id)}`)}
+              title="Open this customer's usage & billing history"
+              style={{
+                display: "flex", justifyContent: "space-between", width: "100%",
+                fontSize: 11.5, color: "var(--text-dim)", padding: "6px 2px",
+                borderBottom: "1px solid var(--border)", background: "none",
+                border: "none", borderBottomWidth: 1, borderBottomStyle: "solid",
+                borderBottomColor: "var(--border)", textAlign: "left", cursor: "pointer",
+              }}
+            >
+              <span style={{ textDecoration: "underline" }}>{o.email || o.user_id}</span>
               <span>cost ${o.cost_usd} · paid ${o.revenue_usd} · over ${o.overage_usd}</span>
-            </div>
+            </button>
           ))}
         </div>
       )}

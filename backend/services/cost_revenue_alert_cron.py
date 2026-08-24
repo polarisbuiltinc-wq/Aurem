@@ -58,6 +58,45 @@ def _email_enabled() -> bool:
     return v in ("1", "true", "on", "yes")
 
 
+async def _daily_series(db, since: float, period_days: int) -> list:
+    """2026-08-27 · Cost Trend Chart — day-bucketed cost/revenue for the
+    sparkline on the admin card. `customer_chat_cost` already carries a
+    `ts_day` bucket key (services/ora_chat/cost_tracker._current_day_key
+    format, 'YYYY-MM-DD'); `cto_payments` only has raw epoch `created_at`,
+    bucketed here with the same format via $dateToString."""
+    cost_by_day: dict = {}
+    async for d in db.customer_chat_cost.aggregate([
+        {"$match": {"ts": {"$gte": since}}},
+        {"$group": {"_id": "$ts_day", "cost": {"$sum": "$cost_usd"}}},
+    ]):
+        if d.get("_id"):
+            cost_by_day[d["_id"]] = round(float(d.get("cost") or 0), 2)
+
+    revenue_by_day: dict = {}
+    async for d in db.cto_payments.aggregate([
+        {"$match": {"created_at": {"$gte": since}, "payment_status": "paid"}},
+        {"$addFields": {"_day": {"$dateToString": {
+            "format": "%Y-%m-%d",
+            "date": {"$toDate": {"$multiply": ["$created_at", 1000]}},
+        }}}},
+        {"$group": {"_id": "$_day", "amount": {"$sum": "$amount"}}},
+    ]):
+        if d.get("_id"):
+            revenue_by_day[d["_id"]] = round(float(d.get("amount") or 0), 2)
+
+    series = []
+    now_dt = datetime.now(timezone.utc)
+    for i in range(period_days - 1, -1, -1):
+        dt = now_dt - timedelta(days=i)
+        key = f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d}"
+        series.append({
+            "day": key,
+            "cost": cost_by_day.get(key, 0.0),
+            "revenue": revenue_by_day.get(key, 0.0),
+        })
+    return series
+
+
 async def compute_cost_revenue_status(db, period_days: int = PERIOD_DAYS) -> dict:
     """Real numbers, no cache — same collections /admin/token-pnl reads.
     Called by both the cron tick and the admin card's on-demand GET."""
@@ -106,6 +145,8 @@ async def compute_cost_revenue_status(db, period_days: int = PERIOD_DAYS) -> dic
         except Exception:
             pass
 
+    daily_series = await _daily_series(db, since, min(period_days, 30))
+
     return {
         "period_days": period_days,
         "computed_at": datetime.now(timezone.utc).isoformat(),
@@ -113,6 +154,7 @@ async def compute_cost_revenue_status(db, period_days: int = PERIOD_DAYS) -> dic
         "revenue_total": revenue_total,
         "aggregate_breach": aggregate_breach,
         "paying_customers": len(revenue_by_user),
+        "daily_series": daily_series,
         "offenders": offenders[:20],
         "offenders_count": len(offenders),
         "email_enabled": _email_enabled(),

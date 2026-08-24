@@ -3476,6 +3476,21 @@ export default function Admin({ initialTab = "overview" }) {
     setSelectedUser(null);
   }, [initialTab]);
 
+  // 2026-08-27 — Per-Customer Drilldown. The Live Cost Alert card
+  // (AdminOverview) links straight to a specific offending customer
+  // via `/admin/users?drill_user=<id>` instead of making the founder
+  // manually search for them in the Users list. UserDetail only ever
+  // needs `user.user_id` (it re-fetches full detail itself), so a
+  // minimal seed object is enough while the real fetch resolves.
+  useEffect(() => {
+    if (page !== "users") return;
+    const params = new URLSearchParams(location.search);
+    const drillId = params.get("drill_user");
+    if (!drillId) return;
+    setSelectedUser({ user_id: drillId });
+    navigate("/admin/users", { replace: true });
+  }, [page, location.search, navigate]);
+
   useEffect(() => {
     // Guard order matters: NO token at all → bounce to /login with a
     // `next=/admin` so we come right back after sign-in. With a token

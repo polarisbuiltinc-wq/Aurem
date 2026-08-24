@@ -44,6 +44,27 @@ export default function Pricing() {
           </p>
         </div>
         <PricingCards currentTier={currentTier} />
+        <footer style={{
+          marginTop: 48, paddingTop: 16, textAlign: "center",
+          borderTop: "1px solid var(--border, rgba(255,200,120,0.16))",
+          fontSize: 11, color: "var(--text-faint)",
+        }}>
+          <button
+            type="button"
+            data-testid="pricing-footer-cookie-prefs"
+            onClick={() => {
+              try { localStorage.removeItem("aurem_consent"); } catch (_e) { /* private mode */ }
+              window.dispatchEvent(new CustomEvent("aurem:reopen-consent"));
+            }}
+            style={{
+              background: "transparent", border: "none", padding: 0,
+              cursor: "pointer", color: "inherit", font: "inherit",
+              textDecoration: "underline",
+            }}
+          >
+            Cookie preferences
+          </button>
+        </footer>
       </div>
     </Shell>
   );

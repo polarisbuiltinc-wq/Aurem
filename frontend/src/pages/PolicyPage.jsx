@@ -135,6 +135,21 @@ export default function PolicyPage({ slug }) {
         <Link to="/privacy" style={{ color: "inherit", marginRight: 16 }}>Privacy</Link>
         <Link to="/terms" style={{ color: "inherit", marginRight: 16 }}>Terms</Link>
         <Link to="/acceptable-use" style={{ color: "inherit", marginRight: 16 }}>Acceptable Use</Link>
+        <button
+          type="button"
+          data-testid="policy-footer-cookie-prefs"
+          onClick={() => {
+            try { localStorage.removeItem("aurem_consent"); } catch (_e) { /* private mode */ }
+            window.dispatchEvent(new CustomEvent("aurem:reopen-consent"));
+          }}
+          style={{
+            background: "transparent", border: "none", padding: 0,
+            marginRight: 16, cursor: "pointer", color: "inherit",
+            font: "inherit", textDecoration: "underline",
+          }}
+        >
+          Cookie preferences
+        </button>
         <span>· Questions? <a href="/support" style={{ color: "inherit" }}>auremcto.com/support</a></span>
       </footer>
     </div>
