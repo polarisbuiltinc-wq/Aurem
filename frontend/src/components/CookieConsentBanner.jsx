@@ -17,7 +17,7 @@
  *     integrate a real CMP like Cookiebot/OneTrust — this file is the interim.
  */
 import React, { useEffect, useState, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Z_COOKIE_BANNER } from "../lib/zIndex";
 
 const STORAGE_KEY = "aurem_consent";
@@ -113,6 +113,14 @@ function isGpcOn() {
 }
 
 export default function CookieConsentBanner() {
+  const location = useLocation();
+  // 2026-08-27 — Cosmetic Polish fix. This banner is mounted once,
+  // outside <Routes>, so it never unmounts on navigation — but on
+  // /admin/* it kept surfacing on top of the founder's own dashboard,
+  // where a public-visitor GDPR consent prompt is irrelevant (admin is
+  // logged-in internal tooling, not a marketing/tracked surface). Skip
+  // it entirely there instead of just visually clipping it.
+  const isAdminRoute = location.pathname.startsWith("/admin");
   const [visible, setVisible]   = useState(false);
   const [showPrefs, setShowPrefs] = useState(false);
   const [cats, setCats] = useState(DEFAULT_CATS);
@@ -149,7 +157,7 @@ export default function CookieConsentBanner() {
     return () => window.removeEventListener("aurem:reopen-consent", openBanner);
   }, [openBanner]);
 
-  if (!visible) return null;
+  if (isAdminRoute || !visible) return null;
 
   const acceptAll = () => {
     const next = { necessary: true, functional: true, analytics: true, marketing: true };

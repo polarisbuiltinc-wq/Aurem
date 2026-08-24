@@ -35,6 +35,7 @@ export default function AdminOverview() {
   const [deployReadiness, setDeployReadiness] = useState(null); // 2026-08-24 — Option A advisory card
   const [dora, setDora] = useState(null); // 2026-08-24 — Guard 22, DORA metrics
   const [slo, setSlo] = useState(null); // 2026-08-26 — Phase 5.3, SLO compliance
+  const [costAlert, setCostAlert] = useState(null); // 2026-08-27 — Live Cost Alert
   const [refreshingHealth, setRefreshingHealth] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -42,7 +43,7 @@ export default function AdminOverview() {
     const h = { Authorization: `Bearer ${getToken()}` };
     const HEALTH_URL = `${process.env.REACT_APP_BACKEND_URL}/api/health`;
     try {
-      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes, ghFunnelRes, nudgeStagesRes, backupStatusRes, drillHistoryRes, deployReadinessRes, doraRes, sloRes] =
+      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes, ghFunnelRes, nudgeStagesRes, backupStatusRes, drillHistoryRes, deployReadinessRes, doraRes, sloRes, costAlertRes] =
         await Promise.allSettled([
           fetch(HEALTH_URL, { signal: AbortSignal.timeout(10000) }).then((r) => r.json()),
           api.get("/usage/public/stats"),
@@ -65,6 +66,7 @@ export default function AdminOverview() {
           api.get("/admin/deploy-readiness", { headers: h }),      // 2026-08-24 — Option A advisory card
           api.get("/admin/insights/dora", { headers: h }),         // 2026-08-24 — Guard 22 DORA metrics
           api.get("/admin/insights/slo", { headers: h }),          // 2026-08-26 — Phase 5.3 SLO compliance
+          api.get("/admin/insights/cost-alert", { headers: h }),   // 2026-08-27 — Live Cost Alert
         ]);
       if (healthRes.status   === "fulfilled") setHealth(healthRes.value);
       if (statsRes.status    === "fulfilled") setStats(statsRes.value.data);
@@ -87,6 +89,7 @@ export default function AdminOverview() {
       if (deployReadinessRes.status === "fulfilled") setDeployReadiness(deployReadinessRes.value.data);
       if (doraRes.status === "fulfilled") setDora(doraRes.value.data);
       if (sloRes.status === "fulfilled") setSlo(sloRes.value.data);
+      if (costAlertRes.status === "fulfilled") setCostAlert(costAlertRes.value.data);
     } catch { /* silent */ }
     finally { setLoading(false); }
   }, []);
@@ -835,6 +838,10 @@ export default function AdminOverview() {
       {/* ── 2026-08-26 — Phase 5.3 — SLO compliance ──────────── */}
       {slo && !slo.error && (
         <SloCard data={slo} />
+      )}
+      {/* ── 2026-08-27 — Live Cost Alert ─────────────────────── */}
+      {costAlert && !costAlert.error && (
+        <CostAlertCard data={costAlert} />
       )}
       {/* ── 2026-08-20 — stage-aware nudge visibility ────────── */}
       {nudgeStages?.nudge_stages && (
@@ -2022,6 +2029,73 @@ function SloCard({ data }) {
     </Section>
   );
 }
+
+// ── Live Cost Alert card (2026-08-27) ─────────────────────────────
+// AI cost vs customer revenue — aggregate + per-paying-customer.
+// Same numbers /admin/token-pnl already shows, watched proactively:
+// services/cost_revenue_alert_cron.py fires this every 30 min and
+// (log-only by default in preview) records a finding here even
+// without emailing the founder.
+function CostAlertCard({ data }) {
+  const breach = data.aggregate_breach;
+  const offenders = data.offenders || [];
+  return (
+    <Section title={`Live Cost Alert · AI cost vs revenue (${data.period_days}d)`}>
+      <div data-testid="cost-alert-card" style={{
+        display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10,
+      }}>
+        <div data-testid="cost-alert-aggregate-tile" style={{
+          padding: "12px 14px", borderRadius: 6,
+          background: breach ? "rgba(232, 70, 70, 0.06)" : "var(--panel-2)",
+          border: breach ? "1px solid rgba(232, 70, 70, 0.28)" : "1px solid var(--border)",
+        }}>
+          <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".04em" }}>
+            AI cost vs revenue (aggregate)
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4, color: breach ? "#ff8a8a" : "var(--text)" }}>
+            ${data.ai_cost_total} <span style={{ fontSize: 12, color: "var(--text-faint)" }}>cost</span>
+            {" / "}${data.revenue_total} <span style={{ fontSize: 12, color: "var(--text-faint)" }}>revenue</span>
+            {breach && <span data-testid="cost-alert-aggregate-breach-badge" style={{ fontSize: 11, marginLeft: 8, color: "#ff8a8a" }}>breach</span>}
+          </div>
+          <div style={{ fontSize: 10.5, color: "var(--text-faint)", marginTop: 4 }}>
+            {data.paying_customers} paying customer(s) in window
+          </div>
+        </div>
+        <div data-testid="cost-alert-offenders-tile" style={{
+          padding: "12px 14px", borderRadius: 6,
+          background: offenders.length ? "rgba(232, 70, 70, 0.06)" : "var(--panel-2)",
+          border: offenders.length ? "1px solid rgba(232, 70, 70, 0.28)" : "1px solid var(--border)",
+        }}>
+          <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".04em" }}>
+            Customers costing more than they pay
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4, color: offenders.length ? "#ff8a8a" : "var(--text)" }}>
+            {data.offenders_count}
+          </div>
+          <div style={{ fontSize: 10.5, color: "var(--text-faint)", marginTop: 4 }}>
+            {data.email_enabled ? "Founder email ON" : "Log-only (email off in preview)"}
+          </div>
+        </div>
+      </div>
+      {offenders.length > 0 && (
+        <div data-testid="cost-alert-offenders-list" style={{ marginTop: 10 }}>
+          {offenders.slice(0, 5).map((o) => (
+            <div key={o.user_id} style={{
+              display: "flex", justifyContent: "space-between",
+              fontSize: 11.5, color: "var(--text-dim)", padding: "6px 2px",
+              borderBottom: "1px solid var(--border)",
+            }}>
+              <span>{o.email || o.user_id}</span>
+              <span>cost ${o.cost_usd} · paid ${o.revenue_usd} · over ${o.overage_usd}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Section>
+  );
+}
+
+
 
 
 function FunnelCard({ data }) {

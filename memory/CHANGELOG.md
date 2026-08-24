@@ -666,3 +666,18 @@ Founder directive: investigate-first on a 9-item production admin sweep, then ro
 - Business Pulse 520 / Codebase Health Score stuck loading — UNCERTAIN, not reproducible in Preview, needs production repro evidence.
 - 2 quarantined live-E2E tests broken because their external GitHub testbed repo (`polarisbuiltinc-wq/aurem-rollback-testbed`) 404s on GitHub itself — not part of CI, not fixed.
 - Code Duplication metric — would need a new dependency (`jscpd` or similar), proposed not built.
+
+## 2026-08-27 — Cosmetic Polish + Live Cost Alert (founder-approved batch)
+Status: Built, Preview-tested (`testing_agent`, 100% backend + 100% frontend, 0 critical/minor issues — `/app/test_reports/iteration_cost_alert_cookie_qa_skeleton_2026_01.json`). Production adoption pending founder redeploy.
+
+1. **Cookie consent banner fix** — `frontend/src/components/CookieConsentBanner.jsx` now reads `useLocation()` and early-returns `null` on any `/admin/*` path. Root cause: the banner is mounted once outside `<Routes>` and stays visible until a decision button is clicked — it was showing on the founder's own internal admin tool (not a tracked public surface, irrelevant there). Public-page accept/reject/manage/save flows unaffected — still persist to `localStorage.aurem_consent` and don't reappear once dismissed.
+2. **Admin QA Health skeleton** — `frontend/src/pages/AdminQADashboard.jsx`'s loading state replaced plain "Loading QA status…" text with a `QASkeleton` component (shimmer, mirrors the real 4-card grid) since the real `/admin/qa/status` fetch (AST parse across the whole test suite) takes several seconds.
+3. **Live Cost Alert** — new `backend/services/cost_revenue_alert_cron.py`:
+   - `compute_cost_revenue_status(db, period_days=30)` computes AGGREGATE (total `customer_chat_cost.cost_usd` vs total `cto_payments` paid `amount` — same numbers `/admin/token-pnl` shows) AND PER-CUSTOMER (only users with ≥1 paid payment in window — free/trial cost-with-$0-revenue is expected, not flagged) breach detection. Noise floors: $1.00 aggregate, $0.50 per-customer.
+   - Cron registered in `main.py` (`app.state.cost_revenue_alert_cron_task`, `_supervise`-wrapped), every 1800s (`COST_ALERT_INTERVAL_SEC`), 6h dedup per `source_key` via its own `db.cost_revenue_alert_log` collection (`source_key_created_at` index ensured once per boot).
+   - **Founder decision (per ask_human)**: real Resend email gated behind `ENABLE_COST_REVENUE_ALERT_EMAIL` (default OFF/unset) — log-only in Preview, no inbox spam, until founder confirms. Reuses `services/founder_alerts.py::send_founder_alert()` when enabled; own dedup log (not `founder_alert_sends`) so visibility isn't tied to email being on.
+   - New endpoint `GET /api/aurem-dev/admin/insights/cost-alert` (admin JWT) — on-demand version of the same computation + last 10 `recent_findings`.
+   - New `CostAlertCard` on `AdminOverview.jsx` (`/admin/overview`), below `SloCard` — aggregate cost-vs-revenue tile, offenders tile, top-5 offender list.
+   - Verified (unit-style + live curl): cost>revenue+floor → breach=true; non-paying user with cost and zero revenue never appears as a per-customer offender (aggregate still reflects it correctly). Live Preview at test time: `ai_cost_total=$0.08`, `revenue_total=$0`, `aggregate_breach=false` (below $1 floor) — expected given current tiny Preview spend, not a bug.
+- Scope held per prior founder instruction, untouched this batch: k6 load test, guard dashboard, retry insight badge, sensitive-edit approval UI, Parliament tile.
+

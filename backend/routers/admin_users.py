@@ -1006,6 +1006,32 @@ async def slo_metrics_endpoint(
     return await compute_slo(db, period_days=period_days)
 
 
+@router.get("/insights/cost-alert")
+async def cost_revenue_alert_endpoint(
+    period_days: int = 30,
+    authorization: Optional[str] = Header(None),
+) -> dict:
+    """2026-08-27 — Live Cost Alert. On-demand version of the same
+    computation the cron tick runs (services/cost_revenue_alert_cron.py)
+    so the admin Overview card always shows fresh numbers, not a cached
+    cron snapshot. Also returns the most recent recorded findings
+    (email or log-only) for visibility into what already fired."""
+    await _require_admin(authorization)
+    db = require_db()
+    from services.cost_revenue_alert_cron import compute_cost_revenue_status
+    period_days = max(1, min(period_days, 90))
+    status = await compute_cost_revenue_status(db, period_days=period_days)
+
+    recent = await db.cost_revenue_alert_log.find(
+        {}, {"_id": 0}
+    ).sort("created_at", -1).limit(10).to_list(10)
+    for r in recent:
+        if hasattr(r.get("created_at"), "isoformat"):
+            r["created_at"] = r["created_at"].isoformat()
+    status["recent_findings"] = recent
+    return status
+
+
 @router.post("/github-app/repair-orphaned-installations")
 async def repair_orphaned_installations(
     dry_run: bool = True,

@@ -96,6 +96,64 @@ function CIJobChip({ name, job }) {
   );
 }
 
+// 2026-08-27 — Cosmetic Polish. This page's real fetch
+// (`/admin/qa/status`) runs an AST parse across the whole test suite
+// server-side and can take several seconds — the old "Loading QA
+// status…" text sat alone on a black screen the whole time, reading
+// as broken/blank rather than "working". Skeleton mirrors the real
+// header + 4-card grid below so the layout doesn't jump on load.
+function SkeletonBlock({ w, h, style }) {
+  return (
+    <div style={{
+      width: w, height: h, borderRadius: 6,
+      background: "linear-gradient(90deg, #1a1a1a 25%, #232323 37%, #1a1a1a 63%)",
+      backgroundSize: "400% 100%",
+      animation: "aurem-qa-shimmer 1.4s ease infinite",
+      ...style,
+    }} />
+  );
+}
+
+function QASkeleton() {
+  return (
+    <div data-testid="admin-qa-skeleton"
+          style={{ minHeight: "100vh", padding: "32px 40px",
+                    background: "#0a0a0a", fontFamily: "system-ui" }}>
+      <style>{`@keyframes aurem-qa-shimmer {
+        0% { background-position: 100% 50%; }
+        100% { background-position: 0 50%; }
+      }`}</style>
+      <div style={{ display: "flex", justifyContent: "space-between",
+                     alignItems: "center", marginBottom: 24 }}>
+        <div>
+          <SkeletonBlock w={140} h={20} />
+          <SkeletonBlock w={220} h={12} style={{ marginTop: 8 }} />
+        </div>
+        <SkeletonBlock w={90} h={34} style={{ borderRadius: 6 }} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr",
+                     gap: 20, maxWidth: 1100 }}>
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} style={{
+            background: "#0f0f0f", border: "1px solid #262626",
+            borderRadius: 12, padding: 22,
+          }}>
+            <SkeletonBlock w={110} h={11} />
+            <SkeletonBlock w={160} h={10} style={{ marginTop: 10 }} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr",
+                           gap: 14, marginTop: 18 }}>
+              <SkeletonBlock w={70} h={28} />
+              <SkeletonBlock w={70} h={28} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+
 
 export default function AdminQADashboard() {
   const [data,    setData]    = useState(null);
@@ -122,13 +180,7 @@ export default function AdminQADashboard() {
   useEffect(() => { load(); }, [load]);
 
   if (loading && !data) {
-    return (
-      <div style={{ padding: 40, color: "#666",
-                     fontFamily: "system-ui" }}
-            data-testid="admin-qa-loading">
-        Loading QA status…
-      </div>
-    );
+    return <QASkeleton />;
   }
 
   if (error && !data) {

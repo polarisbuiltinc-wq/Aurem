@@ -107,6 +107,7 @@ from services.integration_health_cron import schedule_integration_health_cron
 # 2026-08-26 — periodic SLO-breach founder-alert cron (approved
 # Stage-1 follow-up, reuses services/slo_metrics.py + founder_alerts.py)
 from services.slo_alert_cron import schedule_slo_alert_cron
+from services.cost_revenue_alert_cron import schedule_cost_revenue_alert_cron
 # Session F — supervised background-task wrapper. Long-lived crons
 # use `supervise(coro, name=..., db_getter=..., long_lived=True)`
 # instead of `_asyncio.create_task(...)` so silent death opens a
@@ -359,6 +360,16 @@ async def lifespan(app: FastAPI):
     app.state.slo_alert_cron_task = _supervise(
         schedule_slo_alert_cron(),
         name="slo_alert_cron",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
+    )
+    # 2026-08-27 — Live Cost Alert. Watches AI cost vs customer revenue
+    # (aggregate + per-paying-customer) every 30 min; real email is
+    # gated behind ENABLE_COST_REVENUE_ALERT_EMAIL (default OFF in
+    # preview per founder decision — log-only until confirmed).
+    app.state.cost_revenue_alert_cron_task = _supervise(
+        schedule_cost_revenue_alert_cron(),
+        name="cost_revenue_alert_cron",
         db_getter=lambda: app.state.db,
         long_lived=True,
     )
