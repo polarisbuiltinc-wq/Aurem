@@ -1,0 +1,331 @@
+[
+  {
+    "path": "/admin/cockpit",
+    "info": {
+      "mainLen": 1308,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nCOCKPIT \u00b7 LIVE\nSystem Overview\nloading system-health checks\u2026\nMODE BOARD\nenv: preview\ndeploy: 4bf9feb09978\ngh: 4bf9feb09978\nstripe: not-set\nTOTAL USERS\n651\n645 free \u00b7 3 paid\nDAU (today)\n0\nREVENUE 30d\n$57\nGITHUB CONNECT %\n0%\n0 of 0\nPAID UPGRADES 30d\n0\n0 paid total\nLive Business Intelligence\nReal Stripe \u00b7 real inference cost from ora_chat_usage + customer_chat_cost \u00b7 Slice ASTRIPE \u00b7 OK \u00b7 LIVE\n\u21bb Refresh BI\n\ud83e\uddf9 Reconcile Orphans\nMRR (LIVE)\nNo data yet\nStripe subscriptions\nARR\n\u2014\nMRR \u00d7 12\nACTIVE SUBS\n0\n+ 0 trialing \u00b7 0 past-due\nNEW (30D)\n0\nsignups \u2192 paid\nCANCELED (30D)\n0\nchurn events\nINFER TODAY (COMBINED)\n$0.0145\nadmin tool $0.0096 \u00b7 customer chat $0.0050\nINFER MON",
+      "hasSpinner": false,
+      "loadingText": true,
+      "errText": false
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/dashboard",
+    "info": {
+      "mainLen": 858,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nUSERS\n651\n32 projects\nTASKS TODAY\n2\n31.2% success\nDONE / FAILED\n5/7\nCHAT SESSIONS\n1686\nlifetime\nRECENT TASKS\nTASK\tUSER\tSTATUS\tCOMMIT\tTIME\n\nAdd a one-line comment '# TEST regression 2026-08-27' at top of README.md\n\ttest_admin\tfailed\t\u2014\t2h ago\n\nFix the push on main: - fix: tiny tweak\n\te0b5c4c1d2\tfailed\t\u2014\t4h ago\n\nAdd a one-line comment to README.md\n\ttest_admin\tdone\td67935c\t1d ago\n\nAdd a one-line comment to README.md\n\ttest_admin\tfailed\t\u2014\t1d ago\n\nAdd a one-line comment to README.md\n\ttest_admin\tdone\tfc804cd\t1d ago\nRECENT USERS\nEMAIL\tNAME\tTIER\tJOINED\nsectest_b_16d147feac@aurem.test\tSecTest B\tfree\t3h ago\nsectest_a_c0a2483db6@aurem.test\tSecTest A\tfree\t3h ago\ne2e-userb",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": true
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/users",
+    "info": {
+      "mainLen": 9009,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nAgent token P&L\nCompare DeepSeek vs Claude (Maxx) \u2014 is the extra cost worth it?\n24h\n7d\n30d\n90d\n1y\nDeepSeek\n$0.00\n0 tok \u00b7 3 tasks\navg $0.0000/task\nClaude (Maxx)\n$0.00\n0 tok \u00b7 0 tasks\nClaude\n$0.00\n0 tok \u00b7 0 tasks\nGroq\n$0.00\n0 tok \u00b7 0 tasks\nAug 23\nTotal: $0.0000\nRange: 7d \u00b7 daily buckets \u00b7 1 pts\nRates: DS $0.30 \u00b7 Maxx/Claude $0.65 \u00b7 Groq $0.03 per 1k tok\nUSERS (100)\nLast 24 h \u00b7 19\nLast 7 days \u00b7 650\nLast 30 days \u00b7 650\nAll time \u00b7 651\n\tEMAIL\tNAME\tTIER\tPROJECTS\tTASKS\tSTATUS\tJOINED\t\n\tsectest_b_16d147feac@aurem.test\tSecTest B\tfree\t0\t0\tactive\t3h ago\t\nview \u2192\ndelete\n\n\tsectest_a_c0a2483db6@aurem.test\tSecTest A\tfree\t0\t0\tactive\t3h ago\t\nview \u2192\ndelete\n\n\te2e-userb-1787591176@",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": true
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/overview",
+    "info": {
+      "mainLen": 10327,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nDEPENDENCIES\nopenrouter\ndeepseek_direct\ngroq\ngithub\nstripe\ntavily\nfirecrawl\nvercel\nresend\nsupabase\nbuild\n4bf9feb09978\n\u00b7\nbuilt 31m ago\n\u00b7\nproduction\n\u00b7 uptime 31m \u00b7\nGitHub \u2713 in sync\nNOT DEPLOY-READY\n(advisory \u2014 Rule C, cannot block the Deploy button)\nws 345c637 \u2260 gh 4bf9feb\nCI failure\nQG failure\nworkspace has 11 uncommitted change(s) \u2014 not on GitHub\nworkspace 345c637 \u2260 GitHub main 4bf9feb \u2014 unpushed commits\nCI is failure for 4bf9feb\nQuality Gate is failure for 4bf9feb\n\u2713 All integrations healthy \u2014 no top-up alerts.\nRe-probe now\nLLM PROVIDER STATUS\nRefresh\nLoading\u2026\nBOUNDARY PROBES \u00b7 TODAY\n0\nNon-zero = someone tried to inspect `/app/*`, `AUREM_MASTER_KEY`, or anot",
+      "hasSpinner": true,
+      "loadingText": false,
+      "errText": true
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/support",
+    "info": {
+      "mainLen": 510,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nSUPPORT INBOX (2 OPEN)\n[TEST] In-app dashboard help button \u2014 quick question about tokens\ntest@aurem.dev \u00b7 12d ago\nopen\nin_app_dashboard\n[TEST] Email-link support message \u2014 hit send from stage 0 link\ntest@aurem.dev \u00b7 12d ago\nopen\nemail_stage_0\nGitHub PAT 401\ntest@aurem.dev \u00b7 85d ago\nresolved\n[TEST] In-app dashboard help button \u2014 quick question about tokens\ntest@aurem.dev \u00b7 12d ago\nresolve\nuser \u00b7 12d ago\n[TEST] In-app dashboard help button \u2014 quick question about tokens\nsend",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": false
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/audit",
+    "info": {
+      "mainLen": 5482,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nAudit feed\nRefresh\nTimestamp\tUser\tProject\tTools\t\ud83d\udee1\ufe0f\t\u26a0\ufe0f Signals\tModel\tRetry\n2026-08-24 19:50:08\ttest_admin\u2026\t\u2014\t0\t\u2014\t\u2014\tglm-5.2\t\u2014\n2026-08-24 18:40:34\ttest_admin\u2026\t\u2014\t0\t\u2014\t\u2014\tglm-5.2\t\u2014\n2026-08-24 17:12:35\ttest_admin\u2026\t\u2014\t0\t\u2014\t\u2014\tintent-gateway-casual\t\u2014\n2026-08-24 17:07:50\ttest_admin\u2026\thome\t0\t\u2014\t\u2014\tintent-gateway-casual\t\u2014\n2026-08-24 17:06:45\ttest_admin\u2026\thome\t0\t\u2014\t\u2014\tintent-gateway-casual\t\u2014\n2026-08-24 17:06:31\ttest_admin\u2026\t\u2014\t0\t\u2014\t\u2014\tglm-5.2\t\u2014\n2026-08-24 16:09:02\ttest_admin\u2026\t\u2014\t0\t\u2014\t\u2014\tintent-gateway-casual\t\u2014\n2026-08-24 16:08:56\ttest_admin\u2026\t\u2014\t0\t\u2014\t\u2014\tlongcat-2.0\t\u2014\n2026-08-24 16:08:47\ttest_admin\u2026\t\u2014\t0\t\u2014\t\u2014\tintent-gateway-casual\t\u2014\n2026-08-24 16:05:37\ttest_admin\u2026\t\u2014\t0\tYES\t\u2014\tglm-5.2\t\u21bb\n2026-08-2",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": false
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/payments",
+    "info": {
+      "mainLen": 135,
+      "mainSnippet": "Skip to content\nSomething went wrong loading this page.\nThis is usually a transient network hiccup. Your data is safe.\nRetry\nReload app",
+      "hasSpinner": false,
+      "loadingText": true,
+      "errText": false
+    },
+    "ce": [
+      "Failed to load resource: the server responded with a status of 429 ()",
+      "The above error occurred in one of your React components:\n\n    at Lazy\n    at AdminRoute (https://bin-context-pat.preview.emergentagent.com/src/components/PrivateRoute.jsx:40:30)\n    at RenderedRoute ",
+      "[route-error-boundary] TypeError: Failed to fetch dynamically imported module: https://bin-context-pat.preview.emergentagent.com/src/pages/Admin.jsx \n    at Lazy\n    at AdminRoute (https://bin-context"
+    ],
+    "net": [
+      {
+        "u": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/admin/errors/report",
+        "s": 429
+      },
+      {
+        "u": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/admin/errors/report",
+        "s": 429
+      },
+      {
+        "u": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/admin/errors/report",
+        "s": 429
+      }
+    ]
+  },
+  {
+    "path": "/admin/token-pnl",
+    "info": {
+      "mainLen": 404,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nREVENUE (MO)\n$0.00\nStripe pending\nAI COST (MO)\n$0.00\nNET PROFIT\n$0.00\nTASKS DONE (MO)\n5\n0 today\nNote: Revenue = sum(amount) from cto_payments where payment_status='paid' in the last 30d. Stripe fees are an ESTIMATE at 2.9% + $0.30/txn (US standard) \u2014 not a settlement-accurate figure. AI cost rates last verified 2026-02-13 (per-1k tokens, averaged across input+output).",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": false
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/projects",
+    "info": {
+      "mainLen": 2248,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nPROJECTS WITH GRAPH\n0\nof 32\nGRAPH COVERAGE\n0%\nTOTAL PROJECTS\n32\nALL PROJECTS (32)\nNAME\tREPO\tBRANCH\tSTACK\tTASKS\tGRAPH\tNODES\tGRAPH BUILT\tUSER\tCREATED\naurem-demo/frontend\taurem-demo/frontend\tmain\tTEST_stack\t0\tno\t\u2014\t\u2014\ttest_admin\t42d ago\naurem-demo/backend\taurem-demo/backend\t\tauto\t0\tno\t\u2014\t\u2014\ttest_admin\t42d ago\n\tauto-0f295d/demo\tmain\tauto\t0\tno\t\u2014\t\u2014\te0b5c4c1d2\t4h ago\nfixture project\t/\t\tauto\t0\tno\t\u2014\t\u2014\tpat1_test_\t1d ago\nfunnel-repro\tpolarisbuiltinc-wq/aurem-rollback-testbed\tmain\tauto\t3\tno\t\u2014\t\u2014\ttest_admin\t1d ago\nTEST_Proj_1787379054\towner/test-repo\tmain\treact-fastapi\t0\tno\t\u2014\t\u2014\ttest_admin\t2d ago\nTEST_Proj_1787378423\towner/test-repo\tmain\treact-fastapi\t0\tno\t\u2014\t\u2014\ttest_admin\t2d ag",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": false
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/tasks",
+    "info": {
+      "mainLen": 1298,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nTASKS (16)\nAll\nDone\nFailed\nRunning\nQueued\nTASK ID\tTASK\tUSER\tSTATUS\tCOMMIT\tCREATED\nt_da736cc39c\t\nAdd a one-line comment '# TEST regression 2026-08-27' at top of README.md\n\ttest_admin\tfailed\t\u2014\t2h ago\nt_aea9c6eaaf\t\nFix the push on main: - fix: tiny tweak\n\te0b5c4c1d2\tfailed\t\u2014\t4h ago\nt_2e19f9c4df\t\nAdd a one-line comment to README.md\n\ttest_admin\tdone\td67935c\t1d ago\nt_a3b7fd1b8d\t\nAdd a one-line comment to README.md\n\ttest_admin\tfailed\t\u2014\t1d ago\nt_fca5807599\t\nAdd a one-line comment to README.md\n\ttest_admin\tdone\tfc804cd\t1d ago\nt_9dcd31032b\t\nAdd a one-line comment to README.md\n\ttest_admin\tfailed\t\u2014\t1d ago\nt_51b7bd82\t\nimplement worker.py\n\tpat1_test_\tfailed\t\u2014\t1d ago\nt_4f2f",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": true
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/agent-performance",
+    "info": {
+      "mainLen": 203,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nAGENT PERFORMANCE \u2014 LAST 30 DAYS (2 MODELS)\nMODEL\tCALLS\tTOTAL COST\tAVG INPUT TOK\tAVG OUTPUT TOK\nz-ai/glm-5.2\t750\t$0.0575\t50\t103\ndeepseek/deepseek-chat\t288\t$0.0199\t335\t79",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": false
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/mcp-usage",
+    "info": {
+      "mainLen": 5346,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nMCP API KEYS (98)\n\ud83d\udd11 Manage API Keys \u2192\nKEY\tUSER\tCLIENT\tSCOPE\tLAST USED\tCREATED\n\u2026YZ9zHM\ttest_admin_0\t\u2014\tmcp\t54d ago\t54d ago\n\u2026j7Bp5I\ttest_admin_0\t\u2014\tmcp\t68d ago\t68d ago\n\u2026JZL6sM\tf7e968f43679\tclaude-desktop\tmcp\tnever\t1h ago\n\u2026jYZzBI\t683c38ee2a99\tclaude-desktop\tmcp\tnever\t1h ago\n\u2026JZMklU\tcebfa84f089c\tclaude-desktop\tmcp\tnever\t1h ago\n\u2026??????\ttest_admin_0\t\u2014\tmcp\tnever\t27d ago\n\u2026Z5FfNg\tba3fcc56c13d\tclaude-desktop\tmcp\tnever\t4h ago\n\u2026g2v6QA\t5b7e50ae4852\tclaude-desktop\tmcp\tnever\t4h ago\n\u2026oqX1Ns\tedc7551f21e7\tclaude-desktop\tmcp\tnever\t14h ago\n\u2026l7_TIQ\t5ba0707bacda\tclaude-desktop\tmcp\tnever\t14h ago\n\u2026EGqJJE\t683a57f07399\tclaude-desktop\tmcp\tnever\t22h ago\n\u2026oU1gMw\t1762a734adfa\tclaude-deskt",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": true
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/reliability",
+    "info": {
+      "mainLen": 399,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nWARM START \u2014 LAST 24 H / 7 D / 30 D\nAVG WARM TIME\n\u2014\nLast 100 done jobs \u00b7 30 d\nSUCCESS RATE (7 D)\n\u2014\n0/0 jobs\nTOTAL JOBS (7 D)\n0\n7-day window\nNo data yet.\nPOST-SCAN ISSUES \u2014 VANGUARD 007 FINDINGS\nCRITICAL FINDINGS\n0\nCommit blockers\nWARNINGS\n0\nTOTAL SHOWN\n0\nNo data yet.\nNo post-scan findings recorded. Vanguard 007 runs on every commit \u2014 empty here means clean ships.",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": false
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/settings",
+    "info": {
+      "mainLen": 4582,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nUpgrade your plan\nMONTHLY\nFree\n$0/mo\nCurrent baseline\nStarter\n$9/mo\nUpgrade \u2192 Starter\nPro\n$19/mo\nUpgrade \u2192 Pro\nTeam\n$49/mo\nUpgrade \u2192 Team\nANNUAL \u00b7 20% OFF\nStarter\n$86.40/yr\nUpgrade \u2192 Starter annual\nPro\n$182.40/yr\nUpgrade \u2192 Pro annual\nTeam\n$470.40/yr\nUpgrade \u2192 Team annual\nToken limits per plan\nFree\nStarter\nPro\nTeam\nPricing ($/mo)\nFree\nStarter\nPro\nTeam\nSave settings\nTwo-factor authentication\n\u26a0 Not enabled \u2014 your admin account is protected by password only.\nAdd a second factor (Google Authenticator, 1Password, Authy) so a stolen password alone can't reach the admin panel.\nEnable two-factor authentication\nStripe API key\nlive\nSOURCE: ENV\nEdit\n\u25cf Connected \u2014 sk_liv",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": true
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/feature-flags",
+    "info": {
+      "mainLen": 531,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nFeature Flags\nRefresh\n6 flags\nGLOBAL FLAGS\nnew_analytics_v2\nNew product analytics dashboard\n\u25cf ON\nmaxx_mode_beta\nMaxx dual-model review mode\ntiers: pro, team, founder\n\u25cf ON\nparallel_agents\n3-agent parallel task execution\ntiers: pro, team, founder\n\u25cf ON\ntest_flag_z\nno description\n\u25cb OFF\nintegration_health_cron\nPeriodic integration health probe (default: 10 min). Toggle OFF to pause runtime without a restart.\n\u25cf ON\nchrome_extension_beta\nChrome extension side panel (beta)\n\u25cb OFF\nCREATE NEW FLAG\nCreate",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": false
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/llm-credits",
+    "info": {
+      "mainLen": 414,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nLLM Credits\nLLM PROVIDER STATUS\nRefresh\n8:43:12 PM\nOpenRouter\n$25.19\n\u25cfConnected\nLongCat (Council A primary)\nAPI OK\n\u25cfConnected\nDeepSeek (Council C)\nAPI OK\n\u25cfvia OpenRouter\nGLM-5.2 (Council B + Advisor)\nAPI OK\n\u25cfvia OpenRouter\nClaude Sonnet 4.5 (CEO Judge)\nAPI OK\n\u25cfvia OpenRouter\nGroq Llama-3.3-70B (rescue)\nAPI OK\n\u25cfFree tier, rate-limited\nAlert threshold\nSave\nCircuit breaker: closed",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": false
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/parliament-live",
+    "info": {
+      "mainLen": 301,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nParliament Live\nPARLIAMENT LIVE STATUS\n1h\n24h\n7d\nLongCat: LIVE \u2713\nCOUNCIL\nROLE\nPRIMARY\nFALLBACK\nCALLS\nA\nCouncil A (Code Fix)\nLongCat\nGLM-5.2\n0\nB\nCouncil B (Analysis)\nGLM-5.2\n\u2014\n0\nC\nCouncil C (Writing)\nDeepSeek V3\n\u2014\n0\nCEO\nCEO Judge\nClaude Sonnet 4.5\nGLM-5.2\n0(0 rescues)",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": false
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/architecture",
+    "info": {
+      "mainLen": 12270,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nPERSONA QUALITY SCORE \u00b7 LAST 30 DAYS\n\u2014\nlatest: 0/0 pass \u00b7 hard fails 0 \u00b7 runs 86\nORA LEARNING HEALTH\nRED\nbrains 8 \u00b7 last write 38.4h ago (p_6d0be78cdd) \u00b7 patterns 6 \u00b7 council logs 995 (22 in 24h)\ncanary \u00b7 ON \u00b7 ran\neval cron \u00b7 ON\nLOOP INTENT GATE \u00b7 LAST 24H\n0%\nchat redirects 0 \u00b7 loops triggered 15 \u00b7 plan timeouts 0\nEXTERNAL SERVICES\nMongoDB\nlive\n1668ms\nGitHub API\nlive\n201ms\nOpenRouter\nlive\n259ms\nSentry ingest\nlive\n106ms\nStripe API\nlive\n219ms\nINTEGRATIONS\nmongodb \u00b7 OK\ngithub_oauth \u00b7 OK\nopenrouter (deepseek) \u00b7 OK\nemergent_llm (maxx) \u00b7 OK\nanthropic (claude maxx) \u00b7 missing\ncloudflare_purge \u00b7 missing\nvercel_deploy_hook \u00b7 missing\nsentry_dsn \u00b7 OK\nstripe \u00b7 OK\nresend ",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": true
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/api-keys",
+    "info": {
+      "mainLen": 889,
+      "mainSnippet": "Skip to content\nADMIN \u00b7 MCP\nAPI Keys\n\nLong-lived sk-aurem-\u2026 keys for MCP clients (Claude Desktop, Cursor, Cline). Each key inherits your account's permissions and can be revoked anytime. Treat them like passwords \u2014 never commit them to git.\n\n+ Generate new key\nRefresh\nACTIVE KEYS (3)\nKEY\tCREATED\tLAST USED\tSTATUS\tACTION\nsk-aurem-gG1j\u2026Bp5IMCP API Key\t69d ago\t69d ago\tRevoked\t\nsk-aurem-qjOx\u20269zHMIntegrations page (auto-minted)\t55d ago\t55d ago\tActive\tRevoke\n\u2026\tnever used\tnever used\tRevoked\t\nCLAUDE DESKTOP \u00b7 CONFIG SNIPPET\n{\n  \"mcpServers\": {\n    \"aurem-cto\": {\n      \"url\": \"https://auremcto.com/api/aurem-dev/mcp\",\n      \"headers\": {\n        \"Authorization\": \"Bearer sk-aurem-YOUR_KEY_HERE\"\n      }\n ",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": false
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/system-health",
+    "info": {
+      "mainLen": 1811,
+      "mainSnippet": "Skip to content\n\u2190 Admin\nSystem Health\nLive signals \u00b7 refreshes every 30 s \u00b7 last: 8:43:46 PM\n\u21bb REFRESH NOW\nDEPLOY SYNC\nOK\nPREVIEW\n4bf9feb09978\npreview \u00b7 Deployed 8/24/2026, 7:47:20 PM\nPushed to GitHub 8/24/2026, 7:47:20 PM \u00b7 4bf9feb09978\nPRODUCTION\n4bf9feb09978\nproduction \u00b7 Deployed 8/24/2026, 8:11:06 PM\nFRONTEND BUNDLE\nbuild sha \u00b7 e01a87b3305e\n\u26a0 Frontend bundle \u2260 production backend \u2014 bundle may be stale.\nCOUNCIL A\nOK\nPrimary intended\nanthropic/claude-sonnet-4.5\nPrimary actual\nanthropic/claude-sonnet-4.5\nLive\nYES\nLast probe\n8/24/2026, 8:39:41 PM\nORA LEARNING\nOK\nLayer 1 \u00b7 RAG few-shot\nactive\n995 / 20\nTF-IDF few-shot retrieval into system prompt\nLayer 2 \u00b7 Fine-tune queue\ncollecting\n995 / 1000\n",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": true
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/qa",
+    "info": {
+      "mainLen": 34,
+      "mainSnippet": "Skip to content\nLoading QA status\u2026",
+      "hasSpinner": false,
+      "loadingText": true,
+      "errText": false
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/system-stats",
+    "info": {
+      "mainLen": 1812,
+      "mainSnippet": "Skip to content\nSYSTEM OBSERVABILITY\nParliament \u00b7 Intent Gateway \u00b7 Quality\nUpdated 8:44:01 PM \u00b7 auto-refresh 60s\n1h\n24h\n7d\n30d\nRefresh\nPARLIAMENT RUNS\n0\nCOUNCIL SUCCESS RATE\n0.0%\nCIRCUIT BREAKER OPENS \u00b7 24H\n0\nAVG WINNER SCORE\n0\nINTENT CONFIDENCE\n0.82\nQUALITY AVG \u00b7 24H\n0.97\nDRIFT ALERTS UNACKED\n0\nMANUAL REVIEW QUEUE\n0\nCOUNCIL A \u2014 WINNER DISTRIBUTION\nA1-conservative\n0\nA2-balanced\n0\nA3-creative\n0\nINTENT GATEWAY \u2014 TIER DISTRIBUTION\ncasual\n15\nquery\n15\nagentic\n22\nclarify\n4\nLLM fallback rate\n19.6%\nTOOL ROUTER \u2014 CALLS BY GROUP\ncode\n22\nquery\n15\ncasual\n15\nweb\n0\ndeploy\n0\ndebug\n0\nclarify\n4\nQUALITY MONITOR\nAvg score (24h)\n0.97\nLow-score count\n0\nDrift alerts unacked\n0\nSYNTAX GATE (LAST 24H)\nTotal checks\n0",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": false
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/system-map",
+    "info": {
+      "mainLen": 2753,
+      "mainSnippet": "Skip to content\n\u2190 Back to dashboard\nORA System Internals\nADMIN \u00b7 PLATFORM\nRefresh\nLive scan \u00b7 8/24/2026, 8:44:09 PM\n514\nROUTES\n121\nCOMPONENTS\n60\nPAGES\n741\nCOLLECTIONS\n24\nTOOLS\nGitHub PAT + OAuth\nMCP server (4 tools)\nVS Code extension v0.2.0\nTavily web search\nFirecrawl scrape\nStripe payments\nResend email\nSentry monitoring\nGroq emergency fallback\nDeepSeek direct\nOpenRouter (Claude / GLM)\nE2B sandbox\nOllama / LM Studio\n/diagram Mermaid\nMODES\nSwift\nlive\nanthropic/claude-sonnet-4.5 via OpenRouter\nstarter+ \u00b7 $9\nPro\nlive\nanthropic/claude-sonnet-4.5 \u2192 Claude Sonnet 4.5 fallback\npro+ \u00b7 $19\nMaxx\nlive\nanthropic/claude-sonnet-4.5 draft + Claude review\nteam+ \u00b7 $49\nLocal\nnot_built\nOllama / LM Studio\nany \u00b7",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": true
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/suggestions",
+    "info": {
+      "mainLen": 118,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nFounder Suggestions\nPENDING\nAPPROVED\nREJECTED\nALL\nNo suggestions in this bucket yet.",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": false
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/house-rules",
+    "info": {
+      "mainLen": 1894,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nHouse Rules\nINACTIVE\n\nSet a global instruction block that ORA reads before its own persona, tool catalog, and project context. These rules take the highest priority over every other instruction. Use the toggles below to choose exactly where the rules apply.\n\nPROMPT\n0 / 8000 chars\nlast updated 8/13/2026, 6:00:21 PM by 3ee3ba6bd16044e88f852f5a4414c711\nAPPLY TO\nORA Chat\nMain chat at /chat/stream + /chat/send. Mode toggles below also need to be ON.\nOFF\nAsk Advisor\nThe ORA Side Panel \u2014 support / billing / how-to flow (agent=ora).\nOFF\nCHAT MODES (ENABLE ORA CHAT FIRST)\nSwift\nFast turn, GLM-5.2 only.\nOFF\nPro\nGLM-5.2 with Claude fallback on weak answers.\nOFF\nMaxx\nGL",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": true
+    },
+    "ce": [],
+    "net": []
+  },
+  {
+    "path": "/admin/robot-guide",
+    "info": {
+      "mainLen": 702,
+      "mainSnippet": "Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nRobot Guide Messages\n\nCustomize the ORA robot welcome wording on the signup and login windows. Basic HTML like <strong> and <span class=\"ora-arrow\">\ud83d\udc47</span> works. Leave a field empty to fall back to the default message.\n\nSignup window welcome message\nShown to new visitors on /signup before they start typing.\n0/600\nLive preview:\nORA GUIDE\nFastest way: click Continue with GitHub below \ud83d\udc47 \u2014 creates your account instantly, no password needed.\nLogin window welcome message\nShown to returning users on /login before they start typing.\n0/600\nLive preview:\nORA GUIDE\nFastest way: click Continue with GitHub below \ud83d\udc47 \u2014 one tap, no password.\nSave changes\nReset to defaul",
+      "hasSpinner": false,
+      "loadingText": false,
+      "errText": false
+    },
+    "ce": [],
+    "net": []
+  }
+]

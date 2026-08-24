@@ -537,54 +537,43 @@ async def token_pnl(authorization: Optional[str] = Header(None)):
     day_ago = now - 86400
     month_ago = now - 86400 * 30
 
-    # Real token usage from done tasks (Iter 25 — token tracking)
-    pipe = [
-        {"$match": {"created_at": {"$gte": month_ago}, "status": "done"}},
-        {"$group": {"_id": "$agent_used", "tokens": {"$sum": "$tokens_used"}}},
+    # Iter 2026-08-27 — ROOT FIX: this previously aggregated
+    # `cto_tasks.tokens_used`/`agent_used`, which is ALWAYS empty for
+    # this purpose (cto_tasks only carries per-task status metadata,
+    # never real per-call model/cost attribution — same root cause the
+    # 2026-08-26 fix to /admin/agent-performance already diagnosed and
+    # fixed for that endpoint). Real per-call LLM cost lives in
+    # `customer_chat_cost` (cost_usd, model, ts) — the same ledger
+    # `admin_bi.py::_fetch_inference_metrics` and the now-fixed
+    # /admin/agent-performance already use. Switched to the same real
+    # source so the cockpit's "AI cost (mo)" card stops showing $0
+    # while Agent Performance shows real spend from the same 30d window.
+    month_pipe = [
+        {"$match": {"ts": {"$gte": month_ago}}},
+        {"$group": {"_id": "$model", "cost": {"$sum": "$cost_usd"},
+                    "n": {"$sum": 1}}},
     ]
-    month_by_agent = {}
-    async for d in db.cto_tasks.aggregate(pipe):
-        month_by_agent[d.get("_id") or "deepseek"] = d.get("tokens") or 0
+    month_by_agent: dict[str, float] = {}
+    month_calls_by_agent: dict[str, int] = {}
+    async for d in db.customer_chat_cost.aggregate(month_pipe):
+        agent = d.get("_id") or "unknown"
+        month_by_agent[agent] = round(float(d.get("cost") or 0), 4)
+        month_calls_by_agent[agent] = int(d.get("n") or 0)
 
     day_pipe = [
-        {"$match": {"created_at": {"$gte": day_ago}, "status": "done"}},
-        {"$group": {"_id": "$agent_used", "tokens": {"$sum": "$tokens_used"}}},
+        {"$match": {"ts": {"$gte": day_ago}}},
+        {"$group": {"_id": "$model", "cost": {"$sum": "$cost_usd"},
+                    "n": {"$sum": 1}}},
     ]
-    day_by_agent = {}
-    async for d in db.cto_tasks.aggregate(day_pipe):
-        day_by_agent[d.get("_id") or "deepseek"] = d.get("tokens") or 0
+    day_by_agent: dict[str, float] = {}
+    day_calls_by_agent: dict[str, int] = {}
+    async for d in db.customer_chat_cost.aggregate(day_pipe):
+        agent = d.get("_id") or "unknown"
+        day_by_agent[agent] = round(float(d.get("cost") or 0), 4)
+        day_calls_by_agent[agent] = int(d.get("n") or 0)
 
-    # Iter 388y · Admin Panel Payments Accuracy fix (#35 slice) —
-    # cost table refreshed for the models we actually route to.  Rates
-    # are USD per 1,000 tokens, averaged across input + output pricing
-    # per the provider's public pricing page (last verified 2026-02-13).
-    # Unknown agents fall through to the DeepSeek rate as a conservative
-    # upper bound — the previous 2024-era table (deepseek $0.30, maxx
-    # $0.65, groq $0.03) silently applied DeepSeek pricing to every
-    # Claude/GPT/Gemini call because those keys were missing, inflating
-    # the cost estimate on the founder cockpit.
-    cost_per_1k = {
-        "deepseek":         0.00040,   # DeepSeek v3 ~ $0.14/M in, $0.28/M out → ~$0.20/M avg → $0.00020/1k. Kept 0.00040 as headroom.
-        "deepseek-chat":    0.00040,
-        "maxx":             0.00900,   # Legacy label for GPT-4 class routes
-        "groq":             0.00080,   # Groq llama-3.1-70b ~ $0.79/M avg → $0.00079/1k
-        "claude-sonnet-5":  0.00900,   # Anthropic $3/M in, $15/M out → ~$9/M avg → $0.00900/1k
-        "claude-haiku-4":   0.00080,   # Anthropic Haiku 4 ~ $0.80/M avg
-        "gpt-5.2":          0.00750,   # OpenAI gpt-5.2 ~ $2.5/M in, $10/M out → ~$6.25/M → $0.00625/1k. Headroom.
-        "gpt-5.2-mini":     0.00040,
-        "gemini-3-flash":   0.00030,   # Google Gemini 3 Flash ~ $0.30/M
-        "gemini-3-pro":     0.00350,
-        "glm-5.2":          0.00010,   # z-ai/glm-5.2 via OpenRouter ~ $0.10/M (Council A default)
-    }
-    _fallback_rate = 0.00040          # per-1k, uses deepseek band as headroom
-    def calc(agent_map):
-        return round(sum(
-            (t / 1000) * cost_per_1k.get(a, _fallback_rate)
-            for a, t in agent_map.items()
-        ), 2)
-
-    ai_cost_month = calc(month_by_agent)
-    ai_cost_today = calc(day_by_agent)
+    ai_cost_month = round(sum(month_by_agent.values()), 2)
+    ai_cost_today = round(sum(day_by_agent.values()), 2)
 
     done_month = await db.cto_tasks.count_documents(
         {"created_at": {"$gte": month_ago}, "status": "done"}
@@ -654,13 +643,16 @@ async def token_pnl(authorization: Optional[str] = Header(None)):
         "chat_sessions_month": chat_month,
         "month_by_agent":      month_by_agent,
         "day_by_agent":        day_by_agent,
+        "month_calls_by_agent": month_calls_by_agent,
+        "day_calls_by_agent":   day_calls_by_agent,
         "stripe_configured":   stripe_configured,
         "_note": (
             "Revenue = sum(amount) from cto_payments where "
             "payment_status='paid' in the last 30d.  Stripe fees are "
             "an ESTIMATE at 2.9% + $0.30/txn (US standard) — not a "
-            "settlement-accurate figure.  AI cost rates last verified "
-            "2026-02-13 (per-1k tokens, averaged across input+output)."
+            "settlement-accurate figure.  AI cost = sum(cost_usd) from "
+            "customer_chat_cost (real per-call LLM ledger, same source "
+            "/admin/agent-performance uses) in the last 30d/24h."
         ),
     }
 
@@ -967,8 +959,16 @@ async def eval_quality(authorization: Optional[str] = Header(None)):
         return {"latest": None, "trend": [], "totals": {"runs": 0}}
     from datetime import datetime, timezone, timedelta
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    # 2026-08-27 — ROOT FIX: a periodic "quick" liveness ping of the eval
+    # harness itself (0 test cases, exists purely to prove the pipeline
+    # can still run) was being picked up as "latest" whenever it landed
+    # more recently than the last REAL eval — which made the tile always
+    # show "—" (score = null, since 100 * passed/total with total=0 is
+    # undefined) even with 97 real historical runs sitting right there.
+    # Excluding quick pings from this endpoint entirely — they carry no
+    # score signal, they'd only dilute totals.avg_score too.
     docs = await db.ora_eval_runs.find(
-        {"ts": {"$gte": cutoff}}, {"_id": 0},
+        {"ts": {"$gte": cutoff}, "quick": {"$ne": True}}, {"_id": 0},
     ).sort("ts", 1).to_list(length=200)
     trend = [{
         "ts":         d.get("ts"),

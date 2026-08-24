@@ -410,8 +410,13 @@ class TestOraLearning:
 class TestTokenPnl:
     def test_token_pnl(self, client, fake_db):
         now = time.time()
-        fake_db.cto_tasks.rows.append({
-            "created_at": now, "status": "done", "agent_used": "deepseek", "tokens_used": 1000,
+        # 2026-08-27 — root-fixed to source AI cost from `customer_chat_cost`
+        # (real per-call LLM ledger), same source /admin/agent-performance
+        # already uses — `cto_tasks.tokens_used` never carried real
+        # model attribution, which is exactly why the cockpit showed $0
+        # while Agent Performance showed real spend from the same window.
+        fake_db.customer_chat_cost.rows.append({
+            "ts": now, "model": "deepseek", "cost_usd": 0.4, "input_tokens": 800, "output_tokens": 200,
         })
         fake_db.cto_payments.rows.append({
             "created_at": now, "payment_status": "paid", "amount": 50.0,
@@ -420,7 +425,8 @@ class TestTokenPnl:
         assert r.status_code == 200
         body = r.json()
         assert body["revenue_month"] == 50.0
-        assert body["month_by_agent"]["deepseek"] == 1000
+        assert body["month_by_agent"]["deepseek"] == 0.4
+        assert body["ai_cost_month"] == 0.4
 
 
 class TestAgentTokens:

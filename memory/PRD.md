@@ -4,7 +4,77 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
 
-## 2026-08-27 (latest) — Sensitive-path guard (real G3) + CI dependency dry-run + 5-gap Phase 1 documented — testing_agent verified 212/212
+## 2026-08-27 (latest) — Full admin-panel audit (35 pages) + 3 confirmed data bugs fixed — testing_agent verified live, 250/250 + 5/5 pass
+
+Founder asked (Hinglish): audit the ENTIRE admin panel, every score, everything — find what's not live/working, fix it. Dispatched a full 35-page/route audit to testing_agent first (`/app/test_reports/iteration_admin_full_audit_2026_08_24.json`) rather than guessing, then investigated and fixed the confirmed data-source bugs; corrected 2 items in the audit's own diagnosis after my own evidence contradicted it (see below — I do not blindly implement a subagent's RCA when my own investigation disagrees).
+
+**Fixed (3):**
+1. `/admin/token-pnl` — was aggregating AI cost from `cto_tasks.tokens_used`
+   (always $0 — that field never carried real model attribution). Switched
+   to `customer_chat_cost` (real per-call LLM ledger), same source the
+   already-fixed `/admin/agent-performance` uses. Live-verified:
+   `ai_cost_month=$0.08` now matches `glm-5.2 $0.0575 + deepseek $0.0199`
+   shown on Agent Performance for the same window.
+2. `/admin/eval-quality` (Architecture page "Persona Quality Score" tile,
+   showed "—") — the query picked the most-recent `ora_eval_runs` doc as
+   "latest," but the most recent one was a 0-test-case "quick" liveness
+   ping (proves the eval harness can still run, carries no score), making
+   `passed/total` undefined. Excluded `quick:true` docs. Live-verified:
+   `latest.total=42, passed=38` → tile now shows 90/100.
+3. `POST /admin/errors/report` (frontend ErrorBoundary's crash-report
+   sink) added to `_GLOBAL_RL_SKIP_PREFIXES` — cheap defensive fix so a
+   crash-report retry loop can never self-DOS itself via the rate
+   limiter, regardless of how often that path actually gets hit today.
+
+**Corrected 2 items in the audit's own diagnosis (evidence-based, not
+just following the subagent blindly):**
+- "Cockpit MRR No data yet + stripe not-set" — did NOT reproduce; live
+  curl showed `stripe.status="ok"`, `mode="live"`. $0 MRR is real (0
+  active subscriptions), not a config error. Likely a stale/transient
+  observation from before an earlier Stripe fix landed.
+- "Aggressive rate-limiter causing 429 storms on admin pages" — grep of
+  backend logs showed ZERO actual 429s on any `/admin/*` GET endpoint;
+  all 154 real 429s were on `/auth/login` (repeated test logins,
+  unrelated). The real cause of the "Something went wrong" crashes was
+  the well-known Starlette `BaseHTTPMiddleware` "No response returned"
+  client-disconnect race (709 occurrences in logs) — which the existing
+  code already catches and converts to a clean 500 (pre-existing,
+  already-mitigated, not touched further — high-risk middleware with
+  multiple prior fix attempts, not worth touching again for a benign/
+  transient pattern that self-recovers on reload, per testing_agent's
+  own observation).
+
+Verification: `/app/test_reports/iteration_fix_pass_2026_01.json` —
+250/250 regression + 5/5 targeted checks, live values confirmed on both
+endpoints and visually on the Architecture page tile.
+
+**Engineering Gaps Found (not acted on without approval):**
+- **CONFIRMED, needs founder decision, not fixed** — the "Parliament/
+  Council" aggregator (`/admin/system-stats`' "Council success rate" /
+  "Parliament runs" tile) queries `parliament_log` for
+  `{"event": "aggregate"}` documents. Grepped the ENTIRE backend: no
+  production code path writes a document matching that schema — the
+  only writer that sets `"event": "aggregate"` is a test fixture
+  (`test_phase2c_admin_analytics_router.py`). The 7 real `parliament_log`
+  documents in the DB are all `user_id: "u_proof"` / `loop_session_id:
+  "PROOF_TEST_001"` — proof/test artifacts, not real usage. This may be
+  a genuinely unbuilt/never-wired feature (not a "wrong data source"
+  bug) — founder input needed on whether Council/Parliament mode is
+  still planned, in which case it needs a real writer built, or whether
+  this admin tile should be removed/marked N/A instead of silently
+  showing misleading zeros.
+- **UNCERTAIN, cosmetic, not fixed** — several lower-priority audit
+  items (cookie-banner re-prompt on every admin nav, no skeleton loader
+  during ~4s `/admin/qa/status` load, generic error-boundary copy) were
+  flagged by the audit but not built this round — pure UI polish, lower
+  value than the 3 confirmed data bugs; logged for a future pass if
+  founder wants them.
+- **CONFIRMED, not touched** — `_run_task_via_api`'s test-file lock has
+  no equivalent in `_run_task_with_git` (noted in an earlier session
+  entry too) — unrelated to this admin audit, just re-surfaced during
+  investigation; still pending founder decision.
+
+## 2026-08-27 — Sensitive-path guard (real G3) + CI dependency dry-run + 5-gap Phase 1 documented — testing_agent verified 212/212
 
 **#5 (highest priority) — sensitive-path guard, built + testing_agent-verified.**
 Full detail + correction to G3's actual status logged in

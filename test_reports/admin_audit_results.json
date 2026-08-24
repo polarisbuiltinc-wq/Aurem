@@ -1,0 +1,1108 @@
+[
+  {
+    "path": "/admin/cockpit",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/cockpit",
+    "info": {
+      "textLen": 1974,
+      "h1": "Live Business Intelligence",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nOR",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 1,
+      "bodyEmpty": false
+    },
+    "console_errors": [],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/dashboard",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/dashboard",
+    "info": {
+      "textLen": 1517,
+      "h1": "",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nOR",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": false
+    },
+    "console_errors": [],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/users",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/users",
+    "info": {
+      "textLen": 9668,
+      "h1": "",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nOR",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": false
+    },
+    "console_errors": [],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/suggestions",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/suggestions",
+    "info": {
+      "textLen": 777,
+      "h1": "Founder Suggestions",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nOR",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": false
+    },
+    "console_errors": [],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/overview",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/overview",
+    "info": {
+      "textLen": 10902,
+      "h1": "",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nOR",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 14,
+      "bodyEmpty": false
+    },
+    "console_errors": [],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/support",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/support",
+    "info": {
+      "textLen": 1169,
+      "h1": "",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nOR",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": false
+    },
+    "console_errors": [],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/audit",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/audit",
+    "info": {
+      "textLen": 6141,
+      "h1": "Audit feed",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nOR",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": false
+    },
+    "console_errors": [],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/house-rules",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/house-rules",
+    "info": {
+      "textLen": 2553,
+      "h1": "House Rules",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nOR",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": false
+    },
+    "console_errors": [],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/robot-guide",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/robot-guide",
+    "info": {
+      "textLen": 406,
+      "h1": "",
+      "snippet": "Skip to content\nSomething went wrong loading this page.\nThis is usually a transient network hiccup. Your data is safe.\nRetry\nReload app\nWe use cookies to improve your experience\nStrictly-necessary cookies keep you logged in. With your permission, we also use analytics and marketing cookies to measure conversions. Read our Cookie Policy \u00b7 Privacy Policy.\nManage preferences\nReject non-essential\nAcce",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": false
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "The above error occurred in one of your React components:\n\n    at Lazy\n    at AdminRoute (https://bin-context-pat.preview.emergentagent.com/src/components/PrivateRoute.jsx:40:30)\n    at RenderedRoute (https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react-router-dom.js?v=cc7"
+      },
+      {
+        "type": "error",
+        "text": "[route-error-boundary] TypeError: Failed to fetch dynamically imported module: https://bin-context-pat.preview.emergentagent.com/src/pages/Admin.jsx \n    at Lazy\n    at AdminRoute (https://bin-context-pat.preview.emergentagent.com/src/components/PrivateRoute.jsx:40:30)\n    at RenderedRoute (https://"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": [
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/list",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/findings/starter-suggestions?project_id=p_demo_a&limit=4",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/admin/errors/report",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/admin/errors/report",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/admin/errors/report",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/findings/starter-suggestions?project_id=p_demo_a&limit=4",
+        "status": 429
+      }
+    ]
+  },
+  {
+    "path": "/admin/payments",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/payments",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/token-pnl",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/token-pnl",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/projects",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/projects",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "WebSocket connection to 'wss://bin-context-pat.preview.emergentagent.com/?token=SMfZcupOj8HJ' failed: Error during WebSocket handshake: Unexpected response code: 429"
+      },
+      {
+        "type": "error",
+        "text": "[vite] failed to connect to websocket (Error: WebSocket closed without opened.). "
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/tasks",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/tasks",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/agent-performance",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/agent-performance",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/mcp-usage",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/mcp-usage",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/reliability",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/reliability",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/settings",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/settings",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/bin-tracker",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/bin-tracker",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/feature-flags",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/feature-flags",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/llm-credits",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/llm-credits",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "WebSocket connection to 'wss://bin-context-pat.preview.emergentagent.com/?token=SMfZcupOj8HJ' failed: Error during WebSocket handshake: Unexpected response code: 429"
+      },
+      {
+        "type": "error",
+        "text": "[vite] failed to connect to websocket (Error: WebSocket closed without opened.). "
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/parliament-live",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/parliament-live",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/architecture",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/architecture",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/integrations",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/integrations",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/financials",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/financials",
+    "info": {
+      "textLen": 406,
+      "h1": "",
+      "snippet": "Skip to content\nSomething went wrong loading this page.\nThis is usually a transient network hiccup. Your data is safe.\nRetry\nReload app\nWe use cookies to improve your experience\nStrictly-necessary cookies keep you logged in. With your permission, we also use analytics and marketing cookies to measure conversions. Read our Cookie Policy \u00b7 Privacy Policy.\nManage preferences\nReject non-essential\nAcce",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": false
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "The above error occurred in one of your React components:\n\n    at Lazy\n    at AdminRoute (https://bin-context-pat.preview.emergentagent.com/src/components/PrivateRoute.jsx:40:30)\n    at RenderedRoute (https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react-router-dom.js?v=cc7"
+      },
+      {
+        "type": "error",
+        "text": "[route-error-boundary] TypeError: Failed to fetch dynamically imported module: https://bin-context-pat.preview.emergentagent.com/src/pages/AdminFinancials.jsx \n    at Lazy\n    at AdminRoute (https://bin-context-pat.preview.emergentagent.com/src/components/PrivateRoute.jsx:40:30)\n    at RenderedRoute"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": [
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/list",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/findings/starter-suggestions?project_id=p_demo_a&limit=4",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/admin/errors/report",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/admin/errors/report",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/admin/errors/report",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/findings/starter-suggestions?project_id=p_demo_a&limit=4",
+        "status": 429
+      }
+    ]
+  },
+  {
+    "path": "/admin/vanguard",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/vanguard",
+    "info": {
+      "textLen": 406,
+      "h1": "",
+      "snippet": "Skip to content\nSomething went wrong loading this page.\nThis is usually a transient network hiccup. Your data is safe.\nRetry\nReload app\nWe use cookies to improve your experience\nStrictly-necessary cookies keep you logged in. With your permission, we also use analytics and marketing cookies to measure conversions. Read our Cookie Policy \u00b7 Privacy Policy.\nManage preferences\nReject non-essential\nAcce",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": false
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "The above error occurred in one of your React components:\n\n    at Lazy\n    at AdminRoute (https://bin-context-pat.preview.emergentagent.com/src/components/PrivateRoute.jsx:40:30)\n    at RenderedRoute (https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react-router-dom.js?v=cc7"
+      },
+      {
+        "type": "error",
+        "text": "[route-error-boundary] TypeError: Failed to fetch dynamically imported module: https://bin-context-pat.preview.emergentagent.com/src/pages/AdminVanguard.jsx \n    at Lazy\n    at AdminRoute (https://bin-context-pat.preview.emergentagent.com/src/components/PrivateRoute.jsx:40:30)\n    at RenderedRoute ("
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": [
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/findings/starter-suggestions?project_id=p_demo_a&limit=4",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/list",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/admin/errors/report",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/admin/errors/report",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/admin/errors/report",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/findings/starter-suggestions?project_id=p_demo_a&limit=4",
+        "status": 429
+      }
+    ]
+  },
+  {
+    "path": "/admin/system-stats",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/system-stats",
+    "info": {
+      "textLen": 2083,
+      "h1": "Parliament \u00b7 Intent Gateway \u00b7 Quality",
+      "snippet": "Skip to content\nSYSTEM OBSERVABILITY\nParliament \u00b7 Intent Gateway \u00b7 Quality\nUpdated 8:35:11 PM \u00b7 auto-refresh 60s\n1h\n24h\n7d\n30d\nRefresh\nPARLIAMENT RUNS\n0\nCOUNCIL SUCCESS RATE\n0.0%\nCIRCUIT BREAKER OPENS \u00b7 24H\n0\nAVG WINNER SCORE\n0\nINTENT CONFIDENCE\n0.82\nQUALITY AVG \u00b7 24H\n0.97\nDRIFT ALERTS UNACKED\n0\nMANUAL REVIEW QUEUE\n0\nCOUNCIL A \u2014 WINNER DISTRIBUTION\nA1-conservative\n0\nA2-balanced\n0\nA3-creative\n0\nINT",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 2,
+      "bodyEmpty": false
+    },
+    "console_errors": [],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/observability",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/observability",
+    "info": {
+      "textLen": 2083,
+      "h1": "Parliament \u00b7 Intent Gateway \u00b7 Quality",
+      "snippet": "Skip to content\nSYSTEM OBSERVABILITY\nParliament \u00b7 Intent Gateway \u00b7 Quality\nUpdated 8:35:14 PM \u00b7 auto-refresh 60s\n1h\n24h\n7d\n30d\nRefresh\nPARLIAMENT RUNS\n0\nCOUNCIL SUCCESS RATE\n0.0%\nCIRCUIT BREAKER OPENS \u00b7 24H\n0\nAVG WINNER SCORE\n0\nINTENT CONFIDENCE\n0.82\nQUALITY AVG \u00b7 24H\n0.97\nDRIFT ALERTS UNACKED\n0\nMANUAL REVIEW QUEUE\n0\nCOUNCIL A \u2014 WINNER DISTRIBUTION\nA1-conservative\n0\nA2-balanced\n0\nA3-creative\n0\nINT",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 2,
+      "bodyEmpty": false
+    },
+    "console_errors": [],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/system-map",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/system-map",
+    "info": {
+      "textLen": 3024,
+      "h1": "ORA System Internals",
+      "snippet": "Skip to content\n\u2190 Back to dashboard\nORA System Internals\nADMIN \u00b7 PLATFORM\nRefresh\nLive scan \u00b7 8/24/2026, 8:35:17 PM\n514\nROUTES\n121\nCOMPONENTS\n60\nPAGES\n741\nCOLLECTIONS\n24\nTOOLS\nGitHub PAT + OAuth\nMCP server (4 tools)\nVS Code extension v0.2.0\nTavily web search\nFirecrawl scrape\nStripe payments\nResend email\nSentry monitoring\nGroq emergency fallback\nDeepSeek direct\nOpenRouter (Claude / GLM)\nE2B sandbox",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": false
+    },
+    "console_errors": [],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/api-keys",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/api-keys",
+    "info": {
+      "textLen": 1195,
+      "h1": "API Keys",
+      "snippet": "Skip to content\nADMIN \u00b7 MCP\nAPI Keys\n\nLong-lived sk-aurem-\u2026 keys for MCP clients (Claude Desktop, Cursor, Cline). Each key inherits your account's permissions and can be revoked anytime. Treat them like passwords \u2014 never commit them to git.\n\n+ Generate new key\nRefresh\nServer error (HTTP 429) \u2014 the backend returned an unreadable response (usually a transient deploy/restart). Retry in a few seconds;",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": false
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": [
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/findings/starter-suggestions?project_id=p_demo_a&limit=4",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/mcp/keys",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/mcp/keys",
+        "status": 429
+      }
+    ]
+  },
+  {
+    "path": "/admin/system-health",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/system-health",
+    "info": {
+      "textLen": 2012,
+      "h1": "System Health",
+      "snippet": "Skip to content\n\u2190 Admin\nSystem Health\nLive signals \u00b7 refreshes every 30 s \u00b7 last: 8:35:25 PM\n\u21bb REFRESH NOW\nDEPLOY SYNC\nDOWN\nPREVIEW\nRequest failed with status code 429\nPRODUCTION\n4bf9feb09978\nproduction \u00b7 Deployed 8/24/2026, 8:11:06 PM\nFRONTEND BUNDLE\nbuild sha \u00b7 e01a87b3305e\n\u26a0 Frontend bundle \u2260 production backend \u2014 bundle may be stale.\nCOUNCIL A\nOK\nPrimary intended\nanthropic/claude-sonnet-4.5\nPri",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": false
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": [
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/version",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/findings/starter-suggestions?project_id=p_demo_a&limit=4",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/version",
+        "status": 429
+      }
+    ]
+  },
+  {
+    "path": "/admin/qa",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/qa",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/maintenance",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/maintenance",
+    "info": {
+      "textLen": 406,
+      "h1": "",
+      "snippet": "Skip to content\nSomething went wrong loading this page.\nThis is usually a transient network hiccup. Your data is safe.\nRetry\nReload app\nWe use cookies to improve your experience\nStrictly-necessary cookies keep you logged in. With your permission, we also use analytics and marketing cookies to measure conversions. Read our Cookie Policy \u00b7 Privacy Policy.\nManage preferences\nReject non-essential\nAcce",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": false
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "The above error occurred in one of your React components:\n\n    at Lazy\n    at AdminRoute (https://bin-context-pat.preview.emergentagent.com/src/components/PrivateRoute.jsx:40:30)\n    at RenderedRoute (https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react-router-dom.js?v=cc7"
+      },
+      {
+        "type": "error",
+        "text": "[route-error-boundary] TypeError: Failed to fetch dynamically imported module: https://bin-context-pat.preview.emergentagent.com/src/pages/AdminMaintenance.jsx \n    at Lazy\n    at AdminRoute (https://bin-context-pat.preview.emergentagent.com/src/components/PrivateRoute.jsx:40:30)\n    at RenderedRout"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": [
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/list",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/findings/starter-suggestions?project_id=p_demo_a&limit=4",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/admin/errors/report",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/admin/errors/report",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/admin/errors/report",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/findings/starter-suggestions?project_id=p_demo_a&limit=4",
+        "status": 429
+      }
+    ]
+  },
+  {
+    "path": "/admin/personal-track",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/personal-track",
+    "info": {
+      "textLen": 406,
+      "h1": "",
+      "snippet": "Skip to content\nSomething went wrong loading this page.\nThis is usually a transient network hiccup. Your data is safe.\nRetry\nReload app\nWe use cookies to improve your experience\nStrictly-necessary cookies keep you logged in. With your permission, we also use analytics and marketing cookies to measure conversions. Read our Cookie Policy \u00b7 Privacy Policy.\nManage preferences\nReject non-essential\nAcce",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": false
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "The above error occurred in one of your React components:\n\n    at Lazy\n    at AdminRoute (https://bin-context-pat.preview.emergentagent.com/src/components/PrivateRoute.jsx:40:30)\n    at RenderedRoute (https://bin-context-pat.preview.emergentagent.com/node_modules/.vite/deps/react-router-dom.js?v=cc7"
+      },
+      {
+        "type": "error",
+        "text": "[route-error-boundary] TypeError: Failed to fetch dynamically imported module: https://bin-context-pat.preview.emergentagent.com/src/pages/admin/PersonalTrackAdmin.jsx \n    at Lazy\n    at AdminRoute (https://bin-context-pat.preview.emergentagent.com/src/components/PrivateRoute.jsx:40:30)\n    at Rend"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      },
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": [
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/cto/projects/list",
+        "status": 429
+      },
+      {
+        "url": "https://bin-context-pat.preview.emergentagent.com/api/aurem-dev/findings/starter-suggestions?project_id=p_demo_a&limit=4",
+        "status": 429
+      }
+    ]
+  },
+  {
+    "path": "/admin/ora-chat",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/ora-chat",
+    "info": {
+      "textLen": 548,
+      "h1": "ORA Chat",
+      "snippet": "Skip to content\nback to admin\nORA Chat\n\nAUREM's context-aware assistant. Slash-commands for deterministic DB reads. Everything else routes to cheap OpenRouter models.\n\nClick the chat bubble at the bottom-right to open the drawer. The drawer is available on every /admin/* page.\nWe use cookies to improve your experience\nStrictly-necessary cookies keep you logged in. With your permission, we also use",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": false
+    },
+    "console_errors": [],
+    "network_errors": []
+  },
+  {
+    "path": "/admin/ops",
+    "url_final": "https://bin-context-pat.preview.emergentagent.com/admin/ops",
+    "info": {
+      "textLen": 0,
+      "h1": "",
+      "snippet": "",
+      "hasLoading": false,
+      "errTexts": [],
+      "naCount": 0,
+      "zeroCount": 0,
+      "bodyEmpty": true
+    },
+    "console_errors": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    ],
+    "network_errors": []
+  }
+]

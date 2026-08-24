@@ -1,0 +1,24 @@
+{
+  "summary": "Fix-pass verification following admin_full_audit_2026_08_24. All 3 targeted fixes confirmed working: (1) /admin/token-pnl now sources from customer_chat_cost with non-zero values and new month_calls_by_agent/day_calls_by_agent fields; (2) /admin/eval-quality latest.total>0 after quick:true exclusion; (3) /admin/errors/report rate-limit exemption confirmed via 30 rapid POSTs (all 200, zero 429). All 250 regression tests pass. Frontend visual check on Architecture page shows Persona Quality tile '90/100 · 38/42 pass · runs 11'. Cockpit shows live inference cost from customer_chat_cost source ($0.0146 today, $0.1863 MTD).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_fix_pass_2026_01.py",
+    "/app/test_reports/pytest/pytest_results_fix_pass.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/routers/admin_analytics.py:token_pnl - fix is clean: aggregates from customer_chat_cost with model-key grouping; verified live values consistent with per_model_30d from /admin/agent-performance (both show glm-5.2 dominant, deepseek secondary).",
+    "backend/routers/admin_analytics.py:eval_quality - quick:{'$ne': True} filter correctly excludes liveness pings; latest.quick=False confirmed in response.",
+    "backend/main.py:_GLOBAL_RL_SKIP_PREFIXES - errors/report exemption works for BOTH /api/admin/errors/report and /api/aurem-dev/admin/errors/report prefixes.",
+    "Non-blocking: pytest emits RuntimeWarning about un-awaited coroutines in test_run_warm_agents_mark_done_db_error_swallowed (pre-existing, not from this fix pass)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (250/250 regression + 5/5 targeted)", "frontend": "100% (both tiles verified live)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (Preview admin, worked cleanly)",
+  "seed_data_creation": "None - used live preview data",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Fix-pass complete. Verified live values: token_pnl.ai_cost_month=$0.08, ai_cost_today=$0.01, month_by_agent={glm-5.2:$0.0575, deepseek:$0.0199}, month_calls_by_agent={glm-5.2:750, deepseek:288}. eval_quality.latest={total:42, passed:38, quick:false}. errors/report accepts 30 rapid requests without any 429. Founder's audit correction confirmed - no cockpit/Stripe/rate-limiter bugs; the 3 items founder flagged as 'do not re-investigate' (cockpit MRR, aggressive rate limiter, Parliament aggregator) all validated as correct/known/out-of-scope. No new issues.",
+  "rca of the issue": "Original bugs from audit: (a) token_pnl was joining cto_tasks.tokens_used which never carried $ cost (all zeros); switched aggregation source to customer_chat_cost ledger (real per-call LLM spend). (b) eval_quality picked most-recent ora_eval_runs which was a 0-testcase 'quick' liveness ping; added quick:{'$ne':True} filter. (c) errors/report was hitting global per-IP rate limiter during ErrorBoundary crash storms; added path to _GLOBAL_RL_SKIP_PREFIXES. All three fixes verified live."
+}

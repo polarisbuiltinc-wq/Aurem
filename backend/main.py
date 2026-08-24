@@ -2240,6 +2240,14 @@ _GLOBAL_RL_SKIP_PREFIXES = (
     "/health",
     "/healthz",
     "/ping",
+    # 2026-08-27 — the frontend's ErrorBoundary reports crashes to this
+    # endpoint. If it's ever itself blocked by the rate limiter, the
+    # boundary's own retry/backoff can turn a handful of real client
+    # errors into a self-inflicted request storm against this exact
+    # path — exempting it removes that failure mode entirely, cheap
+    # and safe regardless of how often it actually fires today.
+    "/api/aurem-dev/admin/errors/report",
+    "/api/admin/errors/report",
 )
 
 

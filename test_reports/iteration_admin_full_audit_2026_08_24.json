@@ -1,0 +1,129 @@
+{
+  "summary": "Full diagnostic sweep of all 35 admin routes as logged-in Preview admin (test@aurem.dev). Every route renders (no persistent crash / no whitelist). Vast majority show REAL live data from Mongo/Stripe/OpenRouter. Main systemic issue: an aggressive global rate-limiter (Redis unavailable, in-memory fallback) causes CASCADE 429 errors when the admin shell fires many widget requests in parallel, which trips the react error boundary and shows 'Something went wrong loading this page' on ~6 routes intermittently. A single reload usually recovers the page. Also identified a handful of data-source mismatches (Token P&L $0 vs Agent Perf real cost; Cockpit MRR 'No data yet' vs $57 revenue widget on same page; Parliament runs=0 in system-stats vs 750+ council calls visible elsewhere; Architecture Persona Quality Score '—'). No auth/console-error hard crashes on any route.",
+
+  "per_route_status": {
+    "PASS (renders + real data)": [
+      "/admin/cockpit (91% system health, 20 pass / 2 fail — G21 Security Scan, CI drift)",
+      "/admin/dashboard (651 users, 32 projects, 1686 chat sessions, tasks table populated)",
+      "/admin/users (651 users, token P&L graphs, real user table)",
+      "/admin/overview (deploy sync + advisory 'NOT DEPLOY-READY' warnings visible)",
+      "/admin/support (2 open tickets rendered from Mongo)",
+      "/admin/audit (audit feed, 20+ entries with model/user/tools)",
+      "/admin/house-rules (INACTIVE state + config toggles OK)",
+      "/admin/robot-guide (welcome-message editor renders + live preview works)",
+      "/admin/projects (32 projects table, real repo names)",
+      "/admin/tasks (16 tasks with statuses)",
+      "/admin/agent-performance (glm-5.2 750 calls $0.0575, deepseek 288 $0.0199 — REAL live cost)",
+      "/admin/mcp-usage (98 API keys listed with real timestamps)",
+      "/admin/settings (plan pricing, 2FA panel, token limits)",
+      "/admin/bin-tracker (real user rows, tier data)",
+      "/admin/feature-flags (6 flags with real state)",
+      "/admin/llm-credits (OpenRouter $25.19 balance, all 5 providers Connected)",
+      "/admin/parliament-live (councils/roles table, LongCat LIVE)",
+      "/admin/architecture (external services live, integrations list, but Persona score '—')",
+      "/admin/integrations (13 integrations · 10 LIVE, real latencies)",
+      "/admin/financials (Free/Starter/Pro user counts, USD→CAD 1.3849 live)",
+      "/admin/vanguard (blocked-commits filter, verify config toggles)",
+      "/admin/system-stats + /admin/observability (renders but many zero scores — see issue below)",
+      "/admin/system-map (514 routes / 121 components / 60 pages / 741 collections live scan)",
+      "/admin/api-keys (3 active MCP keys with real created/last-used timestamps)",
+      "/admin/system-health (deploy sync, council A/B/C, versions — flags 'bundle may be stale')",
+      "/admin/qa (SLOW ~4s but loads 6105 tests, CI status, static-grep, a11y burn-down)",
+      "/admin/maintenance (planned-maintenance toggle, outage tracker)",
+      "/admin/personal-track (MRR $57, 8 drafts, users 651)",
+      "/admin/ora-chat (drawer info page)",
+      "/admin/ops (copy-paste runbook cards render)",
+      "/admin/suggestions (empty PENDING bucket - legit empty state)"
+    ],
+    "INTERMITTENT — 429/error-boundary during parallel loads (all recover on reload)": [
+      "/admin/payments",
+      "/admin/financials (also observed 'Something went wrong' during storm)",
+      "/admin/vanguard (also observed during storm)",
+      "/admin/maintenance (also observed during storm)",
+      "/admin/personal-track (also observed during storm)",
+      "/admin/robot-guide (also observed during storm)"
+    ]
+  },
+
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "global rate-limit middleware (backend/main.py:2374 _global_rate_limit_guard)",
+        "issue": "Redis unavailable → in-memory per-process rate limiter is too strict and triggers 429 storms when admin panel loads multiple widgets in parallel. When 429 fires the middleware ALSO raises RuntimeError('No response returned.') (see backend.err.log). This cascades: React ErrorBoundary tries to POST /api/admin/errors/report which is ALSO rate-limited → infinite retry loop → 'Something went wrong loading this page' on ~6 admin routes. Reload usually clears it because it's a per-process burst. Fix: raise the admin-endpoint rate-limit ceiling (or exempt authenticated admin JWT), start Redis on 127.0.0.1:6379 in preview, and CRITICALLY exempt /api/admin/errors/report from the limiter so the error boundary can always report.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {"endpoint": "/api/aurem-dev/admin/qa/status", "issue": "~4210 ms server-side response — user sees 'Loading QA status…' with no spinner for 4+ seconds. Consider caching /api/admin/qa/status output."},
+      {"endpoint": "/api/aurem-dev/admin/token-pnl (Token P&L)", "issue": "Revenue $0.00 / AI Cost $0.00 / Net $0.00 for 30d despite /admin/agent-performance showing real per-model cost ($0.0575 + $0.0199) and /admin/dashboard reporting $57 rev 30d. Token P&L is not summing from the same source (ora_chat_usage / cto_payments). Two admin pages disagree."},
+      {"endpoint": "/admin/cockpit MRR widget", "issue": "'MRR (LIVE) — No data yet' shown while same page cockpit badge shows REVENUE 30d $57. MRR live projection not wired to same Stripe/catalog_projection source."},
+      {"endpoint": "/admin/cockpit mode-board", "issue": "stripe: not-set (should be 'live' — Stripe integration is Connected per /admin/integrations)."},
+      {"endpoint": "/admin/architecture Persona Quality Score", "issue": "Shows '—' with 'latest: 0/0 pass · hard fails 0 · runs 86' — persona quality data source appears empty even though 86 runs exist."},
+      {"endpoint": "/admin/system-stats (Observability)", "issue": "Parliament runs=0, Council success rate=0.0%, Avg winner score=0 despite /admin/audit + /admin/agent-performance showing 750+ z-ai/glm-5.2 calls. Parliament scoring aggregator not tied to real council call log."},
+      {"endpoint": "/admin/system-health", "issue": "Persistent 'Frontend bundle ≠ production backend — bundle may be stale' warning — either genuine drift or the check itself is comparing wrong SHAs."}
+    ]
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdminRoute lazy imports (PrivateRoute.jsx:40)", "issue": "When lazy chunk fetch hits 429, ErrorBoundary shows generic 'Something went wrong loading this page' with only a Retry button; users don't know it's a transient rate-limit. Show a specific 429/backoff message.", "selector": "[route-error-boundary]", "priority": "MEDIUM"},
+      {"component": "AdminQADashboard (/admin/qa)", "issue": "4+ second blank 'Loading QA status…' with no skeleton/spinner. Feels broken. Add a shimmer skeleton.", "selector": "/admin/qa root", "priority": "LOW"},
+      {"component": "Cookie banner", "issue": "Cookie consent banner overlays bottom-right of every /admin page and never remembers the choice (re-appears on every navigation)", "selector": ".cookie-banner / 'Accept all'", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Admin panel initial load", "issue": "Multiple widget API calls fire in parallel and trip the backend rate limiter → cascade page failure", "affected_selectors": ["/admin/payments", "/admin/financials", "/admin/vanguard", "/admin/maintenance", "/admin/personal-track", "/admin/robot-guide"]},
+      {"flow": "Vite dev HMR websocket", "issue": "wss://.../?token=... connection got HTTP 429 during storm — dev-only, but noisy in console"}
+    ],
+    "design_issues": []
+  },
+
+  "score_specific_findings": {
+    "system_health_score": "91% — VALID (20 pass / 2 fail / 3 unconfigured) on /admin/cockpit",
+    "qa_test_style_ratio": "19.6% — VALID (5630 tests analysed, CI threshold 60%) on /admin/qa",
+    "council_success_rate": "0.0% — SUSPICIOUS on /admin/system-stats (real council calls exist)",
+    "avg_winner_score": "0 — SUSPICIOUS on /admin/system-stats",
+    "intent_confidence": "0.82 — plausible",
+    "quality_avg_24h": "0.97 — plausible",
+    "persona_quality_score_30d": "— (empty) on /admin/architecture — BROKEN aggregator",
+    "loop_intent_gate_24h": "0% — plausible (loops=15, redirects=0)",
+    "graph_coverage": "0% (0 of 32) — plausible empty state on /admin/projects",
+    "mrr_live": "'No data yet' on cockpit — INCONSISTENT with $57 rev widget on same page",
+    "revenue_30d": "$57 — VALID (matches Personal Track + Dashboard)"
+  },
+
+  "test_report_links": [
+    "/app/test_reports/admin_audit_results.json",
+    "/app/test_reports/admin_audit_retry.json",
+    "/app/test_reports/admin_audit_focus.json"
+  ],
+
+  "action_items": [
+    "P0: Investigate rate-limit middleware backend/main.py:2374 — RuntimeError('No response returned.') on 429 path, and exempt /api/admin/errors/report from the limiter to prevent ErrorBoundary infinite loop.",
+    "P0: Bring Redis online in preview (127.0.0.1:6379) OR increase in-memory rate-limit ceiling for authenticated admin JWT — Redis fallback warning spams the logs and per-process quotas trip too fast.",
+    "P1: Fix /admin/token-pnl aggregator — it reports $0 rev + $0 cost while agent-performance/dashboard show real numbers. Ensure it queries same collections (ora_chat_usage + cto_payments).",
+    "P1: Fix /admin/cockpit 'MRR (LIVE) No data yet' + 'stripe: not-set' — Stripe IS live per /admin/integrations; MRR feed uses wrong source.",
+    "P1: Fix /admin/system-stats Parliament aggregator — Parliament runs=0 and avg-winner=0 despite 750+ council-A calls visible in agent-performance.",
+    "P2: Fix /admin/architecture Persona Quality Score '—' (86 runs exist but score is empty).",
+    "P2: Cache /api/admin/qa/status (4+ sec response), add skeleton loader on /admin/qa.",
+    "P2: Better error boundary copy on lazy-chunk 429 (say 'backend is throttling, retrying…' instead of generic 'something went wrong').",
+    "P3: Cookie banner re-appears on every admin nav — persist consent to localStorage.",
+    "P3: /admin/system-health 'Frontend bundle ≠ production backend' — verify SHA comparison logic (or ship the bundle).",
+    "P3: /admin/overview 'NOT DEPLOY-READY' advisory shows 11 uncommitted changes + CI failure — informational only, but noisy on a founder cockpit."
+  ],
+
+  "critical_code_review_comments": [
+    "backend/main.py:2374 — the rate_limit_guard raises RuntimeError('No response returned.') on the 429 branch instead of returning a proper 429 JSONResponse. This surfaces as a 500 in downstream and confuses the front-end error boundary. Return a Response object explicitly.",
+    "Error-report endpoint (/api/admin/errors/report) MUST be exempt from rate-limiting — otherwise the ErrorBoundary can't log its own error and retries in a loop.",
+    "Multiple admin pages fetch the same core stats independently (cockpit revenue, dashboard users, personal-track MRR, token-pnl revenue) — duplicated queries + inconsistent aggregates. Extract a single admin/analytics/summary endpoint.",
+    "Preview env has no Redis running; the rate_limiter falls back to per-process in-memory (see services/rate_limiter.py). This is not viable for even light admin usage."
+  ],
+
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend audit)", "frontend": "35/35 routes render · 5 data-source inconsistencies · 1 systemic 429 storm"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None (used existing preview data — 651 users, 32 projects, 16 tasks, 6105 tests)",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Full 35-route admin panel audit complete. All routes render. The main systemic bug is the global rate limiter + missing Redis + non-exempt errors/report endpoint (backend/main.py:2374). Secondary bugs are data-source inconsistencies between: (1) /admin/token-pnl showing $0 vs agent-perf showing real cost, (2) /admin/cockpit MRR 'No data yet' vs $57 revenue on same page, (3) /admin/system-stats Parliament runs=0 vs 750+ council calls, (4) /admin/architecture Persona Quality '—' with 86 runs. All raw data captured in /app/test_reports/admin_audit_*.json files.",
+  "rca_of_the_issue": "Systemic 429 cascade RCA: (1) Preview has no Redis on 127.0.0.1:6379, so backend/services/rate_limiter.py falls back to in-memory per-process. (2) Admin panel widgets fire 5–15 API calls in parallel on tab-switch, breaching the per-process burst. (3) When limiter returns 429, backend/main.py:2374 _global_rate_limit_guard raises RuntimeError('No response returned.') instead of returning a 429 Response, so downstream marks the request failed. (4) React ErrorBoundary catches 'Failed to fetch dynamically imported module' from the lazy admin route and tries to POST /api/admin/errors/report, which is ITSELF rate-limited → infinite retry loop → user stuck on 'Something went wrong loading this page'. (5) Reload usually recovers because the per-process burst window resets. Fix by (a) exempting authenticated admin JWT from the burst limit, (b) returning a proper 429 Response object from _global_rate_limit_guard, (c) hard-exempting /api/admin/errors/report."
+}

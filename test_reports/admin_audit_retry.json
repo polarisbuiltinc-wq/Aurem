@@ -1,0 +1,296 @@
+[
+  {
+    "path": "/admin/robot-guide",
+    "info": {
+      "textLen": 1361,
+      "h1": "Robot Guide Messages",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nRobot Guide Messages\n\nCustomize the ORA robot welcome wording on the signup and login windows. Basic HTML like <strong> and <span class=\"ora-arrow\">\ud83d\udc47</span> works. Leave a field",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 2,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/payments",
+    "info": {
+      "textLen": 1017,
+      "h1": "",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nSTRIPE REVENUE\nREVENUE (30 D)\n$0.00\npaid checkouts\nREVENUE (MO)\n$0.00\nStripe pending\nAI COST (MO)\n$0.00\nNET PROFIT\n$0.00\nTRANSACTIONS\nLIFETIME REVENUE\n$0.00\nTRANSACTIONS\n0\nPENDIN",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 7,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/token-pnl",
+    "info": {
+      "textLen": 1063,
+      "h1": "",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nREVENUE (MO)\n$0.00\nStripe pending\nAI COST (MO)\n$0.00\nNET PROFIT\n$0.00\nTASKS DONE (MO)\n5\n0 today\nNote: Revenue = sum(amount) from cto_payments where payment_status='paid' in the l",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 5,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/projects",
+    "info": {
+      "textLen": 2907,
+      "h1": "",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nPROJECTS WITH GRAPH\n0\nof 32\nGRAPH COVERAGE\n0%\nTOTAL PROJECTS\n32\nALL PROJECTS (32)\nNAME\tREPO\tBRANCH\tSTACK\tTASKS\tGRAPH\tNODES\tGRAPH BUILT\tUSER\tCREATED\naurem-demo/frontend\taurem-demo",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 33,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/tasks",
+    "info": {
+      "textLen": 1957,
+      "h1": "",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nTASKS (16)\nAll\nDone\nFailed\nRunning\nQueued\nTASK ID\tTASK\tUSER\tSTATUS\tCOMMIT\tCREATED\nt_da736cc39c\t\nAdd a one-line comment '# TEST regression 2026-08-27' at top of README.md\n\ttest_ad",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 0,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/agent-performance",
+    "info": {
+      "textLen": 862,
+      "h1": "",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nAGENT PERFORMANCE \u2014 LAST 30 DAYS (2 MODELS)\nMODEL\tCALLS\tTOTAL COST\tAVG INPUT TOK\tAVG OUTPUT TOK\nz-ai/glm-5.2\t750\t$0.0575\t50\t103\ndeepseek/deepseek-chat\t288\t$0.0199\t335\t79\nWe use c",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 2,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/mcp-usage",
+    "info": {
+      "textLen": 6005,
+      "h1": "",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nMCP API KEYS (98)\n\ud83d\udd11 Manage API Keys \u2192\nKEY\tUSER\tCLIENT\tSCOPE\tLAST USED\tCREATED\n\u2026YZ9zHM\ttest_admin_0\t\u2014\tmcp\t54d ago\t54d ago\n\u2026j7Bp5I\ttest_admin_0\t\u2014\tmcp\t68d ago\t68d ago\n\u2026JZL6sM\tf7e96",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 0,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/reliability",
+    "info": {
+      "textLen": 1058,
+      "h1": "",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nWARM START \u2014 LAST 24 H / 7 D / 30 D\nAVG WARM TIME\n\u2014\nLast 100 done jobs \u00b7 30 d\nSUCCESS RATE (7 D)\n\u2014\n0/0 jobs\nTOTAL JOBS (7 D)\n0\n7-day window\nNo data yet.\nPOST-SCAN ISSUES \u2014 VANGUA",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 6,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/settings",
+    "info": {
+      "textLen": 5241,
+      "h1": "AUREM Intelligence Dashboard",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nUpgrade your plan\nMONTHLY\nFree\n$0/mo\nCurrent baseline\nStarter\n$9/mo\nUpgrade \u2192 Starter\nPro\n$19/mo\nUpgrade \u2192 Pro\nTeam\n$49/mo\nUpgrade \u2192 Team\nANNUAL \u00b7 20% OFF\nStarter\n$86.40/yr\nUpgra",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 7,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/bin-tracker",
+    "info": {
+      "textLen": 6406,
+      "h1": "BIN Tracker",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nBIN Tracker\nPer-user boundary explorer \u2014 expand a BIN to see projects + live PAT validity.\n100 BINs\nEMAIL / BIN\nTIER\nPIDS\nTASKS\nSESSIONS\nsectest_b_16d147feac@aurem.test\n7816e65d2",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 297,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/feature-flags",
+    "info": {
+      "textLen": 1190,
+      "h1": "Feature Flags",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nFeature Flags\nRefresh\n6 flags\nGLOBAL FLAGS\nnew_analytics_v2\nNew product analytics dashboard\n\u25cf ON\nmaxx_mode_beta\nMaxx dual-model review mode\ntiers: pro, team, founder\n\u25cf ON\nparalle",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 0,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/llm-credits",
+    "info": {
+      "textLen": 1073,
+      "h1": "LLM Credits",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nLLM Credits\nLLM PROVIDER STATUS\nRefresh\n8:38:56 PM\nOpenRouter\n$25.25\n\u25cfConnected\nLongCat (Council A primary)\nAPI OK\n\u25cfConnected\nDeepSeek (Council C)\nAPI OK\n\u25cfvia OpenRouter\nGLM-5.2 ",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 0,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/parliament-live",
+    "info": {
+      "textLen": 960,
+      "h1": "Parliament Live",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nParliament Live\nPARLIAMENT LIVE STATUS\n1h\n24h\n7d\nLongCat: LIVE \u2713\nCOUNCIL\nROLE\nPRIMARY\nFALLBACK\nCALLS\nA\nCouncil A (Code Fix)\nLongCat\nGLM-5.2\n0\nB\nCouncil B (Analysis)\nGLM-5.2\n\u2014\n0\nC",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 5,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/architecture",
+    "info": {
+      "textLen": 12926,
+      "h1": "",
+      "snippet": "Skip to content\nAUREM\nADMIN PANEL\nCockpit\nMONITOR\nOverview\nLLM Credits\nParliament Live\nQA Health\nMaintenance\nArchitecture\nUSERS\nBIN Tracker\nUsers (Legacy)\nSupport\nSuggestions\nAudit Log\nCONFIG\nFeature Flags\nHouse Rules V2\nRobot Guide\nBUSINESS\nPayments & Revenue\nToken P&L\nSYSTEM\nDashboard\nProjects\nTasks\nAgent Performance\nMCP Usage\nReliability\nSettings\ntest@aurem.dev\nback to app\nPersonal Track ops\nORA Chat\nsign out\n\ud83d\udd14\n70\nPERSONA QUALITY SCORE \u00b7 LAST 30 DAYS\n\u2014\nlatest: 0/0 pass \u00b7 hard fails 0 \u00b7 runs 86\nORA LEARNING HEALTH\nRED\nbrains 8 \u00b7 last write 38.3h ago (p_6d0be78cdd) \u00b7 patterns 6 \u00b7 council log",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 6,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/integrations",
+    "info": {
+      "textLen": 2603,
+      "h1": "Integration Health Center",
+      "snippet": "Skip to content\n\u2190 Back to admin\nIntegration Health Center\n\nReal-time probes of every external dependency. Auto-refreshes daily at DIGEST_HOUR_UTC; manual refresh below.\n\nTOTAL\n13\nLIVE\n10\nDEGRADED\n0\nBROKEN\n0\nMISSING\n0\nLast refresh: 6m ago \u00b7 Trigger: periodic_cron\nRefresh now\nStripe\nLIVE\nLIVE mode \u2022 aurem\nid: stripe\n1409ms \u00b7 6m ago\nGitHub OAuth\nLIVE\nclient_id Ov23liJOw6\u2026 accepted by GitHub\nid: github_oauth\n194ms \u00b7 6m ago\nEmergent LLM Key\nLIVE\nLive \u2022 gpt-5.4-mini responded (2 chars)\nid: emergent_llm\n648ms \u00b7 6m ago\nOpenRouter (DeepSeek)\nLIVE\n$25.25 remaining ($115.75 used)\nid: openrouter\n187ms \u00b7 6",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 3,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/financials",
+    "info": {
+      "textLen": 2042,
+      "h1": "Financial Command Center",
+      "snippet": "Skip to content\n\u2190 Back to admin\nFinancial Command Center\n\nLive MongoDB data \u00b7 USD\u2192CAD rate 1.3849 (frankfurter.app (ECB)) \u00b7 MRR source: catalog_projection\n\n\u21bb Reload\nLive BI (MRR, ARR, inference cost, budget mode, reconcile orphans) now lives in the Cockpit \u2014 one dashboard, one source of truth.\nOpen Cockpit \u2192\nFREE USERS (LIVE FROM DB)\nSTARTER ($9) USERS\nPRO ($19) USERS\nTEAM ($49) USERS\nCASH IN BANK (USD)\n$\nDEV SALARY (USD/MO)\n$\n/MO\nData source: live_db \u00b7 real DB has 648 users \u00b7 290 Maxx tasks this month\nMRR\n$57\nbelow break-even\nNET PROFIT/MO\n-$3216.39\n\u2248 C$-4454/mo\nGROSS MARGIN\n9.8%\ntune costs\nA",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 13,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/vanguard",
+    "info": {
+      "textLen": 1269,
+      "h1": "Blocked Commits",
+      "snippet": "Skip to content\n\ud83d\udee1\ufe0f VANGUARD AUDIT\nBlocked Commits\n1d\n7d\n30d\n90d\nRefresh\n\u2699 Vanguard verify config\nPer-mode severity threshold for the LLM verify-agent. Changes propagate within ~10 s.\n\u25cf Enabled\nSWIFT\nOFF\nDisabled \u2014 only regex floor blocks.\nCRITICAL\nRecommended. Blocks only on critical findings.\nHIGH\nStrict. Blocks on critical + high.\nPRO\nOFF\nDisabled \u2014 only regex floor blocks.\nCRITICAL\nRecommended. Blocks only on critical findings.\nHIGH\nStrict. Blocks on critical + high.\nMAXX\nOFF\nDisabled \u2014 only regex floor blocks.\nCRITICAL\nRecommended. Blocks only on critical findings.\nHIGH\nStrict. Blocks on ",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 3,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/qa",
+    "info": {
+      "textLen": 305,
+      "h1": "",
+      "snippet": "Skip to content\nLoading QA status\u2026\nWe use cookies to improve your experience\nStrictly-necessary cookies keep you logged in. With your permission, we also use analytics and marketing cookies to measure conversions. Read our Cookie Policy \u00b7 Privacy Policy.\nManage preferences\nReject non-essential\nAccept all",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 0,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/maintenance",
+    "info": {
+      "textLen": 11594,
+      "h1": "System Maintenance",
+      "snippet": "Skip to content\nCockpit\nSystem Maintenance\n\nManual planned-maintenance toggle + automatic outage tracker (deploy restarts & crashes).\n\nPlanned maintenance mode\nWhen ON, every visitor (except admins) sees the maintenance screen immediately.\nOFF \u2014 click to turn on\nMESSAGE SHOWN TO VISITORS\nDEPLOYMENT WINDOW (FREE TEXT \u2014 FOR YOUR OWN REFERENCE / VISITOR NOTE)\nSave message / window\nAuto-outage detection threshold\nIf the backend is unreachable longer than this on boot (deploy restart / crash), it's logged below as an outage.\n15s\n30s\n60s\nseconds (custom)\nSave threshold\nOutage incidents\n354 in last 3",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 0,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/personal-track",
+    "info": {
+      "textLen": 1108,
+      "h1": "Personal Track Ops",
+      "snippet": "Skip to content\nADMIN\nPersonal Track Ops\nRefresh\nMRR\n$57\n3 paid \u2022 0 stripe-linked\nDRAFTS\n8\nactive\nMATERIALIZED\n0\n0 drafts shipped\nBLOCKED BY SCAN\n0\nneeds override\nPENDING DOWNGRADES\n0\nhealthy\ndev_users.created_at health\nhealthy\n651 users \u2022 0 legacy \u2022 0 missing\nTypes: double=651\nParliament LLM (scaffold canary)\nProbing LLM canary (can take ~30s)\u2026\nInfra smoke test (pipeline tokens)\nRun smoke test\nDraft \u2192 GitHub repo \u2192 Vercel deploy \u2192 managed-DB roundtrip \u2192 cleanup. Har step ka alag pass/fail \u2014 galat token exactly ek step pe point karega. Throwaway resources auto-delete hote hain.\nBlocked by secu",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 10,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  },
+  {
+    "path": "/admin/ops",
+    "info": {
+      "textLen": 3640,
+      "h1": "Ops recipes",
+      "snippet": "Skip to content\nback to admin\nOps recipes\n\nServer-side operations AUREM can't run on your infra (we don't have SSH to your boxes). Copy-paste runbooks below for the most common issues. ORA links here when you ask things like \"restart supervisor\" or \"free disk space\".\n\nRestart supervisor (services aren't running)\nWhen: Backend/frontend showing 502 \u00b7 supervisor process died \u00b7 after deploy\nsudo systemctl status supervisor\nFirst check if supervisor itself is alive\nsudo systemctl restart supervisor\nRestart the whole daemon\nsudo supervisorctl status\nConfirm all services show RUNNING\nsudo supervisorc",
+      "bodyEmpty": false,
+      "hasSomethingWentWrong": false,
+      "zeroCount": 1,
+      "naCount": 0
+    },
+    "console_errors": [],
+    "net_4xx_5xx": []
+  }
+]
