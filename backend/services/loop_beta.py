@@ -138,6 +138,83 @@ def is_user_allowed(user_doc: dict) -> tuple[bool, str]:
     return False, "tier_locked"
 
 
+# ── Gate-parity telemetry (Guard 21) ─────────────────────────────────
+# 2026-08-24 — iter 212m-181 exposed a class of bug: two Loop entry
+# points (/loop/start and the /chat/stream execution_mode gate) each
+# had their own tier-eligibility check, and a rollout updated one
+# without the other. Recording every allow/deny decision at BOTH
+# entry points lets the admin dashboard detect that drift from data
+# the next time it happens, instead of waiting for a founder to
+# manually notice a customer-facing symptom.
+
+async def log_gate_decision(
+    db, *, entry_point: str, user_id: str, tier: Optional[str],
+    decision: str, reject_reason: Optional[str] = None,
+) -> None:
+    """entry_point: 'loop_start' | 'chat_stream'. decision: 'allowed' | 'denied'."""
+    if db is None:
+        return
+    try:
+        await db.loop_gate_log.insert_one({
+            "entry_point":   entry_point,
+            "user_id":       user_id,
+            "tier":          (tier or "unknown").lower(),
+            "decision":      decision,
+            "reject_reason": reject_reason,
+            "created_at":    datetime.now(timezone.utc),
+        })
+    except Exception as e:
+        logger.warning("[loop_beta] log_gate_decision failed: %r", e)
+
+
+async def gate_parity_check(db, window_hours: int = 24) -> dict:
+    """Per-tier denial-rate comparison between the two entry points
+    over the trailing window. Flags a tier as `mismatch: True` when
+    one entry point is mostly allowing and the other mostly denying
+    the SAME tier with enough volume to be meaningful (>=5 requests
+    each side) — the exact signature of the 212m-181 drift."""
+    if db is None:
+        return {"tiers": [], "mismatch_detected": False, "window_hours": window_hours}
+    since = datetime.now(timezone.utc) - timedelta(hours=window_hours)
+    tiers_out = []
+    mismatch_detected = False
+    for tier in ("pro", "team", "founder"):
+        row = {"tier": tier}
+        rates = {}
+        low_volume = False
+        for ep in ("loop_start", "chat_stream"):
+            try:
+                total = await db.loop_gate_log.count_documents({
+                    "tier": tier, "entry_point": ep, "created_at": {"$gte": since},
+                })
+                denied = await db.loop_gate_log.count_documents({
+                    "tier": tier, "entry_point": ep, "decision": "denied",
+                    "created_at": {"$gte": since},
+                })
+            except Exception:
+                total, denied = 0, 0
+            rate = round(denied / total, 3) if total else None
+            row[f"{ep}_total"] = total
+            row[f"{ep}_denied"] = denied
+            row[f"{ep}_denial_rate"] = rate
+            rates[ep] = rate
+            if total < 5:
+                low_volume = True
+        row["mismatch"] = bool(
+            not low_volume
+            and rates["loop_start"] is not None and rates["chat_stream"] is not None
+            and abs(rates["loop_start"] - rates["chat_stream"]) >= 0.3
+        )
+        if row["mismatch"]:
+            mismatch_detected = True
+        tiers_out.append(row)
+    return {
+        "tiers": tiers_out,
+        "mismatch_detected": mismatch_detected,
+        "window_hours": window_hours,
+    }
+
+
 # ── Concurrency ──────────────────────────────────────────────────────
 
 async def count_active_loops(db, user_id: str) -> int:

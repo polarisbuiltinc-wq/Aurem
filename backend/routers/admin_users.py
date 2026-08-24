@@ -595,7 +595,10 @@ async def toggle_loop_kill_switch(
 
 @router.get("/loop-beta/status")
 async def loop_beta_status(authorization: Optional[str] = Header(None)):
-    """Iter 364 · Phase-3 — dashboard snapshot for the admin QA UI."""
+    """Iter 364 · Phase-3 — dashboard snapshot for the admin QA UI.
+    Iter 212m-182 · Guard 21 — also returns gate-parity telemetry so a
+    future /loop/start vs /chat/stream drift (the 212m-181 bug class)
+    surfaces here instead of waiting on a founder report."""
     await _require_admin(authorization)
     db = require_db()
     from services import loop_beta as _lb
@@ -605,6 +608,7 @@ async def loop_beta_status(authorization: Optional[str] = Header(None)):
     n_beta   = await db.dev_users.count_documents({"loop_beta_enabled": True})
     n_stuck  = await _lb.count_stuck_loops(db)
     row = await db.system_flags.find_one({"key": "loop_mode_kill_switch"}) or {}
+    gate_parity = await _lb.gate_parity_check(db)
     return {
         "kill_switch_db":        bool(row.get("value")),
         "kill_switch_env":       os.environ.get("LOOP_MODE_KILL_SWITCH", ""),
@@ -615,6 +619,7 @@ async def loop_beta_status(authorization: Optional[str] = Header(None)):
         "stuck_trip_threshold":  _lb.LOOP_STUCK_TRIP_THRESHOLD,
         "max_concurrent_per_user": _lb.LOOP_MAX_CONCURRENT_PER_USER,
         "maxx_daily_cap":        _lb.MAXX_DAILY_TASK_CAP,
+        "gate_parity":           gate_parity,
     }
 
 

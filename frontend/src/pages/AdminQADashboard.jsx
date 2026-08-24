@@ -426,7 +426,69 @@ function LoopKillSwitchSection() {
             {busy ? "…" : (on ? "Re-enable Loop" : "🚨 Kill Loop Mode")}
           </button>
         </div>
+        <LoopGateParitySection parity={status.gate_parity} />
       </Card>
+    </div>
+  );
+}
+
+
+// Iter 212m-182 · Guard 21 — cross-entry-point drift detector. Shows,
+// per tier, the /loop/start vs /chat/stream denial rate side by side
+// over the trailing 24h. This is the data trail that would have
+// surfaced the 212m-181 bug (loop_start unlocked for Pro/Team while
+// chat_stream silently stayed founder-only) on this dashboard instead
+// of waiting for a founder to notice it manually.
+function LoopGateParitySection({ parity }) {
+  if (!parity || !Array.isArray(parity.tiers)) return null;
+  const rows = parity.tiers.filter(
+    (t) => (t.loop_start_total || 0) + (t.chat_stream_total || 0) > 0
+  );
+  return (
+    <div data-testid="loop-gate-parity" style={{ marginTop: 18, borderTop: "1px solid #262626", paddingTop: 14 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#e5e5e5", marginBottom: 6 }}>
+        Gate Parity — /loop/start vs /chat/stream ({parity.window_hours}h)
+      </div>
+      {parity.mismatch_detected && (
+        <div data-testid="loop-gate-parity-warning"
+             style={{ fontSize: 12, color: "#f87171", background: "#2a1414",
+                       border: "1px solid #7f1d1d", borderRadius: 6,
+                       padding: "8px 10px", marginBottom: 8 }}>
+          ⚠️ Drift detected — one entry point is allowing a tier the other is denying.
+          This is the exact pattern behind the 2026-08-21 Loop Mode rollout gap.
+        </div>
+      )}
+      {rows.length === 0 ? (
+        <div style={{ fontSize: 11, color: "#666" }}>No gate decisions logged yet in this window.</div>
+      ) : (
+        <table style={{ width: "100%", fontSize: 11, color: "#a3a3a3", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ textAlign: "left", color: "#666" }}>
+              <th style={{ padding: "2px 8px" }}>Tier</th>
+              <th style={{ padding: "2px 8px" }}>loop_start denied</th>
+              <th style={{ padding: "2px 8px" }}>chat_stream denied</th>
+              <th style={{ padding: "2px 8px" }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((t) => (
+              <tr key={t.tier} data-testid={`loop-gate-parity-row-${t.tier}`}
+                  style={{ color: t.mismatch ? "#f87171" : "#a3a3a3" }}>
+                <td style={{ padding: "2px 8px", fontWeight: 600 }}>{t.tier}</td>
+                <td style={{ padding: "2px 8px" }}>
+                  {t.loop_start_denied}/{t.loop_start_total}
+                  {t.loop_start_denial_rate != null ? ` (${Math.round(t.loop_start_denial_rate * 100)}%)` : ""}
+                </td>
+                <td style={{ padding: "2px 8px" }}>
+                  {t.chat_stream_denied}/{t.chat_stream_total}
+                  {t.chat_stream_denial_rate != null ? ` (${Math.round(t.chat_stream_denial_rate * 100)}%)` : ""}
+                </td>
+                <td style={{ padding: "2px 8px" }}>{t.mismatch ? "⚠️ mismatch" : ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

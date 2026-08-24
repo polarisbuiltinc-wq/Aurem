@@ -689,6 +689,45 @@ async def run_debug_session(
                 except Exception:
                     pass
 
+        # 2026-08-24 — Priority 2b (repo-auth reachability gap, closed):
+        # the check below used to require `github_pat` truthy to fire,
+        # so when the repo connection itself is unauthenticated/absent
+        # (no PAT/GitHub App token reached this call at all — e.g. a
+        # revoked install, a project never connected, or a token-mint
+        # failure upstream), this branch was skipped entirely and we
+        # fell straight through to llm_diagnosis() with an EMPTY
+        # file_contents, letting the LLM "diagnose" a file it never
+        # read. Same trust class as the original guessing bug — say so
+        # honestly instead. This fires BEFORE the "file not found in
+        # your repo" branch below, which assumes a working connection.
+        if error_ctx["file_refs"] and not github_pat:
+            no_access_reply = (
+                "I see a reference to "
+                + ", ".join(f"`{r}`" for r in error_ctx["file_refs"][:3])
+                + ", but I don't currently have read access to your repo "
+                  "(no active GitHub connection for this project), so I "
+                  "can't inspect it before diagnosing. Reconnect your "
+                  "repo, or paste the relevant code directly, and I'll "
+                  "take a proper look."
+            )
+            await log_conversational(
+                db=db, mode="D", user_message=user_message,
+                ora_reply=no_access_reply, user_id=user_id,
+                project_id=project_id,
+            )
+            return {
+                "diagnosis": {
+                    "cause": "No repo connection — cannot read referenced file(s)",
+                    "severity": "low", "needs_commit": False,
+                    "files_to_check": [],
+                },
+                "ora_reply": no_access_reply,
+                "can_auto_fix": False, "commit_task": "",
+                "files_to_read": [], "severity": "low",
+                "error_count": 0, "fast_path_used": False,
+                "clarify": True,
+            }
+
         # 2026-08-25 — Priority 2 (reachability-scope check): if we
         # extracted file_refs from the error text but EVERY read
         # against the customer's OWN connected repo came back empty,
@@ -707,10 +746,21 @@ async def run_debug_session(
                   "doing right before this happened, or a different "
                   "error line), share it and I'll take another look."
             )
+            await log_conversational(
+                db=db, mode="D", user_message=user_message,
+                ora_reply=not_found_reply, user_id=user_id,
+                project_id=project_id,
+            )
             return {
+                "diagnosis": {
+                    "cause": "Referenced file(s) not found in connected repo",
+                    "severity": "low", "needs_commit": False,
+                    "files_to_check": [],
+                },
                 "ora_reply": not_found_reply,
                 "can_auto_fix": False, "commit_task": "",
-                "severity": "low", "fast_path_used": False,
+                "files_to_read": [], "severity": "low",
+                "error_count": 0, "fast_path_used": False,
                 "clarify": True,
             }
 

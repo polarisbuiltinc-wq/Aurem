@@ -1,0 +1,42 @@
+{
+  "summary": "Follow-up to iteration_loop_gate_chat_stream_2026_01.json (20/20) and iteration_loop_gate_killswitch_2026_01b.json (10/10). Tested (a) Mode D repo-auth reachability gap in mode_d_debugger.run_debug_session, (b) new gate telemetry logging on POST /api/loop/start and POST /api/chat/stream (execution_mode=loop) writing to MongoDB loop_gate_log, (c) admin /aurem-dev/admin/loop-beta/status gate_parity dashboard object with per-tier mismatch flagging, (d) frontend AdminQADashboard LoopGateParitySection rendering (data-testids loop-gate-parity, loop-gate-parity-warning, loop-gate-parity-row-<tier>). All 9 backend pytest cases pass. Frontend renders parity table + warning banner correctly with drift seed. Cleaned up all seeded loop_gate_log rows and throwaway TEST- users after.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "TaskProgressCard.jsx (FailedCard.retry)",
+        "issue": "SyntaxError: 'Identifier newTaskId has already been declared' at line 55 — duplicate `const newTaskId = r?.data?.task_id;` (lines 38 and 55). This blocked the ENTIRE frontend from loading (fatal Vite/babel compile error, whole app crashed with red overlay). Fixed by testing agent (removed the duplicate declaration on line 55, kept the earlier one at line 38 and just referenced it in the popup handler). Unrelated to the current Loop Gate Parity feature under review but critical enough to fix to unblock UI testing.",
+        "selector": "N/A",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_loop_gate_parity_and_mode_d_2026_01.py",
+    "/app/test_reports/pytest/gate_parity_mode_d.xml"
+  ],
+  "action_items": [
+    "None blocking on this batch — all 3 new items (Mode D fix, gate telemetry logging on both entry points, admin dashboard gate_parity) are correctly implemented and verified.",
+    "Main agent: TaskProgressCard.jsx duplicate `const newTaskId` was fixed in-place by this test agent to unblock UI testing — please review the diff to confirm the intent (was clearly a merge/paste artefact of the 2026-08-23 bug-fix comment block).",
+    "OPTIONAL improvement: the parity dashboard currently omits Free/Starter tiers entirely (gate_parity_check only walks pro/team/founder). If Free users repeatedly try loop-mode and get denied, that's *expected* on both entry points → not a drift. Current scope is correct; noting only for future-proofing."
+  ],
+  "critical_code_review_comments": [
+    "services/loop_beta.py::log_gate_decision — swallows all exceptions via try/except with a debug log. Correct choice for best-effort telemetry (must not break the primary request path), verified in practice.",
+    "services/loop_beta.py::gate_parity_check — mismatch threshold of >=0.30 abs delta AND both sides >=5 requests is a reasonable heuristic; matches the 212m-181 drift signature.",
+    "services/mode_d_debugger.py — the new `if error_ctx['file_refs'] and not github_pat:` branch (line ~703) is correctly ordered BEFORE the existing 'file_contents empty' branch (line ~739). Both branches now have identical shape (clarify=True, can_auto_fix=False, cause description). Verified via unit tests with mocked db + monkeypatched llm_diagnosis that llm_diagnosis is NOT called in the no-pat branch (previous bug).",
+    "extract_error_context_from_text() has a pre-existing regex-capture-group quirk: `re.findall(r'[\\w/.-]+\\.(jsx?|tsx?|py|ts)[:(]\\s*\\d+', msg)` returns only the extension string (e.g. 'py'), not the filename. file_refs therefore stores extensions rather than actual paths. Not caused by this iteration but worth noting: any downstream code that treats file_refs entries as filenames (e.g. the read_file loop at line ~677) will attempt to read a file literally named 'py' or 'jsx'. Pre-existing bug, out of scope for this review, but flagging."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_loop_gate_parity_and_mode_d_2026_01.py (NEW — 9 tests, all pass)",
+    "/app/frontend/src/components/TaskProgressCard.jsx (fixed duplicate `const newTaskId` declaration that broke frontend build)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (kill-switch card + gate parity section render, warning banner shows on drift, per-tier rows correct)"},
+  "test_credentials": "Founder test@aurem.dev / AuremTest2026! used for admin dashboard tests. Throwaway TEST-gp-pro-* / TEST-gp-free-* users created via /auth/signup + Mongo tier promotion, deleted at teardown.",
+  "seed_data_creation": "Backend test seeds 22 loop_gate_log rows (6 loop_start + 6 chat_stream drifted for pro tier, 5+5 consistent for team) then deletes them in fixture teardown. Frontend UI verification seeded then cleaned an identical 22-row drift set (user_id=TEST-parity-fe-seed). Verified via pymongo that loop_gate_log has 0 residual TEST- rows after the run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest file lives at /app/backend/tests/test_loop_gate_parity_and_mode_d_2026_01.py — safe to re-run as a regression. TaskProgressCard.jsx had a pre-existing duplicate `const newTaskId` syntax error (unrelated to the current review) that I fixed in-place to unblock UI testing. Preview MongoDB is local per-pod; throwaway test users are recreated on each run. Login response returns user fields at TOP LEVEL (not under `user`), and /auth/me returns nulls without cookies — use the login response directly to build the localStorage user object (fields: user_id, email, name, tier, is_admin, is_unlimited).",
+  "rca of the issue": "N/A — no bugs found in the code paths under review."
+}

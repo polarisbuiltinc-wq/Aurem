@@ -96,6 +96,10 @@ async def start_loop(body: StartBody,
     # including founders / betas. Instant rollback without a deploy.
     from services import loop_beta as _lb
     if await _lb.is_kill_switch_on_async(db):
+        await _lb.log_gate_decision(
+            db, entry_point="loop_start", user_id=user.get("user_id", ""),
+            tier=user.get("tier"), decision="denied", reject_reason="kill_switch",
+        )
         raise HTTPException(403, {
             "error":       "loop_mode_kill_switch",
             "message":     ("Loop Mode is temporarily disabled while we "
@@ -111,6 +115,17 @@ async def start_loop(body: StartBody,
     is_founder = bool(
         user.get("is_admin") or user.get("is_unlimited")
         or (user.get("tier") == "founder")
+    )
+    # Iter 212m-182 · Guard 21 — gate-parity telemetry (best-effort,
+    # never blocks the request). See log_gate_decision docstring: this
+    # is the data trail that would have surfaced the 212m-181 drift
+    # (loop_start unlocked for Pro/Team, chat_stream silently not) on
+    # the admin dashboard instead of waiting for a founder report.
+    await _lb.log_gate_decision(
+        db, entry_point="loop_start", user_id=user.get("user_id", ""),
+        tier=user.get("tier"),
+        decision="allowed" if allowed else "denied",
+        reject_reason=None if allowed else reject_reason,
     )
     if not allowed:
         # Nice UX per rejection class.

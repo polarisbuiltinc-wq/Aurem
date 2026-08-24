@@ -1375,9 +1375,18 @@ async def chat_stream(
     # injected into continuation turns, not just new /loop/start calls.
     if (body.execution_mode or "").lower() == "loop":
         from services import loop_beta as _lb_gate
-        _loop_allowed, _ = _lb_gate.is_user_allowed(user)
+        _loop_allowed, _loop_reject = _lb_gate.is_user_allowed(user)
         if _loop_allowed and await _lb_gate.is_kill_switch_on_async(get_db()):
-            _loop_allowed = False
+            _loop_allowed, _loop_reject = False, "kill_switch"
+        # Iter 212m-182 · Guard 21 — same gate-parity telemetry as
+        # /loop/start (see log_gate_decision docstring). Best-effort,
+        # never blocks the chat turn.
+        await _lb_gate.log_gate_decision(
+            get_db(), entry_point="chat_stream", user_id=user.get("user_id", ""),
+            tier=user.get("tier"),
+            decision="allowed" if _loop_allowed else "denied",
+            reject_reason=None if _loop_allowed else _loop_reject,
+        )
         if not _loop_allowed:
             body.execution_mode = "prompt"
     if (body.execution_mode or "").lower() == "loop":

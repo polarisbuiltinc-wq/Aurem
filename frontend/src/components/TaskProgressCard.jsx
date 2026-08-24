@@ -52,7 +52,6 @@ function FailedCard({ taskId, task, onOpenLivePopup }) {
       // looking exactly like "re-queued but doing nothing". Open the
       // live progress popup for the NEW task so retries are visibly
       // alive.
-      const newTaskId = r?.data?.task_id;
       if (newTaskId) onOpenLivePopup?.(newTaskId);
     } catch (e) {
       toast({
