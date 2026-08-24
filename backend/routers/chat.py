@@ -2417,8 +2417,24 @@ async def chat_stream(
                 #             run but the UI is informed so it can render
                 #             a "looks ambiguous" hint next to the reply.
                 from core.intent_gateway import classify as _classify_intent
+                # 2026-08-24 — Guard 22 fix: strip the internal
+                # `LOOP_PHASE:plan\n` / `LOOP_PHASE:execute\n` marker
+                # (prepended by the frontend on Loop Mode turns,
+                # BEFORE the user's actual message) before handing
+                # text to the classifier. Left in, "LOOP_PHASE:plan\n
+                # Ship a change..." tokenizes with "loop" as the first
+                # word instead of the user's real verb "ship", masking
+                # a clearly agentic message as ambiguous. Confirmed
+                # live-reproducible 2026-08-24; did not block the Loop
+                # pipeline itself (PLAN needs 0 tool calls) but would
+                # wrongly cap max_iters on the regular chat_with_tools
+                # path for any non-Loop turn that happened to carry a
+                # similar internal prefix.
+                _intent_probe_text = re.sub(
+                    r"^LOOP_PHASE:\w+\s*\n", "", body.prompt or "", count=1,
+                )
                 _intent_result = await _classify_intent(
-                    body.prompt or "",
+                    _intent_probe_text,
                     history=[],   # full conversation context is heavy
                                   # for the 2 s budget; we rely on the
                                   # heuristic + the message itself.

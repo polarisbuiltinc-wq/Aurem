@@ -180,6 +180,34 @@ def _classify_heuristic(message: str) -> dict[str, Any]:
 
     # ── Tier 2 (query) — question words / question mark ────────────
     if has_question_word or has_question_mark:
+        # 2026-08-24 — Guard 22 fix (real bug, live-reproduced): a
+        # query-lead word appearing ANYWHERE in the message (not
+        # leading it) is a much weaker signal than one at position 0
+        # ("show me the leads" vs "please ship this and show me the
+        # confirmation" — the latter is an action request whose tail
+        # happens to mention "show"). Root cause of a real customer-
+        # facing bug: "Please proceed to make the edit and show me
+        # the ship confirmation." misclassified as QUERY purely
+        # because of the trailing "show", capping tool iterations
+        # for what is unambiguously an action request. When the
+        # message does NOT lead with a query word or contain "?" AND
+        # it DOES contain a real agentic verb anywhere, the agentic
+        # reading wins.
+        if first not in _QUERY_LEADS and not has_question_mark:
+            _agentic_hits = [t for t in tokens if t in _AGENTIC_VERBS]
+            if _agentic_hits:
+                signals.append(f"agentic_verb_present:{_agentic_hits[0]}")
+                return {
+                    "tier":       TIER_AGENTIC,
+                    "confidence": 0.80,
+                    "method":     "heuristic",
+                    "signals":    signals,
+                    "reasoning":  (
+                        f"Agentic verb '{_agentic_hits[0]}' present; a "
+                        f"query-lead word appeared but not at the start "
+                        f"and no '?' — action intent wins."
+                    ),
+                }
         signals.append("query_signal")
         # Stronger confidence when a query-lead is at the START
         # ("show me my leads", "what is the status").

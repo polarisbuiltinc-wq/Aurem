@@ -95,18 +95,36 @@ def _format_files(files: list[dict]) -> str:
 
 
 def _parse(raw: str) -> tuple[str, str, str]:
-    """Fail-closed. Any parse issue → ("no", tech, user)."""
+    """Fail-closed. Any parse issue → ("no", tech, user).
+
+    2026-08-24 — Guard 22, real bug found while wiring the scaffold
+    onboarding path end-to-end (not a hypothetical — reproduced live
+    against a real LLM response): the old regex
+    `\\{.*?\"verdict\".*?\\}` is non-greedy, so it stops at the FIRST
+    `}` it finds after "verdict" appears — which can be a `}` that's
+    part of the STRING VALUE of technical_reason/user_message (e.g.
+    the model mentioning "{ }" while describing missing config),
+    truncating otherwise-valid JSON and forcing every review through
+    this fail-closed path. Fixed by trying a direct parse first, and
+    falling back to the outermost first-'{'..last-'}' span (not a
+    content-dependent regex) only if that fails.
+    """
     s = (raw or "").strip()
     s = s.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    m = re.search(r"\{.*?\"verdict\".*?\}", s, re.DOTALL)
-    if m:
-        s = m.group(0)
     try:
         j = json.loads(s)
     except ValueError:
-        return "no", "scaffold_verifier_parse_error", (
-            "We couldn't confirm your app matches your description. "
-            "Try clicking regenerate — usually a one-time hiccup.")
+        start, end = s.find("{"), s.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            return "no", "scaffold_verifier_parse_error", (
+                "We couldn't confirm your app matches your description. "
+                "Try clicking regenerate — usually a one-time hiccup.")
+        try:
+            j = json.loads(s[start:end + 1])
+        except ValueError:
+            return "no", "scaffold_verifier_parse_error", (
+                "We couldn't confirm your app matches your description. "
+                "Try clicking regenerate — usually a one-time hiccup.")
     v = str(j.get("verdict") or "").strip().lower()
     tech = str(j.get("technical_reason") or "").strip()[:200]
     user = str(j.get("user_message") or "").strip()[:280]

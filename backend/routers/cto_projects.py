@@ -2744,7 +2744,9 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
                                f"✅ {agents_count} agents merged {len(edits)} file edits",
                                "success")
         except Exception as _pe:
-            await _log(task_id, f"parallel codegen fell back to single agent: {_pe}", "warning")
+            from services.error_classifier import classify_error
+            _pe_safe = classify_error(_pe)["user_message"]
+            await _log(task_id, f"parallel codegen fell back to single agent: {_pe_safe}", "warning")
             edits = {}
             parallelized = False
             agents_count = 1
@@ -3324,7 +3326,9 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
                     edits = review_result["corrected"] or edits
                     await _set_status(task_id, agent_used="deepseek+claude")
             except Exception as _re:
-                await _log(task_id, f"⚠️ reviewer error (committing original): {_re}", "warning")
+                from services.error_classifier import classify_error
+                _re_safe = classify_error(_re)["user_message"]
+                await _log(task_id, f"⚠️ reviewer error (committing original): {_re_safe}", "warning")
                 review_result = {"pass": True, "corrected": None, "issues": []}
 
         # 2d) Council log — fire-and-forget; never blocks the commit.

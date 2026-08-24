@@ -206,6 +206,26 @@ jobs:
           echo "Diffing $BASE_SHA..$HEAD_SHA (override: ${OVERRIDE:-none})"
           python backend/scripts/ci_check_coverage_ratchet.py "$BASE_SHA" "$HEAD_SHA" backend/coverage.json $OVERRIDE
 
+      - name: Raw exception leak check (Guard 22, Phase 2.3)
+        # 2026-08-24 — real, AST-based, CI-enforced check that a raw
+        # Python exception message never flows into a customer-facing
+        # sink (task step log, chat reply) without going through
+        # services.error_classifier.classify_error() first. This is
+        # the exact bug class behind the ReRootsBeauty incident
+        # ("'str' object has no attribute 'get'" reaching a customer).
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -e
+          OVERRIDE=""
+          if [ "$EVENT" = "pull_request" ] && printf '%s' "$PR_LABELS" | grep -q '"raw-error-approved"'; then
+            OVERRIDE="--override"
+          elif git log -1 --format=%B HEAD | grep -q '\[raw-error-approved\]'; then
+            OVERRIDE="--override"
+          fi
+          python backend/scripts/ci_check_raw_exception_leak.py $OVERRIDE
+
       - name: Legacy lane (deferred failures — non-blocking)
         # Iter 345 — founder ruling: 259 pre-existing failures
         # (iter36–iter267 era) are quarantined via @pytest.mark.legacy

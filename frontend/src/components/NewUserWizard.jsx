@@ -40,6 +40,18 @@ export default function NewUserWizard({ onComplete }) {
   const [busy, setBusy]         = useState(false);
   const [err, setErr]           = useState("");
 
+  // 2026-08-24 · Guard 22 — Phase 3.1 blueprint gap: the "start from
+  // an idea" path (routers/scaffold.py — brief → real generated repo
+  // + real project, fully built, Vercel auto-deploy included) had
+  // ZERO frontend entry point. "connect" is the default so existing
+  // muscle-memory/tests are untouched; "scaffold" is the new 3rd path.
+  const [mode, setMode] = useState("connect"); // "connect" | "scaffold"
+  const [ideaText, setIdeaText]         = useState("");
+  const [scaffoldBusy, setScaffoldBusy] = useState(false);
+  const [scaffoldErr, setScaffoldErr]   = useState("");
+  const [draft, setDraft]               = useState(null); // {draft_id, files, stack_detected}
+  const [materializing, setMaterializing] = useState(false);
+
   // GitHub OAuth state — drives whether step 1 shows a Connect button
   // or the repo URL input + picker.
   const [ghStatus, setGhStatus] = useState("checking"); // "checking" | "connected" | "disconnected"
@@ -392,6 +404,49 @@ export default function NewUserWizard({ onComplete }) {
     }
   }
 
+  // ─── Guard 22 · Phase 3.1 — "start from an idea" (scaffold path) ──
+  async function submitIdea(e) {
+    e?.preventDefault();
+    setScaffoldErr("");
+    if (ideaText.trim().length < 10) {
+      setScaffoldErr("A bit more detail please — one real sentence about what you want to build.");
+      return;
+    }
+    setScaffoldBusy(true);
+    try {
+      const r = await api.post("/scaffold/new-project", { brief: ideaText.trim() });
+      setDraft(r.data);
+    } catch (e2) {
+      const detail = e2?.response?.data?.detail;
+      const msg = (typeof detail === "object" && (detail?.user_message || detail?.message))
+        || (typeof detail === "string" ? detail : null);
+      setScaffoldErr(msg || "Could not generate a plan — try rephrasing your idea.");
+    } finally {
+      setScaffoldBusy(false);
+    }
+  }
+
+  async function confirmMaterialize() {
+    if (!draft?.draft_id) return;
+    setScaffoldErr("");
+    setMaterializing(true);
+    try {
+      const r = await api.post(`/scaffold/${draft.draft_id}/materialize`, {});
+      const newProjectId = r.data?.project_id;
+      if (!newProjectId) throw new Error("No project_id returned");
+      setProject(newProjectId);
+      setActiveProjectId(newProjectId);
+      close();
+    } catch (e2) {
+      const detail = e2?.response?.data?.detail;
+      const msg = (typeof detail === "object" && (detail?.user_message || detail?.message))
+        || (typeof detail === "string" ? detail : null);
+      setScaffoldErr(msg || "Could not create the project — please try again.");
+    } finally {
+      setMaterializing(false);
+    }
+  }
+
   const robotMsg = buildRobotMessage({ ghStatus, busy, err, repoUrl });
 
   // Iter 388t · Bug 27 · Escape + focus trap.  Wizard was aria-modal
@@ -468,7 +523,31 @@ export default function NewUserWizard({ onComplete }) {
           <RobotGuide message={robotMsg} kind={err ? "error" : "info"} testid="wizard-robot-guide" />
           {step === 1 && (
             <form onSubmit={submitRepo} data-testid="wizard-step-1">
-              <h2 id="wizard-title" style={hStyle}>Connect your GitHub repo</h2>
+              <h2 id="wizard-title" style={hStyle}>
+                {mode === "connect" ? "Connect your GitHub repo" : "Start from an idea"}
+              </h2>
+
+              {/* 2026-08-24 · Guard 22 · Phase 3.1 — path chooser. Default
+                  stays "connect" (existing behaviour untouched); this just
+                  adds the previously-missing 3rd onboarding path. */}
+              <div data-testid="wizard-mode-toggle" style={{
+                display: "flex", gap: 6, marginBottom: 16,
+                background: "var(--bg-elev, rgba(255,255,255,0.03))",
+                padding: 4, borderRadius: 8,
+              }}>
+                <button type="button" data-testid="wizard-mode-connect"
+                  onClick={() => { setMode("connect"); setScaffoldErr(""); }}
+                  style={modeTabStyle(mode === "connect")}>
+                  🔗 Connect a repo
+                </button>
+                <button type="button" data-testid="wizard-mode-scaffold"
+                  onClick={() => { setMode("scaffold"); setErr(""); }}
+                  style={modeTabStyle(mode === "scaffold")}>
+                  💡 Start from an idea
+                </button>
+              </div>
+
+              {mode === "connect" && (<>
 
               {ghStatus === "checking" && (
                 <div data-testid="wizard-gh-checking" style={{
@@ -787,6 +866,66 @@ export default function NewUserWizard({ onComplete }) {
                   />
                 </>
               )}
+              </>)}
+
+              {mode === "scaffold" && (
+                <div data-testid="wizard-scaffold-panel">
+                  {!draft && (
+                    <>
+                      <p style={pStyle}>
+                        One or two sentences is enough — AUREM will draft a
+                        real project structure, then create it as a real
+                        GitHub repo the moment you approve it.
+                      </p>
+                      <textarea
+                        data-testid="wizard-idea-input"
+                        autoFocus
+                        value={ideaText}
+                        onChange={(e) => setIdeaText(e.target.value)}
+                        placeholder="e.g. A simple waitlist landing page with an email signup form and an admin list view"
+                        rows={4}
+                        style={{ ...iStyle, height: "auto", resize: "vertical", fontFamily: "inherit" }}
+                      />
+                      {scaffoldErr && <div data-testid="wizard-scaffold-error" style={errStyle}>{scaffoldErr}</div>}
+                      <Footer
+                        busy={scaffoldBusy}
+                        primary="Draft my project"
+                        onPrimary={submitIdea}
+                        onSkip={close}
+                      />
+                    </>
+                  )}
+                  {draft && (
+                    <>
+                      <p style={pStyle}>
+                        {draft.stack_detected ? `Stack: ${draft.stack_detected}. ` : ""}
+                        Here's what AUREM will create ({(draft.files || []).length} files):
+                      </p>
+                      <div data-testid="wizard-draft-file-list" style={{
+                        maxHeight: 180, overflowY: "auto",
+                        background: "var(--bg-elev, rgba(255,255,255,0.03))",
+                        border: "1px solid var(--border, rgba(255,255,255,0.08))",
+                        borderRadius: 6, padding: "8px 12px", marginBottom: 12,
+                        fontFamily: "'JetBrains Mono', monospace", fontSize: 11.5,
+                      }}>
+                        {(draft.files || []).map((f) => (
+                          <div key={f.path} style={{ padding: "2px 0", color: "var(--text-dim)" }}>
+                            {f.path}
+                          </div>
+                        ))}
+                      </div>
+                      {scaffoldErr && <div data-testid="wizard-scaffold-error" style={errStyle}>{scaffoldErr}</div>}
+                      <Footer
+                        busy={materializing}
+                        primary="Looks good — create it"
+                        onPrimary={confirmMaterialize}
+                        onSkip={() => setDraft(null)}
+                        skipLabel="Back"
+                      />
+                    </>
+                  )}
+                </div>
+              )}
             </form>
           )}
         </div>
@@ -795,7 +934,7 @@ export default function NewUserWizard({ onComplete }) {
   );
 }
 
-function Footer({ busy, primary, onPrimary, onSkip }) {
+function Footer({ busy, primary, onPrimary, onSkip, skipLabel = "Skip for now" }) {
   return (
     <div style={{ display:"flex", alignItems:"center",
                   gap: 8, padding: "16px 0 4px" }}>
@@ -803,7 +942,7 @@ function Footer({ busy, primary, onPrimary, onSkip }) {
               style={{ background:"transparent", border:"none",
                        color:"var(--text-faint)", fontSize:11,
                        padding:"6px 4px", cursor:"pointer" }}>
-        Skip for now
+        {skipLabel}
       </button>
       <div style={{ flex:1 }} />
       <button data-testid="wizard-next" data-guide-target="continue-btn" type="button" onClick={onPrimary}
@@ -814,6 +953,17 @@ function Footer({ busy, primary, onPrimary, onSkip }) {
       </button>
     </div>
   );
+}
+
+function modeTabStyle(active) {
+  return {
+    flex: 1, padding: "8px 10px", fontSize: 12, fontWeight: 500,
+    borderRadius: 6, border: "none", cursor: "pointer",
+    fontFamily: "inherit",
+    background: active ? "rgba(255,102,8,0.16)" : "transparent",
+    color: active ? "#ff9d5c" : "var(--text-faint)",
+    transition: "background 120ms, color 120ms",
+  };
 }
 
 const hStyle = { margin: 0, fontSize: 20, fontWeight: 500,

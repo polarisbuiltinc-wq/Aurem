@@ -33,6 +33,7 @@ export default function AdminOverview() {
   const [backupStatus, setBackupStatus] = useState(null); // 2026-08-20 — nightly backup health
   const [drillHistory, setDrillHistory] = useState(null); // 2026-08-20 — recurring restore-drill health
   const [deployReadiness, setDeployReadiness] = useState(null); // 2026-08-24 — Option A advisory card
+  const [dora, setDora] = useState(null); // 2026-08-24 — Guard 22, DORA metrics
   const [refreshingHealth, setRefreshingHealth] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -40,7 +41,7 @@ export default function AdminOverview() {
     const h = { Authorization: `Bearer ${getToken()}` };
     const HEALTH_URL = `${process.env.REACT_APP_BACKEND_URL}/api/health`;
     try {
-      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes, ghFunnelRes, nudgeStagesRes, backupStatusRes, drillHistoryRes, deployReadinessRes] =
+      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes, ghFunnelRes, nudgeStagesRes, backupStatusRes, drillHistoryRes, deployReadinessRes, doraRes] =
         await Promise.allSettled([
           fetch(HEALTH_URL, { signal: AbortSignal.timeout(10000) }).then((r) => r.json()),
           api.get("/usage/public/stats"),
@@ -61,6 +62,7 @@ export default function AdminOverview() {
           api.get("/admin/backups/status", { headers: h }),        // 2026-08-20 — backup health
           api.get("/admin/backups/drill-history", { headers: h }), // 2026-08-20 — restore-drill health
           api.get("/admin/deploy-readiness", { headers: h }),      // 2026-08-24 — Option A advisory card
+          api.get("/admin/insights/dora", { headers: h }),         // 2026-08-24 — Guard 22 DORA metrics
         ]);
       if (healthRes.status   === "fulfilled") setHealth(healthRes.value);
       if (statsRes.status    === "fulfilled") setStats(statsRes.value.data);
@@ -81,6 +83,7 @@ export default function AdminOverview() {
       if (backupStatusRes.status === "fulfilled") setBackupStatus(backupStatusRes.value.data);
       if (drillHistoryRes.status === "fulfilled") setDrillHistory(drillHistoryRes.value.data);
       if (deployReadinessRes.status === "fulfilled") setDeployReadiness(deployReadinessRes.value.data);
+      if (doraRes.status === "fulfilled") setDora(doraRes.value.data);
     } catch { /* silent */ }
     finally { setLoading(false); }
   }, []);
@@ -821,6 +824,10 @@ export default function AdminOverview() {
       {/* ── Iter 212m-3 — Activation funnel (FunnelCard) ────── */}
       {funnel && (
         <FunnelCard data={funnel} />
+      )}
+      {/* ── 2026-08-24 — Guard 22 — DORA metrics ─────────────── */}
+      {dora && !dora.error && (
+        <DoraCard data={dora} />
       )}
       {/* ── 2026-08-20 — stage-aware nudge visibility ────────── */}
       {nudgeStages?.nudge_stages && (
@@ -1892,6 +1899,66 @@ function StageUsersModal({ stageInfo, data, loading, onClose }) {
     </div>
   );
 }
+
+// ── DORA metrics card (2026-08-24, Guard 22) ─────────────────────────
+// 4 standard DORA metrics computed purely from existing collections
+// (deploy_events / rollback_attempts / incidents) — was a flat 1/10
+// blueprint gap ("not built at all"), closed via GET /admin/insights/dora.
+function DoraCard({ data }) {
+  const df = data.deployment_frequency || {};
+  const lt = data.lead_time_for_changes || {};
+  const cfr = data.change_failure_rate || {};
+  const mttr = data.mttr || {};
+  const tiles = [
+    {
+      key: "deploy_freq", label: "Deployment Frequency",
+      value: df.count != null ? `${df.per_day}/day` : "—",
+      sub: df.count != null ? `${df.count} deploys / ${data.period_days}d` : "no deploys in period",
+    },
+    {
+      key: "lead_time", label: "Lead Time for Changes",
+      value: lt.avg_hours != null ? `${lt.avg_hours}h avg` : "—",
+      sub: lt.sample_size ? `median ${lt.median_hours}h · n=${lt.sample_size}` : "commit→deploy gap unavailable",
+    },
+    {
+      key: "change_failure_rate", label: "Change Failure Rate",
+      value: cfr.pct != null ? `${cfr.pct}%` : "—",
+      sub: cfr.total_deploys ? `${cfr.failed_deploys}/${cfr.total_deploys} deploys (±${cfr.failure_window_hours}h)` : "no deploys in period",
+      warn: cfr.pct != null && cfr.pct >= 30,
+    },
+    {
+      key: "mttr", label: "MTTR",
+      value: mttr.avg_hours != null ? `${mttr.avg_hours}h` : "—",
+      sub: mttr.sample_size ? `n=${mttr.sample_size} resolved incidents` : "no resolved incidents in period",
+    },
+  ];
+  return (
+    <Section title={`DORA Metrics · ${data.env || "all envs"} · last ${data.period_days}d`}>
+      <div data-testid="dora-metrics-card" style={{
+        display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10,
+      }}>
+        {tiles.map((t) => (
+          <div key={t.key} data-testid={`dora-tile-${t.key}`} style={{
+            padding: "12px 14px", borderRadius: 6,
+            background: t.warn ? "rgba(232, 70, 70, 0.06)" : "var(--panel-2)",
+            border: t.warn ? "1px solid rgba(232, 70, 70, 0.28)" : "1px solid var(--border)",
+          }}>
+            <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".04em" }}>
+              {t.label}
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4, color: t.warn ? "#ff8a8a" : "var(--text)" }}>
+              {t.value}
+            </div>
+            <div style={{ fontSize: 10.5, color: "var(--text-faint)", marginTop: 4 }}>
+              {t.sub}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
 
 function FunnelCard({ data }) {
   const steps = (data && data.funnel_steps) || [];

@@ -973,6 +973,23 @@ async def admin_send_user_offer(
     }
 
 
+@router.get("/insights/dora")
+async def dora_metrics_endpoint(
+    period_days: int = 30, env: str = "production",
+    authorization: Optional[str] = Header(None),
+) -> dict:
+    """2026-08-24 · Guard 22 — Phase 5.3 blueprint gap (was 1/10, not
+    built at all). 4 standard DORA metrics computed purely from
+    existing collections (deploy_events, rollback_attempts,
+    incidents) — no new event infra."""
+    await _require_admin(authorization)
+    db = require_db()
+    from services.dora_metrics import compute_dora
+    period_days = max(1, min(period_days, 365))
+    return await compute_dora(db, period_days=period_days, env=env or None)
+
+
+
 @router.get("/insights/activation-funnel")
 async def activation_funnel(
     authorization: Optional[str] = Header(None),

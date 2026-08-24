@@ -19,6 +19,7 @@ import React, { useState } from "react";
 import { Loader2, ExternalLink, Undo2 } from "lucide-react";
 import { api } from "../lib/api";
 import { toast } from "./Toast";
+import { SupportButton } from "./SupportPopup";
 
 const STAGES = [
   { key: "pulling", label: "Cloning…",          icon: "📡" },
@@ -28,7 +29,7 @@ const STAGES = [
   { key: "done",    label: "Pushed",             icon: "✅" },
 ];
 
-function FailedCard({ taskId, task, onOpenLivePopup }) {
+function FailedCard({ taskId, task, project, onOpenLivePopup }) {
   const [retrying, setRetrying] = useState(false);
   async function retry() {
     if (retrying) return;
@@ -119,9 +120,36 @@ function FailedCard({ taskId, task, onOpenLivePopup }) {
             fontFamily: "inherit", lineHeight: 1.5,
           }}
         >
-          ⚠️ This exact failure has happened {repeatCount}× on this project.
-          Retrying is unlikely to change the outcome — try rephrasing the
-          task, or contact support if it keeps happening.
+          <div>
+            ⚠️ This exact failure has happened {repeatCount}× on this project.
+            Retrying is unlikely to change the outcome — try rephrasing the
+            task, or contact support if it keeps happening.
+          </div>
+          {/* 2026-08-24 · Guard 22 — Phase 6.1/6.2 blueprint gap: the
+              failure-signature detection + repeat-count already
+              existed and was already displayed here as plain text.
+              The one real missing piece was routing — "contact
+              support" was never a real link. Reuses the SAME
+              SupportPopup/POST /support/tickets path every other
+              support entry point in the app already uses, just
+              pre-filled with the real task context so the founder
+              doesn't have to ask the user to paste a task ID. */}
+          <div style={{ marginTop: 8 }}>
+            <SupportButton
+              source="task_repeat_failure"
+              label="✉ Contact support about this"
+              style={{ fontSize: 11, padding: "5px 12px" }}
+              initialBody={
+                `My task keeps failing the same way (${repeatCount}x) and Retry isn't fixing it.\n\n` +
+                `Task ID: ${taskId}\n` +
+                (project?.github_owner && project?.github_repo
+                  ? `Repo: ${project.github_owner}/${project.github_repo}\n` : "") +
+                (task.failure_signature ? `Failure signature: ${task.failure_signature}\n` : "") +
+                (plain ? `\nWhat AUREM told me: ${plain}\n` : "") +
+                `\n(please add anything else that would help — what you were trying to do, etc.)`
+              }
+            />
+          </div>
         </div>
       )}
 
@@ -257,7 +285,7 @@ export default function TaskProgressCard({ taskId, task, project, onRollback, on
 
   // Failed — own sub-component so hooks stay top-level
   if (status === "failed") {
-    return <FailedCard taskId={taskId} task={task} onOpenLivePopup={onOpenLivePopup} />;
+    return <FailedCard taskId={taskId} task={task} project={project} onOpenLivePopup={onOpenLivePopup} />;
   }
 
   // Success

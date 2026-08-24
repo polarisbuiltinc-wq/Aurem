@@ -32,7 +32,7 @@ const PAL = {
 };
 
 export function SupportButton({ source = "in_app", style = {},
-                                 label = "Need help?" }) {
+                                 label = "Need help?", initialBody = "" }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -62,13 +62,13 @@ export function SupportButton({ source = "in_app", style = {},
         }}>
         {label}
       </button>
-      {open && <SupportPopup source={source} onClose={() => setOpen(false)} />}
+      {open && <SupportPopup source={source} initialBody={initialBody} onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-export function SupportPopup({ source = "in_app", onClose }) {
-  const [body, setBody] = useState("");
+export function SupportPopup({ source = "in_app", onClose, initialBody = "" }) {
+  const [body, setBody] = useState(initialBody);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState(null); // "ok" | "err" | null
   const [err, setErr] = useState("");

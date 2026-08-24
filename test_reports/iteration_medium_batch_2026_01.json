@@ -1,0 +1,24 @@
+{
+  "summary": "Medium batch (8 items) tested end-to-end. All 12 backend tests pass (100%), all frontend selectors verified live in Preview. Intent Gateway fix 1 (agentic-verb-anywhere override) works and all 3 regression cases still classify as query. Intent Gateway fix 2 (chat.py strips LOOP_PHASE:\\w+\\n before classify_intent) verified both by source and regex behavior. CI coverage ratchet prints HIGH-RISK 80% floor + diff-coverage per touched file with parsed added lines (5 for chat.py). New CI raw-exception-leak lint script exits 0 clean on current codebase AND correctly flags a deliberately-reintroduced synthetic leak, and correctly ignores send_founder_alert(f'{e}') sites. DORA metrics endpoint returns all 4 aggregates over seeded deploy_events/rollback_attempts/incidents (2 deploys, 1 failure, 1 mttr sample), admin-only gate enforced (401 unauth). DORA card + 4 tiles render live at /admin/overview with real data (MTTR=22.55h, n=32 resolved). scaffold_design_review._parse() unit-verified to survive stray '}' in string values (real bug fixed). NewUserWizard mode toggle renders both connect + scaffold tabs, idea input and Draft-my-project button all rendered on fresh signup. Escalation banner + SupportPopup initialBody wiring source-verified (SupportButton accepts initialBody; SupportPopup useState(initialBody); TaskProgressCard pre-fills task_id + repo + failure_signature + plain error). Wizard error surfacing correctly reads detail?.user_message || detail?.message (both cases handled). Monitoring flap-dampening audit confirmed no additional gap.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_medium_batch_2026_01.py",
+    "/app/test_reports/pytest/medium_batch_2026_01.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/scripts/ci_check_raw_exception_leak.py: sink list is intentionally narrow (only `_log`, `_emit_step`, assigns to `ora_reply`/`error_plain`/`user_message`) — this is documented and correct for now but future user-facing sinks (e.g. new `_task_step`, `_notify_customer`) must be added to _SINK_CALL_NAMES or leaks will slip through. Consider a comment marker convention (`# customer-facing-sink`) that the linter could pick up.",
+    "backend/services/dora_metrics.py: change_failure_rate loop does N sequential per-deploy Mongo count_documents queries (2 per deploy). Fine at current scale but a single `$facet` aggregation or bulk window scan would be O(1) queries — flag if deploy counts ever exceed a few hundred per period."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_medium_batch_2026_01.py"
+  ],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "100% (DORA card + wizard toggle + all testids verified)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (Preview admin) — used for DORA endpoint + admin UI. Throwaway signup TEST_wiz_<ts>@example.com for wizard render.",
+  "seed_data_creation": "2 deploy_events (TEST_dora_1/2, env=production, one with rollback within 24h → change_failure_rate=1/2=50%), 1 rollback_attempts (TEST_dora_rb), 1 resolved incident (TEST_dora_inc, mttr_s=3600). All auto-deleted at test end.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Full medium batch (Intent Gateway 1+2, CI coverage ratchet tiered floors + diff-cov, raw-exception-leak lint, DORA metrics endpoint + admin card, scaffold parser fix, wizard mode toggle wiring, wizard user_message surfacing, support-open-task_repeat_failure) verified. Not verified live: full scaffold POST /scaffold/new-project → LLM draft → materialize path (would take 10-40s real LLM + hit expected aurem_org_not_configured wall) — main agent has already confirmed manually. Escalation banner pre-fill body content also source-verified only (would need seeding a failed task with failure_repeat_count>=2 for a live click test — low ROI, exhaustive source review sufficient).",
+  "rca of the issue": "N/A — no critical bugs found in this pass. Two real bugs referenced in the request (scaffold_design_review._parse non-greedy regex; wizard reading detail.message instead of detail.user_message) were already fixed by main agent; both fixes verified: parser now uses direct json.loads first + outermost {..} span fallback and survives stray '}' in string values; wizard now reads `detail?.user_message || detail?.message`."
+}
