@@ -275,3 +275,61 @@ PROOF: fuzz report + misconfig scan output.
 - G13: spend-cap env values confirm
 - G11: Atlas backup settings (agar dashboard access chahiye)
 - G8: GITHUB_ACTIONS_TOKEN + GITHUB_REPO env
+
+## 2026-08-27 ADDENDUM — G3 status correction + real implementation + 5-gap production-readiness Phase 1
+
+**Correction to this charter**: G3 ("scope-drift hard block" / PROTECTED_PATHS
+covering routers/admin*, payments.py, auth.py, mcp.py, vault*,
+stripe_client.py, .github/workflows/*) was never actually implemented
+anywhere — confirmed by direct grep, no `PROTECTED_PATHS` constant exists
+even in `loop_engine.py`. It was correctly listed as "NOT STARTED" in the
+ship-order plan; a prior session-summary mischaracterized it as shipped.
+Noting this here so the charter stays the accurate source of truth.
+
+**G3 — real implementation, shipped 2026-08-27** (testing_agent-verified,
+212/212 pass, real forced-reproduction on both worker paths):
+`services/sensitive_path_guard.py` — generalizes the charter's spec
+(which named AUREM's OWN files) into a filename/path pattern that fires
+for ANY connected repo, since `cto_projects.py`'s task workers (the real
+customer-facing engine — `loop_engine.py` stays founder/admin/unlimited
+gated) operate on customer repos, not AUREM's own. Blocks an AI-generated
+task edit touching `payments.py` / `auth.py` / `stripe_client.py` /
+`mcp.py` / `vault*.py` / `admin*.py` (any path segment) / anything under
+`.github/workflows/` — fires BEFORE the hallucination-gate/Vanguard/commit
+pipeline in both `_run_task_via_api` and `_run_task_with_git`, fail-closed
+by default (`cto_tasks.allow_sensitive_file_change`, DB-only, never
+settable by the LLM). No UI exposes the override flag yet — tracked as a
+deliberate follow-up, not an oversight.
+Verification: `/app/test_reports/iteration_sensitive_path_guard_2026_08_27.json`.
+
+**5-gap production-readiness Phase 1 investigation — founder decisions:**
+1. **Dependency-lockfile discipline** — BUILT: `.github/workflows/ci.yml`
+   now runs `pip install --dry-run` as a fail-fast first step (before the
+   real install), giving an unambiguous "resolution is broken" signal in
+   seconds. Verified locally: passes clean against the real
+   `requirements.txt`, and correctly exits 1 (ResolutionImpossible) against
+   a deliberately-reintroduced conflicting `litellm==1.60.0` pin.
+2. **Load-testing** — PROPOSAL ONLY, not built. k6 script targeting the
+   real highest-traffic endpoints (chat, task-create, task-status poll),
+   ramped load, watching Motor pool saturation (`maxPoolSize=50` per
+   process today) + response time. To run against Preview only, never
+   Production, when founder schedules it.
+3. **External-service degradation** — mostly already covered: Guard 17
+   (`services/retry_guard.py`) ships real per-dependency circuit breakers
+   (OpenRouter, Stripe, GitHub, Tavily, Firecrawl, Vercel, Resend,
+   Supabase). Sentry needs none (own internal queue/retry). **Documented
+   gap, not fixed**: E2B (`services/preview_sandbox.py`) has graceful
+   bounded failure but no breaker — founder call: acceptable, not urgent
+   given lower traffic/risk surface.
+4. **Backup 3-2-1** — CONFIRMED already solid: MongoDB Atlas (primary) +
+   Cloudflare R2 (genuinely separate provider/infra, 30-day retention),
+   with real periodic restore drills already proven (real log evidence:
+   "7406093 docs / 5702 collections restored"). **Founder decision,
+   logged**: 2 copies (Atlas + R2, offsite, drill-proven recoverable) is
+   sufficient for now; a 3rd copy is not a current priority given the real
+   drill evidence already confirms recoverability. Not building a 3rd copy.
+5. **Sensitive-change checklist** — see G3 real implementation above; this
+   IS the concrete instance of it. No separate "engineering standards doc"
+   exists or will be created — **this charter (`GUARDS_CHARTER.md`) is the
+   permanent home** for this class of finding going forward, per founder
+   decision.

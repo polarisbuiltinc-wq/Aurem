@@ -1,0 +1,24 @@
+{
+  "summary": "Verified G3 PROTECTED_PATHS sensitive-path guard in cto_projects.py worker (2026-08-27). Wrote 10 new tests including the founder's mandated REAL forced-reproduction against BOTH worker paths (`_run_task_via_api` and the primary `_run_task_with_git`) with mocked LLM returning FILE: blocks for sensitive files (auth.py, .github/workflows/ci.yml, payments.py). Confirmed status='failed' with error containing 'security-sensitive', and that the block fires BEFORE any commit/push (spy on commit function proves no reach). Confirmed no false-positive on README.md, auth_helpers.py, payments_util.py. Confirmed `allow_sensitive_file_change=True` overrides the block. All 202 regression tests (test_phase2c_cto_projects_router.py + test_checkpoint_resume_2026_08_27.py + test_iter_cto_projects_worker_coverage_2026_08.py + test_retry_orphan_fix_2026_08_27.py) still pass. /api/health = 200, backend boots clean, _GIT_AVAILABLE=True (so `_run_task_with_git` is the default runtime path).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_sensitive_path_guard_2026_08_27.py",
+    "/app/test_reports/pytest/sensitive_path_guard_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Guard is inserted AFTER `edits` is populated but BEFORE Vanguard / hallucination-gate / commit — verified correct placement in both `_run_task_via_api` (line ~2656) and `_run_task_with_git` (line ~3686). Good fail-closed default (allow flag defaults to falsy on the task record).",
+    "Minor: guard reads `allow_sensitive_file_change` from DB but currently no UI/endpoint exposes it — this is the intended initial rollout per the request, but flag mgmt should be tracked as follow-up so real customer bypasses stay a deliberate action.",
+    "Note: the guard block is duplicated verbatim across the two worker paths (~20 lines each). If a third worker path is ever added, extract into an `_enforce_sensitive_path_guard(task_id, edits)` helper to avoid drift."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_sensitive_path_guard_2026_08_27.py (new)"
+  ],
+  "success_rate": {"backend": "100% (212/212: 10 new + 202 regression)", "frontend": "n/a (skipped per request)"},
+  "test_credentials": "n/a — tests use mocked LLM/DB/git, no live credentials needed",
+  "seed_data_creation": "None (fake in-memory DB per test)",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Sensitive-path guard is live and verified end-to-end via mocked-LLM reproduction on both worker paths. If a subsequent change touches routers/cto_projects.py or services/sensitive_path_guard.py, re-run tests/test_sensitive_path_guard_2026_08_27.py — it covers matching logic spot-checks + real worker-path reproduction + allow-flag override + normal-file non-regression."
+}

@@ -1,0 +1,33 @@
+{
+  "summary": "Verified the 2026-08-27 orphaned-task fix in POST /api/aurem-dev/cto/tasks/{task_id}/retry. Founder's non-negotiable acceptance bar met: forced token-mint failure via LIVE HTTP against the preview URL returns 403 AND leaves ZERO new cto_tasks docs in real Mongo. Happy-path regression confirmed. Full regression suite (200 tests across 3 files) still green.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_retry_orphan_fix_2026_08_27.py",
+    "/app/test_reports/pytest/retry_orphan_fix_2026_08_27.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix is correctly placed: get_repo_token_or_error() is now invoked at line 1987-1990 immediately after the parent-project existence check and STRICTLY BEFORE any db.cto_tasks.insert_one(...) call (line 2039). A 403 from token-mint therefore returns before any DB write occurs. Order is right; no state mutation between the auth check and the raise.",
+    "Note: file cto_projects.py is 3970 lines — should be split further per Phase 2c refactor guidance (already flagged in prior iterations, not this scope)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_retry_orphan_fix_2026_08_27.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "n/a (skipped per request)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview, founder tier)",
+  "seed_data_creation": "Test seeds two ephemeral cto_projects + cto_tasks pairs (prefixed TEST_) and cleans them up in try/finally after each test. No residue in Mongo after run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "New live-HTTP + real-Mongo acceptance test lives at backend/tests/test_retry_orphan_fix_2026_08_27.py. Uses REACT_APP_BACKEND_URL for the forced-failure path (real preview URL, real 403, real Mongo count-before/count-after). Happy path calls retry_task() coroutine in-process (with pat_vault.get_repo_token_or_error and _run_task patched) since cross-process HTTP mocking isn't possible — realism level stated in docstring. Include this file in future regression bundles for the retry endpoint.",
+  "test_results_detail": {
+    "forced_token_failure_creates_no_orphan": "PASS — live HTTP POST returned 403 with 'GitHub App auth failed (app_installation_missing)'; task count for the seeded project was 1 before and 1 after (zero orphan queued docs); original failed task doc untouched (status=failed, error preserved).",
+    "happy_path_retry_still_works": "PASS — retry_task() with successful mocked token mint inserts a new cto_tasks doc (status=queued, retry_of=<old>, project_id preserved).",
+    "regression_test_phase2c_cto_projects_router.py": "PASS (all)",
+    "regression_test_checkpoint_resume_2026_08_27.py": "PASS (all)",
+    "regression_test_iter_cto_projects_worker_coverage_2026_08.py": "PASS (all)",
+    "combined_run": "202 passed, 0 failed, 14 warnings in 8.25s",
+    "api_health": "GET /api/health -> 200, ok=true, db=true"
+  },
+  "rca of the issue": "Pre-existing bug: retry_task() inserted the new cto_tasks doc via db.cto_tasks.insert_one({... status: 'queued' ...}) BEFORE calling get_repo_token_or_error(proj). If the token mint failed (missing/revoked GitHub App installation), it raised HTTPException(403) after the insert, so the queued doc had no worker started, no cleanup, and no path to ever transition — pure orphan. Fix: move the token-mint call up so it runs immediately after the parent-project existence check and BEFORE the insert. Verified live: 403 now yields zero new docs. Mitigation for any historical orphans is out of scope for this fix but could be added as a preview_sweeper pass ('cto_tasks docs stuck in queued with no worker for >N minutes')."
+}

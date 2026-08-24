@@ -1978,6 +1978,17 @@ async def retry_task(
     if not proj:
         raise HTTPException(404, "Parent project not found")
 
+    # 2026-08-27 — orphaned-task fix: mint the GitHub App token BEFORE
+    # inserting the new task doc. Previously the insert happened first —
+    # if the token mint then failed (e.g. revoked installation), the
+    # caller got a 403 but a `queued` task doc was left behind forever
+    # with no execution and no cleanup. Failing fast here means a 403
+    # never creates any DB record at all.
+    from services.pat_vault import get_repo_token_or_error
+    user_token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
+    if not user_token:
+        raise HTTPException(403, f"GitHub App auth failed ({_auth_err}): {_auth_detail}")
+
     new_task_id = "t_" + uuid.uuid4().hex[:12]
     _maxx = bool(old.get("maxx_mode", False))
     # 2026-08-27 — checkpoint/resume Phase 2: if the failed task already
@@ -2044,10 +2055,6 @@ async def retry_task(
                           "status": "info",
                           "ts": time.time()}],
     })
-    from services.pat_vault import get_repo_token_or_error
-    user_token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
-    if not user_token:
-        raise HTTPException(403, f"GitHub App auth failed ({_auth_err}): {_auth_detail}")
     bg.add_task(
         _run_task,
         new_task_id, proj, old.get("task", ""),
@@ -2638,6 +2645,34 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
             await _set_status(task_id, status="failed", error=err,
                               completed_at=time.time())
             return
+
+        # 2026-08-27 — sensitive-path guard (real implementation of
+        # GUARDS_CHARTER's G3 PROTECTED_PATHS concept, which was speced
+        # but never actually built anywhere — see
+        # services/sensitive_path_guard.py docstring). Fires BEFORE the
+        # hallucination-gate/Vanguard/commit pipeline so a blocked task
+        # never pays for the rest of the pipeline. `allow_sensitive_file_change`
+        # is read only from the task record — never from LLM output.
+        from services.sensitive_path_guard import find_sensitive_paths
+        _sensitive_touched = find_sensitive_paths(edits.keys())
+        if _sensitive_touched:
+            _db_sp = get_db()
+            _task_row_sp = (await _db_sp.cto_tasks.find_one(
+                {"task_id": task_id}, {"allow_sensitive_file_change": 1, "_id": 0},
+            ) or {}) if _db_sp is not None else {}
+            if not _task_row_sp.get("allow_sensitive_file_change"):
+                err = (
+                    "Blocked — this task would modify security-sensitive "
+                    f"file(s) {_sensitive_touched} (auth / payments / admin / "
+                    "CI-workflow naming pattern). These need a human to "
+                    "review the diff before shipping. Rephrase to target a "
+                    "different file, or confirm explicitly if this change "
+                    "is intentional."
+                )
+                await _log(task_id, f"⛔ {err}", "error")
+                await _set_status(task_id, status="failed", error=err,
+                                  completed_at=time.time())
+                return
 
         # ── Iter 212m-177 — P0-4a HALLUCINATION GATE (pre-push, before
         # Vanguard). If the model "rewrote" a file we actually read but
@@ -3640,6 +3675,34 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
                                   completed_at=time.time())
                 return
             await _log(task_id, f"✏️ {len(edits)} files to update", "success")
+
+        # 2026-08-27 — sensitive-path guard (real implementation of
+        # GUARDS_CHARTER's G3 PROTECTED_PATHS concept, which was speced
+        # but never actually built anywhere — see
+        # services/sensitive_path_guard.py docstring). Fires BEFORE
+        # Vanguard/write/commit so a blocked task never pays for the
+        # rest of the pipeline. `allow_sensitive_file_change` is read
+        # only from the task record — never from LLM output.
+        from services.sensitive_path_guard import find_sensitive_paths
+        _sensitive_touched = find_sensitive_paths(edits.keys())
+        if _sensitive_touched:
+            _db_sp = get_db()
+            _task_row_sp = (await _db_sp.cto_tasks.find_one(
+                {"task_id": task_id}, {"allow_sensitive_file_change": 1, "_id": 0},
+            ) or {}) if _db_sp is not None else {}
+            if not _task_row_sp.get("allow_sensitive_file_change"):
+                err = (
+                    "Blocked — this task would modify security-sensitive "
+                    f"file(s) {_sensitive_touched} (auth / payments / admin / "
+                    "CI-workflow naming pattern). These need a human to "
+                    "review the diff before shipping. Rephrase to target a "
+                    "different file, or confirm explicitly if this change "
+                    "is intentional."
+                )
+                await _log(task_id, f"⛔ {err}", "error")
+                await _set_status(task_id, status="failed", error=err,
+                                  completed_at=time.time())
+                return
 
 
         # iter 111 / 2026-08-25 parity fix — the git-subprocess path was

@@ -4,7 +4,98 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
 
-## 2026-08-27 (latest) — Checkpoint/resume Phase 2 (scoped) for cto_projects task retry — testing_agent live-HTTP verified, 200/200 pass
+## 2026-08-27 (latest) — Sensitive-path guard (real G3) + CI dependency dry-run + 5-gap Phase 1 documented — testing_agent verified 212/212
+
+**#5 (highest priority) — sensitive-path guard, built + testing_agent-verified.**
+Full detail + correction to G3's actual status logged in
+`GUARDS_CHARTER.md`'s 2026-08-27 addendum (G3 was speced but never built
+anywhere, not even in loop_engine.py — corrected the record). Real
+implementation: `services/sensitive_path_guard.py`, wired into both
+`_run_task_via_api` and `_run_task_with_git` (the real customer engine),
+blocking AI-generated edits to payments.py/auth.py/stripe_client.py/
+mcp.py/vault*.py/admin*.py/`.github/workflows/*` before the
+Vanguard/commit pipeline, fail-closed, DB-only override flag. I caught
+and fixed my own bug during self-testing: an initial `is_sensitive_path()`
+used `.lstrip("./")` which strips characters, not the substring — it
+silently un-blocked `.github/workflows/ci.yml` by stripping the leading
+dot. Fixed to an exact-prefix check, re-verified with 15 cases.
+Verification: `/app/test_reports/iteration_sensitive_path_guard_2026_08_27.json`
+— 212/212 (10 new + 202 regression), real live task-creation reproduction
+on both worker paths via mocked-LLM, confirmed block fires before any
+commit/push, confirmed override flag works, confirmed no false positives.
+
+**#1 — CI dependency-resolution dry-run, built.** `.github/workflows/ci.yml`
+now runs `pip install --dry-run` before the real install in the invariants
+job — fails in seconds with an unambiguous signal instead of ambiguously
+inside the 3-attempt network-retry loop. Verified locally (not via
+testing_agent — pure CI-config change, self-tested): passes clean against
+current `requirements.txt`; correctly exits 1 against a deliberately
+reintroduced conflicting `litellm==1.60.0` pin (reproducing the exact
+failure mode that caused the original bug this session started with).
+
+**#2, #3, #4 — documented as proposals/decisions only, no code**, per
+founder's explicit instruction. Full detail in `GUARDS_CHARTER.md`'s
+2026-08-27 addendum: load-test plan (proposal, k6, not run), E2B missing
+circuit breaker (documented gap, not urgent — founder call), backup 3rd
+copy (founder decision: 2 copies, Atlas + R2, offsite + drill-proven, is
+sufficient — not building a 3rd copy).
+
+**Engineering Gaps Found (not acted on without approval):**
+- **UNCERTAIN** — the sensitive-path guard block is duplicated verbatim
+  across `_run_task_via_api` and `_run_task_with_git` (~20 lines each,
+  per testing_agent's code-review note). If a third worker path is ever
+  added, should extract into a shared `_enforce_sensitive_path_guard()`
+  helper to avoid drift. Not done — premature abstraction for 2 call sites.
+- **CONFIRMED, not fixed** — no UI/endpoint exists yet to set
+  `allow_sensitive_file_change`, so ANY task touching a sensitive-pattern
+  file is currently blocked with no legitimate bypass path for a customer
+  who genuinely wants to edit their own `auth.py`. Intended initial
+  fail-closed rollout per founder's explicit approval; flagged so it
+  doesn't get mistaken for an oversight later.
+- **UNCERTAIN** — E2B has no circuit breaker (documented, founder-reviewed,
+  logged as acceptable/not urgent this round — see above).
+
+No further phase is queued — awaiting founder's next direction.
+
+## 2026-08-27 — Orphaned-task fix in retry_task() — testing_agent live-HTTP verified, zero-orphan proof, 202/202 pass
+
+Founder-approved small scoped fix following a gap testing_agent surfaced
+while testing checkpoint/resume: `retry_task()` (routers/cto_projects.py
+~line 1951) inserted the new `cto_tasks` doc BEFORE minting the GitHub
+App installation token. A token-mint failure (revoked/broken
+installation) returned 403 to the caller but left a `queued` doc
+orphaned forever — no worker started, no cleanup path. Fix: reordered so
+`get_repo_token_or_error(proj)` runs immediately after the parent-project
+existence check, strictly before `db.cto_tasks.insert_one(...)`. A 403
+now leaves zero new DB records.
+
+Verified: `/app/test_reports/iteration_retry_orphan_fix_2026_08_27.json`
+— real live HTTP POST to the preview endpoint with a forced token-mint
+failure returned 403 with task count unchanged (1 before, 1 after — zero
+orphans); happy-path retry regression confirmed unchanged; full
+regression 202/202 (200 prior + 2 new) pass. `/api/health` 200.
+
+**Engineering Gaps Found (not acted on without approval):**
+- **CONFIRMED, out of this fix's approved scope** — the SAME
+  insert-before-token-mint ordering exists in the PRIMARY task-creation
+  endpoint (not just retry) at `routers/cto_projects.py` around lines
+  1506-1519 and again near line 1635-1726 (`db.cto_tasks.insert_one`
+  before `get_repo_token_or_error`). Same orphan risk. Not fixed —
+  founder only approved `retry_task()` this round; flagged for a
+  follow-up decision.
+- **UNCERTAIN** — no cleanup sweep exists for any HISTORICAL orphaned
+  `queued` docs created by this bug before today's fix (testing_agent's
+  own suggestion: a sweeper for "queued with no worker for >N minutes").
+  Not built — no founder approval, and scale of the historical problem
+  (how many pre-existing orphans exist) hasn't been measured.
+- **UNCERTAIN, non-blocking, noted by testing_agent** — `cto_projects.py`
+  is now 3970 lines; prior Phase 2c extraction guidance flagged this
+  file for further splitting. Not this session's scope.
+
+Next per founder's explicit sequence: **5-gap production-readiness Phase
+1 investigation only** — report and STOP, no code, awaiting approval.
+
+## 2026-08-27 — Checkpoint/resume Phase 2 (scoped) for cto_projects task retry — testing_agent live-HTTP verified, 200/200 pass
 
 **Scope actually approved** (founder rejected the bigger "sequential per-file
 generation+commit" redesign after my Phase 1 investigation showed codegen

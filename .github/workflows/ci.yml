@@ -113,6 +113,22 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
+      # 2026-08-27 — fail-fast dependency resolution check. Catches a
+      # broken requirements.txt (e.g. a version conflict between a
+      # direct pin and a transitive requirement — exactly what happened
+      # with the litellm/emergentintegrations conflict) in seconds, with
+      # an unambiguous "resolution is broken" signal, instead of only
+      # discovering it minutes later as an ambiguous "install step
+      # failed" from inside the retry loop below (which can't tell a
+      # permanent ResolutionImpossible apart from a transient network
+      # blip — it just retries a doomed install 3 times either way).
+      - name: Dependency resolution check (fail-fast)
+        working-directory: backend
+        run: |
+          pip install --dry-run --no-cache-dir -r requirements.txt \
+            --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/ \
+            || { echo "::error::requirements.txt does not resolve — fix the conflict before pushing (see the pip error above for the exact clashing packages)."; exit 1; }
+
       - name: Install dependencies
         working-directory: backend
         run: |
