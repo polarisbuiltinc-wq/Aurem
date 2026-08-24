@@ -23,7 +23,18 @@ import logging
 import time
 from typing import Iterable
 
+from pymongo.write_concern import WriteConcern
+
 logger = logging.getLogger(__name__)
+
+# 2026-08-26 — PROD deploy-log fix. Feature-flag seed-if-missing writes
+# are best-effort/idempotent ($setOnInsert, upsert=True, run on every
+# boot) — losing one on a primary failover is harmless, the next boot
+# retries it. Default driver `w:"majority"` was observed timing out
+# against the real prod Atlas cluster (`WTimeoutError` in deploy logs);
+# `w=1` is safe for this non-critical seed write and resolves instantly
+# on local sandbox Mongo too.
+_BEST_EFFORT_WC = WriteConcern(w=1)
 
 # Each tuple = (collection_name, [(keys_spec, options_dict), ...])
 # keys_spec: list of (field, direction) tuples — same shape Motor expects
@@ -464,7 +475,9 @@ async def init_prod_collections(db) -> dict:
     for _spec in _SEED_FLAGS:
         _fname = _spec["flag"]
         try:
-            res = await db.feature_flags.update_one(
+            res = await db.feature_flags.with_options(
+                write_concern=_BEST_EFFORT_WC,
+            ).update_one(
                 {"flag": _fname},
                 {"$setOnInsert": _spec},
                 upsert=True,

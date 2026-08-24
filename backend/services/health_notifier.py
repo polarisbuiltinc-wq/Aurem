@@ -44,7 +44,22 @@ import os
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
+from pymongo.write_concern import WriteConcern
+
 logger = logging.getLogger(__name__)
+
+# 2026-08-26 — PROD deploy-log fix. `health_check_state` writes are
+# best-effort, idempotent candidate/last-known tracking — losing one
+# on a primary failover is harmless (the very next 45s tick just
+# re-writes it). They do NOT need the driver's default `w:"majority"`
+# durability, which was observed timing out against the real
+# production Atlas cluster (`WTimeoutError: operation exceeded time
+# limit ... writeConcern majority`) under replication lag, crashing
+# this tick (caught by notifier_loop's own try/except, so the loop
+# itself never died — but every tick was failing, so notifications
+# silently stopped firing). `w=1` (primary-ack only) is safe here and
+# resolves in local sandbox Mongo too (single-node, always instant).
+_BEST_EFFORT_WC = WriteConcern(w=1)
 
 _INTERVAL_S = int(os.environ.get("HEALTH_NOTIFIER_INTERVAL_S", "45"))
 # Max 1 red-still-red re-alert per (check, 30 min).
@@ -127,7 +142,9 @@ async def _fire_notification(db, check_id: str, name: str, category: str,
                        check_id, exc_info=True)
 
     # Track last-alert time for the cooldown gate.
-    await db.health_check_state.update_one(
+    await db.health_check_state.with_options(
+        write_concern=_BEST_EFFORT_WC,
+    ).update_one(
         {"_id": check_id},
         {"$set": {"last_alert_at": now_iso,
                   "last_alert_to": new}},
@@ -218,7 +235,9 @@ async def _tick_once() -> None:
             # tracking only, no fire, no last_known change this tick.
             if (candidate_fields.get("candidate_status") != state_row.get("candidate_status")
                     or candidate_fields.get("candidate_count") != state_row.get("candidate_count")):
-                await db.health_check_state.update_one(
+                await db.health_check_state.with_options(
+                    write_concern=_BEST_EFFORT_WC,
+                ).update_one(
                     {"_id": check.id}, {"$set": candidate_fields}, upsert=True,
                 )
             continue
@@ -248,7 +267,9 @@ async def _tick_once() -> None:
         update_fields = dict(candidate_fields)
         update_fields["last_known"] = confirmed_status
         update_fields["last_known_at"] = _iso_now()
-        await db.health_check_state.update_one(
+        await db.health_check_state.with_options(
+            write_concern=_BEST_EFFORT_WC,
+        ).update_one(
             {"_id": check.id}, {"$set": update_fields}, upsert=True,
         )
 

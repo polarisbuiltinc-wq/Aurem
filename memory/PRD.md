@@ -4,6 +4,42 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
 
+## 2026-08-26 (later) — Deploy-log fix: MongoDB WTimeoutError (majority write-concern) crashing health_notifier ticks + feature_flags seed on real Atlas
+
+Founder shared production deploy build/error logs showing recurring
+`pymongo.errors.WTimeoutError: operation exceeded time limit ...
+writeConcern majority` in `services/health_notifier.py::_tick_once()`
+("[health-notifier] tick crashed") and `scripts/init_prod_collections.py`'s
+feature_flags seed ("feature_flags seed new_analytics_v2 failed"). Used
+`deployment_agent` to scan first — confirmed both crashes were already
+caught (notifier_loop's outer try/except, per-flag try/except in the seed
+loop) and NOT the actual deploy blocker, but genuinely real, recurring,
+worth root-causing.
+
+**Root cause**: both writes are best-effort, idempotent, low-stakes
+background documents (health-check candidate/last-known tracking;
+feature-flag seed-if-missing) using the driver's DEFAULT `w:"majority"`
+write concern — which was timing out against the real production Atlas
+cluster's replication acknowledgment (sandbox Mongo is single-node/local,
+so this never reproduces there — only visible against real prod Atlas).
+
+**Fix (code-only, no Docker/K8s changes)**: all 4 affected write call
+sites — 3 in `health_notifier.py` (`_fire_notification`'s cooldown-tracking
+write + `_tick_once`'s 2 candidate/baseline writes) and 1 in
+`init_prod_collections.py`'s feature_flags seed loop — now use
+`.with_options(write_concern=WriteConcern(w=1))` instead of the default
+majority concern. Safe because losing one of these idempotent writes on a
+primary failover is harmless — the very next tick/boot retries it; no
+data-loss risk for non-critical background state.
+
+**Verified**: local sandbox run of `_tick_once()` + `init_prod_collections()`
+both complete with zero errors (`errors: []`); backend `/api/health` stays
+`ok:true` after hot-reload. Re-ran `deployment_agent` post-fix — **PASS,
+0 blockers**, only pre-existing non-blocking WARN (Redis fails open to
+per-pod rate limiting, unrelated to this fix) and an INFO naming note
+(`CORS_ORIGINS` vs `ALLOWED_ORIGINS`). **Preview-only — founder needs to
+redeploy for this fix to reach production.**
+
 ## 2026-08-26 — Blueprint Stage 1+2 batch: SLO declaration dashboard + shared Ambiguity-gate (Loop Mode wiring closed) — testing_agent 8/8 + full frontend pass, 0 issues
 
 Medium batch closed out first (test report `iteration_medium_batch_2026_01.json` —
