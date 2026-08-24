@@ -1,0 +1,33 @@
+{
+  "summary": "Verified the one-time retroactive backfill script backend/scripts/backfill_low_confidence_council_logs_2026_08_25.py end-to-end. All 6 pytest checks pass. Independently confirmed: (1) script is idempotent — re-running dry-run finds candidates_scanned=1000, total_flagged=0, fallback_message_matches=0, mismatch_detector_matches=0; (2) dry-run does NOT mutate the DB (count_documents({low_confidence:True}) is unchanged before/after); (3) the 6 rows main agent flagged have BOTH low_confidence=True AND low_confidence_backfilled=True, and each of them re-passes one of the two detection signals (3 matched FALLBACK_MESSAGE exact-equality, 3 matched response_seems_mismatched — matches main agent's tally exactly); (4) services.ora_council_retriever._quality_filter returns False for all 6; (5) get_retriever_stats() after _rebuild_index() shows corpus_rows=1000, unique_users=8, unique_projects=5, modes_indexed=['A','D','E'] — matches main agent's observation; (6) none of the 6 backfilled _ids appear in the in-memory _index after rebuild. Backend /api/health = 200, no errors in supervisor logs.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "scripts/backfill_low_confidence_council_logs_2026_08_25.py", "issue": "Doc/expectation mismatch in review request: request expected 'already_flagged_skipped'==6 on re-run, but the Mongo query itself filters low_confidence:{$ne: True}, so already-flagged rows never enter the cursor and already_flagged_skipped stays 0. The doc.get('low_confidence') is True defensive branch inside the loop is effectively dead code. Idempotency is correctly achieved via the query filter (total_flagged=0 on re-run), but the counter naming is misleading. Cosmetic only."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_backfill_low_confidence_2026_08_25.py",
+    "/app/test_reports/pytest/backfill_low_confidence.xml"
+  ],
+  "action_items": [
+    "Optional cosmetic: either remove the dead 'already_flagged_skipped' counter/branch in the script, or widen the query to include low_confidence:True rows so the counter actually reflects skipped-because-already-flagged. Not blocking — idempotency is already correct via the query."
+  ],
+  "critical_code_review_comments": [
+    "Idempotency is guaranteed by the query filter {low_confidence:{$ne:True}}, which is the right approach (avoids scanning already-processed docs). The in-loop `if doc.get('low_confidence') is True` check is unreachable given that query and could be removed.",
+    "Script correctly uses os.environ[...] with no defaults (fails fast on missing config) and only writes when --apply is passed. Matches the fix_ttl_field_types_2026_08_27.py convention.",
+    "Two-flag design (low_confidence + low_confidence_backfilled) is clean — makes retroactive vs live-flagged rows distinguishable for future audits.",
+    "Script is not registered in main.py startup — correct, this is meant to be a one-shot manual migration."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_backfill_low_confidence_2026_08_25.py (new pytest file, 6 tests all passing)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "N/A (skipped per request)"},
+  "test_credentials": "Preview: test@aurem.dev / AuremTest2026! (not used — no API calls needed for this migration script verification)",
+  "seed_data_creation": "None — verified against existing DB state (the 6 rows already flagged by main agent's --apply run).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backfill script for ora_council_logs low_confidence flag is verified idempotent and safe. 6 historical rows are permanently flagged (low_confidence + low_confidence_backfilled). Core chat pipeline was NOT regression-tested at API level this round — request explicitly said 'light regression check, chat.py wasn't touched'. Retriever internals verified in-process via _rebuild_index() + _quality_filter (indirect but sufficient proof the corpus now excludes the 6 bad rows). If founder's live production re-run of the acceptance test fails, first check whether _rebuild_index() has been called in the prod backend process after the --apply run (main agent did this manually in preview, but a fresh backend restart would also do it via services/ora_council_retriever startup).",
+  "rca of the issue": "N/A — no bug found. Script behaves exactly as designed."
+}
