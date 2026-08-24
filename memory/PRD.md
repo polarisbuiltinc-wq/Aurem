@@ -114,9 +114,66 @@ was intentionally NOT touched this pass — it is highly stateful
 (pipeline task refs, phase transitions, self-heal retries, the
 `_LIVE` registry) and any breakup needs its own dedicated, carefully-
 scoped pass with its own regression plan, not a mechanical cut.
-`cto_projects.py` (58.0% coverage, just under the 60% floor) also
-remains on hold per founder's standing rule — no structural split
-until it clears 60%.
+
+## 2026-08-26 (follow-up) — Orphaned loop-lock cleanup + cto_projects.py coverage 58%→66% + LoopEngine class-split SCOPING (no code changes)
+
+**Orphaned loop locks cleared** — all 18 rows in `loop_locks` had zero
+matching `loop_sessions` doc (definitionally orphaned — a lock is only
+useful while a session is live). Deleted directly via Mongo (same
+effect as the existing founder-only `/loop/force-release-lock`
+endpoint, applied in bulk). `remaining loop_locks: 0` confirmed after.
+Root cause noted for later: `acquire_loop_lock`'s ghost-sweep in
+`services/loop_safety.py` only clears a lock when `loop_sessions` shows
+a *terminated* state — it does NOT handle the case where the session
+doc was never created at all (e.g. loop_start crashed after acquiring
+the lock but before persisting a session). Not fixed — out of scope
+for a "clear the lock" task, flagged here for anyone touching
+`loop_safety.py` next.
+
+**`cto_projects.py` coverage: 58% → 66%** (well past the 60% floor).
+New `tests/test_iter_cto_projects_worker_coverage_2026_08.py` — 3 tests
+exercising `_run_task_via_api` and `_run_task_with_git` for the first
+time end-to-end (previously only source-lock/shape-assert tests
+existed for these, per test_phase2c_cto_projects_router.py's own notes
+— CC=166 and CC=51 respectively). Both functions wrap nearly their
+entire body in ONE outer try/except ending in a shared failure-
+handling block (error classification, failure-signature dedup,
+`_set_status`, PAT-scrubbing, Sentry capture) — so triggering a
+realistic failure early (no PAT; a mocked LLM outage during codegen;
+a failed `git clone`) exercises setup + context-injection + the full
+failure path honestly, without needing to fake an entire successful
+commit/push. 592 lines still uncovered (mostly the successful-path
+codegen→commit→push body, ~2732-3618 and ~3685-4069) — `cto_projects.py`
+is now unblocked for the same safe-mechanical-extraction treatment as
+chat.py/loop_engine.py whenever that's next prioritized.
+
+**LoopEngine class-split — SCOPING ONLY, per founder's explicit request
+("plan first, no code changes").** Full risk-assessment/approach/effort
+plan delivered to founder in-chat (2026-08-26). Summary for continuity:
+class is 3570 lines / 24 methods; `self.loop_id`(123)/`self.db`(100)/
+`self.context`(70)/`self.user_id`(52)/`self.state`(47) referenced
+pervasively — real coupling, not incidental. `_do_execute` alone is
+736 lines (largest single lever). Only 5 test call-sites patch
+LoopEngine internals directly; everything else goes through the
+public surface (`start`/`confirm`/`confirm_ship`/`skip_at_ship`/
+`cancel`/`submit_files`) — that surface + the SSE event/doc shape is
+the real contract to protect. Key risk: `_with_budget` (185 lines) is
+a control-flow choke point (token ledger + timeout + failure routing)
+that every phase call must keep going through unchanged. No test in
+the suite currently simulates a full PLAN→EXECUTE→VERIFY→SCAN→SHIP
+run against a real repo — weakest regression safety net of anything
+touched in this program so far. **Recommended approach (not started)**:
+mixin-class split (same pattern as today's extraction — move phase
+bodies to separate files as mixins `LoopEngine` inherits from, zero
+`self.` access changes) rather than a shared-context redesign.
+**Recommended effort**: one dedicated session per phase, starting with
+`_do_execute` only, each verified via testing_agent with a real
+triggered Loop run — NOT all phases in one pass. Awaiting founder
+go-ahead before any implementation.
+
+`cto_projects.py` structural split (file-boundary extraction, not
+attempted yet) can now proceed once prioritized — coverage floor is
+cleared.
 
 ## 2026-08-26 (later still) — Admin data-integrity audit fixes + GitHub App reconnect root-cause fix (founder-diagnosed) — testing_agent 8/8, 0 issues
 

@@ -834,3 +834,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 ### Iter 0 · 2026-08-24
 
 - `services/dora_metrics.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-24T03:50:10.195963Z] <!-- inv:service:services/dora_metrics.py -->
+- `services/chat_helpers.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-24T17:59:36.424300Z] <!-- inv:service:services/chat_helpers.py -->
+- `services/churn_risk.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-24T17:59:36.424336Z] <!-- inv:service:services/churn_risk.py -->
+- `services/duplication_scanner.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-24T17:59:36.424356Z] <!-- inv:service:services/duplication_scanner.py -->
+- `services/loop_engine_helpers.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-24T17:59:36.424375Z] <!-- inv:service:services/loop_engine_helpers.py -->
