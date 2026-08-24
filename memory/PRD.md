@@ -4,6 +4,75 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
 
+## 2026-08-26 — Blueprint Stage 1+2 batch: SLO declaration dashboard + shared Ambiguity-gate (Loop Mode wiring closed) — testing_agent 8/8 + full frontend pass, 0 issues
+
+Medium batch closed out first (test report `iteration_medium_batch_2026_01.json` —
+100% pass, 0 critical/minor; all 8 items confirmed Built+Wired+Preview-tested,
+including confirming "60-sec auto-scan" and "monitoring flap-dampening" were
+ALREADY done in earlier sessions, not new gaps). User then approved Stage 1+2
+of the post-Medium-batch plan together.
+
+**Stage 1 — SLO declaration (`services/slo_metrics.py`, new):** two declared
+SLOs computed from data that already exists (Rule 12, no new tracking infra):
+- `chat_response`: p50/p95 of `/api/chat/send` from `health_endpoint_latency`
+  (already-sampled by `main.py`'s existing latency middleware) — a legitimate
+  proxy for real chat-turn latency since `/chat/send` and `/chat/stream` both
+  resolve through the same `chat_with_tools()` call underneath.
+- `ship_completion`: p50/p95 of `completed_at - created_at` over `cto_tasks`
+  where `status=="done"` — both fields already written by every task worker.
+- Targets reuse EXISTING internal constants as the "bad" boundary (chat:
+  `CHAT_SOFT_TIMEOUT_S=48s`; ship: the existing 5-min SSE-stream-close
+  constant) rather than inventing arbitrary numbers.
+- New admin-only `GET /admin/insights/slo` (`routers/admin_users.py`, mirrors
+  the existing `/admin/insights/dora` pattern exactly) + new `SloCard` on
+  `/admin/overview` (mirrors `DoraCard`), renders below DORA with a green
+  "✓ within target" / red "breach" badge per SLO, graceful "no samples yet"
+  null-state.
+- Deploy-gate live-fire drill (2nd Stage-1 item) — **NOT done, needs founder
+  action**: this sandbox has no git push access (confirmed: `git remote -v`
+  is empty) — pushing a deliberately-failing commit to prove `auto_deploy.
+  yml`'s `gate-on-ci` actually blocks requires the founder's own "Save to
+  GitHub" action. Prepared to poll the real GitHub Actions API (read-only,
+  `GITHUB_ACTIONS_TOKEN`/`GITHUB_REPO` already in `backend/.env`) once
+  triggered — not yet requested from the founder.
+
+**Stage 2 — Ambiguity-gate formalized + Loop Mode gap closed (Blueprint
+Phase 1.3):** `cto_projects.py`'s `_is_ambiguous_task()` regex heuristic
+extracted into a new shared, pure, testable module
+`services/ambiguity_gate.py::is_ambiguous_task()` — `cto_projects.py` now
+imports it (no duplicated logic, same lesson already applied to
+`loop_beta.is_user_allowed()`). **Real gap closed**: Loop Mode
+(`routers/loop.py::start_loop()`) had ZERO ambiguity protection despite
+being live for all Pro/Team users since 2026-08-21 — a 2026-08-25 PRD entry
+had logged this as a "future migration, not built" item on the (stale)
+assumption Loop was still founder-only. Wired the same shared check into
+`/loop/start`, right after the existing read-only intent-gate, before any
+lock/session/LLM work — returns `{loop_id:null, needs_clarification:true,
+message:...}` for a vague message like "fix it", same contract shape as the
+existing `redirect_to_chat` short-circuit. `ChatPanel.jsx::runLoopPlan()`
+now handles this the same way it already handles `redirect_to_chat` — clears
+the pending "Generating plan…" bubble, resets loop UI state, shows a plain
+clarification reply instead of hanging or opening a plan-approval card.
+Reachability-scope for Loop's execute phase was reviewed and left as-is —
+already has a non-blocking "ungrounded_paths" diagnostic (deliberately not
+blocking, so legitimate "create a new file" plans still work); making it
+block was not requested and carries real regression risk to a live paying-
+customer path.
+
+Scaffold materialization final E2E (2nd Stage-2 item) — **blocked, needs
+founder-provided config**: `AUREM_ORG_NAME`/`AUREM_ORG_GITHUB_APP_TOKEN` are
+confirmed empty in this preview `.env`. Draft generation + QA-parser fix
+were already live-tested in the Medium batch; final "materialize to a real
+GitHub org repo" step cannot be E2E-proven until these are configured.
+
+**Tested**: `testing_agent` — `/app/test_reports/iteration_stage1_2_slo_
+ambiguity_2026_08.json`, 8/8 backend + full frontend pass (SLO card render
+incl. null-state, live `/loop/start` vague-message flow screenshot-verified
+end-to-end in the browser, concrete-message regression confirms no false-
+positive gating, legacy `cto_projects.py` behavior unchanged). Zero issues,
+zero action items. **Preview-tested only — needs founder redeploy for
+production.**
+
 ## 2026-08-23 (later still) — BUG FIX: "Codebase Health Score timeout of 40000ms exceeded"
 
 **Root cause (confirmed live)**: `services/health_score.py`'s

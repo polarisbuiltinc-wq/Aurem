@@ -176,6 +176,27 @@ async def start_loop(body: StartBody,
                 "reason":           _intent_reason,
             }
 
+    # 2026-08-26 — Ambiguity gate (Blueprint Phase 1.3, formalized).
+    # Loop Mode was unlocked for all Pro/Team users (2026-08-21) but
+    # never got the same "too vague to act on safely" protection the
+    # legacy manual-ship path (`cto_projects.py::submit_task`) has had
+    # since 2026-08-25 — a real, live customer-facing gap, not a
+    # theoretical one. Same shared helper, checked BEFORE any lock/
+    # session/LLM work so a vague message costs nothing. Mirrors the
+    # `redirect_to_chat` short-circuit shape above so the frontend can
+    # handle both the same way (no loop_id created, no engine spun up).
+    from services.ambiguity_gate import is_ambiguous_task, CLARIFICATION_MESSAGE
+    if is_ambiguous_task(body.user_message):
+        logging.getLogger("aurem.loop").info(
+            "[loop ambiguity-gate] vague task redirected to clarification "
+            "(user=%s): %.120s", user["user_id"], body.user_message,
+        )
+        return {
+            "loop_id":             None,
+            "needs_clarification": True,
+            "message":             CLARIFICATION_MESSAGE,
+        }
+
     # Iter 212m-115 safety #4 — Circuit breaker: refuse new starts if
     # this {project_id, user_id} has hit 3+ failures in the last 15 min.
     # Founders bypass (so we never block our own debugging).

@@ -34,6 +34,7 @@ export default function AdminOverview() {
   const [drillHistory, setDrillHistory] = useState(null); // 2026-08-20 — recurring restore-drill health
   const [deployReadiness, setDeployReadiness] = useState(null); // 2026-08-24 — Option A advisory card
   const [dora, setDora] = useState(null); // 2026-08-24 — Guard 22, DORA metrics
+  const [slo, setSlo] = useState(null); // 2026-08-26 — Phase 5.3, SLO compliance
   const [refreshingHealth, setRefreshingHealth] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -41,7 +42,7 @@ export default function AdminOverview() {
     const h = { Authorization: `Bearer ${getToken()}` };
     const HEALTH_URL = `${process.env.REACT_APP_BACKEND_URL}/api/health`;
     try {
-      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes, ghFunnelRes, nudgeStagesRes, backupStatusRes, drillHistoryRes, deployReadinessRes, doraRes] =
+      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes, ghFunnelRes, nudgeStagesRes, backupStatusRes, drillHistoryRes, deployReadinessRes, doraRes, sloRes] =
         await Promise.allSettled([
           fetch(HEALTH_URL, { signal: AbortSignal.timeout(10000) }).then((r) => r.json()),
           api.get("/usage/public/stats"),
@@ -63,6 +64,7 @@ export default function AdminOverview() {
           api.get("/admin/backups/drill-history", { headers: h }), // 2026-08-20 — restore-drill health
           api.get("/admin/deploy-readiness", { headers: h }),      // 2026-08-24 — Option A advisory card
           api.get("/admin/insights/dora", { headers: h }),         // 2026-08-24 — Guard 22 DORA metrics
+          api.get("/admin/insights/slo", { headers: h }),          // 2026-08-26 — Phase 5.3 SLO compliance
         ]);
       if (healthRes.status   === "fulfilled") setHealth(healthRes.value);
       if (statsRes.status    === "fulfilled") setStats(statsRes.value.data);
@@ -84,6 +86,7 @@ export default function AdminOverview() {
       if (drillHistoryRes.status === "fulfilled") setDrillHistory(drillHistoryRes.value.data);
       if (deployReadinessRes.status === "fulfilled") setDeployReadiness(deployReadinessRes.value.data);
       if (doraRes.status === "fulfilled") setDora(doraRes.value.data);
+      if (sloRes.status === "fulfilled") setSlo(sloRes.value.data);
     } catch { /* silent */ }
     finally { setLoading(false); }
   }, []);
@@ -828,6 +831,10 @@ export default function AdminOverview() {
       {/* ── 2026-08-24 — Guard 22 — DORA metrics ─────────────── */}
       {dora && !dora.error && (
         <DoraCard data={dora} />
+      )}
+      {/* ── 2026-08-26 — Phase 5.3 — SLO compliance ──────────── */}
+      {slo && !slo.error && (
+        <SloCard data={slo} />
       )}
       {/* ── 2026-08-20 — stage-aware nudge visibility ────────── */}
       {nudgeStages?.nudge_stages && (
@@ -1948,6 +1955,63 @@ function DoraCard({ data }) {
             </div>
             <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4, color: t.warn ? "#ff8a8a" : "var(--text)" }}>
               {t.value}
+            </div>
+            <div style={{ fontSize: 10.5, color: "var(--text-faint)", marginTop: 4 }}>
+              {t.sub}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+
+// ── SLO compliance card (2026-08-26, Blueprint Phase 5.3) ────────────
+// Two declared SLOs (chat response, ship completion) with real
+// rolling p50/p95 computed purely from existing collections — see
+// services/slo_metrics.py for target rationale. Closed a real gap:
+// AUREM had zero declared SLOs before this.
+function SloCard({ data }) {
+  const slos = data.slos || {};
+  const chat = slos.chat_response || {};
+  const ship = slos.ship_completion || {};
+  const tiles = [
+    {
+      key: "chat_response", label: chat.label || "Chat response",
+      value: chat.p95_ms != null ? `${(chat.p95_ms / 1000).toFixed(1)}s p95` : "—",
+      sub: chat.sample_size
+        ? `target ≤${chat.target_good_ms / 1000}s · n=${chat.sample_size}`
+        : "no /chat/send samples in window",
+      met: chat.met,
+    },
+    {
+      key: "ship_completion", label: ship.label || "Ship completion",
+      value: ship.p95_s != null ? `${ship.p95_s}s p95` : "—",
+      sub: ship.sample_size
+        ? `target ≤${ship.target_good_s}s · n=${ship.sample_size}`
+        : "no completed ships in window",
+      met: ship.met,
+    },
+  ];
+  return (
+    <Section title={`SLO Compliance · last ${data.period_days}d`}>
+      <div data-testid="slo-metrics-card" style={{
+        display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10,
+      }}>
+        {tiles.map((t) => (
+          <div key={t.key} data-testid={`slo-tile-${t.key}`} style={{
+            padding: "12px 14px", borderRadius: 6,
+            background: t.met === false ? "rgba(232, 70, 70, 0.06)" : "var(--panel-2)",
+            border: t.met === false ? "1px solid rgba(232, 70, 70, 0.28)" : "1px solid var(--border)",
+          }}>
+            <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".04em" }}>
+              {t.label}
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4, color: t.met === false ? "#ff8a8a" : "var(--text)" }}>
+              {t.value}
+              {t.met === true && <span data-testid={`slo-met-badge-${t.key}`} style={{ fontSize: 11, marginLeft: 8, color: "#3ecf8e" }}>✓ within target</span>}
+              {t.met === false && <span data-testid={`slo-breach-badge-${t.key}`} style={{ fontSize: 11, marginLeft: 8, color: "#ff8a8a" }}>breach</span>}
             </div>
             <div style={{ fontSize: 10.5, color: "var(--text-faint)", marginTop: 4 }}>
               {t.sub}

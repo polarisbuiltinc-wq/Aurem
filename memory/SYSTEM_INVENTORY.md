@@ -830,3 +830,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 ### Iter 0 · 2026-08-23
 
 - `services/failure_signature.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-23T23:42:42.760231Z] <!-- inv:service:services/failure_signature.py -->
+
+### Iter 0 · 2026-08-24
+
+- `services/dora_metrics.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-24T03:50:10.195963Z] <!-- inv:service:services/dora_metrics.py -->

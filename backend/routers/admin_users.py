@@ -989,6 +989,23 @@ async def dora_metrics_endpoint(
     return await compute_dora(db, period_days=period_days, env=env or None)
 
 
+@router.get("/insights/slo")
+async def slo_metrics_endpoint(
+    period_days: int = 7,
+    authorization: Optional[str] = Header(None),
+) -> dict:
+    """2026-08-26 — Blueprint Phase 5.3 gap ("decide SLOs before you
+    need them for a postmortem"). Two declared SLOs (chat response,
+    ship completion) with real rolling p50/p95 computed purely from
+    existing collections (health_endpoint_latency, cto_tasks) — no
+    new event infra. See services/slo_metrics.py for target rationale."""
+    await _require_admin(authorization)
+    db = require_db()
+    from services.slo_metrics import compute_slo
+    period_days = max(1, min(period_days, 90))
+    return await compute_slo(db, period_days=period_days)
+
+
 
 @router.get("/insights/activation-funnel")
 async def activation_funnel(

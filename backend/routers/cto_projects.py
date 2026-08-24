@@ -46,33 +46,12 @@ if not _GIT_AVAILABLE:
 WORKSPACE = Path(os.getenv("WORKSPACE_PATH", "/tmp/aurem-dev-projects"))
 WORKSPACE.mkdir(parents=True, exist_ok=True)
 
-# 2026-08-25 — Priority 2 (ambiguity-gate). Cheap, no-LLM-cost heuristic:
-# a task with no concrete target (a file path, a quoted string, or
-# enough words to name something specific) is too under-specified to
-# act on blindly — this is the structural fix for "the AI guesses
-# instead of asking," proposed and approved in this session's incident
-# review. Deliberately simple (regex, not a repo-map lookup) — this is
-# the customer-facing path (see PRD 2026-08-25 engine-convergence note);
-# the loop_engine.py equivalent belongs in `_generate_plan()` per that
-# same note, not built there yet.
-_VAGUE_TASK_PATTERNS = [
-    re.compile(r"^(fix|improve|update|clean up|make|do)\s+(it|this|that|things?|stuff)\.?$"),
-    re.compile(r"^fix (the )?bugs?\.?$"),
-    re.compile(r"^make it (better|work)\.?$"),
-    re.compile(r"^improve( the)? (site|app|code)\.?$"),
-]
-_FILE_PATH_RE = re.compile(r"[\w./-]+\.(jsx?|tsx?|py|css|json|md|html)\b")
-
-
-def _is_ambiguous_task(task_text: str) -> bool:
-    t = (task_text or "").strip().lower()
-    if not t:
-        return True
-    if _FILE_PATH_RE.search(t) or '"' in t or "'" in t or "`" in t:
-        return False
-    if any(p.match(t) for p in _VAGUE_TASK_PATTERNS):
-        return True
-    return len(t.split()) < 4
+# 2026-08-25 — Priority 2 (ambiguity-gate). Now a shared, single-
+# source-of-truth module (`services/ambiguity_gate.py`) so this logic
+# can never drift from the Loop Mode equivalent (`routers/loop.py::
+# start_loop`) — formalized 2026-08-26 once Loop Mode's own gap (zero
+# ambiguity protection despite being live for Pro/Team) was closed.
+from services.ambiguity_gate import is_ambiguous_task as _is_ambiguous_task
 
 
 # ── Live progress streams (Iter 73) ──────────────────────────────────────

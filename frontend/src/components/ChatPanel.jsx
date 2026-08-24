@@ -2834,6 +2834,27 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       });
       const lid  = resp?.loop_id;
 
+      // ── 2026-08-26 · Ambiguity gate (backend redirect) ──────────
+      // /loop/start found the message too vague to safely act on
+      // (mirrors the same gate the legacy manual-ship path already
+      // had) — no loop_id was created, no engine spun up. Show the
+      // clarification message as a plain assistant reply instead of
+      // "Generating plan…" hanging forever.
+      if (resp?.needs_clarification === true) {
+        setMessages((m) =>
+          m.filter((row) => !(row.role === "assistant" && row.loopPending)));
+        setBusy(false);
+        setLoopPhase(null);
+        setLoopStepTones({});
+        setLoopId(null);
+        setMessages((m) => m.concat([{
+          role: "assistant",
+          streaming: false,
+          content: resp.message || "Could you be a bit more specific about what you'd like changed?",
+        }]));
+        return;
+      }
+
       // ── Iter 349 · Read-only intent gate (backend redirect) ─────
       // /loop/start detected a read-only query and refused to spin up
       // the engine. Answer it through the fast chat stream instead —
