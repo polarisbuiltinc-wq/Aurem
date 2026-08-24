@@ -4,7 +4,27 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
 
-## 2026-08-27 (latest) — Full admin-panel audit (35 pages) + 3 confirmed data bugs fixed — testing_agent verified live, 250/250 + 5/5 pass
+## 2026-08-27 (latest) — Founder decisions logged, holding for production deploy confirmation
+
+Founder accepted the full admin-audit fix-pass. Decisions on the 4 proposed next items:
+1. **Sensitive-Path UI (approve-to-edit)** — HELD, not building. Hard
+   block with no bypass stays the default while the guard is new in
+   production; revisit after a track record with no false positives.
+2. **Load-test run (k6 against Preview)** — APPROVED, queued.
+3. **Guard Dashboard Row** (G3 sensitive-path guard status, matching
+   the existing Loop Gate Parity dashboard pattern) — APPROVED, queued.
+4. **Retry Insight badge** (surface "resumed from checkpoint, skipped
+   regeneration" on a retried task, same reasoning as the Auto-Fix
+   Visibility badge) — APPROVED, queued.
+
+Founder is redeploying now so today's 5 Preview fixes (TTL field-type
+fix, checkpoint/resume, orphan-task fix, sensitive-path guard, CI
+dependency dry-run) actually reach Production, and will confirm the new
+build hash once live. **Holding all 3 approved items (#2, #3, #4) until
+founder confirms deploy is live** — explicit instruction, do not start
+early.
+
+## 2026-08-27 — Full admin-panel audit (35 pages) + 3 confirmed data bugs fixed — testing_agent verified live, 250/250 + 5/5 pass
 
 Founder asked (Hinglish): audit the ENTIRE admin panel, every score, everything — find what's not live/working, fix it. Dispatched a full 35-page/route audit to testing_agent first (`/app/test_reports/iteration_admin_full_audit_2026_08_24.json`) rather than guessing, then investigated and fixed the confirmed data-source bugs; corrected 2 items in the audit's own diagnosis after my own evidence contradicted it (see below — I do not blindly implement a subagent's RCA when my own investigation disagrees).
 
