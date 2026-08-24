@@ -4,6 +4,73 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
 
+## 2026-08-26 (later still) — Admin data-integrity audit fixes + GitHub App reconnect root-cause fix (founder-diagnosed) — testing_agent 8/8, 0 issues
+
+Founder-driven audit (admin panel, README, homepage) surfaced 6 real
+issues, all fixed and testing_agent-verified this cycle:
+
+1. **Total Users arithmetic (AdminCockpit.jsx)** — TOTAL USERS card read
+   `/admin/dashboard`'s raw (unfiltered) count while GITHUB CONNECT %'s
+   denominator read `/admin/pulse`'s organic (synthetic-filtered) count —
+   two different "total users" on the same page whenever a test/synthetic
+   row exists. Fixed: pulse's organic count is now the primary source
+   everywhere on the page.
+2. **Revenue 30d card (AdminCockpit.jsx)** — read `d?.revenue_30d ||
+   d?.mrr` from `/admin/dashboard`, which never returns either field —
+   permanently hardwired to $0 next to a real non-zero paid-upgrades
+   count. Fixed: reads `financials.metrics.mrr_usd` (already fetched on
+   this page for the tier breakdown).
+3. **MongoDB status mismatch (Architecture vs Cockpit)** — Architecture's
+   check was `"live" if db is not None else "down"` (handle existence,
+   not connectivity — could show "live" through a real outage). Fixed:
+   real `db.command("ping")` with measured latency, same depth as
+   Cockpit's `_check_db_reachable`.
+4. **Homepage promo endpoints live-broken on production** —
+   `/promo/first50/status` and `/founder-offer/status` were returning
+   500s (live-reproduced via direct curl) from the exact same majority-
+   write-concern timeout already fixed today in `health_notifier.py`/
+   `init_prod_collections.py` — their `_ensure_singleton` upsert.
+   Fixed with the same `w=1` pattern, applied ONLY to that upsert (spot-
+   claim/allocation writes elsewhere in both files keep majority
+   concern intentionally).
+5. **README stale claims** — "12k+ Commits" (real figure: 94, via
+   `/usage/public/stats`) and unfounded "4.9★ Rating" (no rating system
+   exists anywhere in the codebase) badges removed/replaced; "PAT +
+   OAuth" / "PAT for repo I/O" architecture text updated to "GitHub App
+   (installation-based)".
+6. **GitHub App reconnect root cause (founder self-diagnosed via live
+   production DB queries)** — `PATCH /cto/projects/{id}` (the reconnect
+   flow) set `auth_method="github_app"` on `installation_id` update but
+   NEVER set `installation_active` — only `POST /cto/projects/add` (new
+   project) did. `PatRequiredCTA.jsx` gates the "not connected" banner on
+   exactly `auth_method==="github_app" && installation_active` — so a
+   genuinely successful reconnect left the banner stuck forever. Fixed:
+   extracted `services/github_app.py::verify_installation_for_repo()`
+   (ownership check + live GitHub repo-access probe) as the single
+   shared verification both `add_project` and `update_project` now call;
+   `installation_active` is only set True on real verified success (not
+   blindly trusted from client input either way). New admin-only
+   `POST /admin/github-app/repair-orphaned-installations` (dry_run
+   default) backfills any existing orphaned rows (installation_id set,
+   installation_active missing) production-wide, re-verifying live
+   before repairing any of them.
+
+**Tested**: `testing_agent` —
+`/app/test_reports/iteration_admin_audit_installation_active_2026_08_26.json`,
+8/8 backend + full frontend verification, 0 critical/minor issues.
+Cockpit now shows matching Total Users + real non-zero Revenue; both
+promo widgets render real numbers; Architecture MongoDB check confirmed
+ping-based; repair endpoint's dry-run/negative-path fully covered.
+**One acknowledged, unavoidable gap**: full E2E on a real GitHub App
+happy-path reconnect (real installation → PATCH → banner clears) needs a
+live human-approved GitHub App installation fixture not available in
+this sandbox — negative/rejection path is fully covered instead.
+**Preview-tested only — needs founder redeploy for production**, and the
+founder should re-click "Reconnect GitHub App" on TJSNDHU/Aurem once
+deployed (or trigger the repair endpoint) to get the real live
+confirmation on their own account.
+
+
 ## 2026-08-26 (later) — SLO Alerts: auto-email on breach (approved follow-up to Stage 1 SLO dashboard)
 
 New `services/slo_alert_cron.py` — periodic (30 min default,

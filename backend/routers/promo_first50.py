@@ -39,6 +39,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from pymongo.write_concern import WriteConcern
 
 from cto_services.auth import current_dev
 from cto_services.db import get_db
@@ -57,6 +58,13 @@ PROMO_PRO_DAYS      = int(os.environ.get("PROMO_FIRST50_PRO_DAYS", "30"))
 PROMO_SINGLETON_ID  = "global"
 RESEND_COOLDOWN_MIN = 15
 
+# 2026-08-26 — same fix as founder_offer.py's `_ensure_singleton`
+# (see that file's comment for the full root-cause explanation) — the
+# public `/promo/first50/status` homepage read was live-reproduced
+# returning a hard 500 on production from this exact upsert timing
+# out under the default majority write concern.
+_BEST_EFFORT_WC = WriteConcern(w=1)
+
 PUBLIC_BASE         = os.environ.get(
     "PUBLIC_APP_URL", "https://auremcto.com",
 ).rstrip("/")
@@ -68,7 +76,9 @@ def _now() -> datetime:
 
 async def _ensure_singleton(db) -> dict:
     """Idempotent — create the `{_id: 'global'}` row on first call."""
-    doc = await db.promo_first50_state.find_one_and_update(
+    doc = await db.promo_first50_state.with_options(
+        write_concern=_BEST_EFFORT_WC,
+    ).find_one_and_update(
         {"_id": PROMO_SINGLETON_ID},
         {"$setOnInsert": {
             "_id":            PROMO_SINGLETON_ID,

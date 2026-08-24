@@ -1,0 +1,24 @@
+{
+  "summary": "Verified admin data-integrity fixes + GitHub App reconnect root-cause fix + homepage promo write-concern fix. All 8 backend pytest tests pass; frontend Admin Cockpit Business Pulse now shows matching Total Users=1 (same denominator as GitHub Connect %) and Revenue 30d=$57 (from financials.metrics.mrr_usd, no longer stuck at $0); homepage FounderOfferPill/First-50 widgets render real numbers ('First-50 promo · 3/3 free Pro trials left' and '500 of 500 free SEO fixes for founders left'); Architecture endpoint returns MongoDB status='live' from a real db.command('ping') (latency_ms=0 due to sub-ms local mongo — code path confirmed with time.time() measurement + asyncio.wait_for timeout); repair-orphaned-installations endpoint auth-gated (200 admin / 401 anon), dry_run works & returns 'still_broken' for seeded orphan with bogus install ID; PATCH /cto/projects/{id} with bogus installation_id + nonexistent project 404s (regression guard proving the shared verify helper runs before blind acceptance).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_admin_audit_and_installation_active_2026_08.py",
+    "/app/test_reports/pytest/audit_installation_2026_08_26.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "services/github_app.py::verify_installation_for_repo cleanly enforces (a) user owns an active github_installations row AND (b) live GitHub repo probe via installation token — correct root-cause fix. Both add_project and update_project now share it — good DRY.",
+    "admin_projects_brain.py MongoDB status now uses asyncio.wait_for(db.command('ping'), timeout=3.0) with measured elapsed — real health check as claimed. Round to int is fine but sub-ms local reports 0 (cosmetic only).",
+    "promo_first50.py / founder_offer.py: WriteConcern(w=1) applied only to the singleton-ensure upsert on GET /status; spot-claim writes preserve default (majority) — verified by grep, matches spec.",
+    "README badges updated: '94+ Commits Shipped' orange badge present; 12k/4.9★ badges gone; 'GitHub App (installation-based — the only supported repo auth method; PATs were removed)' present near line 344."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% verified items"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview admin) — worked",
+  "seed_data_creation": "test seeds & cleans TEST_orphan_proj_2026_08_26 within itself; no residual data",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Full end-to-end GitHub App reconnect happy path (item 4b: real installation → PATCH → installation_active=true → PatRequiredCTA banner disappears) was NOT executed here because it requires a live, human-approved GitHub App installation fixture on a test repo — not available in this sandbox. Founder acknowledged this as acceptable in the request. Negative-path (item 4a) is fully covered by test_verify_installation_for_repo_unknown_install + test_update_project_reconnect_rejects_unverified_installation + test_repair_orphaned_installations_dry_run_seeded (all pass).",
+  "rca of the issue": "N/A — this iteration verifies previously-authored fixes. Original RCA (per founder's own live DB inspection): PATCH /cto/projects/{id} updated auth_method='github_app' and installation_id but never called the same verify+set-installation_active path add_project used, so reconnects landed the doc in state {auth_method:'github_app', installation_id:<real>, installation_active:undef} — PatRequiredCTA gates on installation_active===true, so banner never cleared. Fix: extract verify_installation_for_repo() into services/github_app.py and invoke it from both flows; only set installation_active=true on real success; add admin repair endpoint to backfill affected users."
+}

@@ -1006,6 +1006,79 @@ async def slo_metrics_endpoint(
     return await compute_slo(db, period_days=period_days)
 
 
+@router.post("/github-app/repair-orphaned-installations")
+async def repair_orphaned_installations(
+    dry_run: bool = True,
+    authorization: Optional[str] = Header(None),
+) -> dict:
+    """2026-08-26 — root-cause backfill for the reconnect bug (see
+    `routers/cto_projects.py::update_project` + `services/github_app.py
+    ::verify_installation_for_repo`): the PATCH reconnect path used to
+    set `auth_method="github_app"` without ever setting
+    `installation_active`, which is the exact flag `PatRequiredCTA.jsx`
+    gates the "not connected" banner on — a real installation could
+    work while the banner never cleared.
+
+    Finds every `cto_projects` row with `auth_method="github_app"`,
+    a real `installation_id`, and `installation_active` missing/false
+    (the orphaned-link pattern) — the fix going forward stops new
+    ones; this repairs ones that already exist. For each, re-verifies
+    live GitHub access (same helper as a real reconnect) before
+    flipping the flag — never blindly trusts the stored ID.
+
+    `dry_run=True` (default) only reports what WOULD change — nothing
+    is written. Call with `dry_run=false` to actually repair.
+    """
+    await _require_admin(authorization)
+    db = require_db()
+    from services.github_app import verify_installation_for_repo
+
+    orphans = await db.cto_projects.find({
+        "auth_method": "github_app",
+        "installation_id": {"$exists": True, "$ne": None},
+        "$or": [
+            {"installation_active": {"$exists": False}},
+            {"installation_active": False},
+            {"installation_active": None},
+        ],
+    }, {
+        "_id": 0, "project_id": 1, "user_id": 1, "github_owner": 1,
+        "github_repo": 1, "installation_id": 1, "name": 1,
+    }).to_list(1000)
+
+    repaired, still_broken = [], []
+    for proj in orphans:
+        ok, err_code, err_msg = await verify_installation_for_repo(
+            db, user_id=proj["user_id"],
+            installation_id=int(proj["installation_id"]),
+            owner=proj.get("github_owner") or "", repo=proj.get("github_repo") or "",
+        )
+        row = {
+            "project_id":      proj["project_id"],
+            "name":            proj.get("name"),
+            "user_id":         proj["user_id"],
+            "installation_id": proj.get("installation_id"),
+        }
+        if ok:
+            if not dry_run:
+                await db.cto_projects.update_one(
+                    {"project_id": proj["project_id"]},
+                    {"$set": {"installation_active": True}},
+                )
+            repaired.append(row)
+        else:
+            still_broken.append({**row, "error_code": err_code, "error": err_msg})
+
+    return {
+        "dry_run":        dry_run,
+        "scanned":        len(orphans),
+        "repaired":       repaired,
+        "repaired_count": len(repaired),
+        "still_broken":   still_broken,
+        "still_broken_count": len(still_broken),
+    }
+
+
 
 @router.get("/insights/activation-funnel")
 async def activation_funnel(

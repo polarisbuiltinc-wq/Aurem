@@ -316,6 +316,7 @@ function BusinessPulse() {
   // the other measures only the `tier=='free'` bucket. Showing both
   // in one place removes the false-discrepancy signal.
   const [tiers, setTiers] = useState(null);
+  const [fin, setFin] = useState(null);
   const [err, setErr] = useState(null);
   useEffect(() => {
     // Feb 2026 · prod-hang fix — bound each fetch with a per-request
@@ -329,12 +330,23 @@ function BusinessPulse() {
        .then(r => setP(r.data))
        .catch(e => setErr(prev => prev || `pulse: ${e?.message || "failed"}`));
     api.get("/admin/financials", { timeout: 12000 })
-       .then(r => setTiers(r.data?.users || null))
+       .then(r => { setTiers(r.data?.users || null); setFin(r.data); })
        .catch(() => { /* soft-fail — the tier sub-line just won't render */ });
   }, []);
-  const users = d?.total_users || p?.total_users || 0;
+  // 2026-08-26 — was `d?.total_users` first: /admin/dashboard's RAW
+  // (unfiltered) count, while the GITHUB CONNECT % card two rows down
+  // reads /admin/pulse's ORGANIC (synthetic-filtered) total as its
+  // denominator — same page, two different "total users" numbers
+  // whenever a synthetic/test row exists. Pulse's organic count is
+  // now the primary source everywhere on this page.
+  const users = p?.total_users || d?.total_users || 0;
   const dau   = d?.dau || d?.dau_today || 0;
-  const rev   = d?.revenue_30d || d?.mrr || 0;
+  // 2026-08-26 — was `d?.revenue_30d || d?.mrr`, both fields that
+  // /admin/dashboard never returns (grep-confirmed) — this card was
+  // permanently hardwired to show $0 next to a real non-zero "PAID
+  // UPGRADES 30d" count. /admin/financials (already fetched on this
+  // page for the tier sub-line) has the real, computed MRR.
+  const rev   = fin?.metrics?.mrr_usd ?? 0;
   const ghPct = p?.github_connect_pct;
   const paidNew = p?.paid_new_30d;
   const tierSub = tiers

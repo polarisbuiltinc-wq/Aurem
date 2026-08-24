@@ -353,6 +353,67 @@ async def get_repo_via_installation(
     return r.json() or {}
 
 
+async def verify_installation_for_repo(
+    db, *, user_id: str, installation_id: int, owner: str, repo: str,
+) -> tuple[bool, Optional[str], Optional[str]]:
+    """Shared verification used by BOTH connecting a new project
+    (`cto_projects.py::add_project`) and reconnecting an existing one
+    (`update_project`'s PATCH) — extracted 2026-08-26 so the two flows
+    can never drift apart the way they just did (`add_project` set
+    `installation_active=True` after this exact check; the PATCH
+    reconnect endpoint set `auth_method="github_app"` but skipped the
+    check AND the flag entirely — the real root cause of GitHub-App
+    reconnects that never cleared the "not connected" banner).
+
+    1. Confirms `user_id` owns an active `github_installations` row
+       for `installation_id`.
+    2. Confirms that installation actually has access to `owner/repo`
+       via a real GitHub call (not just trusting the client-supplied
+       IDs).
+
+    Returns `(ok, error_code, message)` — `error_code`/`message` are
+    None when `ok` is True.
+    """
+    install_row = await db.github_installations.find_one({
+        "installation_id": int(installation_id),
+        "user_id":         user_id,
+        "active":          True,
+    })
+    if not install_row:
+        return False, "installation_not_found_or_inactive", (
+            "That GitHub App installation isn't linked to your account, "
+            "or has been suspended/uninstalled. Re-install the App and "
+            "try again."
+        )
+    try:
+        await get_repo_via_installation(int(installation_id), owner, repo)
+    except httpx.HTTPStatusError as _e:
+        code = _e.response.status_code
+        if code == 404:
+            return False, "installation_no_repo_access", (
+                f"The App installation on @{install_row.get('github_login','')} "
+                f"doesn't have access to {owner}/{repo}. "
+                "Grant access on GitHub → your App → Configure → "
+                "\"Repository access\" (add this repo)."
+            )
+        if code in (401, 403):
+            return False, "installation_token_rejected", (
+                "GitHub rejected the installation access token. The "
+                "installation may have been suspended — check the App "
+                "settings on GitHub."
+            )
+        return False, "github_probe_failed", (
+            f"GitHub returned HTTP {code} while verifying installation "
+            f"access to {owner}/{repo}."
+        )
+    except httpx.RequestError as _e:
+        return False, "installation_probe_request_error", (
+            f"Couldn't reach GitHub to verify installation access "
+            f"({type(_e).__name__}). Try again in a moment."
+        )
+    return True, None, None
+
+
 async def revoke_installation(installation_id: int) -> None:
     """Delete an installation from GitHub's side (App-JWT auth).
 

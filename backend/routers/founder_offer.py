@@ -29,6 +29,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
+from pymongo.write_concern import WriteConcern
 
 from cto_services.auth import current_dev
 from cto_services.db import get_db
@@ -42,13 +43,31 @@ TOTAL_SPOTS         = 500
 MAX_CLAIMS_PER_USER = 3
 SINGLETON_ID        = "global"
 
+# 2026-08-26 — homepage promo fix. `_ensure_singleton` is called on
+# EVERY public `/founder-offer/status` read (the homepage widget) just
+# to guarantee the counter doc exists — an idempotent, best-effort
+# upsert with zero real-money stakes on its own. It was live-
+# reproduced returning a hard 500 on production
+# (`WTimeoutError`/`operation exceeded time limit` on the default
+# `w:"majority"` write concern under real Atlas replication lag —
+# same root cause already fixed today in health_notifier.py /
+# init_prod_collections.py). `w=1` here is safe: losing this specific
+# doc-exists upsert on a primary failover just means the next request
+# retries it. NOT applied to `/claim`'s spot-allocation increment
+# below — that one keeps the default majority concern since it's real
+# business state (don't want two failover replicas to both think they
+# allocated the same spot).
+_BEST_EFFORT_WC = WriteConcern(w=1)
+
 
 # ── Mongo singleton helpers ──────────────────────────────────────────
 async def _ensure_singleton(db) -> dict:
     """Idempotent — creates the `{_id: 'global'}` row on first call.
 
     Returns the current state of the offer document."""
-    doc = await db.founder_offer.find_one_and_update(
+    doc = await db.founder_offer.with_options(
+        write_concern=_BEST_EFFORT_WC,
+    ).find_one_and_update(
         {"_id": SINGLETON_ID},
         {
             "$setOnInsert": {

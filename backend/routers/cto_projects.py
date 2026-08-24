@@ -909,62 +909,20 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
 
     # ── Branch A: GitHub App install ────────────────────────────────
     if installation_id:
-        # 1. Verify caller owns THIS installation.
-        install_row = await db.github_installations.find_one({
-            "installation_id": int(installation_id),
-            "user_id":         me["user_id"],
-            "active":          True,
-        })
-        if not install_row:
-            await _fail(400, {
-                "error":   "installation_not_found_or_inactive",
-                "message": (
-                    "That GitHub App installation isn't linked to your "
-                    "account, or has been suspended/uninstalled. Re-install "
-                    "the App and try again."
-                ),
-            }, "installation_not_found_or_inactive")
-        # 2. Verify installation has access to THIS repo — real GitHub
-        #    call using a fresh short-lived installation token (never
-        #    stored). Same trust boundary as the PAT branch's live
-        #    verify step; this is what prevents a user from pointing
-        #    their own installation at a repo they don't have access to.
-        from services import github_app as _ga
-        try:
-            await _ga.get_repo_via_installation(
-                int(installation_id), owner, repo,
-            )
-        except _httpx.HTTPStatusError as _e:
-            code = _e.response.status_code
-            if code == 404:
-                await _fail(400, {
-                    "error":   "installation_no_repo_access",
-                    "message": (
-                        f"The App installation on @{install_row.get('github_login','')} "
-                        f"doesn't have access to {owner}/{repo}. "
-                        "Grant access on GitHub → your App → Configure → "
-                        "\"Repository access\" (add this repo)."
-                    ),
-                }, "installation_no_repo_access")
-            if code in (401, 403):
-                await _fail(400, {
-                    "error":   "installation_token_rejected",
-                    "message": (
-                        "GitHub rejected the installation access token. The "
-                        "installation may have been suspended — check the "
-                        "App settings on GitHub."
-                    ),
-                }, "installation_token_rejected")
-            await _fail(502, {
-                "error":   "github_probe_failed",
-                "message": f"GitHub returned HTTP {code} while verifying "
-                           f"installation access to {owner}/{repo}.",
-            }, "github_probe_failed")
-        except _httpx.RequestError as _e:
-            await _fail(502, (
-                f"Couldn't reach GitHub to verify installation access "
-                f"({type(_e).__name__}). Try again in a moment."
-            ), "installation_probe_request_error")
+        # 2026-08-26 — now the SAME shared helper `update_project`'s
+        # reconnect path uses, so the two flows can never verify
+        # differently again (see services/github_app.py::
+        # verify_installation_for_repo for the full root-cause note).
+        from services.github_app import verify_installation_for_repo
+        ok, err_code, err_msg = await verify_installation_for_repo(
+            db, user_id=me["user_id"], installation_id=int(installation_id),
+            owner=owner, repo=repo,
+        )
+        if not ok:
+            status = 502 if err_code in (
+                "github_probe_failed", "installation_probe_request_error",
+            ) else 400
+            await _fail(status, {"error": err_code, "message": err_msg}, err_code)
         auth_method         = "github_app"
         encrypted_token     = None   # never stored — token minted per-request
         installation_active = True
@@ -1518,8 +1476,38 @@ async def update_project(
     # fresh GitHub App installation (after the user revoked/reinstalled
     # it) takes over as the auth method, same precedence rule as
     # `add_project` (installation_id wins over any stored PAT).
+    #
+    # 2026-08-26 — ROOT CAUSE FIX. This used to set `auth_method=
+    # "github_app"` WITHOUT ever setting `installation_active=True` —
+    # `add_project` (new project) verified + set the flag; this
+    # reconnect path (existing project) set neither the flag nor did
+    # any verification at all, silently trusting the client-supplied
+    # installation_id. `PatRequiredCTA.jsx` gates on
+    # `auth_method === "github_app" && installation_active` — so a
+    # reconnect could succeed on GitHub's side while the "not
+    # connected" banner never cleared, because the one flag it reads
+    # was never written. Now runs the SAME shared verification
+    # `add_project` uses before trusting the reconnect.
     if "installation_id" in updates:
-        updates["auth_method"] = "github_app"
+        proj = await db.cto_projects.find_one(
+            {"project_id": project_id, "user_id": me["user_id"]},
+            {"_id": 0, "github_owner": 1, "github_repo": 1},
+        )
+        if not proj:
+            raise HTTPException(404, "Project not found")
+        from services.github_app import verify_installation_for_repo
+        ok, err_code, err_msg = await verify_installation_for_repo(
+            db, user_id=me["user_id"],
+            installation_id=int(updates["installation_id"]),
+            owner=proj.get("github_owner") or "", repo=proj.get("github_repo") or "",
+        )
+        if not ok:
+            status = 502 if err_code in (
+                "github_probe_failed", "installation_probe_request_error",
+            ) else 400
+            raise HTTPException(status, {"error": err_code, "message": err_msg})
+        updates["auth_method"]         = "github_app"
+        updates["installation_active"] = True
     r = await db.cto_projects.update_one(
         {"project_id": project_id, "user_id": me["user_id"]},
         {"$set": updates},

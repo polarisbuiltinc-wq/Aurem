@@ -93,9 +93,24 @@ async def get_architecture(authorization: Optional[str] = Header(None)):
         REGISTRY, is_configured, should_probe,
     )
     db = get_db()
+    # 2026-08-26 — was `"live" if db is not None else "down"` — the
+    # client handle almost never becomes None after boot (motor
+    # auto-reconnects), so this could show "live" straight through a
+    # real Mongo outage that Cockpit's `/admin/status/all` (which does
+    # a real `db.command("ping")`) would correctly flag red. Bringing
+    # this check to the same depth so the two pages can't disagree.
+    mongo_status, mongo_latency_ms = "down", 0
+    if db is not None:
+        try:
+            _t0 = time.time()
+            await asyncio.wait_for(db.command("ping"), timeout=3.0)
+            mongo_status = "live"
+            mongo_latency_ms = round((time.time() - _t0) * 1000)
+        except Exception:
+            mongo_status = "down"
     services: dict = {"MongoDB": {
-        "status": "live" if db is not None else "down",
-        "latency_ms": 0,
+        "status": mongo_status,
+        "latency_ms": mongo_latency_ms,
     }}
     # Iter 124 — PARALLEL probes (was sequential — worst case 8 svcs × 4s = 32s
     # which is enough to trip Cloudflare 524 under cold-start CPU contention).

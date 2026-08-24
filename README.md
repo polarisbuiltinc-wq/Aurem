@@ -4,8 +4,7 @@
 > No IDE. No token billing. No broken loops. Just code that ships.
 
 [![Founders 500](https://img.shields.io/badge/Founders-500-orange)]()
-[![12k+ Commits](https://img.shields.io/badge/Commits-12k%2B-orange)]()
-[![4.9★ Rating](https://img.shields.io/badge/Rating-4.9★-orange)]()
+[![94+ Commits Shipped](https://img.shields.io/badge/Commits%20Shipped-94%2B-orange)]()
 [![$9/month](https://img.shields.io/badge/Price-%249%2Fmonth-orange)]()
 [![OSS Core](https://img.shields.io/badge/OSS%20core-ora--grounding-brightgreen)](https://github.com/polarisbuiltinc-wq/ora-grounding)
 
@@ -65,9 +64,9 @@ is the one-screen mental model.
 └──────────┬───────────────┬───────────────┬──────────────────┘
            │               │               │
      ┌─────▼─────┐   ┌─────▼──────┐  ┌─────▼──────────────┐
-     │  MongoDB  │   │ GitHub API │  │ LLM Providers        │
-     │ (Motor)   │   │ PAT + OAuth│  │ OpenRouter · Groq ·  │
-     │  ~76 cols │   │            │  │ Anthropic (Emergent) │
+     │  MongoDB  │   │ GitHub App │  │ LLM Providers        │
+     │ (Motor)   │   │ (install-  │  │ OpenRouter · Groq ·  │
+     │  ~76 cols │   │  based)    │  │ Anthropic (Emergent) │
      └───────────┘   └────────────┘  │ Council A primary =  │
                                      │ claude-sonnet-4.5    │
                                      └──────────────────────┘
@@ -342,7 +341,8 @@ rolls into the same monthly meter as chat tasks (`services/usage.py`).
 - **AI:** OpenRouter proxy + Groq direct + Anthropic via
   Emergent LLM Key + emergentintegrations
 - **Auth:** Custom JWT (with `jti` + `iat`) + Google OAuth
-  (Emergent-managed) + GitHub OAuth (identity only, PAT for repo I/O)
+  (Emergent-managed) + GitHub App (installation-based — the only
+  supported repo auth method; PATs were removed)
 - **Real-time:** SSE (Server-Sent Events) for chat streams and fix
   progress. No websockets, no long-polling.
 - **Cache / snapshots:** `.aurem_cache/` git-tree snapshots on disk
