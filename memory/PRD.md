@@ -5693,3 +5693,104 @@ parity gap, iteration_380 confirmed the fix, 14/14 pass):**
 - "ORA answered two unrelated questions" — still UNCERTAIN. Founder is pulling the actual `chat_sessions`
   turns array via the new admin endpoints above (browser-side, admin-only) and will paste redacted data for
   a follow-up trace.
+
+## 2026-08-25 (continued) — Engine convergence decision, ambiguity-gate/reachability-gate build, OAuth root-cause fix
+
+**Item 1 — engine convergence: DECIDED, do not migrate now.** CONFIRMED via code
+(`routers/chat.py:1349-1366`): Loop Mode (`loop_engine.py`) is founder-only —
+`if execution_mode=="loop" and not _is_founder: body.execution_mode="prompt"`, with the code's own
+comment: *"Loop Mode is temporarily founder-only (engine is being hardened — stuck-in-loop + verify
+retry storms)."* `/loop/start` returns 403 `coming_soon:true` for non-founders. **Every real
+customer (including ReRootsBeauty) has only ever gone through `cto_projects.py`'s task workers.**
+Decision: do not migrate onto an engine its own team flagged as not-yet-safe for general release.
+All customer-facing reliability work (ambiguity-gate, reachability-gate, Vanguard auto-fix — see
+below) is built into `cto_projects.py`. Revisit convergence once `loop_engine.py` clears
+founder-only status — at that point `cto_projects.py`'s task workers become the redundant one.
+
+**Future-migration spec for `loop_engine.py` (logged, NOT built — apply when Loop Mode ships
+broadly):**
+- Ambiguity-gate: insert in `_generate_plan()` right after `repo_map_block` is built, before the
+  LLM call (~line 4078-4095) — check `user_message` against `rm["map_text"]` for a referenced
+  path/symbol; if absent and repo isn't trivially small, return a plan dict with
+  `needs_clarification` instead of spending the LLM call.
+- Reachability-scope: insert at the start of `_do_execute()` (~line 1072-1075) — if the task
+  originated from a diagnosis/error context, confirm the evidence resolves to a path inside
+  `repo_map_block`'s known files before executing; otherwise pause with an honest "not in your
+  repo" response.
+
+**Item 2 — ambiguity-gate + reachability-scope: BUILT in `cto_projects.py` (the real customer
+path), live-reproduced, testing_agent pending:**
+- `_is_ambiguous_task()` (new helper, `cto_projects.py`) — cheap regex heuristic (no LLM cost):
+  vague/generic phrasing with no file path/quoted string/enough words → blocked before any
+  budget/rate-limit spend. Wired into `submit_task()`. **Live-reproduced via real HTTP call**:
+  `"fix it"` → blocked with `needs_clarification`; `"add a code comment explaining the login
+  function in auth.py"` → passed through normally (reached the GitHub-App-access check, a known
+  pre-existing test-fixture limitation, not a regression).
+- `mode_d_debugger.py::run_debug_session()` — reachability-scope gate inserted between the
+  file-read loop and `llm_diagnosis()`: if `file_refs` were extracted but EVERY read against the
+  customer's own repo came back empty, return an honest "I don't see that in your connected repo"
+  reply instead of letting the LLM diagnose from a file it never actually read. This is the
+  concrete, structural fix for the "Mode D guesses instead of admitting uncertainty" gap flagged
+  two rounds ago — supersedes the earlier, vaguer "reword the prompt" idea with a hard code gate.
+- Frontend: `MessageBubble.jsx` (Ship-via-CTO) and `Projects.jsx` (Quick Task box) both updated to
+  show the clarifying message via toast instead of silently proceeding with a null task_id.
+- **Not yet wired-and-adopted-confirmed**: testing_agent run pending for this batch; "built" and
+  "wired into the real path" are reported separately per the standing rule — do not conflate.
+
+**Google OAuth `missing_token` mislabel — CONFIRMED root cause via code, live-reproduced by fix
+logic (not by reproducing the original race):**
+- `OAuthFinish.jsx`'s `#token=` branch is shared by BOTH GitHub OAuth and the new direct Google
+  OAuth (both redirect here with `#token=`). The branch hardcoded `/login?github=missing_token`
+  for ANY missing token, regardless of which provider actually redirected — explaining the
+  founder's exact observation (Google flow → "github=" label).
+- CONFIRMED-plausible mechanism for the underlying "token went missing on the second attempt":
+  the effect's `run()` had no re-entrancy guard. The first, successful invocation calls
+  `history.replaceState(null, "", "/oauth-finish")`, clearing the URL hash, AFTER already
+  navigating to `/dashboard`. If `run()` fires a second time for any reason (React double-invoke,
+  remount, fast back/forward nav), that second invocation reads an ALREADY-EMPTY hash, finds no
+  token, and bounces to `/login?...missing_token` — AFTER the user was already signed in. This
+  matches every detail of the founder's report (URL at `/dashboard`, then unexpected bounce) with
+  no need to invoke the `oauth_states` TTL/backend timing the founder had flagged as a suspect —
+  callback logic (`google_oauth.py`) redirects with clearly-labeled `google=cancelled`/`google=error`
+  on its own failure paths and raises a plain HTTP 400 on state issues; it does not produce this
+  specific symptom. This is LIKELY (not lab-reproduced with an actual double-invoke), but is the
+  only mechanism found that explains every observed detail.
+- Fix shipped: (1) `useRef` re-entrancy guard in `OAuthFinish.jsx` so only the first `run()`
+  invocation can act; (2) `google_oauth.py`'s success redirect now includes `&provider=google`;
+  (3) the missing-token branch reads that marker and labels the redirect correctly
+  (`google=missing_token` vs `github=missing_token`) regardless of cause, so any future
+  recurrence is self-diagnosing instead of generically mislabeled.
+
+**Deploy Gate live-fire test — confirmed `polarisbuiltinc-wq/Aurem` IS the real engineering repo**
+(cross-referenced against this session's earlier repo-rename note: `auremdev` → GitHub-renamed →
+canonical `polarisbuiltinc-wq/Aurem`, same repo). Founder running the live-fire test directly
+(push/PR with a deliberately failing check) since this container has no git remote and an empty
+`GITHUB_TOKEN` — cannot be executed from this environment. Cleanest signal: a deliberately failing
+pytest assertion in a new PR/branch, tripping the `AUREM CI — Build + Test Guard` workflow, then
+confirm `auto_deploy.yml`'s `gate-on-ci` job actually reports the deploy as blocked, not just that
+CI shows red in isolation.
+
+**Item 2 batch — testing_agent verification (iteration_ambiguity_reach_google_2026_08_25.json,
+17/17 pass, 0 critical/minor):** ambiguity-gate (6 vague + 3 concrete inputs, backend + Quick Task
+UI), reachability-scope gate (pytest with `read_file` mocked empty, confirmed honest reply, zero
+fabricated diagnosis), Google OAuth provider-label fix (3 scenarios) and re-entrancy guard all
+confirmed correct.
+- **Built**: yes (all 3 fixes).
+- **Wired into the real path production traffic hits**: yes — `_is_ambiguous_task()` is called
+  synchronously inside `submit_task()` (the live `/cto/tasks/submit` endpoint, the only task-entry
+  route real customers use, confirmed above); the reachability gate is inline in
+  `run_debug_session()` (Mode D's live diagnosis path, called from `chat.py`); the OAuth fix is in
+  the live `OAuthFinish.jsx`/`google_oauth.py` callback path itself, not a parallel copy.
+- **Live-reproduced**: yes — real curl calls against the live backend (ambiguity-gate) and
+  testing_agent's pytest-level repro with the real function, mocked only at the `read_file` I/O
+  boundary (reachability gate).
+- **Confirmed via real evidence that production traffic is using it post-deploy**: NOT YET — this
+  is Preview-only; production adoption confirmation is pending an actual deploy + a real
+  post-deploy task/chat trace, per the standing rule (built + wired + live-reproduced ≠ confirmed
+  production adoption).
+
+**Minor, non-blocking finding from testing_agent's code review (logged, not fixed — out of this
+round's scope):** the reachability gate only fires when `github_pat` is present; if the repo
+connection itself is unauthenticated/unreachable, `run_debug_session()` still falls through to
+`llm_diagnosis()` with empty file_contents rather than saying "I can't read your repo." Worth
+closing in a future round.

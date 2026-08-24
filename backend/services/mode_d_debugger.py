@@ -689,8 +689,32 @@ async def run_debug_session(
                 except Exception:
                     pass
 
-        diagnosis = await llm_diagnosis(error_text, repo_ctx, file_contents)
+        # 2026-08-25 — Priority 2 (reachability-scope check): if we
+        # extracted file_refs from the error text but EVERY read
+        # against the customer's OWN connected repo came back empty,
+        # those files genuinely aren't in scope here — most likely the
+        # error originates outside the customer's repo entirely (a
+        # different service, or AUREM's own infra, per this session's
+        # P0 incident review). Say so honestly instead of letting the
+        # LLM "diagnose" from a file it never actually read.
+        if error_ctx["file_refs"] and github_pat and not file_contents:
+            not_found_reply = (
+                "I see a reference to "
+                + ", ".join(f"`{r}`" for r in error_ctx["file_refs"][:3])
+                + ", but I don't see that in your connected repo — this "
+                  "might be coming from somewhere outside what I can "
+                  "inspect here. If you have more context (what you were "
+                  "doing right before this happened, or a different "
+                  "error line), share it and I'll take another look."
+            )
+            return {
+                "ora_reply": not_found_reply,
+                "can_auto_fix": False, "commit_task": "",
+                "severity": "low", "fast_path_used": False,
+                "clarify": True,
+            }
 
+        diagnosis = await llm_diagnosis(error_text, repo_ctx, file_contents)
     # 4. Build ORA reply
     severity_emoji = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}.get(
         diagnosis.get("severity", "medium"), "🟡"

@@ -1739,6 +1739,12 @@ function ProjectDetail({ project, onRemoved, onChanged }) {
         project_id: project.project_id, task: task.trim(),
         files: fileList, context: context.trim(),
       });
+      // 2026-08-25 — ambiguity-gate: backend declined to create a task
+      // because the free-text brief was too vague to act on safely.
+      if (r.data?.needs_clarification) {
+        toast({ message: r.data.message || "Please be more specific.", kind: "info" });
+        return;
+      }
       setTask(""); setFiles(""); setContext("");
       setActiveTaskId(r.data.task_id);
       toast({ message: "Task queued — pulling repo…", kind: "info" });

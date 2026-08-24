@@ -1,0 +1,29 @@
+{
+  "summary": "Verified 2026-08-25 architectural gates: (1) ambiguity-gate on POST /cto/tasks/submit correctly returns {ok:false, needs_clarification:true, message:...} for 6 vague inputs and passes through 3 concrete inputs (concrete correctly hits the known GitHub-App-access error on fixture p_norepotest — expected). (2) Reachability-scope gate in services/mode_d_debugger.py::run_debug_session — direct pytest with read_file monkey-patched to return None on a plausible stack-trace referring to src/pages/DoesNotExist.jsx returns clarify:True with the honest 'I don't see that in your connected repo' reply and NO fabricated diagnosis (can_auto_fix=False, commit_task=''). (3) OAuthFinish.jsx now labels the missing-token redirect using the `provider` fragment param — verified 3 scenarios (#none → /login?github=missing_token, #provider=google → /login?google=missing_token, #provider=github → /login?github=missing_token). (4) google_oauth.py callback source includes `&provider=google` in success redirect. (5) useRef re-entrancy guard present in OAuthFinish.jsx. UI Quick Task box on Projects page: vague 'fix it' renders the exact clarifying toast; concrete task submission is unblocked. 12/12 backend tests pass; 3/3 frontend OAuthFinish forced-scenarios pass; 2/2 Projects UI ambiguity flows pass.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter_ambiguity_and_mode_d_gates.py",
+    "/app/test_reports/pytest/iter_ambiguity_reach_google.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "_is_ambiguous_task uses word count < 4 as a fallback which is a reasonable heuristic; 'help' (1 word) and 'do stuff' (2 words) are correctly caught. No obvious edge cases that would leak vague through.",
+    "Reachability gate is only active when github_pat is present AND file_refs is non-empty. If github_pat is missing, the code falls through to llm_diagnosis with empty file_contents — the gate does NOT cover that case. Consider whether an unreachable/unauthenticated repo should also honestly say 'I can't read your repo' rather than diagnose from zero content. Not a regression of this round, but worth noting.",
+    "OAuthFinish.jsx sets `hasRun.current = true` inside `run()` after the first if-check. Since setState/effects run synchronously per invocation and hasRun is set before any await, this correctly prevents double-invoke in React StrictMode / remount races."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter_ambiguity_and_mode_d_gates.py (new test file)"
+  ],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "test_credentials": "test@aurem.dev / AuremTest2026! (user_id test_admin_001) — worked",
+  "seed_data_creation": "None — used existing fixture project aurem-demo/frontend (any project works since gate is checked before project resolution).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend API prefix is /api/aurem-dev (not /api). Login endpoint: /api/aurem-dev/auth/login. Ambiguity-gate is checked in cto_projects.py::submit_task at line ~1658 BEFORE budget/rate-limit. Reachability gate in services/mode_d_debugger.py at line ~700 — requires github_pat + non-empty file_refs + all read_file returns empty. If retesting Mode D via full HTTP chat endpoint, note is_debug_request() requires hard/soft signals — a stack-trace-style line 'TypeError ... at path/file.jsx:42:17' works.",
+  "rca of the issue": "Not applicable — this iteration was verification of a completed fix, not bug reproduction. All three gates behave exactly as specified in the review request."
+}

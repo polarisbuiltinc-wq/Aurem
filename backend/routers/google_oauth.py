@@ -195,5 +195,13 @@ async def callback(
             f"#token={jwt_token}"
             f"&login={quote_plus(g_name or user_mail)}"
             f"&new={'1' if is_new_account else '0'}"
+            # 2026-08-25 — root-cause fix for a founder-reported bug:
+            # this callback shares OAuthFinish.jsx's GitHub-labeled
+            # `#token=` branch, so any failure inside that branch
+            # (e.g. a stale re-run reading an already-cleared hash)
+            # was bouncing to `/login?github=missing_token` for what
+            # was structurally a Google sign-in. `provider=google`
+            # lets the frontend label any failure correctly.
+            f"&provider=google"
         )
     )

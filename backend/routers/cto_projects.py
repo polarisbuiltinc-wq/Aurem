@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -44,6 +45,34 @@ if not _GIT_AVAILABLE:
 
 WORKSPACE = Path(os.getenv("WORKSPACE_PATH", "/tmp/aurem-dev-projects"))
 WORKSPACE.mkdir(parents=True, exist_ok=True)
+
+# 2026-08-25 — Priority 2 (ambiguity-gate). Cheap, no-LLM-cost heuristic:
+# a task with no concrete target (a file path, a quoted string, or
+# enough words to name something specific) is too under-specified to
+# act on blindly — this is the structural fix for "the AI guesses
+# instead of asking," proposed and approved in this session's incident
+# review. Deliberately simple (regex, not a repo-map lookup) — this is
+# the customer-facing path (see PRD 2026-08-25 engine-convergence note);
+# the loop_engine.py equivalent belongs in `_generate_plan()` per that
+# same note, not built there yet.
+_VAGUE_TASK_PATTERNS = [
+    re.compile(r"^(fix|improve|update|clean up|make|do)\s+(it|this|that|things?|stuff)\.?$"),
+    re.compile(r"^fix (the )?bugs?\.?$"),
+    re.compile(r"^make it (better|work)\.?$"),
+    re.compile(r"^improve( the)? (site|app|code)\.?$"),
+]
+_FILE_PATH_RE = re.compile(r"[\w./-]+\.(jsx?|tsx?|py|css|json|md|html)\b")
+
+
+def _is_ambiguous_task(task_text: str) -> bool:
+    t = (task_text or "").strip().lower()
+    if not t:
+        return True
+    if _FILE_PATH_RE.search(t) or '"' in t or "'" in t or "`" in t:
+        return False
+    if any(p.match(t) for p in _VAGUE_TASK_PATTERNS):
+        return True
+    return len(t.split()) < 4
 
 
 # ── Live progress streams (Iter 73) ──────────────────────────────────────
@@ -1620,6 +1649,23 @@ async def submit_task(
     authorization: str = Header(None),
 ) -> dict:
     me = await current_dev(authorization)
+    # 2026-08-25 — Priority 2 (ambiguity-gate): a task with no concrete
+    # target (no file path, no quoted string, and only vague/generic
+    # phrasing) is too under-specified to act on blindly — an LLM will
+    # guess at what to change rather than ask, which is exactly the
+    # failure mode this session's incident review flagged. Checked
+    # BEFORE any budget/rate-limit spend so a vague task costs nothing.
+    if _is_ambiguous_task(body.task):
+        return {
+            "ok": False,
+            "needs_clarification": True,
+            "message": (
+                "That's a bit broad for me to act on safely — could you "
+                "name a specific file, page, or feature? For example "
+                "\"fix the signup form validation in Signup.jsx\" instead "
+                "of \"fix it\"."
+            ),
+        }
     # Iter 50.1 — Founders skip per-IP rate-limit. They run audits, ship
     # tests, retry tasks in bursts — locking them out at 10/min defeats
     # the whole "founder = full access" rule.

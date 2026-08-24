@@ -16,9 +16,22 @@ import { trackSignup, metaCompleteRegistration } from "../lib/analytics";
 export default function OAuthFinish() {
   const nav = useNavigate();
   const [status, setStatus] = useState("Signing you in…");
+  // 2026-08-25 — root-cause fix for a founder-reported bug: URL bar
+  // showed /dashboard, then unexpectedly bounced to
+  // /login?github=missing_token. Root cause: if this effect ever
+  // runs a second time (React double-invoke, remount, fast
+  // back/forward nav) AFTER the first run already succeeded, the
+  // first run's `history.replaceState(..., "/oauth-finish")` (below)
+  // has already cleared the URL hash — so the second run reads an
+  // EMPTY hash, finds no token, and incorrectly redirects to
+  // /login?...missing_token even though sign-in already succeeded.
+  // Guard: only the FIRST invocation is allowed to act.
+  const hasRun = React.useRef(false);
 
   useEffect(() => {
     async function run() {
+      if (hasRun.current) return;
+      hasRun.current = true;
       try {
         // Read fragment: "#token=eyJ...&login=octocat" (GitHub) OR
         // "#session_id=..." (Google via Emergent-managed OAuth).
@@ -89,13 +102,18 @@ export default function OAuthFinish() {
         // ── GitHub path (backend redirect with #token=…) ──────────
         const token = parts.get("token");
         const login = parts.get("login") || "";
+        // 2026-08-25 — the direct-Google-OAuth callback reuses this
+        // SAME branch (also redirects with #token=), so a real
+        // provider label is needed for an honest error redirect
+        // instead of always saying "github".
+        const provider = parts.get("provider") === "google" ? "google" : "github";
         // Iter 156 — `new=1` is set by the backend only when this
         // OAuth callback minted a brand-new account row. We fire
         // the Google Ads signup conversion at most once per session.
         const isNewAccount = parts.get("new") === "1";
         if (!token) {
           setStatus("No sign-in token returned. Redirecting…");
-          setTimeout(() => nav("/login?github=missing_token", { replace: true }), 800);
+          setTimeout(() => nav(`/login?${provider}=missing_token`, { replace: true }), 800);
           return;
         }
         setToken(token);

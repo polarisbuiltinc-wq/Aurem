@@ -169,11 +169,28 @@ functions instead of two divergent 3,000-line copies that can (and did) drift ou
 
 ### 1.2 Checkpointing / state persistence, designed in from day one
 
-**SESSION LESSON (honest, not yet built in AUREM — proposed only).** AUREM's current retry
-button creates a brand-new task and restarts PULL→READ→THINK→WRITE→VERIFY→COMMIT from zero,
-confirmed by code read (`retry_task()` in `cto_projects.py`). The INNER self-correction loop added
-this session (1.1 above) does NOT have this problem — because it's additional LLM calls inside
-the SAME task execution, not a new task — but the OUTER user-facing retry button does.
+**SESSION LESSON (honest, not yet built in AUREM's customer-facing path — proposed only;
+refined 2026-08-25 with exact evidence from `loop_engine.py`, AUREM's more mature but
+not-yet-customer-facing engine).** AUREM's current retry button (`cto_projects.py`, the engine
+real customers actually use) creates a brand-new task and restarts
+PULL→READ→THINK→WRITE→VERIFY→COMMIT from zero, confirmed by code read (`retry_task()`). The
+INNER self-correction loop added this session (1.1 above) does NOT have this problem — because
+it's additional LLM calls inside the SAME task execution, not a new task — but the OUTER
+user-facing retry button does.
+
+**Precise finding from auditing `loop_engine.py`'s own checkpoint implementation** (grepped
+every `_persist_session()` call site, 30+ occurrences): even AUREM's more mature engine only
+checkpoints at **phase boundaries and explicit pause/fail/complete points** — never
+incrementally *within* a phase's internal work. Confirmed, not inferred: the phase-restart code
+path explicitly **resets** `self.context["submitted_files"] = []` on a timeout-triggered
+restart, with the code's own comment — *"phase coroutines aren't idempotent across restarts."*
+If EXECUTE crashes after generating file 5 of 8, that partial progress is deliberately discarded
+and the phase restarts all 8 files from zero, not resumed. `resume_stale()`'s claim of "resume
+from the last completed step, never restart from scratch" is true at the **phase** granularity
+(a session stuck *between* phases, or paused for the user, resumes correctly) but explicitly
+**not** at the **within-phase** granularity. Deliberate trade-off, not a bug — but it means
+real per-step checkpointing (below) would be new work, not a refinement of something that
+already exists at that grain.
 
 **What the schema should look like, decided on day 0** (not retrofitted): a task execution
 record with a **step ledger**, not just a final status:
@@ -512,6 +529,36 @@ data (which they should be, per 5.2/5.1) — the four numbers are just aggregati
 streams you already need for other reasons; the mistake is treating them as a separate initiative
 requiring new infrastructure, when they should be a downstream query over infrastructure you built
 for other purposes anyway.
+
+### 5.4 Canary / staged rollout — currently missing entirely (added 2026-08-25)
+
+**HONEST STATUS, not built — a real, confirmed gap.** Current industry guidance for shipping
+AI-agent-generated code changes to production: strong CI gates + feature flags + canary/staged
+deploys + one-click rollback, used TOGETHER, not any single one alone. AUREM has CI gates (real,
+but per 5.1 still unproven live) and rollback (the single most thoroughly validated piece of
+infrastructure in the whole system, see 2.2) — but **every deploy goes to 100% of users at once,
+with zero staged/canary mechanism.** This matters more than average for a coding-agent product
+specifically: the "customer" is often shipping AUREM-generated code to their OWN real users, so a
+bad AUREM platform deploy has a doubled blast radius (AUREM's own users, plus every downstream
+customer app AUREM is actively managing tasks for).
+
+**What already exists that a canary mechanism should reuse (Rule 12 — checked before proposing
+new build):** `services/feature_flags.py` is real, working infrastructure — flags stored in
+Mongo, checked via `is_enabled(flag_name, user_id/tier)`, with existing support for a boolean
+on/off + a `tier_allowlist` + a `user_allowlist` (explicit user IDs), managed via existing
+`/admin/ops-config` and per-bin `user_overrides` endpoints. **The gap: no percentage-based /
+random-bucket rollout today** — you can flag ON for named users or tiers, but not "10% of all
+users, deterministically and consistently per-user."
+
+**Minimal proposal for AUREM specifically (proposed only, not built):** add one field to the
+existing flag document, `rollout_pct: int` (0-100), and one deterministic bucketing check inside
+the EXISTING `is_enabled()` —
+`int(hashlib.sha1(f"{user_id}:{flag_name}".encode()).hexdigest(), 16) % 100 < rollout_pct` — so
+the same user always lands in the same bucket for a given flag (no flapping between requests),
+with zero new schema, zero new admin UI beyond one new numeric field on the existing flag-edit
+form. Genuinely small (hours, not days) specifically because it rides entirely on infrastructure
+that already exists — the mistake to avoid is building a separate canary-specific system when
+the existing feature-flag collection can do 90% of the job with one added field.
 
 ---
 

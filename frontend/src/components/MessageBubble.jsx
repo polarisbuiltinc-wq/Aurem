@@ -563,6 +563,13 @@ export default function MessageBubble({
           context: `from chat session ${sessionId}, turn ${idx}`,
           maxx_mode: !!m.maxxMode,
         });
+        // 2026-08-25 — ambiguity-gate: backend declined to create a
+        // task because the brief was too vague to act on safely.
+        if (r.data?.needs_clarification) {
+          setShipState({ status: "idle", taskId: null, error: null });
+          toast({ message: r.data.message || "Please be more specific.", kind: "info" });
+          return;
+        }
         const taskId = r.data?.task_id || null;
         setShipState({ status: "shipped", taskId, error: null });
         if (taskId) {
