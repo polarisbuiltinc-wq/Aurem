@@ -1,0 +1,36 @@
+{
+  "summary": "Verified the checkpoint/resume Phase 2 feature end-to-end in cto_projects.retry_task via BOTH (a) a new 12-test pytest suite hitting the real FastAPI route through TestClient + FakeDB, and (b) three REAL live-HTTP calls to the preview /api/aurem-dev/cto/tasks/{id}/retry endpoint backed by real Mongo. All acceptance criteria met. Full regression: 188 pre-existing + 12 new = 200 tests, 0 failures. Backend /api/health green.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_checkpoint_resume_2026_08_27.py",
+    "/app/backend/tests/test_phase2c_cto_projects_router.py",
+    "/app/backend/tests/test_iter_cto_projects_worker_coverage_2026_08.py",
+    "/app/test_reports/pytest/checkpoint_resume_2026_08_27.xml"
+  ],
+  "acceptance_evidence": {
+    "level_of_realism_achieved": "Real FastAPI route + real Mongo + real HTTP over the public preview URL. Downstream LLM/GitHub calls were NOT exercised because retry_task raised 403 on the GitHub App installation-token mint (fake installation_id used to avoid burning real GitHub API calls) — but per the code path, the new task doc with `resumed_from_checkpoint` + step marker is INSERTED BEFORE the GitHub token step runs, so the resume decision is fully observable in Mongo.",
+    "fresh_pending_edits_seed_task": "t_ckpt_8fbb60ae (0s-old pending_edits) -> new task t_705c8c493689: resumed_from_checkpoint=TRUE, steps=['🔁 retry of t_ckpt_8fbb60ae (with failure context) — reusing saved edits, skipping regeneration']",
+    "stale_pending_edits_seed_task": "t_stale_bf201674 (1200s-old, i.e. 300s past 900s TTL) -> new task t_e591554ffd52: resumed_from_checkpoint=FALSE, no 'reusing saved edits' marker in steps — TTL enforced correctly",
+    "no_pending_edits_seed_task": "t_none_4fe4b45c (no pending_edits at all) -> new task t_bd7164dedbfe: resumed_from_checkpoint=FALSE, no marker — regression to pre-feature behaviour clean",
+    "vanguard_gate_still_runs_on_resumed_edits": "Verified by code inspection assertion in TestResumedEditsStillPassThroughVanguard: in both `_run_task_with_git` (~L3590-3777) and `_run_task_via_api` (~L2451-3148), the `if resume_edits: ... else: <codegen>` block falls THROUGH to the same downstream hallucination-gate + verify_patch(Vanguard) + lint pipeline. The `pending_edits` persist call is strictly AFTER `verify_patch()` in the git worker source (asserted by string-offset comparison in the test) — i.e. resumed edits cannot bypass Vanguard.",
+    "dispatcher_routes_correctly": "TestRunTaskDispatcherForwardsResumeEdits verifies _run_task() sends resume_edits to _run_task_with_git when _GIT_AVAILABLE=True (production/preview path — `git` binary IS installed here) and to _run_task_via_api when False.",
+    "ttl_boundary_unit_tests": "test_boundary_at_ttl_seconds_still_resumes (899s -> resume TRUE) and test_stale_pending_edits_falls_through_to_fresh_regen (901s -> resume FALSE) confirm the 900s boundary is enforced exactly at PENDING_EDITS_TTL_S = 15*60.",
+    "regression_suite": "188 existing tests (test_phase2c_cto_projects_router.py + test_iter_cto_projects_worker_coverage_2026_08.py) still pass — no regressions."
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor observation (non-blocking): the persist block in _run_task_with_git stores {'edits','summary','saved_at'} but omits `parallelized`/`agents_count` that the _run_task_via_api block persists. Not a correctness issue (those fields aren't read on resume), just an asymmetry.",
+    "The response body of a successful retry surfaces `resumed_from_checkpoint`, but if the endpoint fails at the GitHub App token step (line ~2050) AFTER the new task doc has already been inserted (line ~2028), the caller gets a 403 with NO indication that a checkpoint-resumed retry task was orphaned in queued state. Consider ordering: mint token BEFORE insert, or delete the just-inserted task on token failure. Not part of this feature's scope but worth noting.",
+    "The `pending_edits` persist is wrapped in a bare try/except that logs at debug level (line 3148 + 3777). If persistence silently fails, the operator has no signal — an INFO/WARN log or a sentry breadcrumb would help post-hoc debugging."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_checkpoint_resume_2026_08_27.py (NEW — 12 tests)"
+  ],
+  "success_rate": {"backend": "100% (200/200 pytest, 3/3 live retry-endpoint scenarios)", "frontend": "n/a (backend-only feature per request)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview founder, from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Seeded 3 cto_tasks + 1 cto_project on preview Mongo (aurem_dev) then DELETED after verification. Zero residual test data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The retry endpoint's GitHub App token mint runs AFTER the new-task DB insert; a fake installation_id yields a 403 to the caller but the resumed_from_checkpoint metadata is still fully persisted and observable via Mongo — this is how to test resume behaviour without burning real GitHub API calls. See test_checkpoint_resume_2026_08_27.py for the pytest pattern using the FakeDB fixture reused from test_phase2c_cto_projects_router.py."
+}

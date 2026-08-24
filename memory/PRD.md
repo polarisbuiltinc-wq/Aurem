@@ -4,7 +4,190 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
 
-## 2026-08-26 (latest) — Safe mechanical extraction: routers/chat.py + services/loop_engine.py — testing_agent live E2E 100%, 0 issues
+## 2026-08-27 (latest) — Checkpoint/resume Phase 2 (scoped) for cto_projects task retry — testing_agent live-HTTP verified, 200/200 pass
+
+**Scope actually approved** (founder rejected the bigger "sequential per-file
+generation+commit" redesign after my Phase 1 investigation showed codegen
+already produces all edits in one LLM call and the commit is already
+atomic — file-level resumability doesn't exist to preserve, so building it
+would be solving a hypothetical, not the real waste). Approved: persist
+`pending_edits` on `cto_tasks` right after generation passes the FULL
+existing validation pipeline (truncation + hallucination-gate + Vanguard
+verify + lint), before commit. On `/tasks/{id}/retry`, reuse
+`pending_edits` if it's <=15 min old (`PENDING_EDITS_TTL_S=900`) and skip
+the LLM codegen call — but Vanguard/hallucination-gate/lint STILL run
+fresh against the reused edits before commit (my deliberate, more
+conservative choice than literally "skip straight to commit" — bypassing
+a security gate to save a modest LLM cost wasn't a trade worth making;
+the founder's actual goal, saving regeneration cost, is fully achieved
+either way).
+
+TTL reasoning (15 min): long enough for the realistic "crash right after
+generation, near-immediate retry" case (worker restart, transient GitHub
+5xx on commit); short enough that reused content doesn't silently drift
+too far from current repo state. Commit always targets the CURRENT
+branch tip (no cached base SHA) so staleness fails loudly, not silently —
+but drift risk still grows with age, hence bounded, not unlimited.
+
+**Confirmed which engine real customer traffic hits (Phase 1 finding,
+now load-bearing for this fix)**: `cto_projects.py`'s `_run_task()` →
+`_run_task_with_git` (git binary present) / `_run_task_via_api`
+(fallback). `loop_engine.py`/`LoopEngine` is CONFIRMED still gated —
+`ChatPanel.jsx` explicitly checks founder/admin/unlimited tier before
+ever sending `execution_mode:"loop"`. Both `_run_task_via_api` and
+`_run_task_with_git` were fixed (not just the "primary" one) for
+consistency since a container without `git` would silently regress to
+the unfixed fallback otherwise.
+
+Files: `backend/routers/cto_projects.py` — `PENDING_EDITS_TTL_S` const,
+`retry_task()` (resume_edits selection + `resumed_from_checkpoint` field
+on new task doc + response), `_run_task()` dispatcher (threads
+`resume_edits` param), `_run_task_via_api()` + `_run_task_with_git()`
+(codegen wrapped in `if resume_edits: reuse else: <existing unchanged
+codegen>`, persist call inserted right before commit/write).
+
+**Four-checkbox discipline (Preview only — no production claim):**
+1. Built — YES.
+2. Wired into the real production execution path (not a
+   founder-only/gated path) — YES, `_run_task_with_git`/`_run_task_via_api`
+   are the only engine regular customers reach; `git` binary confirmed
+   present in Preview so the primary path is the one fixed and tested.
+3. Live-reproduced with a forced failure — YES, testing_agent made 3 REAL
+   HTTP calls to the live `/tasks/{id}/retry` endpoint on the preview URL
+   against real Mongo docs: fresh (0s) pending_edits → resumed=true +
+   step marker; stale (1200s, past the 900s TTL) → resumed=false; no
+   pending_edits at all → resumed=false (clean regression to old
+   behavior). Also 12 new pytest tests + 188 pre-existing = 200/200 pass.
+4. Confirmed via real evidence a resumed task skipped regeneration — YES
+   in Preview (Mongo-observable `resumed_from_checkpoint` + steps marker
+   on the real new task doc via the real endpoint). NOT yet confirmed in
+   Production — that requires founder deploy + a real production retry;
+   not claimed.
+
+Verification: `/app/test_reports/iteration_checkpoint_resume_2026_08_27.json`
+— 200/200 tests, 0 issues, seed data created and deleted cleanly.
+
+**Engineering Gaps Found (not acted on without approval):**
+- **CONFIRMED, pre-existing, NOT introduced by this fix** — `retry_task()`
+  inserts the new task doc BEFORE minting the GitHub App token; if the
+  token mint fails (e.g. revoked installation), the caller gets a 403 but
+  a `queued` task doc is orphaned with no execution and no cleanup.
+  testing_agent surfaced this while testing my feature; it predates this
+  session's change and is out of scope here — flagged for founder review.
+- **UNCERTAIN** — the `pending_edits` persist writes are wrapped in a
+  bare try/except at debug-log level; a silent persist failure gives the
+  operator no signal. Not fixed (would need founder sign-off on log
+  level / alerting policy).
+- **UNCERTAIN, cosmetic only** — `_run_task_with_git`'s persisted
+  `pending_edits` omits `parallelized`/`agents_count` (which
+  `_run_task_via_api`'s persist includes) — harmless since neither field
+  is read on resume, just a minor schema asymmetry. Not fixed per
+  founder's "smaller, honest scope" instruction — no functional impact.
+
+Next per founder's explicit sequence: **5-gap production-readiness Phase
+1 investigation only** (dependency-lockfile CI, load-test plan, external-
+service degradation audit, backup 3-2-1 evidence, sensitive-change
+checklist) — report and STOP for approval before any code/proposal build.
+
+## 2026-08-27 — PAT clarification + TTL field-type audit & fix — testing_agent verified, 1 real bug caught & fixed via live-DB probe
+
+**PAT verification clarification (no code fix — CONFIRMED not a bug).**
+The 9 failing tests in `tests/test_iter212b_verify_pat_endpoint.py` test
+the OLD live-GitHub-verification contract (typed errors: `missing_scope`,
+`repo_not_found`, `network_error`) that existed before PAT support was
+permanently retired (commit `f712850`, "PAT Removal Complete", founder
+directive 2026-06). `POST /projects/verify-pat` now unconditionally
+returns `pat_not_supported` for any input — deliberate, documented
+behavior. The 15 passing tests (`test_pat_removal_full_2026_01.py`,
+`test_iter212m5_verify_pat_security.py`) assert this correctly. Stale
+test file flagged for future deletion, not deleted (out of approved
+scope).
+
+**TTL field-type root-cause fix — founder-approved, repo-wide.**
+Root cause: MongoDB's TTL monitor only expires fields typed as BSON
+`Date` — several collections had a TTL index (`expireAfterSeconds`) on a
+field the app was writing as `time.time()` float or `.isoformat()`
+string, so those rows silently never expired. Live DB audit (not just
+`index_information()`) found the real broken set, larger than the 4
+named fields:
+
+| Collection.field | Was | Docs affected |
+|---|---|---|
+| `loop_locks.acquired_at` | float | 0 (empty at audit time) |
+| `loop_failures.occurred_at` | float | 53 |
+| `loop_verification_log.created_at` | ISO string | 349 |
+| `loop_run_log.created_at` | float / string / **missing entirely** (3 writers) | 223 |
+| `loop_events.created_at` | **missing on every doc** (writers used `ts` only) | 151 |
+| `loop_sessions.updated_at` | ISO string / float (2 writer paths testing_agent caught after my first pass) | 20 |
+| `warm_start_jobs.started_at` | float | 423 |
+| `oauth_codes.expires_at` | float | 222 |
+| `api_keys.expires_at` (oauth-sourced) | float | 110 |
+| `oauth_states` | 28 legacy rows missing `created_at` entirely (writer already fixed pre-session; cleaned up, not backfilled) | 28 |
+
+Fixed writer sites: `services/loop_safety.py` (acquire/release lock,
+circuit breaker — added `_age_seconds()` helper for mixed-type
+backward compat + naive/aware datetime normalization),
+`services/loop_independent_verifier.py` (4 sites),
+`services/loop_audit_log.py`, `services/loop_rollback.py` (2 sites —
+1 found by testing_agent), `services/loop_engine.py` (7 sites),
+`routers/loop.py` (2 cancel-fallback sites — 1 found by testing_agent),
+`services/ora_chat/slash_commands.py` (`_loop_stats` dual-type reader),
+`routers/cto_projects.py` (warm_start_jobs), `routers/oauth.py`
+(oauth_codes + api_keys, tz-aware expiry comparison).
+
+One-time idempotent backfill script:
+`backend/scripts/fix_ttl_field_types_2026_08_27.py` — converts every
+existing wrong-typed doc to real `datetime`, dry-run by default
+(`--apply` to write). Ran twice (once per audit pass); second run
+showed 0 remaining candidates for every field from pass 1, confirming
+idempotency.
+
+**Real deletion proof (not `index_information()`).** After the backfill,
+waited ~75s and re-queried live: MongoDB's TTL monitor had already
+physically deleted `warm_start_jobs` 423→0, `oauth_codes` 222→0,
+`loop_failures` 53→34 (19 overdue ones gone), `loop_events` 151→118 (33
+gone), `api_keys` 113→95 (18 gone) — exact match to the predicted
+overdue counts. This is real production-shaped data being deleted by
+Mongo's TTL sweep, stronger evidence than a synthetic test doc.
+
+**testing_agent found 1 real bug I missed on the first pass**: a THIRD
+`loop_sessions.updated_at` writer (`routers/loop.py:1081`, the
+belt-and-suspenders cancel path) still wrote an ISO string; live DB
+probe showed 20/62 rows with wrong type. Fixed + added to backfill
+script + re-verified 62/62 real `Date` type. Also caught by me
+(self-found before testing_agent): `_age_seconds()` first draft crashed
+with "can't subtract offset-naive and offset-aware datetimes" —
+Motor/PyMongo reads datetimes back as naive-UTC by default; fixed by
+normalizing naive reads to UTC before arithmetic, and proactively
+applied the same fix to `routers/oauth.py`'s expiry check and
+`slash_commands.py`'s `_parse_iso`.
+
+Verification: `/app/test_reports/iteration_ttl_field_types_fix_2026_08_27.json`
+— 229 focused tests, 1 bug found+fixed, 0 regressions vs A/B git-stash
+baseline comparison on 5 pre-existing-failure test files. Backend
+restarted, `/api/health` 200 both before and after the follow-up fix.
+
+**Engineering Gaps Found (mandatory section, not acted on without approval):**
+- **LIKELY** — `api_keys.expires_at` (oauth-sourced tokens) has no
+  active-time expiry check anywhere in the auth path (`mcp.py`
+  `_resolve_user` only checks `active: True`) — an oauth MCP token stays
+  usable until Mongo's TTL sweep physically deletes the row, not at the
+  moment it should logically expire. Not fixed — out of approved scope.
+- **UNCERTAIN** — no CI/lint guard prevents a future writer from
+  reintroducing `time.time()`/`.isoformat()` into a TTL-indexed field —
+  this exact bug class has now bit the repo twice (my first pass +
+  testing_agent's follow-up catch). testing_agent suggested a grep-based
+  CI check; not implemented, awaiting founder approval.
+- **CONFIRMED, not fixed** — `tests/test_iter212b_verify_pat_endpoint.py`
+  (9 stale failures) tests a permanently-retired PAT contract; flagged
+  for deletion, not deleted (out of scope for this task).
+
+Next per founder's explicit sequence: **Checkpoint/resume Phase 1
+investigation only** (identify real customer execution engine, step
+granularity, `cto_tasks.steps[]` reuse, exact resume logic) — report
+and STOP for approval before any Phase 2 code.
+
+## 2026-08-26 — Safe mechanical extraction: routers/chat.py + services/loop_engine.py — testing_agent live E2E 100%, 0 issues
 
 Founder-approved continuation of the coverage-floor split work (`chat.py`
 and `loop_engine.py` both cleared the 60% floor; `cto_projects.py` is at

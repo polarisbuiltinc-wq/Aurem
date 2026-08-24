@@ -58,7 +58,10 @@ async def log(db, *,
             "verdict":    verdict,
             "retryable":  bool(retryable),
             "detail":     detail or {},
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            # 2026-08-27 — TTL fix: real BSON Date (was `.isoformat()`
+            # string — the `loop_run_log.created_at` TTL index never
+            # expired these rows).
+            "created_at": datetime.now(timezone.utc),
         }
         await db[_COLL].insert_one(row)
     except Exception as e:                                    # noqa: BLE001

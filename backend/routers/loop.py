@@ -998,12 +998,18 @@ async def cancel_loop(loop_id: str,
                 # terminal frame — the UI kept rendering the stale
                 # "executing" state for minutes until the user refreshed.
                 from datetime import datetime, timezone
-                terminal_ts = datetime.now(timezone.utc).isoformat()
+                terminal_dt = datetime.now(timezone.utc)
+                terminal_ts = terminal_dt.isoformat()
                 await db.loop_sessions.update_one(
                     {"loop_id": loop_id},
                     {"$set": {"state": "aborted",
                               "phase": doc.get("phase") or "?",
-                              "updated_at": terminal_ts,
+                              # 2026-08-27 — TTL fix: real BSON Date
+                              # (was `.isoformat()` string — the
+                              # `loop_sessions.updated_at` TTL index
+                              # never expired rows written on this
+                              # fallback path).
+                              "updated_at": terminal_dt,
                               "last_event": {
                                   "state":   "aborted",
                                   "phase":   doc.get("phase") or "?",
@@ -1026,7 +1032,7 @@ async def cancel_loop(loop_id: str,
                                     "fallback).",
                         "step":     None,
                         "data":     {"origin": "cancel_fallback"},
-                        "created_at": terminal_ts,
+                        "created_at": terminal_dt,
                     })
                 except Exception as e:                        # noqa: BLE001
                     logger.debug(
@@ -1072,11 +1078,17 @@ async def cancel_loop(loop_id: str,
         db2 = get_db()
         if db2 is not None:
             from datetime import datetime, timezone
-            ts = datetime.now(timezone.utc).isoformat()
+            ts_dt = datetime.now(timezone.utc)
+            ts = ts_dt.isoformat()
             await db2.loop_sessions.update_one(
                 {"loop_id": loop_id},
                 {"$set": {"state": "aborted",
-                          "updated_at": ts,
+                          # 2026-08-27 — TTL fix: real BSON Date (was
+                          # `.isoformat()` string — the
+                          # `loop_sessions.updated_at` TTL index (365d)
+                          # never expired rows written on this
+                          # belt-and-suspenders cancel path).
+                          "updated_at": ts_dt,
                           "last_event": {
                               "state":   "aborted",
                               "phase":   engine.phase or "?",

@@ -522,6 +522,10 @@ class LoopEngine:
                     "kind":        "plan_latency_profile",
                     "profile":     _prof,
                     "ts":          _iso(),
+                    # 2026-08-27 — TTL fix: real BSON Date so
+                    # `loop_run_log.created_at` TTL index (90d) can
+                    # actually expire this row (previously missing).
+                    "created_at":  _now(),
                 })
         except Exception as e:                          # noqa: BLE001
             logger.debug(
@@ -579,6 +583,7 @@ class LoopEngine:
                                 "ungrounded_paths": ungrounded,
                                 "known_paths_count": len(known),
                                 "ts":         _iso(),
+                                "created_at": _now(),
                             })
                         except Exception as e:                # noqa: BLE001
                             logger.debug(
@@ -1176,6 +1181,11 @@ class LoopEngine:
                                 "frozen":     sorted(frozen_set),
                                 "extras":     extras,
                                 "ts":         _iso(),
+                                # 2026-08-27 — TTL fix: real BSON Date
+                                # so `loop_events.created_at` TTL index
+                                # (7d) can actually expire this row
+                                # (previously missing on every write).
+                                "created_at": _now(),
                             })
                         except Exception as e:                # noqa: BLE001
                             logger.debug(
@@ -1374,6 +1384,7 @@ class LoopEngine:
                                     "bytes":       _cur_bytes,
                                     "ceiling":     _HUGE_FILE_BYTES,
                                     "ts":          _iso(),
+                                    "created_at":  _now(),
                                 })
                             except Exception:
                                 pass
@@ -1553,6 +1564,7 @@ class LoopEngine:
                                         "pattern":     _hits[0]["pattern"],
                                         "marker_text": _hits[0]["match"],
                                         "ts":          _iso(),
+                                        "created_at":  _now(),
                                     })
                                 except Exception:
                                     pass
@@ -1691,6 +1703,7 @@ class LoopEngine:
                     "planned_paths": paths,
                     "per_file":     per_file_diag,
                     "ts":           _iso(),
+                    "created_at":   _now(),
                 })
             except Exception as e:                            # noqa: BLE001
                 logger.debug(
@@ -3726,6 +3739,7 @@ class LoopEngine:
                 "phase":      phase,
                 "ts":         ev.get("timestamp") or _iso(),
                 "seq":        ev.get("seq"),
+                "created_at": _now(),
             })
         except Exception as _e:                        # noqa: BLE001
             # Log-only. Diagnostic honesty is worth less than a

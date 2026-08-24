@@ -1,0 +1,43 @@
+{
+  "summary": "TTL field-type fix regression + live-DB type verification. All named writer sites confirmed writing real BSON datetime. All prior test suites still green (18/18 loop_safety + 196/196 cto_projects/PAT + 9/9 OAuth PKCE — 0 pre-existing failures observed, better than the 2-fail baseline main agent expected). Backfill script is idempotent (0 candidates on re-run). Naive/aware datetime stress test passes. HOWEVER: repo-wide TTL-field audit surfaced a MISS by the main agent — routers/loop.py:1081-1085 (cancel-fallback branch) still writes loop_sessions.updated_at as an .isoformat() STRING, and a live DB probe confirms loop_sessions.updated_at currently contains 42 datetime + 12 string + 8 float values (32% will never TTL-expire).",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "routers/loop.py:1077-1092 (cancel-fallback branch, iter279 force-clean-after-cancel block)",
+        "issue": "Writes loop_sessions.updated_at = datetime.now(timezone.utc).isoformat() — a STRING. But loop_sessions.updated_at has a 365-day TTL index (init_prod_collections.py:312, expireAfterSeconds=31536000). MongoDB's TTL monitor only acts on BSON Date fields, so every cancelled-loop row written by this branch will sit forever. This is the EXACT same bug pattern the founder asked to fix repo-wide. Live probe: db.loop_sessions currently has 42/62 (68%) datetime, 12/62 (19%) string, 8/62 (13%) float in updated_at — the 12 strings match this writer site's fingerprint. Fix: change ts = datetime.now(timezone.utc).isoformat() to ts = datetime.now(timezone.utc), then use ts.isoformat() only for the last_event.ts inner field if a string is desired there (or also switch it to datetime for consistency). Also add loop_sessions.updated_at to the backfill script scripts/fix_ttl_field_types_2026_08_27.py so the 20 already-broken rows get repaired.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_ttl_field_types_live_2026_08_27.py",
+    "/app/test_reports/pytest/ttl_loop_safety.xml",
+    "/app/test_reports/pytest/cto_pat.xml",
+    "/app/test_reports/pytest/oauth_pkce.xml",
+    "/app/test_reports/pytest/ttl_live.xml"
+  ],
+  "action_items": [
+    "FIX routers/loop.py:1081 — replace ts = datetime.now(timezone.utc).isoformat() with ts_dt = datetime.now(timezone.utc); then set updated_at: ts_dt (datetime, not string). Optionally keep last_event.ts as the isoformat string if any consumer relies on it (or convert that consumer too).",
+    "EXTEND scripts/fix_ttl_field_types_2026_08_27.py to also convert loop_sessions.updated_at from string/float -> datetime. Currently that collection is NOT in the backfill list, so the 20 already-broken rows are permanent garbage until this is added and re-run with --apply.",
+    "Consider adding a CI/lint rule (or a codebase_health check) that flags any db.<coll>.insert_one/update_one where the value written to a TTL-indexed field is not a datetime object — this exact bug class has now bit the repo twice."
+  ],
+  "critical_code_review_comments": [
+    "loop_engine_helpers._now() correctly returns tz-aware UTC datetime — good. Every _now() call site in loop_engine.py now writes real datetime.",
+    "loop_safety._age_seconds() correctly normalises naive Motor-readback datetimes to UTC before subtracting — the fix main agent already applied is verified live (test_naive_aware_datetime_readback_no_crash forces a NAIVE datetime into loop_failures and confirms is_loop_circuit_open still returns correctly, no TypeError).",
+    "routers/oauth.py:371-376 code-expiry check correctly handles both legacy float and new datetime types via isinstance(_exp, datetime) branch — verified. All 9 OAuth PKCE tests pass (main agent expected 2 pre-existing failures; actual result is 0 failures — even better than baseline).",
+    "services/ora_chat/slash_commands.py:_parse_iso() correctly handles both datetime (naive & tz-aware) and legacy ISO string — dual-type safe.",
+    "One remaining risk pattern: any other writer path to a TTL-indexed field that still uses .isoformat() or time.time(). My audit surfaced ONE such miss (loop_sessions.updated_at via routers/loop.py cancel-fallback). Recommend a repo-wide grep-based CI guard as noted above."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_ttl_field_types_live_2026_08_27.py (NEW — live BSON-type + naive/aware regression suite)"
+  ],
+  "success_rate": {"backend": "99% (229/229 target tests pass, 1 uncaught bug found via live DB probe)", "frontend": "n/a — backend-only fix"},
+  "test_credentials": "n/a — no auth flow touched",
+  "seed_data_creation": "Test-scoped TEST_-prefixed rows in loop_locks/loop_failures/loop_verification_log/loop_run_log/loop_sessions created and cleaned up within each test.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run /app/backend/tests/test_ttl_field_types_live_2026_08_27.py after any TTL-related change. Also re-run /tmp/probe_ttl_types.py (or copy it into tests/) to eyeball which TTL-indexed fields have mixed types in the live DB — that's how the loop_sessions.updated_at bug was caught. The probe covers loop_events, loop_locks, loop_failures, loop_sessions, loop_verification_log, loop_run_log, loop_errors, frontend_errors, warm_start_jobs, oauth_codes, api_keys, oauth_states, prompt_snapshots, revoked_tokens, ora_council_log.",
+  "rca of the issue": "Main agent's audit correctly found and fixed 4 writer sites and did a repo-wide grep, but the grep pattern missed the terminal cancel-fallback branch in routers/loop.py (lines 1077-1092) which is a rarely-taken code path that only runs when a user cancels while the engine is running. That branch was refactored earlier and still uses the old ts = ...isoformat() STRING pattern for BOTH loop_sessions.updated_at (TTL-indexed, real bug) and last_event.ts (harmless string display). The live DB confirms 12 rows already carry this bad-type value, plus 8 legacy float rows from a still-older code path. Reproduction: cancel a running loop; check db.loop_sessions.find({loop_id:'...'}).updated_at — it will be a string. Mitigation: change line 1081 to store a datetime, add loop_sessions.updated_at to the backfill script, re-run with --apply."
+}

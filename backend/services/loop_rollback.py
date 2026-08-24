@@ -120,7 +120,12 @@ async def _emit_rollback_event(
         try:
             await db.loop_sessions.update_one(
                 {"loop_id": loop_id},
-                {"$set": {"last_event": ev, "updated_at": _iso()}},
+                # 2026-08-27 — TTL fix: real BSON Date (was `_iso()`
+                # string — the `loop_sessions.updated_at` TTL index
+                # (365d) never expired rows touched by this SSE-emit
+                # path during rollback).
+                {"$set": {"last_event": ev,
+                          "updated_at": datetime.now(timezone.utc)}},
             )
         except Exception as e:                                  # noqa: BLE001
             logger.debug("[loop-rollback %s] last_event write failed: %r",
@@ -165,7 +170,10 @@ async def _log_step(db, loop_id: str, step: str, status: str = "info") -> None:
             "kind":       "loop_rollback_step",
             "step":       step,
             "status":     status,
-            "created_at": time.time(),
+            # 2026-08-27 — TTL fix: real BSON Date (was `time.time()`
+            # float — the `loop_run_log.created_at` TTL index never
+            # expired these rows).
+            "created_at": datetime.now(timezone.utc),
         })
     except Exception as e:                                  # noqa: BLE001
         logger.debug("[loop-rollback %s] log_step failed: %r", loop_id, e)

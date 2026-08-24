@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import httpx
@@ -137,6 +138,22 @@ async def github_request_with_retry(
     return last_resp  # type: ignore[return-value]
 
 
+def _age_seconds(value, now_dt: datetime) -> float:
+    """Age of a TTL timestamp field in seconds. Handles both the fixed
+    BSON-Date type and legacy `time.time()` float rows written before
+    the 2026-08-27 TTL fix, so in-flight/old rows don't crash this
+    comparison during the rollout window. Also normalizes Mongo's
+    naive-UTC datetime read-back (driver default `tz_aware=False`)
+    against our tz-aware `now_dt`."""
+    if value is None:
+        return 0.0
+    if isinstance(value, (int, float)):
+        return now_dt.timestamp() - value
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return (now_dt - value).total_seconds()
+
+
 # ─── 2 & 3. Concurrent-loop lock ─────────────────────────────────────
 async def acquire_loop_lock(
     db, project_id: str, user_id: str, loop_id: str,
@@ -150,7 +167,7 @@ async def acquire_loop_lock(
     """
     if db is None:
         return True, None
-    now = time.time()
+    now_dt = datetime.now(timezone.utc)
     STALE_S = 15 * 60
     # 2026-08-26 — grace period for the "ghost sweep" below. A lock is
     # written synchronously by this function, but its matching
@@ -161,12 +178,15 @@ async def acquire_loop_lock(
     # *terminal* state, not "never created". 2 min is comfortably
     # longer than that window ever legitimately takes.
     NO_SESSION_GRACE_S = 120
-    # Sweep stale locks first.
+    # 2026-08-27 — TTL fix: `acquired_at` is now a real BSON Date (was
+    # `time.time()` float, which the `loop_locks.acquired_at` TTL index
+    # can never expire — MongoDB's TTL monitor only acts on Date/Date[]
+    # fields). Query below uses a datetime cutoff to match.
     try:
         await db.loop_locks.delete_many({
             "project_id": project_id,
             "user_id":    user_id,
-            "acquired_at": {"$lt": now - STALE_S},
+            "acquired_at": {"$lt": now_dt - timedelta(seconds=STALE_S)},
         })
     except Exception as e:                                # noqa: BLE001
         logger.debug("loop_lock stale sweep failed: %r", e)
@@ -199,7 +219,8 @@ async def acquire_loop_lock(
                     existing["loop_id"], sess.get("state"),
                 )
             elif (sess is None
-                  and now - existing.get("acquired_at", now) > NO_SESSION_GRACE_S):
+                  and _age_seconds(existing.get("acquired_at"), now_dt)
+                      > NO_SESSION_GRACE_S):
                 # The engine never got far enough to persist a session
                 # doc at all (crash/restart right after lock acquire) —
                 # same "abandoned lock" outcome, just never caught by
@@ -211,7 +232,8 @@ async def acquire_loop_lock(
                 logger.info(
                     "[loop_safety] swept ghost lock for loop %s — no "
                     "loop_sessions doc ever created (acquired %.0fs ago)",
-                    existing["loop_id"], now - existing.get("acquired_at", now),
+                    existing["loop_id"],
+                    _age_seconds(existing.get("acquired_at"), now_dt),
                 )
     except Exception as e:                                # noqa: BLE001
         logger.debug("loop_lock ghost sweep failed: %r", e)
@@ -220,7 +242,7 @@ async def acquire_loop_lock(
             "project_id":  project_id,
             "user_id":     user_id,
             "loop_id":     loop_id,
-            "acquired_at": now,
+            "acquired_at": now_dt,
         })
         return True, None
     except Exception:
@@ -276,7 +298,10 @@ async def record_loop_failure(
             "user_id":     user_id,
             "phase":       phase,
             "reason":      (reason or "")[:500],
-            "occurred_at": time.time(),
+            # 2026-08-27 — TTL fix: real BSON Date (was `time.time()`
+            # float — the `loop_failures.occurred_at` TTL index never
+            # expired those rows).
+            "occurred_at": datetime.now(timezone.utc),
         })
     except Exception as e:                                # noqa: BLE001
         logger.warning("loop_failures insert failed: %r", e)
@@ -290,7 +315,8 @@ async def is_loop_circuit_open(
     happened in the last FAIL_WINDOW_S seconds."""
     if db is None:
         return False, 0, None
-    cutoff = time.time() - FAIL_WINDOW_S
+    now_dt = datetime.now(timezone.utc)
+    cutoff = now_dt - timedelta(seconds=FAIL_WINDOW_S)
     try:
         recent = await db.loop_failures.find({
             "project_id":  project_id,
@@ -302,8 +328,8 @@ async def is_loop_circuit_open(
         return False, 0, None
     count = len(recent)
     if count >= FAIL_THRESHOLD:
-        oldest = min(r["occurred_at"] for r in recent)
-        retry_after = max(1, int(FAIL_WINDOW_S - (time.time() - oldest)))
+        oldest = min(_age_seconds(r["occurred_at"], now_dt) for r in recent)
+        retry_after = max(1, int(FAIL_WINDOW_S - oldest))
         return True, count, retry_after
     return False, count, None
 

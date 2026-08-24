@@ -33,6 +33,7 @@ import os
 import secrets
 import time
 import urllib.parse
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import bcrypt
@@ -304,7 +305,7 @@ async def oauth_authorize_submit(
 
     # Issue one-time, 10-min auth code
     code = secrets.token_urlsafe(32)
-    now = time.time()
+    now = datetime.now(timezone.utc)
     await db.oauth_codes.insert_one({
         "code":                  code,
         "user_id":               user["user_id"],
@@ -314,7 +315,10 @@ async def oauth_authorize_submit(
         "code_challenge":        code_challenge,
         "code_challenge_method": code_challenge_method,
         "created_at":            now,
-        "expires_at":            now + AUTH_CODE_TTL,
+        # 2026-08-27 — TTL fix: real BSON Date (was `time.time()`
+        # float — the `oauth_codes.expires_at` TTL index never
+        # expired these rows).
+        "expires_at":            now + timedelta(seconds=AUTH_CODE_TTL),
         "used":                  False,
     })
 
@@ -364,7 +368,12 @@ async def oauth_token(
     code_doc = await db.oauth_codes.find_one({"code": code, "used": False})
     if not code_doc:
         raise HTTPException(400, "invalid_grant: code not found, already used, or expired")
-    if time.time() > code_doc["expires_at"]:
+    _exp = code_doc["expires_at"]
+    if isinstance(_exp, datetime):
+        _exp_dt = _exp if _exp.tzinfo else _exp.replace(tzinfo=timezone.utc)
+    else:
+        _exp_dt = datetime.fromtimestamp(_exp, tz=timezone.utc)
+    if datetime.now(timezone.utc) > _exp_dt:
         raise HTTPException(400, "invalid_grant: code expired")
     if redirect_uri and code_doc.get("redirect_uri") and redirect_uri != code_doc["redirect_uri"]:
         raise HTTPException(400, "invalid_grant: redirect_uri mismatch")
@@ -388,14 +397,18 @@ async def oauth_token(
     # Issue access token → reuse the api_keys collection so MCP server's
     # existing _resolve_user (mcp.py line 194) accepts it transparently.
     token = f"{API_KEY_PREFIX}{secrets.token_urlsafe(32)}"
-    now   = time.time()
+    now   = datetime.now(timezone.utc)
     await db.api_keys.insert_one({
         "key":        token,
         "user_id":    code_doc["user_id"],
         "client_id":  client_id or code_doc.get("client_id", "unknown"),
         "scope":      code_doc.get("scope", "mcp"),
         "created_at": now,
-        "expires_at": now + TOKEN_TTL,
+        # 2026-08-27 — TTL fix: real BSON Date (was `time.time()`
+        # float — the `api_keys.expires_at` TTL index, scoped to
+        # source=="oauth" via partialFilterExpression, never expired
+        # these rows).
+        "expires_at": now + timedelta(seconds=TOKEN_TTL),
         "active":     True,
         "label":      f"Claude OAuth ({(client_id or code_doc.get('client_id', 'unknown'))[:32]})",
         "source":     "oauth",

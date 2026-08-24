@@ -288,11 +288,21 @@ async def _loop_stats(ctx: dict, args: str) -> dict:
         }
 
     # Timestamps → ISO parseable → epoch seconds.
-    from datetime import datetime
-    def _parse_iso(s: str) -> float:
-        # Backend writes datetime.now(UTC).isoformat() so `s` is ISO-8601.
+    from datetime import datetime, timezone
+    def _parse_iso(s) -> float:
+        # 2026-08-27 — TTL fix landed on the writer side: new rows
+        # store a real BSON Date (`datetime`), old rows (pre-fix)
+        # still have the legacy `.isoformat()` string until the 90d
+        # TTL rolls them off. Accept both so this reader never breaks
+        # mid-migration. Mongo read-back datetimes are naive-UTC
+        # (driver default `tz_aware=False`) — attach UTC explicitly
+        # before calling .timestamp() so it isn't misread as local time.
+        if isinstance(s, datetime):
+            if s.tzinfo is None:
+                s = s.replace(tzinfo=timezone.utc)
+            return s.timestamp()
         try:
-            return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+            return datetime.fromisoformat(str(s).replace("Z", "+00:00")).timestamp()
         except Exception:                                     # noqa: BLE001
             return 0.0
 

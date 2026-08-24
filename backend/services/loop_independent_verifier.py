@@ -153,7 +153,10 @@ async def verify(db, *, loop_id: str,
             "verdict":        "skipped_no_spec",
             "reason":         "loop_task_specs missing — cannot verify",
             "latency_s":      round(time.time() - started, 2),
-            "created_at":     datetime.now(timezone.utc).isoformat(),
+            # 2026-08-27 — TTL fix: real BSON Date (was `.isoformat()`
+            # string — the `loop_verification_log.created_at` TTL
+            # index never expired those rows).
+            "created_at":     datetime.now(timezone.utc),
             "raw":            "",
             "origin":         origin,
         }
@@ -190,7 +193,7 @@ async def verify(db, *, loop_id: str,
             "verdict":        "skipped_no_llm",
             "reason":         f"verifier_exception:{type(e).__name__}",
             "latency_s":      round(time.time() - started, 2),
-            "created_at":     datetime.now(timezone.utc).isoformat(),
+            "created_at":     datetime.now(timezone.utc),
             "raw":            str(e)[:400],
             "origin":         origin,
         }
@@ -205,7 +208,7 @@ async def verify(db, *, loop_id: str,
             "reason":         err or "empty_verifier_response",
             "latency_s":      round(time.time() - started, 2),
             "usage":          usage or {},
-            "created_at":     datetime.now(timezone.utc).isoformat(),
+            "created_at":     datetime.now(timezone.utc),
             "raw":            (text or "")[:400],
             "origin":         origin,
         }
@@ -220,7 +223,7 @@ async def verify(db, *, loop_id: str,
         "reason":         reason,
         "latency_s":      round(time.time() - started, 2),
         "usage":          usage or {},
-        "created_at":     datetime.now(timezone.utc).isoformat(),
+        "created_at":     datetime.now(timezone.utc),
         "raw":            (text or "")[:2000],
         "origin":         origin,
     }

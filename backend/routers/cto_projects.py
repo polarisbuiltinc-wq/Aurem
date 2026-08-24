@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -58,6 +59,30 @@ if not _GIT_AVAILABLE:
         "`git` binary not found on this server. CTO tasks will use the "
         "GitHub REST API path (no clone, no push subprocess)."
     )
+
+# 2026-08-27 — Checkpoint/resume Phase 2 (founder-approved scoped fix).
+# The expensive/risky part of a task retry is the LLM codegen call(s),
+# NOT file-level write granularity (codegen produces all file edits in
+# one shot; the GitHub write is already one atomic commit — see PRD.md
+# 2026-08-27 Phase 1 investigation for the full reasoning on why a
+# generic step-log was rejected in favor of this narrower fix).
+# `pending_edits` is saved to `cto_tasks` the moment generation succeeds
+# (before the commit). A retry within this TTL reuses the saved edits
+# and skips straight to Vanguard-verify + commit — Vanguard still runs
+# fresh every time (cheap relative to codegen, and keeps the security
+# gate meaningful even on a resumed task).
+#
+# 15 minutes: long enough to cover the realistic "crash right after
+# generation, immediate retry" case this was built for (worker restart,
+# transient GitHub 5xx on commit, operator or automated retry within a
+# couple minutes), short enough that we don't silently ship a diff
+# generated against repo/context state that's gone stale. The commit
+# step always writes against the CURRENT branch tip (no cached base
+# SHA), so a stale reuse fails loudly or applies cleanly — it can't
+# silently corrupt — but repo-drift risk (someone else pushed to the
+# branch in the meantime) still grows with age, so we keep the window
+# short rather than "as long as possible."
+PENDING_EDITS_TTL_S = 15 * 60
 
 WORKSPACE = Path(os.getenv("WORKSPACE_PATH", "/tmp/aurem-dev-projects"))
 WORKSPACE.mkdir(parents=True, exist_ok=True)
@@ -279,12 +304,16 @@ async def warm_start_project(
         }
 
     job_id = f"ws_{_uuid.uuid4().hex[:10]}"
-    started_at = time.time()
+    from datetime import datetime as _dt, timezone as _tz
+    started_at = _dt.now(_tz.utc)
     await db.warm_start_jobs.insert_one({
         "job_id":        job_id,
         "project_id":    project_id,
         "user_id":       user_id,
         "status":        "running",
+        # 2026-08-27 — TTL fix: real BSON Date (was `time.time()`
+        # float — the `warm_start_jobs.started_at` TTL index (1h)
+        # never expired these rows).
         "started_at":    started_at,
         "agents_done":   [],
         "agents_total":  ["brain", "recent", "structure", "stack", "graph"],
@@ -1951,6 +1980,27 @@ async def retry_task(
 
     new_task_id = "t_" + uuid.uuid4().hex[:12]
     _maxx = bool(old.get("maxx_mode", False))
+    # 2026-08-27 — checkpoint/resume Phase 2: if the failed task already
+    # has fresh (TTL-bounded) saved edits from a prior successful
+    # generation, carry them forward so `_run_task` can skip
+    # regenerating them entirely. Guarded by `saved_at` age AND — since
+    # `pending_edits` is only ever meaningful for the EXACT task text
+    # + file set it was generated for, both of which `retry_task`
+    # always copies verbatim from `old` below — no separate content
+    # fingerprint check is needed; this endpoint never lets a caller
+    # change the task text before retrying.
+    resume_edits = None
+    _pe = old.get("pending_edits")
+    if _pe and _pe.get("edits") and _pe.get("saved_at"):
+        _saved_at = _pe["saved_at"]
+        if not isinstance(_saved_at, datetime):
+            _saved_at = None
+        if _saved_at is not None:
+            if _saved_at.tzinfo is None:
+                _saved_at = _saved_at.replace(tzinfo=timezone.utc)
+            _age_s = (datetime.now(timezone.utc) - _saved_at).total_seconds()
+            if 0 <= _age_s <= PENDING_EDITS_TTL_S:
+                resume_edits = _pe
     # Pattern #1 fix from RECURRING_ISSUES.md — the AI failed last time for a
     # reason. Carry that reason forward in the new task's context so the
     # model sees what to avoid. Without this, retry produces the exact same
@@ -1986,8 +2036,11 @@ async def retry_task(
         "maxx_mode":    _maxx,
         "created_at":   time.time(),
         "retry_of":     task_id,
+        "resumed_from_checkpoint": bool(resume_edits),
         "steps":        [{"step": f"🔁 retry of {task_id}"
-                                  + (" (with failure context)" if failure_signals else ""),
+                                  + (" (with failure context)" if failure_signals else "")
+                                  + (" — reusing saved edits, skipping regeneration"
+                                     if resume_edits else ""),
                           "status": "info",
                           "ts": time.time()}],
     })
@@ -1999,9 +2052,11 @@ async def retry_task(
         _run_task,
         new_task_id, proj, old.get("task", ""),
         old.get("files", []), augmented_context, user_token, _maxx,
+        resume_edits,
     )
     return {"ok": True, "task_id": new_task_id, "retry_of": task_id,
-            "carried_failure_context": bool(failure_signals)}
+            "carried_failure_context": bool(failure_signals),
+            "resumed_from_checkpoint": bool(resume_edits)}
 
 
 
@@ -2181,19 +2236,21 @@ def _looks_truncated(path: str, body: str) -> Optional[str]:
     return None
 
 
-async def _run_task(task_id, proj, task, files, context, user_token, maxx_mode: bool = False):
+async def _run_task(task_id, proj, task, files, context, user_token, maxx_mode: bool = False,
+                    resume_edits: Optional[dict] = None):
     """Dispatcher — uses git-subprocess path when git is installed, falls
     back to the pure GitHub-API path when it isn't (Iter 21)."""
     if _GIT_AVAILABLE:
         return await _run_task_with_git(
-            task_id, proj, task, files, context, user_token, maxx_mode
+            task_id, proj, task, files, context, user_token, maxx_mode, resume_edits
         )
     return await _run_task_via_api(
-        task_id, proj, task, files, context, user_token, maxx_mode
+        task_id, proj, task, files, context, user_token, maxx_mode, resume_edits
     )
 
 
-async def _run_task_via_api(task_id, proj, task, files, context, user_token, maxx_mode: bool = False):
+async def _run_task_via_api(task_id, proj, task, files, context, user_token, maxx_mode: bool = False,
+                            resume_edits: Optional[dict] = None):
     """API-only worker — no `git` binary needed. Reads target files from
     GitHub, asks AUREM to generate edits, then commits everything as ONE
     atomic commit via the Git Data API."""
@@ -2391,94 +2448,109 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
         summary = "AI changes"
         parallelized = False
         agents_count = 1
-        try:
-            from services.parallel_agents import (
-                should_parallelize, run_parallel_agents, decompose_task,
-            )
-            from services.subscription_tiers import can_use_feature
-            file_tree_hint = list(contents.keys()) + (files or [])
-            # Parallel agents are a Pro feature — Free / Starter fall
-            # through to the single-agent path (no error, just slower).
-            _parallel_allowed = can_use_feature(user_tier, "parallel_agents")
-            if should_parallelize(task, file_tree_hint) and _parallel_allowed:
-                # Pre-decompose so we know which agents are about to fire
-                # — that lets the chat bubble render the badges + per-agent
-                # mini progress bars BEFORE the LLM round-trip resolves.
-                _agents_preview = decompose_task(task, f"{owner}/{repo}@{branch}", file_tree_hint)
-                _agent_roles = [a.get("role", "agent") for a in _agents_preview]
-                await _emit(
-                    task_id,
-                    f"Parallel mode — {len(_agent_roles)} agents working simultaneously",
-                    kind="parallel", pct=30,
-                    agents=[r.title() for r in _agent_roles],
-                )
-                await _log(task_id, "⚡ Task is multi-domain — splitting into parallel agents")
-                gen_result = await run_parallel_agents(
-                    task_description=user_msg,
-                    repo_ctx=f"{owner}/{repo}@{branch}",
-                    file_tree=file_tree_hint,
-                )
-                edits = gen_result.get("file_blocks", {}) or {}
-                parallelized = bool(gen_result.get("parallelized"))
-                agents_count = int(gen_result.get("agents_used", 1))
-                if parallelized:
-                    # Fan out one terminal frame per agent so the per-agent
-                    # mini-bars can settle to ✓ / ✕ in the UI.
-                    for r in gen_result.get("agent_results", []):
-                        ok = not r.get("error")
-                        await _emit(
-                            task_id,
-                            f"{r.get('role','agent').title()} agent {'done' if ok else 'failed'}",
-                            kind="parallel_agent",
-                            role=r.get("role", "agent").title(),
-                            ok=ok,
-                        )
-                if parallelized and edits:
-                    summary = f"Parallel codegen ({agents_count} agents) — {task[:120]}"
-                    await _log(task_id,
-                               f"✅ {agents_count} agents merged {len(edits)} file edits",
-                               "success")
-        except Exception as _pe:
-            from services.error_classifier import classify_error
-            _pe_safe = classify_error(_pe)["user_message"]
-            await _log(task_id, f"parallel codegen fell back to single agent: {_pe_safe}", "warning")
-            edits = {}
-            parallelized = False
-            agents_count = 1
-
-        if not edits:
-            # Single-agent legacy path — unchanged behaviour for small tasks
-            # and as fallback when parallel returned empty.
-            reply = await _retry(
-                lambda: call_llm(
-                    messages=[{"role": "user", "content": user_msg}],
-                    system=_AI_SYS, max_tokens=3500, temperature=0.0,
-                ),
-                what="AI codegen", task_id=task_id,
-            )
-            # Coarse token estimate (chars/4) so P&L has real numbers
-            approx_in = (len(_AI_SYS) + len(user_msg)) // 4
-            approx_out = len(reply or "") // 4
-            await _set_status(
+        if resume_edits and resume_edits.get("edits"):
+            # 2026-08-27 — checkpoint/resume Phase 2: skip regeneration,
+            # reuse the saved edits from the attempt that crashed/failed
+            # AFTER generation succeeded but BEFORE the commit.
+            edits = dict(resume_edits["edits"])
+            summary = resume_edits.get("summary", "AI changes")
+            await _log(
                 task_id,
-                tokens_used=approx_in + approx_out,
-                agent_used="deepseek",
+                f"♻️ Reusing {len(edits)} saved file edit(s) from the "
+                f"previous attempt — skipping AI regeneration",
+                "success",
             )
-            summary_m = re.search(r"SUMMARY:\s*(.+)", reply)
-            summary = (summary_m.group(1).strip() if summary_m else "AI changes")[:300]
-            # Iter 212m-33 — tolerant FILE-block parser (was a rigid
-            # single-line regex that silently dropped edits whenever
-            # the model deviated by even one whitespace).
-            from services.llm_file_parser import parse_file_blocks
-            edits.update(parse_file_blocks(reply))
+            await _set_status(task_id, tokens_used=0,
+                              agent_used="resumed_from_checkpoint")
         else:
-            # Parallel path produced edits — record token-equivalent + agent name
-            await _set_status(
-                task_id,
-                tokens_used=(len(_AI_SYS) + len(user_msg)) // 4
-                            + sum(len(c) for c in edits.values()) // 4,
-                agent_used=f"deepseek-parallel-x{agents_count}",
-            )
+            try:
+                from services.parallel_agents import (
+                    should_parallelize, run_parallel_agents, decompose_task,
+                )
+                from services.subscription_tiers import can_use_feature
+                file_tree_hint = list(contents.keys()) + (files or [])
+                # Parallel agents are a Pro feature — Free / Starter fall
+                # through to the single-agent path (no error, just slower).
+                _parallel_allowed = can_use_feature(user_tier, "parallel_agents")
+                if should_parallelize(task, file_tree_hint) and _parallel_allowed:
+                    # Pre-decompose so we know which agents are about to fire
+                    # — that lets the chat bubble render the badges + per-agent
+                    # mini progress bars BEFORE the LLM round-trip resolves.
+                    _agents_preview = decompose_task(task, f"{owner}/{repo}@{branch}", file_tree_hint)
+                    _agent_roles = [a.get("role", "agent") for a in _agents_preview]
+                    await _emit(
+                        task_id,
+                        f"Parallel mode — {len(_agent_roles)} agents working simultaneously",
+                        kind="parallel", pct=30,
+                        agents=[r.title() for r in _agent_roles],
+                    )
+                    await _log(task_id, "⚡ Task is multi-domain — splitting into parallel agents")
+                    gen_result = await run_parallel_agents(
+                        task_description=user_msg,
+                        repo_ctx=f"{owner}/{repo}@{branch}",
+                        file_tree=file_tree_hint,
+                    )
+                    edits = gen_result.get("file_blocks", {}) or {}
+                    parallelized = bool(gen_result.get("parallelized"))
+                    agents_count = int(gen_result.get("agents_used", 1))
+                    if parallelized:
+                        # Fan out one terminal frame per agent so the per-agent
+                        # mini-bars can settle to ✓ / ✕ in the UI.
+                        for r in gen_result.get("agent_results", []):
+                            ok = not r.get("error")
+                            await _emit(
+                                task_id,
+                                f"{r.get('role','agent').title()} agent {'done' if ok else 'failed'}",
+                                kind="parallel_agent",
+                                role=r.get("role", "agent").title(),
+                                ok=ok,
+                            )
+                    if parallelized and edits:
+                        summary = f"Parallel codegen ({agents_count} agents) — {task[:120]}"
+                        await _log(task_id,
+                                   f"✅ {agents_count} agents merged {len(edits)} file edits",
+                                   "success")
+            except Exception as _pe:
+                from services.error_classifier import classify_error
+                _pe_safe = classify_error(_pe)["user_message"]
+                await _log(task_id, f"parallel codegen fell back to single agent: {_pe_safe}", "warning")
+                edits = {}
+                parallelized = False
+                agents_count = 1
+
+            if not edits:
+                # Single-agent legacy path — unchanged behaviour for small tasks
+                # and as fallback when parallel returned empty.
+                reply = await _retry(
+                    lambda: call_llm(
+                        messages=[{"role": "user", "content": user_msg}],
+                        system=_AI_SYS, max_tokens=3500, temperature=0.0,
+                    ),
+                    what="AI codegen", task_id=task_id,
+                )
+                # Coarse token estimate (chars/4) so P&L has real numbers
+                approx_in = (len(_AI_SYS) + len(user_msg)) // 4
+                approx_out = len(reply or "") // 4
+                await _set_status(
+                    task_id,
+                    tokens_used=approx_in + approx_out,
+                    agent_used="deepseek",
+                )
+                summary_m = re.search(r"SUMMARY:\s*(.+)", reply)
+                summary = (summary_m.group(1).strip() if summary_m else "AI changes")[:300]
+                # Iter 212m-33 — tolerant FILE-block parser (was a rigid
+                # single-line regex that silently dropped edits whenever
+                # the model deviated by even one whitespace).
+                from services.llm_file_parser import parse_file_blocks
+                edits.update(parse_file_blocks(reply))
+            else:
+                # Parallel path produced edits — record token-equivalent + agent name
+                await _set_status(
+                    task_id,
+                    tokens_used=(len(_AI_SYS) + len(user_msg)) // 4
+                                + sum(len(c) for c in edits.values()) // 4,
+                    agent_used=f"deepseek-parallel-x{agents_count}",
+                )
 
         if not edits:
             # Iter 212m-177 — P0-4b: NEVER report "done" without a real
@@ -3052,6 +3124,29 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
         except Exception:
             pass
 
+        # 2026-08-27 — checkpoint/resume Phase 2: persist the final,
+        # fully-vetted edits (post hallucination-gate + Vanguard + lint)
+        # BEFORE the commit fires. If this task crashes/fails on the
+        # commit step itself, a retry within PENDING_EDITS_TTL_S reuses
+        # this exact content — skipping the LLM codegen call — instead
+        # of paying for full regeneration. Best-effort; a failure here
+        # must never block the actual commit.
+        try:
+            _db_pe = get_db()
+            if _db_pe is not None:
+                await _db_pe.cto_tasks.update_one(
+                    {"task_id": task_id},
+                    {"$set": {"pending_edits": {
+                        "edits":        edits,
+                        "summary":      summary,
+                        "parallelized": parallelized,
+                        "agents_count": agents_count,
+                        "saved_at":     datetime.now(timezone.utc),
+                    }}},
+                )
+        except Exception as e:                                # noqa: BLE001
+            logger.debug("[cto-task %s] pending_edits persist skipped: %r", task_id, e)
+
         # 3) Commit + push as one atomic API call
         await _set_status(task_id, status="pushing")
         # Per-file progress frames so the live tape can render the
@@ -3381,7 +3476,8 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
             pass
 
 
-async def _run_task_with_git(task_id, proj, task, files, context, user_token, maxx_mode: bool = False):
+async def _run_task_with_git(task_id, proj, task, files, context, user_token, maxx_mode: bool = False,
+                             resume_edits: Optional[dict] = None):
     import re
 
     def _scrub(s: str) -> str:
@@ -3491,46 +3587,60 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
             f"Tech: {proj.get('tech_stack','auto')}\n\n"
             f"{extra_context_block}\n\n{files_blob}"
         )
-        reply = await _retry(
-            lambda: call_llm(
-                messages=[{"role": "user", "content": user_msg}],
-                system=_AI_SYS, max_tokens=3500, temperature=0.0,
-            ),
-            what="AI codegen", task_id=task_id,
-        )
-        summary_m = re.search(r"SUMMARY:\s*(.+)", reply)
-        summary = (summary_m.group(1).strip() if summary_m else "AI changes")[:300]
-        # Iter 212m-33 — tolerant FILE-block parser.
-        from services.llm_file_parser import parse_file_blocks
-        edits = parse_file_blocks(reply)
-        if not edits:
-            # Iter 212m-177 — P0-4b: retry once with explicit guidance,
-            # then FAIL — never report success without a real edit.
-            await _log(task_id, "⚠️ AI returned no file edits — auto-retrying", "warning")
-            _nudge = (
-                "Your previous response contained no usable file changes.\n"
-                "You MUST output complete file content using this exact "
-                "format:\nFILE: <path>\n```\n<complete file body>\n```\n"
-                "Do NOT just describe what you would do."
+        if resume_edits and resume_edits.get("edits"):
+            # 2026-08-27 — checkpoint/resume Phase 2: skip regeneration,
+            # reuse the saved edits from the attempt that crashed/failed
+            # AFTER generation succeeded but BEFORE the commit.
+            edits = dict(resume_edits["edits"])
+            summary = resume_edits.get("summary", "AI changes")
+            await _log(
+                task_id,
+                f"♻️ Reusing {len(edits)} saved file edit(s) from the "
+                f"previous attempt — skipping AI regeneration",
+                "success",
             )
+        else:
             reply = await _retry(
                 lambda: call_llm(
-                    messages=[{"role": "user",
-                               "content": user_msg + "\n\n" + _nudge}],
+                    messages=[{"role": "user", "content": user_msg}],
                     system=_AI_SYS, max_tokens=3500, temperature=0.0,
                 ),
-                what="AI codegen auto-retry", task_id=task_id,
+                what="AI codegen", task_id=task_id,
             )
+            summary_m = re.search(r"SUMMARY:\s*(.+)", reply)
+            summary = (summary_m.group(1).strip() if summary_m else "AI changes")[:300]
+            # Iter 212m-33 — tolerant FILE-block parser.
+            from services.llm_file_parser import parse_file_blocks
             edits = parse_file_blocks(reply)
-        if not edits:
-            err = ("AI produced no file edits after a retry — nothing was "
-                   "changed. Rephrase the task naming the exact file, e.g. "
-                   "'Edit backend/utils/auth.py and add …'.")
-            await _log(task_id, f"🚫 {err}", "error")
-            await _set_status(task_id, status="failed", error=err,
-                              completed_at=time.time())
-            return
-        await _log(task_id, f"✏️ {len(edits)} files to update", "success")
+            if not edits:
+                # Iter 212m-177 — P0-4b: retry once with explicit guidance,
+                # then FAIL — never report success without a real edit.
+                await _log(task_id, "⚠️ AI returned no file edits — auto-retrying", "warning")
+                _nudge = (
+                    "Your previous response contained no usable file changes.\n"
+                    "You MUST output complete file content using this exact "
+                    "format:\nFILE: <path>\n```\n<complete file body>\n```\n"
+                    "Do NOT just describe what you would do."
+                )
+                reply = await _retry(
+                    lambda: call_llm(
+                        messages=[{"role": "user",
+                                   "content": user_msg + "\n\n" + _nudge}],
+                        system=_AI_SYS, max_tokens=3500, temperature=0.0,
+                    ),
+                    what="AI codegen auto-retry", task_id=task_id,
+                )
+                edits = parse_file_blocks(reply)
+            if not edits:
+                err = ("AI produced no file edits after a retry — nothing was "
+                       "changed. Rephrase the task naming the exact file, e.g. "
+                       "'Edit backend/utils/auth.py and add …'.")
+                await _log(task_id, f"🚫 {err}", "error")
+                await _set_status(task_id, status="failed", error=err,
+                                  completed_at=time.time())
+                return
+            await _log(task_id, f"✏️ {len(edits)} files to update", "success")
+
 
         # iter 111 / 2026-08-25 parity fix — the git-subprocess path was
         # MISSING the Vanguard verify agent entirely (it only ran on the
@@ -3644,6 +3754,27 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
         except Exception as _ve:
             logger.warning("vanguard verify agent (git path) crashed: %r", _ve)
             await _log(task_id, f"⚠️ Vanguard verify agent crashed: {type(_ve).__name__}", "warning")
+
+        # 2026-08-27 — checkpoint/resume Phase 2: persist the final,
+        # fully-vetted edits (post Vanguard) BEFORE the write+commit. If
+        # this task crashes/fails on the write/commit/push step itself, a
+        # retry within PENDING_EDITS_TTL_S reuses this exact content —
+        # skipping the LLM codegen call — instead of paying for full
+        # regeneration. Best-effort; a failure here must never block the
+        # actual write/commit.
+        try:
+            _db_pe = get_db()
+            if _db_pe is not None:
+                await _db_pe.cto_tasks.update_one(
+                    {"task_id": task_id},
+                    {"$set": {"pending_edits": {
+                        "edits":    edits,
+                        "summary":  summary,
+                        "saved_at": datetime.now(timezone.utc),
+                    }}},
+                )
+        except Exception as e:                                # noqa: BLE001
+            logger.debug("[cto-task %s] pending_edits persist skipped: %r", task_id, e)
 
         # 4) write
         for path, content in edits.items():
