@@ -341,9 +341,10 @@ async def _materialise(db, name: str) -> bool:
         existing = await db.list_collection_names()
         if name in existing:
             return False  # already there
-        await db[name].insert_one({_SENTINEL_KEY: _SENTINEL_VAL,
-                                    "ts": time.time()})
-        await db[name].delete_one({_SENTINEL_KEY: _SENTINEL_VAL})
+        coll = db[name].with_options(write_concern=_BEST_EFFORT_WC)
+        await coll.insert_one({_SENTINEL_KEY: _SENTINEL_VAL,
+                               "ts": time.time()})
+        await coll.delete_one({_SENTINEL_KEY: _SENTINEL_VAL})
         return True
     except Exception as e:
         logger.warning("materialise %s failed: %r", name, e)
@@ -353,10 +354,21 @@ async def _materialise(db, name: str) -> bool:
 async def _ensure_indexes(db, name: str,
                           specs: Iterable[tuple[list, dict]]) -> int:
     n = 0
+    # 2026-08-26 — BUG FIX: this loop was the one `create_index` path
+    # in the file NOT using `_BEST_EFFORT_WC` (every other write here
+    # already does — see the feature_flags seed below). Live evidence:
+    # `create_index ora_skill_usage [('tool', 1), ('ts', -1)] failed:
+    # WTimeoutError` on majority write concern during production boot
+    # — same class of bug already fixed elsewhere in this file/
+    # health_notifier.py. Index creation is idempotent and best-effort
+    # by design (see the IndexOptionsConflict/IndexKeySpecsConflict
+    # handling below) — it should never block boot on a slow majority
+    # ack.
+    coll = db[name].with_options(write_concern=_BEST_EFFORT_WC)
     for keys, opts in specs:
         opts = opts or {}
         try:
-            await db[name].create_index(keys, **opts)
+            await coll.create_index(keys, **opts)
             n += 1
         except Exception as e:                                # noqa: BLE001
             # Iter 282 follow-up — when we're trying to add a TTL
@@ -374,8 +386,8 @@ async def _ensure_indexes(db, name: str,
                 field, _direction = keys[0]
                 default_name = f"{field}_1"
                 try:
-                    await db[name].drop_index(default_name)
-                    await db[name].create_index(keys, **opts)
+                    await coll.drop_index(default_name)
+                    await coll.create_index(keys, **opts)
                     logger.info(
                         "index_conflict_resolved: %s dropped %s, "
                         "recreated with expireAfterSeconds=%s",
