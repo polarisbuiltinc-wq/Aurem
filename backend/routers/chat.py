@@ -1346,16 +1346,12 @@ async def chat_stream(
     # the model knows to (a) respond plan-only on phase 1 and (b)
     # emit `[STEP X/5: NAME]` markers at every phase boundary.
     #
-    # Iter 212m-130 — Loop Mode is temporarily founder-only (engine
-    # is being hardened — stuck-in-loop + verify retry storms). For
-    # everyone else we silently downgrade to "prompt" mode so a
-    # stale `localStorage.ora_execution_mode="loop"` on a non-
-    # founder browser doesn't trigger the contract enrichment. The
-    # dedicated `/loop/start` endpoint already returns 403 with
-    # `coming_soon:true` for the explicit kick-off path.
     # Iter 212m-168 — align _is_founder with email allowlist so ORA
     # dogfood accounts (founders using their real email but not yet
     # promoted to tier=founder in DB) also get local-pod access.
+    # NOTE: _is_founder below gates unrelated founder-only surfaces
+    # (e.g. the execute_bash tool via _is_fnd_stream at is_founder=)
+    # and is intentionally narrower than the Loop Mode tier policy.
     _is_founder = bool(
         user.get("is_admin") or user.get("is_unlimited")
         or (user.get("tier") == "founder")
@@ -1363,8 +1359,27 @@ async def chat_stream(
     )
     # Iter 212m-168 — alias for the orchestrator's execute_bash gate.
     _is_fnd_stream = _is_founder
-    if (body.execution_mode or "").lower() == "loop" and not _is_founder:
-        body.execution_mode = "prompt"
+    # Iter 212m-181 — Loop Mode gate. This used to hardcode "founder
+    # only" here (stale since 2026-08-21's Pro/Team rollout — see
+    # services/loop_beta.py), which silently downgraded execution_mode
+    # to "prompt" for every real Pro/Team customer hitting this stream
+    # path (continuation/fallback turns), even though the dedicated
+    # /loop/start kick-off endpoint had already been unlocked for them.
+    # loop_beta.is_user_allowed() is now the single source of truth for
+    # tier eligibility on both entry points so they can't drift apart
+    # again. Concurrency cap / wall-clock budget / stuck-loop auto-trip
+    # live entirely in loop_engine and are unaffected either way. The
+    # kill-switch is checked explicitly below (is_user_allowed() only
+    # answers "is this tier eligible", not "is loop globally off") so
+    # flipping it also stops the [STEP X/5] contract from being
+    # injected into continuation turns, not just new /loop/start calls.
+    if (body.execution_mode or "").lower() == "loop":
+        from services import loop_beta as _lb_gate
+        _loop_allowed, _ = _lb_gate.is_user_allowed(user)
+        if _loop_allowed and await _lb_gate.is_kill_switch_on_async(get_db()):
+            _loop_allowed = False
+        if not _loop_allowed:
+            body.execution_mode = "prompt"
     if (body.execution_mode or "").lower() == "loop":
         _loop_suffix = (
             "\n\n[LOOP MODE — 5-phase pipeline]\n"

@@ -1,0 +1,29 @@
+{
+  "summary": "Verified the follow-up Iter 212m-181 delta: routers/chat.py::/chat/stream now consults the DB-backed Loop kill-switch (system_flags.key='loop_mode_kill_switch') via `await loop_beta.is_kill_switch_on_async(get_db())` right next to the existing loop_beta.is_user_allowed(user) call. When the flag is ON, execution_mode='loop' is silently downgraded to 'prompt' (no [STEP X/5] contract suffix injected) — the request itself still returns 200 so non-loop chat is never blocked. 10/10 targeted tests pass: (a) source-level presence of is_kill_switch_on_async in chat.py and confirmation the delta does NOT raise HTTPException(403) inside the gate, (b) unit-level check that services.loop_beta.is_kill_switch_on_async reads db.system_flags correctly with the flag flipped, (c) E2E — Pro /chat/stream returns 200 whether flag is off OR on (silent downgrade), Pro /chat/stream execution_mode='prompt' is completely unaffected under the flag, /loop/start still 403s with 'loop_mode_kill_switch' for both Pro and founder under the flag (regression of the pre-existing routers/loop.py check), and (d) final teardown assertion that system_flags row is removed. No regression to the previous 20/20 suite.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_loop_gate_killswitch_2026_01b.py",
+    "/app/test_reports/pytest/loop_gate_killswitch_2026_01b.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Delta is exactly one guarded line (chat.py L1379-1380): `if _loop_allowed and await _lb_gate.is_kill_switch_on_async(get_db()): _loop_allowed = False`. Because it is gated on _loop_allowed being True, ineligible tiers (free/starter) short-circuit before the DB call — cheap and correct.",
+    "Delta correctly does NOT raise HTTPException. It only sets _loop_allowed=False, which then flips body.execution_mode='prompt' a few lines later. This preserves the invariant that /chat/stream can never fail-closed for non-loop traffic when the flag is flipped — important because /chat/stream is the general chat path.",
+    "The two entry points (POST /loop/start and POST /chat/stream) now BOTH consult (1) is_user_allowed(user) for tier and (2) is_kill_switch_on_async(db) for global kill — same two functions, symmetric coverage. The scope-gap finding from iteration_loop_gate_chat_stream_2026_01 is now closed.",
+    "is_kill_switch_on_async gracefully returns False on any DB exception (loop_beta.py L92-93). Good — a Mongo hiccup can't accidentally freeze Loop Mode for everyone."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_loop_gate_killswitch_2026_01b.py (new)"
+  ],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "N/A (backend-only per review request)"},
+  "test_credentials": "Preview founder test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md). Pro test user created dynamically per-run via /auth/signup + Mongo tier promotion and deleted in teardown.",
+  "seed_data_creation": "None persisted. Throwaway Pro user created + deleted per module. system_flags.loop_mode_kill_switch is explicitly deleted at end of module (autouse ensure_clean_state fixture) AND every individual E2E test has its own try/finally _clear_kill_switch(mongo). Post-run verification: `db.system_flags.find_one({key:'loop_mode_kill_switch'})` returns None ✅.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Two test files now cover the Iter 212m-181 fix + delta: (1) test_loop_gate_chat_stream_2026_01.py — the original 20-test suite for the tier gate rewiring, (2) test_loop_gate_killswitch_2026_01b.py — this 10-test delta for the kill-switch coupling. Both are idempotent and can be re-run together. If loop_beta.is_user_allowed is ever refactored to accept a db argument and consult the kill switch internally, update chat.py to pass db and remove the standalone is_kill_switch_on_async call to keep it DRY. The TestChatRouterKillSwitchWired source-level asserts will need to be updated too.",
+  "rca of the issue": "N/A — this iteration is a verification pass on the follow-up main-agent fix, not a bug hunt. Delta RCA: previous test flagged that /loop/start respected system_flags.loop_mode_kill_switch but /chat/stream did not, so on continuation turns a Pro user could still get the [STEP X/5] Loop contract injected even after admins hit the emergency kill switch. Main agent added `if _loop_allowed and await _lb_gate.is_kill_switch_on_async(get_db()): _loop_allowed = False` to close that gap. Verified working end-to-end."
+}

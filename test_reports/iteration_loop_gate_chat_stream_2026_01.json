@@ -1,0 +1,36 @@
+{
+  "summary": "Verified the Iter 212m-181 Loop Mode gate fix in backend/routers/chat.py. The stale founder-only check on /chat/stream has been replaced with services/loop_beta.is_user_allowed() — the same function POST /loop/start already uses — so Pro/Team users are no longer silently downgraded to execution_mode='prompt'. 20/20 targeted tests pass across (a) is_user_allowed() unit matrix, (b) source-level assertion that chat.py is rewired to loop_beta, (c) /loop/start regression for Pro/Team/Free/Founder, (d) /chat/stream integration smoke for all four tier categories, and (e) a scope-formalising test that documents the kill-switch gap.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "services/loop_beta.is_user_allowed() (called from routers/chat.py::/chat/stream)",
+        "issue": "FINDING (not a functional regression, flagged per review request): the DB-backed loop kill-switch (system_flags key 'loop_mode_kill_switch') is checked ONLY in POST /loop/start (routers/loop.py L98) via is_kill_switch_on_async(db). The new /chat/stream contract-enrichment gate calls loop_beta.is_user_allowed(user) which — by design — inspects tier/admin/unlimited fields only and does not consult the kill-switch. Impact is limited because /chat/stream can only ADD a system-prompt suffix; the loop state machine cannot start without /loop/start (which does respect the kill-switch). But if the intent is that flipping the kill-switch also stops LLM turns from being wrapped in the Loop contract on continuation/fallback turns, that is NOT enforced today. Recommend either (a) documenting this scope explicitly, or (b) adding an is_kill_switch_on_async(db) check next to the is_user_allowed() call in chat.py L1374-1378."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_loop_gate_chat_stream_2026_01.py",
+    "/app/test_reports/pytest/loop_gate_chat_stream_2026_01.xml"
+  ],
+  "action_items": [
+    "Decide kill-switch scope for /chat/stream loop enrichment path — see 'minor' finding above. If the founder wants uniform kill-switch coverage, add an is_kill_switch_on_async(db) short-circuit next to the loop_beta.is_user_allowed() call in routers/chat.py around L1374 that downgrades execution_mode to 'prompt' when the switch is on (do NOT 403 — the /chat/stream path must never fail-closed to avoid breaking non-loop chat)."
+  ],
+  "critical_code_review_comments": [
+    "Fix is surgical and correct: routers/chat.py L1374-1378 now delegates to loop_beta.is_user_allowed(user), which is the same gate /loop/start uses. Two entry points, one source of truth — good.",
+    "The unrelated _is_founder variable at L1355-1359 is deliberately left in place for the execute_bash tool gate (via _is_fnd_stream). Intentional and inline-commented — no drift risk.",
+    "Free/Starter tier remains locked to execution_mode='prompt' (silent downgrade, not 403) — this preserves UX so non-Loop chat still works. Confirmed via test_free_stream_opens_but_downgraded (returns 200).",
+    "loop_beta.is_user_allowed() intentionally does not accept a db arg, so it cannot check the DB kill-switch. Fine as long as it is only used to answer 'is this tier eligible?' — see minor finding for the scope question."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_loop_gate_chat_stream_2026_01.py (new)"
+  ],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "N/A (backend-only per review request)"},
+  "test_credentials": "Preview founder test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md). Pro/Team/Free test users are created dynamically per-run via /auth/signup + Mongo tier promotion (see fixtures pro_token / team_token / free_token) and cleaned up on teardown.",
+  "seed_data_creation": "None persisted — Pro/Team/Free test users are created via signup + Mongo tier update and deleted in module teardown. No prod/founder data touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Test file test_loop_gate_chat_stream_2026_01.py is safe to re-run — fixtures are idempotent (409-on-signup falls back to login, and teardown deletes the throwaway rows). /chat/stream tests use stream=True + short 15s timeout and pytest.skip() if the LLM upstream is slow; they only check HTTP 200 on the header frame, not the streamed body content, so they are cheap. If the main agent later couples kill-switch into the chat.py gate, add a new test that flips db.system_flags key 'loop_mode_kill_switch' to true and asserts a Pro user hitting /chat/stream with execution_mode='loop' gets execution_mode='prompt' (currently we cannot observe this from outside — main agent would need to add an admin-only /chat/stream dry-run endpoint or a test-mode flag).",
+  "rca of the issue": "N/A — this iteration was a verification pass on a completed fix, not a bug-hunt. Fix RCA (already recorded by main agent): pre-fix, routers/chat.py::/chat/stream had a locally-scoped '_is_founder' check gating execution_mode='loop' that had not been updated when Pro/Team was unlocked on 2026-08-21. Real Pro/Team customers hitting /chat/stream (continuation/fallback turns after /loop/start) were silently downgraded to execution_mode='prompt' and never received the [STEP X/5] contract suffix. The fix routes the /chat/stream gate through the same loop_beta.is_user_allowed() function /loop/start already used."
+}

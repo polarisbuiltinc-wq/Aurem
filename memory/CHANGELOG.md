@@ -578,3 +578,17 @@ Founder approved a documented, scoped coverage EXCEPTION for the two remaining h
 **local_tools.py wave 2**: 62% → 80% combined (`911 stmts, 178 missed`) — no exception needed here, everything is mockable. New `test_phase2c_local_tools_wave2.py` (39 tests) gave `read_repo_files` and `search_repo` their first-ever coverage (both were at 0% before), plus the remaining branches of `write_repo_file`, `list_repo_files`, `_search_repo_via_api`, `_ensure_repo_snapshot` (one test builds a REAL in-memory gzip tarball and extracts it to real disk — only the network layer is mocked), `save_finding`, and `execute_bash`. Remaining honest gaps: `semantic_search_repo`/`_index_tfidf_search`/`_search_snapshot_sync` not yet attempted.
 
 All 3 new test files (74 tests total) independently re-verified passing by `testing_agent` with zero production-code changes and zero regressions in the pre-existing (unrelated, GitHub-App/PAT-migration-fixture) failure counts for either file.
+
+## 2026-08-24 — Loop Mode chat.py stale gate fixed (root-cause, evidence-first)
+
+Investigated founder's "Loop Mode was already unlocked" report per standing rule: investigate before touching code, no assumptions.
+
+**Evidence gathered (read-only, before any edit):** `git show 6f4a6af` (2026-08-21, "Loop Mode unlocked for Pro/Team tier") confirmed `services/loop_beta.py::is_user_allowed()` and `ChatPanel.jsx` were correctly updated to unlock Pro/Team tier-eligibility for the dedicated `POST /loop/start` kickoff path, with kill-switch/concurrency/wall-clock/stuck-loop auto-trip untouched. `routers/loop.py::/start` already correctly called `is_user_allowed()`. Grepping every `_is_founder`/`execution_mode`/`loop_beta` reference in `routers/chat.py` found a **separate, stale hardcoded founder-only gate** at the old L1359-1367 inside `/chat/stream` (continuation/fallback turns) that the 6f4a6af rollout missed — it silently downgraded `execution_mode="loop"` to `"prompt"` for real non-founder Pro/Team customers, even though `/loop/start` had already unlocked them. This is the actual root cause of the founder's "unlocked but not working" observation, independent of which exact account/route triggered the original report.
+
+**Fix (routers/chat.py, `/chat/stream` handler):**
+- Replaced the local `_is_founder`-based loop gate with `loop_beta.is_user_allowed(user)` — the same function `/loop/start` uses — so both entry points share one source of truth and cannot drift apart again.
+- Left the unrelated `_is_founder`/`_is_fnd_stream` variable untouched (it separately gates the execute_bash tool, confirmed via full-file grep before editing).
+- Free/Starter policy explicitly unchanged — still silently downgraded to `prompt` (intentional paid-tier lock, not a bug).
+- Testing agent's first pass (20/20 pass, 0 critical) flagged one minor gap: the DB kill-switch (`system_flags.loop_mode_kill_switch`) was checked in `/loop/start` but not in this new chat.py gate. Closed immediately: added `await loop_beta.is_kill_switch_on_async(get_db())` next to the tier check, silently downgrading (never 403'ing) so general chat is never blocked.
+
+**Testing:** `iteration_loop_gate_chat_stream_2026_01.json` (20/20) + `iteration_loop_gate_killswitch_2026_01b.json` (10/10) = 30/30, 0 critical/minor. Real dynamically-created Pro/Team/Free/founder test users, kill-switch flag confirmed reset after tests. Preview built + wired into the real `/chat/stream` path + live-reproduced by testing_agent. **Production adoption not confirmed** — pending founder deploy + real traffic evidence.
