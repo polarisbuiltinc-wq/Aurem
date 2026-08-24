@@ -175,6 +175,125 @@ go-ahead before any implementation.
 attempted yet) can now proceed once prioritized — coverage floor is
 cleared.
 
+## 2026-08-27 — Stripe closed (founder-side action, confirmed) + litellm CI-blocker root-caused & fixed + ghost-sweep gap fixed + cto_projects.py safe extraction — testing_agent 100%, 0 issues
+
+**Stripe — CLOSED.** Founder confirmed via `/admin/settings`: API key
+is LIVE mode (`sk_live_...`), all 6 Price IDs show "valid" (previously
+"broken"), 2FA enabled on the founder account (8 backup codes). Agent
+verified independently: `backend/.env`'s `STRIPE_API_KEY` prefix is
+`sk_live` (matches). Confirmed via `git log --all -i --grep=stripe` and
+a `-S` search on `backend/.env` (gitignored, never committed either
+way) that **no agent in this program ever touched Stripe
+keys/config/Price IDs** — this was a **founder-side manual Stripe
+Dashboard action**, not a code fix. Marking fully closed, not just
+"checklist given."
+
+**litellm CI dependency-resolution conflict — ROOT-CAUSED AND FIXED
+(real evidence, not yet confirmed on a real GitHub Actions run — see
+caveat below).** Founder reported `invariants` AND `visual-regression`
+both still failing on the actual pushed commit (`4e3d68d`) at the
+"Install backend deps" step, contradicting the earlier Phase 2
+"invariants fixed, live-reproduced" claim. Investigated honestly:
+- **Confirmed via `git merge-base --is-ancestor`**: the Phase 2
+  editable-package fix (`a7a69b3`/`ebc6c06`, the `-e /app/_extract`
+  CI-runner path issue) IS an ancestor of `4e3d68d` — i.e. it WAS
+  already included in the commit the founder is looking at. That part
+  of the earlier claim was accurate.
+- **But a SECOND, independent, previously-undiagnosed blocker was
+  hitting the exact same "Install backend deps" step the whole time**:
+  `backend/requirements.txt` pinned `litellm @ https://customer-
+  assets.../litellm-1.80.0-py3-none-any.whl#sha256=adf398c5...` directly,
+  while `emergentintegrations==0.1.2`'s own metadata ALSO declares a
+  dependency on the same wheel at the same URL — but WITHOUT the
+  `#sha256=...` fragment. pip's resolver treats a URL requirement with
+  a hash fragment and one without as two different, non-interchangeable
+  specifiers for the same package, even though they resolve to the
+  identical file → `ResolutionImpossible`.
+- **Reproduced byte-for-byte**: built an isolated fresh venv, ran
+  `pip install --dry-run` against the two conflicting specifiers in
+  isolation — got the EXACT same `ResolutionImpossible` error text the
+  founder pasted. This is why it was never caught before: this Preview
+  sandbox's venv already had litellm installed from a prior session, so
+  a local `pip install -r requirements.txt` here never actually forced
+  a fresh resolve — only a truly clean environment (like a CI runner,
+  or this isolated repro venv) exposes it.
+- **`visual-regression` fails for the exact same reason** — confirmed by
+  direct code read of `.github/workflows/quality-gate.yml`: that job
+  also has its own "Install backend deps" step running `pip install -r
+  requirements.txt` against the same file. Not a separate root cause.
+- **Fix applied**: removed the redundant direct `litellm @ URL#sha256=...`
+  line from `backend/requirements.txt` (it was a `pip freeze` artifact —
+  litellm is already pulled in transitively by `emergentintegrations`,
+  no backend code imports litellm directly). Re-ran the isolated dry-run
+  against the FULL requirements.txt after the fix — resolves cleanly,
+  litellm 1.80.0 still installed via the transitive path.
+- **`test-style-guard`/`bug-fix-discipline` "skipped (PR-only gate)"
+  — CONFIRMED accurate**, not a bug: both jobs in `quality-gate.yml`
+  are gated `if: github.event_name == 'pull_request'`; a direct push
+  (no PR) correctly skips them.
+- **IMPORTANT CAVEAT — cannot claim CONFIRMED yet**: this fix (and
+  everything committed since `4e3d68d`, confirmed via ancestry check —
+  Delete Gate, CI retry mechanism, duplication/churn scanner, coverage-
+  floor work, chat.py/loop_engine.py/cto_projects.py extractions,
+  orphaned-lock cleanup) exists only in this Preview sandbox's git
+  history and has **never been pushed to GitHub** (no remote configured
+  here; only "Save to GitHub" pushes). The agent has no push access and
+  cannot trigger or observe a real Actions run. **Founder must push via
+  "Save to GitHub", then the NEXT real CI run is the actual confirmation**
+  — this entry will be updated to CONFIRMED only after that's verified.
+
+**Orphaned loop-lock ghost-sweep gap — FIXED.** Root cause (flagged as
+a known gap in the previous entry): `acquire_loop_lock`'s ghost-sweep
+only cleared a lock when `loop_sessions` showed a *terminated* state —
+never handled a lock whose session was *never created at all* (crash/
+restart in the narrow window between lock-acquire and the engine's
+first `_persist_session` call). Fixed in `services/loop_safety.py`
+with a `NO_SESSION_GRACE_S = 120` grace period: if no session doc
+exists AND the lock is >2 min old, sweep it — long enough to never
+race a legitimate in-flight loop, short enough to self-heal fast.
+Added `test_acquire_sweeps_no_session_lock_past_grace_period` to
+`test_iter212m145_loop_ghost_lock_sweep.py`; all 8 tests in that file
+pass, including the pre-existing "keep lock when session missing
+within grace" case.
+
+**`cto_projects.py` safe mechanical extraction — SAME standard as
+chat.py/loop_engine.py.** 4103 → 3831 lines (272 lines / 6.6% cut).
+New `services/cto_projects_helpers.py` (353 lines) holds: `_task_queues`
++ `_emit` (live SSE progress queue), `_parse_repo`,
+`_run_project_indexing`, `_BROWSE_SKIP_DIRS`/`_BROWSE_SKIP_EXTS`/
+`_BROWSE_MAX_FILE_BYTES` + `_browse_keep_path`, `_classify_phase`,
+`_log`/`_set_status`, `_sh`, `_load_design_system`,
+`_TRUNCATION_PATTERNS` + `_looks_truncated`, `_retry`,
+`_hallucination_reasons`. Same re-export pattern as before. **Deliberately
+NOT moved**: `_run_task_via_api`, `_run_task_with_git`, `_run_task`,
+`_run_rollback`, `_run_rollback_via_api`, `_run_rollback_with_git`,
+`_rollback_log`, `_enqueue_cto_task` (the actual git/API worker +
+rollback pipelines, ~1500 LoC — same posture as `chat_stream`/
+`LoopEngine`); `_frontend_subset`, `get_repo_token`, `_run_warm_agents`
+(3 existing tests do a literal source-text check for their exact
+definitions in `cto_projects.py`). `_run_task`/`_run_rollback` also
+stayed because they read the module-level `_GIT_AVAILABLE` flag which
+existing tests patch directly at `routers.cto_projects._GIT_AVAILABLE`
+— moving the dispatcher would have silently broken that patch's effect.
+Verified: `test_phase2c_cto_projects_router.py` 185/185, ~440-test
+keyword sweep 399 passed / 16 pre-existing failures (confirmed via
+`git stash` A/B — identical on unmodified code), coverage on
+`routers.cto_projects` 63% (>60% floor, consistent with the immediately
+prior coverage-floor entry). **`testing_agent`** —
+`/app/test_reports/iteration_cto_projects_helpers_extraction_2026_08_27.json`
+— 100% pass, 0 issues. Real live E2E on the preview account: full
+task-submit → SSE stream (`_emit`) → phase-tagged steps (`_classify_phase`)
+→ status transitions (`_log`/`_set_status`) all fired correctly through
+the re-exported chain before a clean, pre-existing "repo not found" git-
+clone failure (preview account's GitHub App isn't installed on that
+org — not a regression). Rollback endpoint correctly validated/rejected
+bad confirm values without executing a real revert.
+
+**LoopEngine class-split greenlight — ON HOLD per founder** ("want to
+see cto_projects.py land cleanly first, as a proof-point, before
+greenlighting the higher-risk mixin work" — now landed; revisit on
+next request).
+
 ## 2026-08-26 (later still) — Admin data-integrity audit fixes + GitHub App reconnect root-cause fix (founder-diagnosed) — testing_agent 8/8, 0 issues
 
 Founder-driven audit (admin panel, README, homepage) surfaced 6 real

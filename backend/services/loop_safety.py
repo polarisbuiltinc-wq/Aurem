@@ -152,6 +152,15 @@ async def acquire_loop_lock(
         return True, None
     now = time.time()
     STALE_S = 15 * 60
+    # 2026-08-26 — grace period for the "ghost sweep" below. A lock is
+    # written synchronously by this function, but its matching
+    # loop_sessions doc is only persisted later, inside the engine's
+    # (async, fire-and-forget) `_do_plan()`. A crash/restart in that
+    # narrow window leaves a lock with NO session doc at all — the
+    # existing ghost-sweep only handled a session that reached a
+    # *terminal* state, not "never created". 2 min is comfortably
+    # longer than that window ever legitimately takes.
+    NO_SESSION_GRACE_S = 120
     # Sweep stale locks first.
     try:
         await db.loop_locks.delete_many({
@@ -188,6 +197,21 @@ async def acquire_loop_lock(
                     "[loop_safety] swept ghost lock for terminated "
                     "loop %s (state=%s)",
                     existing["loop_id"], sess.get("state"),
+                )
+            elif (sess is None
+                  and now - existing.get("acquired_at", now) > NO_SESSION_GRACE_S):
+                # The engine never got far enough to persist a session
+                # doc at all (crash/restart right after lock acquire) —
+                # same "abandoned lock" outcome, just never caught by
+                # the state check above.
+                await db.loop_locks.delete_one(
+                    {"project_id": project_id, "user_id": user_id,
+                     "loop_id": existing["loop_id"]},
+                )
+                logger.info(
+                    "[loop_safety] swept ghost lock for loop %s — no "
+                    "loop_sessions doc ever created (acquired %.0fs ago)",
+                    existing["loop_id"], now - existing.get("acquired_at", now),
                 )
     except Exception as e:                                # noqa: BLE001
         logger.debug("loop_lock ghost sweep failed: %r", e)

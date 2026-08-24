@@ -199,6 +199,33 @@ async def test_acquire_keeps_lock_when_session_missing():
     assert existing["loop_id"] == "loop_unknown"
 
 
+async def test_acquire_sweeps_no_session_lock_past_grace_period():
+    """2026-08-26 — a real gap the state-based ghost sweep never
+    covered: the engine crashed/never ran BEFORE it ever persisted a
+    loop_sessions doc at all (not "terminated", "never created").
+    Confirmed live on the preview account — 18 such locks accumulated
+    with zero matching loop_sessions doc and sat there forever (no
+    state to check == never swept, and each was for a DIFFERENT
+    project/user so the 15-min same-key stale sweep never applied
+    either). Past the grace period (120s — comfortably longer than
+    the engine's fire-and-forget task ever legitimately takes to
+    write its first session doc), this must now self-heal exactly
+    like the terminated-state case above."""
+    now = time.time()
+    db = _FakeDB(
+        locks=[{
+            "project_id": "p1", "user_id": "u1",
+            "loop_id": "loop_neversaved", "acquired_at": now - 121,
+        }],
+        sessions=[],  # NO session record — ever
+    )
+    ok, existing = await ls.acquire_loop_lock(db, "p1", "u1", "loop_new")
+    assert ok is True
+    assert existing is None
+    assert any(d["loop_id"] == "loop_new" for d in db.loop_locks.docs)
+    assert not any(d["loop_id"] == "loop_neversaved" for d in db.loop_locks.docs)
+
+
 async def test_router_cancel_fallback_releases_lock():
     """Source-pattern contract: routers/loop.py cancel fallback path
     must call `release_loop_lock` when persisting state=aborted via
