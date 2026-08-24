@@ -1,0 +1,22 @@
+{
+  "summary": "Backend-only regression test for the 3-part 2026-08-25 intent-gateway safe-default fix. Verified: (1) /chat/send now has intent-gateway wiring (previously ZERO), (2) /chat/stream clarify tier now shares the no-tool casual branch, (3) response_confidence._TASK_ACTION_PROSE_RE widened to catch prose Ship-via-CTO/commit-fix language. All 21 tests passed against preview (test@aurem.dev). Founder's exact acceptance bar is met: contaminated-session plain question returns tier=casual, provider=intent-gateway-casual, with NO banned tokens ('ship via cto' / 'root cause:' / '```aurem-handoff'); and real tool requests ('read README.md...', 'fix the bug in services/llm.py') still route through the orchestrator (tier=query|agentic, provider != intent-gateway-casual).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_intent_gateway_casual_boundary_2026_01.py",
+    "/app/test_reports/pytest/intent_gateway_casual_boundary_2026_01.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "chat.py is 3730 lines — well over the 700-line guideline. Consider splitting into chat_send/chat_stream/chat_history submodules. Not a fix-now issue but flagged.",
+    "The chat_send casual/clarify branch duplicates the exact same _casual_system prompt + call_llm block that lives in chat_stream (~line 2088). Extract into a shared helper (e.g. services/intent_gateway_casual_reply.py) to prevent future drift where a fix lands on only ONE surface — the exact pattern the founder called out as zero-tolerance."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (21/21)", "frontend": "N/A (skipped per request)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview) — verified working via /auth/login",
+  "seed_data_creation": "None — session IDs are random uuid4 hex per test, no persistent DB rows require cleanup",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Test file at /app/backend/tests/test_intent_gateway_casual_boundary_2026_01.py covers both surfaces (send + stream), fresh and contaminated sessions, unit-level regex, and heuristic classifier. Re-run with: pytest backend/tests/test_intent_gateway_casual_boundary_2026_01.py -v. Takes ~65s (real LLM calls on preview).",
+  "rca of the issue": "N/A — this iteration verified the RCA fix already implemented by main agent. All 3 root causes (permissive query boundary, inverted clarify fall-through, narrow mismatch regex) are addressed and validated on both /chat/send and /chat/stream surfaces."
+}

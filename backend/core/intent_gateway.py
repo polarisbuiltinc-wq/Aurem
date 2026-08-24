@@ -88,6 +88,42 @@ _CASUAL_THANKS = {
 }
 
 
+#  Concrete resource/data nouns — presence of one of these alongside a
+#  query-lead word means the user wants a real lookup (their tasks,
+#  their repo, their bill, etc.) and genuinely needs tool access.
+#  ABSENCE of any of these on an otherwise question-shaped message
+#  means it's a generic, informational question about the PRODUCT
+#  itself ("what does this do", "is it working") — those get the
+#  casual direct-answer treatment instead (2026-08-25 fix — see
+#  Engineering Gap: casual/query boundary was too permissive, routing
+#  plain informational questions into the tool-enabled query tier).
+_RESOURCE_NOUNS = {
+    "lead", "leads", "task", "tasks", "project", "projects", "repo",
+    "repository", "repositories", "file", "files", "deploy",
+    "deployment", "deployments", "log", "logs", "error", "errors",
+    "bug", "bugs", "revenue", "customer", "customers", "user", "users",
+    "payment", "payments", "invoice", "invoices", "report", "reports",
+    "data", "dashboard", "code", "commit", "commits", "pr", "prs",
+    "issue", "issues", "test", "tests", "build", "builds", "balance",
+    "token", "tokens", "credit", "credits", "subscription", "tier",
+    "plan", "usage", "cost", "costs", "billing", "wallet", "account",
+    "settings", "config", "database", "db", "api", "endpoint",
+    "server", "backend", "frontend", "metric", "metrics", "analytics",
+    "stat", "stats", "statistics", "history", "activity",
+    "notification", "notifications", "alert", "alerts",
+}
+
+
+#  Explicit file reference (e.g. "README.md", "services/llm.py") is
+#  just as strong a real-lookup signal as a resource noun — filenames
+#  don't tokenize as words (the '.' splits them), so this is checked
+#  against the raw text separately from `_RESOURCE_NOUNS`.
+_FILE_REF_RE = re.compile(
+    r"\b[\w\-./]+\.(?:py|js|jsx|ts|tsx|json|md|ya?ml|css|html?|txt|sql|env|sh)\b",
+    re.IGNORECASE,
+)
+
+
 # Compiled patterns used by the heuristic pass.
 _WORD_TOKEN_RX = re.compile(r"[A-Za-z'\u2019]+")
 
@@ -208,6 +244,26 @@ def _classify_heuristic(message: str) -> dict[str, Any]:
                         f"and no '?' — action intent wins."
                     ),
                 }
+        # 2026-08-25 — casual/query boundary fix (root-cause fix for a
+        # real live bug: a plain "what does this website do, is it
+        # working ok?" question got routed into the tool-enabled query
+        # tier and came back with an unrelated task-execution answer).
+        # A question with NO concrete resource/data noun is generic
+        # product chit-chat, not a lookup — casual, no tools, direct
+        # LLM reply. Checked BEFORE the query branch below so it wins.
+        if not (any(t in _RESOURCE_NOUNS for t in tokens) or _FILE_REF_RE.search(text)):
+            signals.append("informational_no_resource_noun")
+            return {
+                "tier":       TIER_CASUAL,
+                "confidence": 0.80,
+                "method":     "heuristic",
+                "signals":    signals,
+                "reasoning":  (
+                    "Question-shaped message with no concrete resource/"
+                    "data noun — informational product question, not "
+                    "a lookup that needs tool access."
+                ),
+            }
         signals.append("query_signal")
         # Stronger confidence when a query-lead is at the START
         # ("show me my leads", "what is the status").
@@ -244,8 +300,12 @@ def _classify_heuristic(message: str) -> dict[str, Any]:
 
 _LLM_SYSTEM = (
     "Classify this developer-platform chat message into exactly one tier:\n"
-    " - casual : chitchat, greetings, thanks, acknowledgements\n"
-    " - query  : asking for information, reports, summaries, data\n"
+    " - casual : chitchat, greetings, thanks, acknowledgements, OR a "
+    "generic informational question about the product itself with no "
+    "concrete resource/data reference (e.g. \"what does this do\", "
+    "\"is it working ok\", \"how does this work\")\n"
+    " - query  : asking for a real lookup on THEIR OWN specific data — "
+    "their tasks, repo, bill, deployments, errors, etc.\n"
     " - agentic: requesting an action to be performed (write code, "
     "ship, scan, deploy, etc.)\n\n"
     "Respond ONLY with JSON: {\"tier\":\"casual|query|agentic\",\"conf\":0.0-1.0}.\n"

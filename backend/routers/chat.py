@@ -442,20 +442,56 @@ async def chat_send(
         or (user.get("tier") == "founder")
         or _is_fnd_email(user.get("email"))
     )
-    result = await chat_with_tools(
-        prompt=body.prompt,
-        jwt_token=jwt_token,
-        system=(extra_sys + "\n\n" if extra_sys else None),
-        max_iters=min(body.max_tool_iters, 4),
-        session_id=body.session_id,
-        mongo_client=None,
-        user_id=user["user_id"],
-        project_id=body.project_id,
-        mode=req_mode,
-        task_type=body.task_type or _infer_task_type(body.prompt),
-        is_founder=_is_fnd,
-        bin_ctx=bin_ctx,
-    )
+    # 2026-08-25 — intent-gateway wiring (root-cause fix, Engineering
+    # Gaps #1/#3). This was previously ONLY wired into /chat/stream —
+    # /chat/send is EQUALLY a real "Main chat" surface (see
+    # AdminHouseRules.jsx:262) and was calling chat_with_tools
+    # unconditionally for every message, casual chit-chat included.
+    # Mirrors the /chat/stream branch below exactly: casual/clarify
+    # (uncertain → safe default, not "give it tools") get a direct,
+    # no-tool LLM reply; query gets a capped tool budget; agentic gets
+    # the full budget. On any failure this falls through to the
+    # original unconditional chat_with_tools call — never blank-screens.
+    from core.intent_gateway import classify as _classify_intent_send
+    _intent_result = await _classify_intent_send(body.prompt or "", history=[])
+    _tier = _intent_result.get("tier") or "agentic"
+    result = None
+    if _tier in ("casual", "clarify") and not body.ora_panel:
+        try:
+            from services.intent_gateway_casual_reply import casual_direct_reply
+            _casual_reply_text = await casual_direct_reply(body.prompt)
+            result = {
+                "ok": True,
+                "content": _casual_reply_text,
+                "provider": "intent-gateway-casual",
+                "iterations": 1,
+                "tool_calls_run": 0,
+                "meta": {},
+                "council": None,
+                "task_type": None,
+                "findings_saved_this_turn": [],
+            }
+        except Exception as _ce:
+            logger.warning(
+                "intent_gateway %s path failed (%r) — falling through "
+                "to chat_with_tools (chat_send)", _tier, _ce,
+            )
+    if result is None:
+        _max_iters_eff = 3 if _tier == "query" else min(body.max_tool_iters, 4)
+        result = await chat_with_tools(
+            prompt=body.prompt,
+            jwt_token=jwt_token,
+            system=(extra_sys + "\n\n" if extra_sys else None),
+            max_iters=_max_iters_eff,
+            session_id=body.session_id,
+            mongo_client=None,
+            user_id=user["user_id"],
+            project_id=body.project_id,
+            mode=req_mode,
+            task_type=body.task_type or _infer_task_type(body.prompt),
+            is_founder=_is_fnd,
+            bin_ctx=bin_ctx,
+        )
     t_llm = time.time()
     content = result.get("content", "") or ""
     provider = result.get("provider", "") or ""
@@ -654,6 +690,8 @@ async def chat_send(
         "tokens_remaining": tokens_remaining,
         "low_confidence": _low_confidence,
         "ship_suppressed": _ship_suppressed,
+        "intent": _intent_result,
+        "tier": _tier,
         # Iter 212m-78 — Council self-learning indicator. FE renders
         # "📚 ORA recalled N similar past answers" above the bubble
         # when this is > 0.
@@ -2028,24 +2066,20 @@ async def chat_stream(
                 # instead of the advisor rules — a silent house-rules
                 # violation.  Skip the casual short-circuit when
                 # ora_panel is on.
-                if _tier == "casual" and not body.ora_panel:
+                #
+                # 2026-08-25 — safe-default fix (Engineering Gap #1,
+                # real bug): `clarify` (confidence <0.72, genuinely
+                # uncertain) used to fall through to the FULL agentic
+                # tool-enabled pipeline below — the opposite of the
+                # safe-default principle. It now takes the exact same
+                # no-tools direct-LLM branch as `casual` instead of a
+                # separate path — uncertain must never mean "give it
+                # tools," it should mean "answer carefully, no risk."
+                if _tier in ("casual", "clarify") and not body.ora_panel:
                     # Direct LLM reply path — no tool calls, fast.
                     try:
-                        from services.llm import call_llm as _call_llm
-                        _casual_system = (
-                            "You are ORA — AUREM's developer co-pilot.\n"
-                            "For this casual message, respond naturally and briefly.\n"
-                            "Be confident, warm, and direct. Do NOT mention\n"
-                            "pipelines, agents, or technical systems. Keep your\n"
-                            "reply under 2 sentences."
-                        )
-                        _sys_for_advisor = _casual_system
-                        _casual_reply = await _call_llm(
-                            [{"role": "user", "content": body.prompt or ""}],
-                            system=_casual_system,
-                            max_tokens=200,
-                            temperature=0.6,
-                        )
+                        from services.intent_gateway_casual_reply import casual_direct_reply
+                        _casual_reply_text = await casual_direct_reply(body.prompt)
                         # Iter 212m-155 — BUG FIX: previously set `reply`
                         # here, but the SSE worker downstream reads
                         # `result["content"]` (line ~2081) to stream
@@ -2054,11 +2088,10 @@ async def chat_stream(
                         # assistant bubble (caught by iter 212m-154
                         # PROD chat E2E).  Switching to the canonical
                         # `content` key — same shape as every other
-                        # mode (B/D/F/orchestrator).  Fallback to a
-                        # friendly "Hey!" so the bubble is never empty.
+                        # mode (B/D/F/orchestrator).
                         result = {
                             "ok":               True,
-                            "content":          (_casual_reply or "").strip() or "Hey! How can I help you ship today?",
+                            "content":          _casual_reply_text,
                             "provider":         "intent-gateway-casual",
                             "fallback_chain":   ["intent_casual"],
                             "iterations":       1,
@@ -2074,8 +2107,8 @@ async def chat_stream(
                         # If the cheap LLM trips, fall through to the
                         # orchestrator path — never blank-screen the user.
                         logger.warning(
-                            "intent_gateway casual path failed (%r) — "
-                            "falling through to orchestrator", _ce,
+                            "intent_gateway %s path failed (%r) — "
+                            "falling through to orchestrator", _tier, _ce,
                         )
 
                 if _tier == "query":
@@ -2090,7 +2123,10 @@ async def chat_stream(
                     # model one guaranteed round to summarise.
                     _max_iters_eff = 3
                 else:
-                    # Agentic or clarify — full pipeline.
+                    # Agentic, or casual/clarify falling back here only
+                    # because the cheap direct-LLM call above raised —
+                    # full pipeline as a fail-open safety net so the
+                    # user is never left with nothing.
                     _max_iters_eff = min(max(body.max_tool_iters, 4), 6)
 
                 # Iter 212m-208 — Ask Advisor (`ora_panel=true`) is a

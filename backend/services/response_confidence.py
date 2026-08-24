@@ -36,6 +36,21 @@ _TOKEN_RE = re.compile(r"[a-z0-9_]+")
 
 _HANDOFF_FENCE_RE = re.compile(r"```aurem-handoff\b")
 _ROOT_CAUSE_RE = re.compile(r"root cause[:\s]", re.IGNORECASE)
+# 2026-08-25 — widened (real live-reproduced miss): a response can
+# describe the SAME "ship a fix" action in plain prose without ever
+# emitting the literal fence or the exact "root cause:" phrase (e.g.
+# "you'd click Ship via CTO to commit that fix") and slip straight
+# past the old narrow check. This catches that class of prose without
+# touching `has_ship_suggestion()`, which stays fence-only on purpose
+# (it gates the actual Ship button, a different, narrower concern).
+_TASK_ACTION_PROSE_RE = re.compile(
+    r"ship\s+(it\s+)?via\s+cto"
+    r"|click[^.\n]{0,25}\bship\b"
+    r"|\bcommit\b[^.\n]{0,20}\bfix\b"
+    r"|\bdeploy\b[^.\n]{0,20}\bfix\b"
+    r"|\bship\b[^.\n]{0,20}\bfix\b",
+    re.IGNORECASE,
+)
 _FILE_PATH_RE = re.compile(
     r"\b[\w\-./]+\.(?:py|js|jsx|ts|tsx|json|md|yml|yaml|css|html|txt|sql|env|sh)\b"
 )
@@ -135,6 +150,7 @@ def _response_has_fix_signal(final_output: str) -> bool:
     return bool(
         _HANDOFF_FENCE_RE.search(final_output)
         or _ROOT_CAUSE_RE.search(final_output)
+        or _TASK_ACTION_PROSE_RE.search(final_output)
     )
 
 
