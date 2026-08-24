@@ -294,6 +294,14 @@ class TestChatStreamSetupMore:
     def test_loop_mode_downgraded_for_non_founder(self, client, fake_db):
         from starlette.requests import Request
         from routers import chat as router_mod
+        # 2026-08-26 — the shared `USER` fixture is tier="pro", which the
+        # Aug-24 Loop Mode rollout (6f4a6af) deliberately made ELIGIBLE
+        # for Loop Mode — so it correctly no longer downgrades, which is
+        # why this test started failing. This test's actual intent is
+        # "an ineligible tier still gets downgraded" — use a free-tier
+        # user (still ineligible) to keep testing that real behaviour.
+        free_user = {**USER, "tier": "free"}
+        router_mod.current_dev = AsyncMock(return_value=free_user)
         scope = {"type": "http", "client": ("1.2.3.4", 0), "headers": []}
         fake_request = Request(scope)
         body = router_mod.ChatBody(prompt="hello", project_id="home", session_id="s1",

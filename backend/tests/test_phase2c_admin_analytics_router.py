@@ -642,9 +642,13 @@ class TestMcpWarmGraphAgent:
 
     def test_agent_performance(self, client, fake_db):
         now = time.time()
-        fake_db.cto_tasks.rows.append({
-            "created_at": now, "model": "claude-sonnet-5", "status": "done",
-            "finished_at": now + 3,
+        # 2026-08-26 — updated for the admin_analytics.py root-cause fix:
+        # the endpoint was reading `cto_tasks.model` (a field that never
+        # existed on any real cto_tasks doc) and now reads the real
+        # per-call usage ledger `customer_chat_cost` instead.
+        fake_db.customer_chat_cost.rows.append({
+            "ts": now, "model": "claude-sonnet-5",
+            "cost_usd": 0.02, "input_tokens": 100, "output_tokens": 50,
         })
         r = client.get("/api/aurem-dev/admin/agent-performance", headers=AUTH)
         assert r.status_code == 200

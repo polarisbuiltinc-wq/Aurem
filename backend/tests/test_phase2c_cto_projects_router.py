@@ -892,8 +892,18 @@ class TestUpdateProject:
         assert fake_db.cto_projects.rows[0]["branch"] == "dev"
 
     def test_installation_id_sets_auth_method(self, client, fake_db):
-        fake_db.cto_projects.rows.append({"project_id": "p1", "user_id": "u1"})
-        with patch("services.repo_context.invalidate_repo_context", AsyncMock(return_value=None)):
+        # 2026-08-26 — installation_id updates now run the real
+        # verify_installation_for_repo() check (Aug reconnect root-cause
+        # fix) before trusting the client-supplied id — mock it to
+        # simulate GitHub confirming real repo access, same as
+        # test_admin_audit_and_installation_active_2026_08.py does.
+        fake_db.cto_projects.rows.append({
+            "project_id": "p1", "user_id": "u1",
+            "github_owner": "acme", "github_repo": "widgets",
+        })
+        with patch("services.repo_context.invalidate_repo_context", AsyncMock(return_value=None)), \
+             patch("services.github_app.verify_installation_for_repo",
+                  AsyncMock(return_value=(True, None, None))):
             r = client.patch("/api/aurem-dev/cto/projects/p1", headers=AUTH,
                              json={"installation_id": 42})
         assert r.status_code == 200
@@ -1041,7 +1051,14 @@ class TestAddProject:
 
 class TestSubmitTask:
     def _body(self, **kw):
-        base = {"project_id": "p1", "task": "fix the bug"}
+        # 2026-08-25 ambiguity-gate (services/ambiguity_gate.py) rejects
+        # vague tasks before reaching rate-limit/budget/maxx/project
+        # checks — "fix the bug" now short-circuits every one of these
+        # tests with the SAME `ok:False, needs_clarification` response,
+        # which is exactly why they all failed identically. Use a
+        # concrete, file-referencing task so we reach the logic each
+        # test actually means to exercise.
+        base = {"project_id": "p1", "task": "fix the bug in signup.py"}
         base.update(kw)
         return base
 

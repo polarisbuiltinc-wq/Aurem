@@ -1,0 +1,25 @@
+{
+  "summary": "Full validation of the Phase-1+Phase-2 admin/CI/test-suite batch. All 6 targeted admin endpoints return 200 with the correct shape and real data. Admin UI (Agent Performance, QA Dashboard) render correctly with expected columns/chips including the new 'skipped (PR-only gate)' label. Backend pytest suite for the 4 in-scope files passes 100% (270/270). No regressions on dashboard/pulse/llm-credits.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_phase2c_admin_analytics_router.py",
+    "/app/backend/tests/test_phase2c_chat_router_wave3.py",
+    "/app/backend/tests/test_phase2c_cto_projects_router.py",
+    "/app/backend/tests/test_regression_iter297_p0_journey_coverage.py",
+    "/app/test_reports/pytest/phase2_admin_batch.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Two benign console 401/403 network errors on /admin/qa page (unrelated to this batch; pre-existing secondary API auth timing). Not blocking.",
+    "AdminQADashboard.jsx is 793 lines — approaching file-size guideline (>700). Consider splitting CIJobChip/BigNumber/report renderer into sub-modules in a future pass. Not part of this batch."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview admin, per /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. Verified against existing customer_chat_cost data (2 real models: z-ai/glm-5.2 705 calls $0.0547, deepseek/deepseek-chat 270 calls $0.0183) and existing project p_demo_a for repair-orphaned dry_run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "This batch verified: (1) /admin/agent-performance now returns source='customer_chat_cost' with real per-model rows (was empty before due to nonexistent cto_tasks.model field). (2) /admin/architecture integrations includes github_app AND services includes MongoDB after the ensure_configured_from_db(db) hydration fix. (3) /admin/github-app/repair-orphaned-installations?dry_run=true returns dry_run:true, scanned:1, repaired:[], repaired_count:0, still_broken shows p_demo_a (existing test project) — no mutation. (4) /admin/health-score returns 200 in ~9.5s with all three targeted categories scored (devops_infra:0, code_quality:39, test_coverage:65). (5) AdminQADashboard renders CI chips with 'SKIPPED (PR-ONLY GATE)' label for test-style-guard and bug-fix-discipline as expected. (6) Pytest 270 passed / 0 failed across the 4 files. CI-only fixes (quality-gate.yml, g15/g1 scripts, requirements.txt editable-install path) not testable in preview per request — confirmed backend still boots cleanly.",
+  "rca of the issue": "N/A — this was a batch verification of already-applied fixes; all changes verified working. No new bugs found."
+}

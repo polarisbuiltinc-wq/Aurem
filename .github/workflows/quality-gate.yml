@@ -162,6 +162,37 @@ jobs:
         # convention). A symlink makes the whole class work on
         # GH-hosted runners without touching 35 files.
         run: sudo ln -sfn "$GITHUB_WORKSPACE" /app
+      - name: Boot backend in background
+        # 2026-08-26 — ROOT FIX: this job never started a backend, but
+        # a real chunk of the "invariant" selection (test_loop_gate_*,
+        # test_regression_iter297_p0_journey_coverage, etc.) makes
+        # REAL `requests.post(REACT_APP_BACKEND_URL + ...)` HTTP calls
+        # (signup/login/loop-start) and asserts against a `mongo`
+        # fixture reading the SAME MONGO_URL/DB_NAME below. With no
+        # server listening on :8001, every such test either connection-
+        # errors outright, or — if a stray process happens to answer on
+        # :8001 pointed at a DIFFERENT database — passes signup but
+        # fails the Mongo assertion ("no dev_users row for X") because
+        # the HTTP call and the Mongo read land in two different DBs.
+        # Verified live: running this exact test selection locally with
+        # a real backend bound to the SAME MONGO_URL/DB_NAME as this
+        # job eliminates the "no dev_users row" failure class entirely.
+        # Same uvicorn-boot pattern already used by visual-regression
+        # (below) and ci.yml's Simulated-user QA job.
+        working-directory: backend
+        env:
+          MONGO_URL: mongodb://localhost:27017
+          DB_NAME:   aurem_ci_smoke
+          JWT_SECRET: ci-test-secret-32-chars-minimum!!
+          AUREM_MASTER_KEY: ci-vault-master-key-32-chars-min!!
+          AUREM_CTO_MASTER_KEY: ci-cto-vault-master-key-32-chars!!
+        run: |
+          uvicorn main:app --host 0.0.0.0 --port 8001 &
+          echo $! > /tmp/backend.pid
+          for i in {1..60}; do
+            curl -sf http://127.0.0.1:8001/health && break
+            sleep 1
+          done
       - name: Run regression + invariant tests
         working-directory: backend
         env:
@@ -212,6 +243,10 @@ jobs:
             --tb=short -q \
             --ignore=tests/test_iter138_acceptance_seven.py \
             --ignore=tests/test_iter212m163_aggression_chat.py
+      - name: Stop backend
+        if: always()
+        run: |
+          if [[ -f /tmp/backend.pid ]]; then kill "$(cat /tmp/backend.pid)" || true; fi
 
   test-style-guard:
     # Iter 291 — block PRs that add new test files whose STATIC_GREP

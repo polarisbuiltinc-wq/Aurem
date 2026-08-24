@@ -100,6 +100,12 @@ class _StubCollection:
         self.indexes_created.append((keys, dict(opts)))
         return f"{self.name}_{len(self.indexes_created)}"
 
+    def with_options(self, **_opts):
+        # Real pymongo/motor: with_options(write_concern=...) returns a
+        # collection handle bound to the same underlying collection —
+        # write concern doesn't change stub behaviour, so return self.
+        return self
+
     async def drop_index(self, name):
         self.dropped_indexes.append(name)
 
