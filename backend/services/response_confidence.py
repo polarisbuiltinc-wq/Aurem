@@ -97,6 +97,24 @@ FALLBACK_MESSAGE = (
 )
 
 
+async def persist_confidence_check(db, **fields) -> None:
+    """2026-08-25 — passive audit trail for `chat.confidence_check`.
+    Founder has no raw log access to Preview/Production; this makes
+    every mismatch-check outcome queryable via
+    GET /admin/insights/confidence-checks instead of requiring a
+    support ticket for log access each time. Fire-and-forget: never
+    lets a Mongo hiccup affect the actual chat response — same
+    fail-open posture as every other passive audit write in this
+    codebase (intent_classifications, cost_revenue_alert_log, etc.)."""
+    if db is None:
+        return
+    try:
+        import time as _time
+        await db.response_confidence_log.insert_one({**fields, "ts": _time.time()})
+    except Exception:
+        pass
+
+
 def _tokens(text: str) -> set[str]:
     return set(_TOKEN_RE.findall((text or "").lower()))
 

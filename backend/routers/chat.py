@@ -484,6 +484,15 @@ async def chat_send(
             (body.prompt or "")[:160], _council_recalled, _mismatch,
             (content or "")[:220],
         )
+        from services.response_confidence import persist_confidence_check
+        await persist_confidence_check(
+            get_db(), surface="chat_send", turn=1,
+            prompt_preview=(body.prompt or "")[:160],
+            content_preview=(content or "")[:220],
+            council_recalled=_council_recalled, mismatch=_mismatch,
+            user_id=user.get("user_id"), session_id=body.session_id,
+            project_id=body.project_id,
+        )
         if _mismatch:
             logger.warning(
                 "chat_send: mismatch detected on first response — retrying "
@@ -505,6 +514,14 @@ async def chat_send(
                 "prompt=%r mismatch=%s content_preview=%r",
                 (body.prompt or "")[:160], _retry_mismatch,
                 (_retry_content or "")[:220],
+            )
+            await persist_confidence_check(
+                get_db(), surface="chat_send", turn=2,
+                prompt_preview=(body.prompt or "")[:160],
+                content_preview=(_retry_content or "")[:220],
+                mismatch=_retry_mismatch,
+                user_id=user.get("user_id"), session_id=body.session_id,
+                project_id=body.project_id,
             )
             if _retry_content.strip() and not _retry_mismatch:
                 content = _retry_content
@@ -2768,6 +2785,15 @@ async def chat_stream(
                 (body.prompt or "")[:160], _council_recalled, _mismatch,
                 (content or "")[:220],
             )
+            from services.response_confidence import persist_confidence_check
+            await persist_confidence_check(
+                get_db(), surface="chat_stream", turn=1,
+                prompt_preview=(body.prompt or "")[:160],
+                content_preview=(content or "")[:220],
+                council_recalled=_council_recalled, mismatch=_mismatch,
+                user_id=(user or {}).get("user_id"), session_id=body.session_id,
+                project_id=body.project_id,
+            )
             if _mismatch:
                 logger.warning(
                     "chat_stream: mismatch detected on first response — "
@@ -2798,6 +2824,14 @@ async def chat_stream(
                     "prompt=%r mismatch=%s content_preview=%r",
                     (body.prompt or "")[:160], _retry_mismatch,
                     (_retry_content or "")[:220],
+                )
+                await persist_confidence_check(
+                    get_db(), surface="chat_stream", turn=2,
+                    prompt_preview=(body.prompt or "")[:160],
+                    content_preview=(_retry_content or "")[:220],
+                    mismatch=_retry_mismatch,
+                    user_id=(user or {}).get("user_id"), session_id=body.session_id,
+                    project_id=body.project_id,
                 )
                 if _retry_content.strip() and not _retry_mismatch:
                     content = _retry_content

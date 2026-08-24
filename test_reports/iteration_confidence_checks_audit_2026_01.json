@@ -1,0 +1,33 @@
+{
+  "summary": "Backend-only verification of the new passive confidence-check audit capability (services/response_confidence.py::persist_confidence_check + GET /api/aurem-dev/admin/insights/confidence-checks + 4 call sites in routers/chat.py). All 9 pytest cases passed: (a) endpoint requires admin JWT (401/403 without auth or with bad token), (b) response shape {count, mismatch_only, rows} with no MongoDB _id leakage, (c) mismatch_only=true filter is honored, (d) limit is clamped to 200, (e) real chat/send returns a genuine LLM response AND writes an audit row with surface=chat_send + turn + prompt_preview + content_preview + council_recalled + mismatch + user_id + session_id + project_id + ts, (f) chat/stream SSE path produces a real response AND writes an audit row with surface=chat_stream, (g) adjacent /admin/insights/slo and /admin/insights/cost-alert endpoints still reachable — no regression from the admin_users.py insertion. Code review of persist_confidence_check() confirms fire-and-forget try/except swallows all exceptions and cannot affect the chat response.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/aurem-dev/chat/send", "issue": "PRE-EXISTING bug (NOT introduced by this change): services/orchestrator.py:2685 references local variable `content` which is unbound when max_tool_iters=0 (while-loop never runs). Reproduces reliably with {\"prompt\":\"hi\",\"max_tool_iters\":0}; surfaces as HTTP 499 + `UnboundLocalError: cannot access local variable 'content'` in backend logs. Exception propagates BEFORE reaching the new persist_confidence_check call, so no audit row is written for these requests. Doesn't block the audit feature — the founder's real chats never send max_tool_iters=0 (frontend default is 4) — but the orchestrator should initialize `content = ''` before the while loop to make max_iters=0 a legal no-op path."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_confidence_checks_audit_2026_01.py",
+    "/app/test_reports/pytest/confidence_checks_audit_2026_01.xml"
+  ],
+  "action_items": [
+    "OPTIONAL / separate concern from this change: fix orchestrator.py:2685 UnboundLocalError when max_tool_iters=0 by initializing `content = ''` above the tool-iteration loop. Not blocking the audit feature; flagged for the pre-existing-bug backlog."
+  ],
+  "critical_code_review_comments": [
+    "persist_confidence_check() correctly uses try/except with `pass` — genuine fail-open write, cannot affect chat response. Verified.",
+    "New endpoint correctly excludes `_id` via projection {\"_id\": 0}, clamps limit to [1,200], and requires admin via _require_admin(). Clean.",
+    "The 4 call sites in chat.py are placed AFTER content is finalized and immediately after the existing logger.info — logging behavior itself is unchanged as intended.",
+    "One observation: on chat_send turn=2 (retry) and chat_stream turn=2 the persist call does not pass `council_recalled` (only turn=1 does). Not a bug — turn=2 is by definition post-recall-strip — but noting for future queries: council_recalled will be missing/None for turn=2 rows."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_confidence_checks_audit_2026_01.py (new)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "N/A (backend-only per request)"},
+  "test_credentials": "Preview admin test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md) — login succeeded.",
+  "seed_data_creation": "None. Test-generated audit rows use TEST_conf_send_* / TEST_conf_stream_* session_ids for easy identification. No cleanup needed (audit log is append-only observability data).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The new confidence-checks audit endpoint is live at /api/aurem-dev/admin/insights/confidence-checks (admin JWT required, supports ?mismatch_only=true and ?limit=N up to 200). Audit rows are written by 4 sites in routers/chat.py (chat_send turn 1+2, chat_stream turn 1+2) via services/response_confidence.py::persist_confidence_check — fire-and-forget. Regression checks passed for /admin/insights/slo and /admin/insights/cost-alert. Note the pre-existing orchestrator bug when max_tool_iters=0 (see minor issue) — any future test hitting chat/send should use max_tool_iters>=1 until that's fixed.",
+  "rca of the issue": "chat/send returned 499 during initial test run. RCA: services/orchestrator.py::chat_with_tools references local `content` at line 2685 (`clean = strip_tool_calls(content)`) after the while-iteration loop. `content` is only assigned inside that loop, so when max_tool_iters=0 the loop is skipped and `content` is unbound, raising UnboundLocalError. FastAPI middleware catches it and returns HTTP 499. This is NOT a regression from the current change — persist_confidence_check is called AFTER the failing point and is never reached. Mitigation for the current audit feature: none required (real user traffic never sends max_tool_iters=0). Mitigation for the underlying bug: initialize `content = ''` before the while loop in orchestrator.py. Flagged as minor since it's out of scope for this iteration."
+}

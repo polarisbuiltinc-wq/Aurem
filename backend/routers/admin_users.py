@@ -1032,6 +1032,28 @@ async def cost_revenue_alert_endpoint(
     return status
 
 
+@router.get("/insights/confidence-checks")
+async def confidence_checks_endpoint(
+    mismatch_only: bool = False,
+    limit: int = 50,
+    authorization: Optional[str] = Header(None),
+) -> dict:
+    """2026-08-25 — passive audit trail for the `chat.confidence_check`
+    log line (services/response_confidence.py + routers/chat.py). Built
+    because the founder has no raw backend log access on Preview or
+    Production — this makes every mismatch-check outcome (the cold-
+    start / council-recall safety net) queryable from the admin panel
+    instead of requiring a support ticket each time."""
+    await _require_admin(authorization)
+    db = require_db()
+    limit = max(1, min(limit, 200))
+    query = {"mismatch": True} if mismatch_only else {}
+    rows = await db.response_confidence_log.find(
+        query, {"_id": 0}
+    ).sort("ts", -1).limit(limit).to_list(limit)
+    return {"count": len(rows), "mismatch_only": mismatch_only, "rows": rows}
+
+
 @router.post("/github-app/repair-orphaned-installations")
 async def repair_orphaned_installations(
     dry_run: bool = True,

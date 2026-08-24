@@ -20,7 +20,10 @@ sys.path.insert(0, "/app/backend")
 
 def _load_env():
     from pathlib import Path
-    for line in Path("/app/backend/.env").read_text().splitlines():
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if not env_path.exists():
+        return  # CI runners export the needed vars directly as job env
+    for line in env_path.read_text().splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue

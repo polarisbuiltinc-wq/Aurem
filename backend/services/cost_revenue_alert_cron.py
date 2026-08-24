@@ -97,12 +97,7 @@ async def _daily_series(db, since: float, period_days: int) -> list:
     return series
 
 
-async def compute_cost_revenue_status(db, period_days: int = PERIOD_DAYS) -> dict:
-    """Real numbers, no cache — same collections /admin/token-pnl reads.
-    Called by both the cron tick and the admin card's on-demand GET."""
-    now = time.time()
-    since = now - period_days * 86400
-
+async def _cost_by_user(db, since: float) -> dict:
     cost_by_user: dict = {}
     async for d in db.customer_chat_cost.aggregate([
         {"$match": {"ts": {"$gte": since}}},
@@ -110,8 +105,10 @@ async def compute_cost_revenue_status(db, period_days: int = PERIOD_DAYS) -> dic
     ]):
         uid = d.get("_id") or "unknown"
         cost_by_user[uid] = round(float(d.get("cost") or 0), 4)
-    ai_cost_total = round(sum(cost_by_user.values()), 2)
+    return cost_by_user
 
+
+async def _revenue_by_user(db, since: float) -> dict:
     revenue_by_user: dict = {}
     async for d in db.cto_payments.aggregate([
         {"$match": {"created_at": {"$gte": since}, "payment_status": "paid"}},
@@ -119,13 +116,10 @@ async def compute_cost_revenue_status(db, period_days: int = PERIOD_DAYS) -> dic
     ]):
         uid = d.get("_id") or "unknown"
         revenue_by_user[uid] = round(float(d.get("amount") or 0), 2)
-    revenue_total = round(sum(revenue_by_user.values()), 2)
+    return revenue_by_user
 
-    aggregate_breach = (
-        ai_cost_total > revenue_total
-        and ai_cost_total >= MIN_AGGREGATE_COST_USD
-    )
 
+def _find_offenders(cost_by_user: dict, revenue_by_user: dict) -> list:
     offenders = []
     for uid, revenue in revenue_by_user.items():
         cost = cost_by_user.get(uid, 0.0)
@@ -135,7 +129,10 @@ async def compute_cost_revenue_status(db, period_days: int = PERIOD_DAYS) -> dic
                 "overage_usd": round(cost - revenue, 2),
             })
     offenders.sort(key=lambda o: o["overage_usd"], reverse=True)
+    return offenders
 
+
+async def _attach_offender_emails(db, offenders: list) -> None:
     for o in offenders[:20]:
         o["email"] = ""
         try:
@@ -144,6 +141,26 @@ async def compute_cost_revenue_status(db, period_days: int = PERIOD_DAYS) -> dic
                 o["email"] = u.get("email") or ""
         except Exception:
             pass
+
+
+async def compute_cost_revenue_status(db, period_days: int = PERIOD_DAYS) -> dict:
+    """Real numbers, no cache — same collections /admin/token-pnl reads.
+    Called by both the cron tick and the admin card's on-demand GET."""
+    since = time.time() - period_days * 86400
+
+    cost_by_user = await _cost_by_user(db, since)
+    ai_cost_total = round(sum(cost_by_user.values()), 2)
+
+    revenue_by_user = await _revenue_by_user(db, since)
+    revenue_total = round(sum(revenue_by_user.values()), 2)
+
+    aggregate_breach = (
+        ai_cost_total > revenue_total
+        and ai_cost_total >= MIN_AGGREGATE_COST_USD
+    )
+
+    offenders = _find_offenders(cost_by_user, revenue_by_user)
+    await _attach_offender_emails(db, offenders)
 
     daily_series = await _daily_series(db, since, min(period_days, 30))
 

@@ -20,7 +20,11 @@ BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/") or _load_env(
 
 
 def _load_backend_env():
-    for line in open("/app/backend/.env"):
+    from pathlib import Path
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if not env_path.exists():
+        return  # CI runners export the needed vars directly as job env
+    for line in env_path.read_text().splitlines():
         line = line.strip()
         if "=" in line and not line.startswith("#"):
             k, v = line.split("=", 1)
