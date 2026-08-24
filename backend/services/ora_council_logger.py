@@ -44,6 +44,7 @@ def _build_log(
         "user_id":              kwargs.get("user_id"),
         "project_id":           kwargs.get("project_id"),
         "maxx_mode":            kwargs.get("maxx_mode", False),
+        "low_confidence":       kwargs.get("low_confidence", False),
         "ora_version":          "2.0",
         "timestamp":            datetime.now(timezone.utc),
         "exported_for_training": False,
@@ -69,8 +70,18 @@ async def log_conversational(
     ora_reply: str,
     user_id: Optional[str] = None,
     project_id: Optional[str] = None,
+    low_confidence: bool = False,
 ):
-    """Log Mode A (chat) / B (advice) / D (debug) / E (audit)."""
+    """Log Mode A (chat) / B (advice) / D (debug) / E (audit).
+
+    2026-08-25 — `low_confidence` (Engineering Gap #6 root-cause fix,
+    part 2 of 2 with services/ora_council_retriever.py's raised
+    _MIN_SCORE). True when this exact turn's final shown content was
+    services/response_confidence.py's generic FALLBACK_MESSAGE — i.e.
+    even the retry couldn't produce a confident answer. Storing that
+    flag lets the retriever permanently exclude these turns from
+    future few-shot recall — a fallback message is never something
+    ORA should learn to imitate."""
     doc = _build_log(
         mode=mode,
         user_message=user_message,
@@ -78,6 +89,7 @@ async def log_conversational(
         agent_used="ora",
         user_id=user_id,
         project_id=project_id,
+        low_confidence=low_confidence,
     )
     asyncio.create_task(_insert(db, doc))   # non-blocking
 

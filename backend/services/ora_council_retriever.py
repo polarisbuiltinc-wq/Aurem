@@ -76,7 +76,20 @@ _REPLY_CAP      = 600    # truncate replies for the prompt budget
 # question. Genuine topical matches (shared substantive vocabulary)
 # score 0.33+ in the same corpus — 0.25 cleanly separates real matches
 # from filler-word noise without needing per-word stopword lists.
-_MIN_SCORE      = 0.25
+#
+# 2026-08-25 — raised 0.25 → 0.42 after a SECOND, independently
+# live-reproduced recurrence of this exact same failure class: a
+# plain "what does this website do, is it working ok?" question
+# recalled a weakly-matched past exchange and echoed its "Ship via
+# CTO" task-execution language almost verbatim. 0.25 was already a
+# deliberate fix for the first incident and still let through a
+# score just above the old floor — real evidence it wasn't a large
+# enough margin above filler-word noise. Root cause fix is two-
+# pronged: this raise (fewer weak matches ever get pulled at all) +
+# `low_confidence` rows now permanently excluded below (see
+# `_quality_filter`) so a past turn that itself needed the fallback
+# message can never be recalled as a "good" example either.
+_MIN_SCORE      = 0.42
 
 _TOKEN_RE = re.compile(r"[a-z0-9_]+")
 
@@ -101,6 +114,14 @@ def _quality_filter(doc: dict) -> bool:
     if not doc.get("user_message") or not doc.get("final_output"):
         return False
     if doc.get("lint_blocked"):
+        return False
+    # 2026-08-25 — Engineering Gap #6, part 2/2 (see _MIN_SCORE above).
+    # A turn whose final shown content was the generic
+    # response_confidence.py fallback (never resolved by the retry
+    # either) is by definition not a real, on-topic answer — it must
+    # never be eligible to get recalled as a "similar past example"
+    # for a future, unrelated question.
+    if doc.get("low_confidence"):
         return False
     # Mode C (code) — require a pass.
     if doc.get("mode") == "C":
@@ -136,7 +157,7 @@ async def _rebuild_index(db) -> None:
         {
             "_id": 0, "user_message": 1, "final_output": 1, "mode": 1,
             "user_id": 1, "project_id": 1, "pass_result": 1,
-            "lint_blocked": 1,
+            "lint_blocked": 1, "low_confidence": 1,
         },
     ).sort("timestamp", -1).limit(_MAX_CORPUS)
 

@@ -3002,6 +3002,7 @@ async def chat_stream(
                         ora_reply=content or "",
                         user_id=user_id,
                         project_id=body.project_id,
+                        low_confidence=_low_confidence,
                     )
                     # Lightweight conversation → brain update (rejections, decisions, stack)
                     if body.project_id and body.project_id != "home":
