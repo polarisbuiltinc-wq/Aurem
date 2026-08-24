@@ -104,6 +104,9 @@ from services.codebase_indexer import router as codebase_router
 from services.daily_digest import schedule_daily_digest
 # Iter 328 · #5 — periodic integration_health probe cron
 from services.integration_health_cron import schedule_integration_health_cron
+# 2026-08-26 — periodic SLO-breach founder-alert cron (approved
+# Stage-1 follow-up, reuses services/slo_metrics.py + founder_alerts.py)
+from services.slo_alert_cron import schedule_slo_alert_cron
 # Session F — supervised background-task wrapper. Long-lived crons
 # use `supervise(coro, name=..., db_getter=..., long_lived=True)`
 # instead of `_asyncio.create_task(...)` so silent death opens a
@@ -344,6 +347,18 @@ async def lifespan(app: FastAPI):
     app.state.integration_health_cron_task = _supervise(
         schedule_integration_health_cron(),
         name="integration_health_cron",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
+    )
+    # 2026-08-26 — SLO breach founder-alert cron. Checks the same two
+    # declared SLOs (chat_response, ship_completion) the admin
+    # dashboard already computes, every 30 min by default, and emails
+    # the founder (existing G10 Resend channel, 6h dedup) if either
+    # is in breach — closes the "you'd only know if you looked at the
+    # dashboard" gap.
+    app.state.slo_alert_cron_task = _supervise(
+        schedule_slo_alert_cron(),
+        name="slo_alert_cron",
         db_getter=lambda: app.state.db,
         long_lived=True,
     )

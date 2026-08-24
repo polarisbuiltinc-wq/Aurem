@@ -4,6 +4,30 @@
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
 
+## 2026-08-26 (later) — SLO Alerts: auto-email on breach (approved follow-up to Stage 1 SLO dashboard)
+
+New `services/slo_alert_cron.py` — periodic (30 min default,
+`SLO_ALERT_INTERVAL_SEC`) breach check on the same two SLOs the dashboard
+already computes (`services/slo_metrics.py::compute_slo()`), firing through
+the EXISTING G10 Resend founder-alert channel (`services/founder_alerts.py
+::send_founder_alert()`, same 6h dedup-per-source_key, same silent-if-
+unconfigured fail-open as every other founder alert) — no new email infra,
+no new metric logic. Only fires when `met is False` (not `None` — no data
+yet) AND `sample_size >= 5` (avoid alerting on one slow blip). Scheduled via
+the existing `_supervise()` long-lived-cron wrapper in `main.py` (same
+pattern as `integration_health_cron`/`daily_digest` — silent death opens a
+Guard 20 incident like any other supervised task).
+
+Verified locally: seeded 6 deliberately-slow `health_endpoint_latency` docs
+→ ran `_check_and_alert_once()` → confirmed a `founder_alert_sends` audit
+row was written for `slo_breach_chat_response` with the correct p95/target
+detail text; test data cleaned up. Backend boot log confirms
+`📈 slo_alert cron ON · every 1800s`. **Preview-tested only — email itself
+untestable end-to-end here since `RESEND_API_KEY`/`FOUNDER_ALERT_EMAIL`
+aren't configured in preview (same as every other founder alert) — will
+actually send once deployed to production where those ARE configured.**
+
+
 ## 2026-08-26 (later) — Deploy-log fix: MongoDB WTimeoutError (majority write-concern) crashing health_notifier ticks + feature_flags seed on real Atlas
 
 Founder shared production deploy build/error logs showing recurring
