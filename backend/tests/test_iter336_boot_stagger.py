@@ -19,9 +19,13 @@ CRON = Path("/app/backend/services/integration_health_cron.py").read_text(
 
 
 def _delay_before(marker: str, src: str = MAIN) -> float:
-    """First asyncio.sleep(N) that appears AFTER `marker`."""
+    """First asyncio.sleep(N...) that appears AFTER `marker`. Matches
+    the leading numeric literal even when it's the base of an
+    expression (e.g. `sleep(150 + _startup_jitter_s())` — Iter C2
+    per-worker jitter, 2026-08-26) rather than requiring a bare
+    literal immediately closed by `)`."""
     seg = src.split(marker, 1)[1][:800]
-    m = re.search(r"sleep\((\d+(?:\.\d+)?)\)", seg)
+    m = re.search(r"sleep\((\d+(?:\.\d+)?)", seg)
     assert m, f"no stagger sleep found after {marker!r}"
     return float(m.group(1))
 

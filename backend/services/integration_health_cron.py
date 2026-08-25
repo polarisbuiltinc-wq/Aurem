@@ -29,10 +29,28 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import random
 import time
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _startup_jitter_s(pid: Optional[int] = None, max_jitter_s: float = 60.0) -> float:
+    """C2 hardening · 2026-08-26 — residual 2-worker risk: if the prod
+    pod runs >1 uvicorn worker, two workers booting at the SAME
+    instant would otherwise run this cron's probe cycles in lockstep
+    forever, doubling the CPU burst each cycle competes for. A bounded
+    per-worker offset desyncs them.
+
+    Seeded by PID, NOT boot wall-clock time — two workers booting at
+    the identical instant have the identical boot time, so seeding on
+    boot time would still align them. PID differs per worker by
+    construction, so each gets a different (but, for a given PID,
+    deterministic — good for tests) offset in [0, max_jitter_s).
+    `pid` is injectable so the proof below is deterministic."""
+    pid = os.getpid() if pid is None else pid
+    return random.Random(pid).uniform(0, max_jitter_s)
 
 
 def _interval_seconds() -> int:
@@ -142,7 +160,10 @@ async def schedule_integration_health_cron() -> None:
     # we hammer the LLMs. Iter 336 — raised 30 → 150 s so the first
     # 11-probe burst (Stripe+E2B+LLM) lands AFTER the deferred boot
     # tasks (linter install at +120 s), not on top of them.
-    await asyncio.sleep(150)
+    # C2 · 2026-08-26 — + a bounded per-worker jitter (0-60s) so a
+    # 2-worker prod pod doesn't run this cron in perfect lockstep
+    # across both workers forever (see _startup_jitter_s docstring).
+    await asyncio.sleep(150 + _startup_jitter_s())
 
     while True:
         try:
