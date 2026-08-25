@@ -1,0 +1,31 @@
+{
+  "summary": "Phase 1 Resilience Layer validated. Ran full resilience backend pytest suite (46 tests across test_core_errors.py, test_core_boundaries.py, test_cto_task_lock_regression.py, test_global_exception_envelope.py, and the updated test_regression_iter286_mcp_test_file_lock.py) — 46/46 PASS. Verified backend/core/errors.py + boundaries.py + i18n/errors_en.json shape and content. Verified main.py _global_exc_handler was EXTENDED (not rebuilt) — original detail + error_category kept, new error_code/ref_id/can_retry added, HTTPException and CancelledError short-circuits preserved. Verified frontend TaskProgressCard.jsx FailedCard renders the new ref line with data-testid=ship-error-ref-<taskId> only when error_code/ref_id are present, and gracefully omits it otherwise; Show technical details toggle preserved. Verified live app loads cleanly (homepage rendered, no console errors, backend /api/health = 200).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/resilience/test_core_errors.py",
+    "/app/backend/tests/resilience/test_core_boundaries.py",
+    "/app/backend/tests/resilience/test_cto_task_lock_regression.py",
+    "/app/backend/tests/resilience/test_global_exception_envelope.py",
+    "/app/backend/tests/test_regression_iter286_mcp_test_file_lock.py",
+    "/app/test_reports/pytest/resilience_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "classify_exception() correctly relies on AttributeError.name/.obj (py3.10+) with no str(exc) parsing — language-independence explicitly tested with Hindi/German/Japanese exception message text.",
+    "RETRYABLE_CODES correctly excludes deterministic failure classes (SCHEMA_MISMATCH, AUTH_FAILED, PERMISSION_DENIED, VERIFY_FAILED, CONTEXT_LEAK, INTERNAL_UNKNOWN).",
+    "build_error_envelope never includes raw str(exc) — verified by regression test.",
+    "main.py handler extension is minimal and additive — original error_category/user_message/http_status contract intact for useAsyncState.js consumers.",
+    "cto_projects.py root-cause fix uses direct iteration over dict keys (path strings) instead of the previous (e or {}).get('path') which was the exact bug source; _db_plan unconditionally initialized before use — no more latent NameError.",
+    "TaskProgressCard FailedCard uses truthy guard (task.error_code || task.ref_id) so older failed tasks without these fields don't render an empty ref line and don't crash.",
+    "Note (out-of-scope but worth flagging for Phase 2): a codebase-wide audit of every unguarded .get()/.items() call site was explicitly deferred; only the one identified root-cause site was hardened."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Not required — validated via pytest direct-invocation of _global_exc_handler; no auth-gated flow was exercised.",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 2 items (retry-with-strategy-mutation, Hindi i18n content errors_hi.json, /admin/health-score failure-class metrics, ADR, full-codebase .get() audit) are deferred and NOT to be flagged as bugs. When Phase 2 lands, extend backend/tests/resilience/ and re-run. Live-HTTP reproduction of the global-exception envelope through a real endpoint was not attempted (no natural uncaught-exception path from an unauthenticated client) — the direct-call test in test_global_exception_envelope.py is authoritative for the response shape and was verified passing.",
+  "rca of the issue": "Original bug: routers/cto_projects.py::_run_task_via_api iterated `for e in edits` where edits is a {path: content} dict, so `e` was a path str; code then called `(e or {}).get('path')` → AttributeError('str' object has no attribute 'get'). Compounded by _db_plan being defined only inside `if _promised_files:` but used unconditionally after → latent NameError. FIX: replaced the .get() with direct string iteration and hoisted _db_plan = get_db() above the branch. Both exception handlers in cto_projects.py now also record error_code + ref_id on the task doc. main.py global handler now emits error_code/ref_id/can_retry in the 500 envelope while preserving the original detail/error_category contract. Verified: 46/46 tests pass, including a targeted regression that reproduces the exact production AttributeError and confirms it now flows cleanly through classify_exception → SCHEMA_MISMATCH → build_error_envelope (no raw text leak) → _global_exc_handler (JSON envelope with error_code, ref_id 'ORA-xxxxxx', can_retry=false)."
+}

@@ -1,0 +1,47 @@
+{
+  "SCHEMA_MISMATCH": {
+    "title": "Data format issue",
+    "what_happened": "The system received data in a shape it didn't expect, so it stopped before doing anything unsafe.",
+    "what_to_try": ["Try again — this is usually a one-off.", "If it repeats, contact support with the reference ID below."]
+  },
+  "TIMEOUT": {
+    "title": "Request timed out",
+    "what_happened": "The request took too long and was stopped.",
+    "what_to_try": ["Try again in a moment."]
+  },
+  "DEPENDENCY_DOWN": {
+    "title": "A service is unavailable",
+    "what_happened": "A service AUREM depends on isn't responding right now.",
+    "what_to_try": ["Wait a minute and try again."]
+  },
+  "AUTH_FAILED": {
+    "title": "Sign-in required",
+    "what_happened": "Your session couldn't be verified.",
+    "what_to_try": ["Sign in again."]
+  },
+  "PERMISSION_DENIED": {
+    "title": "Not allowed",
+    "what_happened": "You don't have permission to do that.",
+    "what_to_try": ["Check that you have the right access, or contact your admin."]
+  },
+  "VERIFY_FAILED": {
+    "title": "Couldn't verify the result",
+    "what_happened": "The change was attempted but could not be confirmed.",
+    "what_to_try": ["Re-run the task — it will re-verify.", "Check the repo directly if this repeats."]
+  },
+  "CONTEXT_LEAK": {
+    "title": "Something looked out of place",
+    "what_happened": "The system caught an internal inconsistency and stopped rather than risk a wrong answer.",
+    "what_to_try": ["Try again with a fresh session."]
+  },
+  "RATE_LIMITED": {
+    "title": "Too many requests",
+    "what_happened": "You've hit a rate limit.",
+    "what_to_try": ["Wait a moment before retrying."]
+  },
+  "INTERNAL_UNKNOWN": {
+    "title": "Something went wrong",
+    "what_happened": "An unexpected internal error occurred.",
+    "what_to_try": ["Try again.", "Contact support with the reference ID below if it persists."]
+  }
+}

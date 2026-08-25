@@ -213,6 +213,20 @@ function FailedCard({ taskId, task, project, onOpenLivePopup }) {
 
       {task.error && (
         <div style={{ marginTop: 8 }}>
+          {(task.error_code || task.ref_id) && (
+            <div
+              data-testid={`ship-error-ref-${taskId}`}
+              style={{
+                fontSize: 10, color: "var(--text-faint)",
+                fontFamily: "'JetBrains Mono', monospace",
+                marginBottom: 4,
+              }}
+            >
+              {task.error_code && <span>{task.error_code}</span>}
+              {task.error_code && task.ref_id && <span> · </span>}
+              {task.ref_id && <span>ref: {task.ref_id}</span>}
+            </div>
+          )}
           <button
             data-testid={`ship-show-raw-${taskId}`}
             onClick={() => setShowRaw((v) => !v)}

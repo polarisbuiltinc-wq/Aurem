@@ -259,7 +259,11 @@ def test_regression_iter286_ship_code_override_not_llm_grantable():
     # Retained so a refactor that deletes the DB-read entirely is
     # caught even if the caller pattern above stops matching prod.
     src = open("/app/backend/routers/cto_projects.py").read()
-    idx = src.find("_test_touched = [e for e in edits")
+    # 2026-08-25 — updated for the P0 hotfix: `edits` is a
+    # {path: content} dict, so `_test_touched` now iterates path
+    # strings directly (`for p in edits`) instead of the old,
+    # incorrect `(e or {}).get("path")` dict-shaped access on a str.
+    idx = src.find("_test_touched = [p for p in edits")
     assert idx > -1
     block = src[idx: idx + 1200]
     assert "cto_tasks.find_one(" in block

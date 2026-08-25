@@ -2525,10 +2525,22 @@ async def _global_exc_handler(request: _FastReq, exc: Exception):
         classified = {"category": "internal",
                       "user_message": "An internal error occurred. Please try again.",
                       "http_status": 500}
+    # 2026-08-25 · Resilience Layer Phase 1 — add error_code + ref_id
+    # on top of the existing category/user_message contract (kept
+    # unchanged so useAsyncState.js and every existing consumer keep
+    # working). ref_id is logged alongside the full traceback above
+    # so a support conversation can be tied back to the exact log line.
+    from core.errors import build_error_envelope
+    envelope = build_error_envelope(exc)
+    logger.error("unhandled exception ref_id=%s error_code=%s",
+                 envelope["ref_id"], envelope["error_code"])
     return _JsonResp(
         status_code=classified.get("http_status") or 500,
         content={"detail": classified["user_message"],
-                 "error_category": classified["category"]},
+                 "error_category": classified["category"],
+                 "error_code": envelope["error_code"],
+                 "ref_id": envelope["ref_id"],
+                 "can_retry": envelope["can_retry"]},
     )
 
 

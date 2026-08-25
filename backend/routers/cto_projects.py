@@ -3189,6 +3189,7 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
         # remote side, so we narrate the writes locally before firing it.
         _file_list = list(edits.keys())
         _total = len(_file_list)
+        _db_plan = get_db()
         for _i, _fp in enumerate(_file_list, 1):
             await _emit(
                 task_id,
@@ -3200,16 +3201,14 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
             )
             # Flip the matching task_plan row → done so the UI's
             # TaskManagementPanel ticks off in real time.
-            if _promised_files:
-                _db_plan = get_db()
-                if _db_plan is not None:
-                    try:
-                        await _db_plan.cto_tasks.update_one(
-                            {"task_id": task_id, "task_plan.file": _fp},
-                            {"$set": {"task_plan.$.status": "done"}},
-                        )
-                    except Exception:
-                        pass
+            if _promised_files and _db_plan is not None:
+                try:
+                    await _db_plan.cto_tasks.update_one(
+                        {"task_id": task_id, "task_plan.file": _fp},
+                        {"$set": {"task_plan.$.status": "done"}},
+                    )
+                except Exception:
+                    pass
         await _emit(task_id, "Committing to GitHub…", kind="phase_commit", pct=90)
 
         # ── Iter 286 (Track 0) — test-file lock ──────────────────────
@@ -3228,8 +3227,15 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
             from services.loop_diff_classifier import is_test_or_fixture
         except Exception:                        # noqa: BLE001
             is_test_or_fixture = lambda _p: False   # noqa: E731
-        _test_touched = [e for e in edits
-                         if is_test_or_fixture((e or {}).get("path") or "")]
+        # 2026-08-25 · P0 hotfix (root cause of the "'str' object has
+        # no attribute 'get'" production crash, task t_4d07055adb99).
+        # `edits` is a {path: content} dict — iterating `for e in
+        # edits` already yields the path STRING, not a per-file dict.
+        # The old code then called .get("path") on that bare string,
+        # which is exactly the contract violation this resilience
+        # pass targets. Paths are the dict keys directly — no lookup
+        # needed at all.
+        _test_touched = [p for p in edits if is_test_or_fixture(p or "")]
         # `allow_test_file_change` is read from the task record itself
         # — never from LLM output — so the model cannot self-grant.
         _task_row = await _db_plan.cto_tasks.find_one(
@@ -3238,7 +3244,7 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
         ) or {}
         _allow_tests = bool(_task_row.get("allow_test_file_change"))
         if _test_touched and not _allow_tests:
-            _paths = [e.get("path") for e in _test_touched]
+            _paths = list(_test_touched)
             await _log(task_id,
                        "⛔ ship_code blocked — task tried to modify "
                        f"test file(s) {_paths}. Loop-pipeline "
@@ -3486,14 +3492,18 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
         # rendered live, unfiltered, in the chat bubble's worker tape.
         from services.error_classifier import classify_error
         from services.failure_signature import compute_signature, record_and_check
+        from core.errors import classify_exception, new_ref_id
         _cat = classify_error(e)["category"]
         _safe_msg = classify_error(e)["user_message"]
+        _code = classify_exception(e)
+        _ref_id = new_ref_id()
         _sig = compute_signature(proj.get("project_id", ""), task, _cat, safe)
         _sig_info = await record_and_check(
             get_db(), project_id=proj.get("project_id", ""), signature=_sig)
-        await _log(task_id, f"❌ {_safe_msg}", "error")
+        await _log(task_id, f"❌ {_safe_msg} (ref: {_ref_id})", "error")
         await _set_status(task_id, status="failed", error=safe,
-                          error_category=_cat, failure_signature=_sig,
+                          error_category=_cat, error_code=_code.value,
+                          ref_id=_ref_id, failure_signature=_sig,
                           failure_repeat_count=_sig_info["repeat_count"],
                           completed_at=time.time())
         await _emit(task_id, f"Failed — {_safe_msg}", kind="fail", pct=100)
@@ -4000,14 +4010,18 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
         # unfiltered in the chat bubble) — only into the `error` field.
         from services.error_classifier import classify_error
         from services.failure_signature import compute_signature, record_and_check
+        from core.errors import classify_exception, new_ref_id
         _cat = classify_error(e)["category"]
         _safe_msg = classify_error(e)["user_message"]
+        _code = classify_exception(e)
+        _ref_id = new_ref_id()
         _sig = compute_signature(proj.get("project_id", ""), task, _cat, safe)
         _sig_info = await record_and_check(
             get_db(), project_id=proj.get("project_id", ""), signature=_sig)
-        await _log(task_id, f"❌ {_safe_msg}", "error")
+        await _log(task_id, f"❌ {_safe_msg} (ref: {_ref_id})", "error")
         await _set_status(task_id, status="failed", error=safe[:2000],
-                          error_category=_cat, failure_signature=_sig,
+                          error_category=_cat, error_code=_code.value,
+                          ref_id=_ref_id, failure_signature=_sig,
                           failure_repeat_count=_sig_info["repeat_count"],
                           completed_at=time.time())
         # Sentry capture for git-path worker crashes too.
