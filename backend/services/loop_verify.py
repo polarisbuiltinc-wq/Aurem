@@ -11,6 +11,14 @@ API:
           "ok":      bool,
           "results": [{
               "path": str, "ok": bool, "linter": "ruff" | "eslint" | "skip",
+              "verified": bool,  # Part B · W3 2026-08 (R2) — True only
+                                 # when a real linter actually ran; False
+                                 # for "skip" rows (unmapped extension or
+                                 # linter binary missing) — an honest,
+                                 # additive signal separate from `ok`
+                                 # (which stays True for skips so the
+                                 # loop doesn't over-block on files it
+                                 # simply can't check yet).
               "stdout": str, "stderr": str,
           }, ...],
           "errors":  [<flattened error strings>],
@@ -31,29 +39,11 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Map file extensions → linter command + JSON output flag.
-# stderr/stdout parsed by linter.
-_LINTERS: dict[str, tuple[str, list[str]]] = {
-    ".py":   ("ruff",   ["check", "--no-fix", "--output-format=concise"]),
-    ".pyi":  ("ruff",   ["check", "--no-fix", "--output-format=concise"]),
-    ".js":   ("eslint", ["--no-eslintrc", "--no-config-lookup",
-                         "--rule", "no-undef:error",
-                         "--rule", "no-unused-vars:warn",
-                         "--rule", "no-unreachable:error",
-                         "--no-color", "--format", "compact"]),
-    ".jsx":  ("eslint", ["--no-eslintrc", "--no-config-lookup",
-                         "--parser-options=ecmaVersion:latest,ecmaFeatures:{jsx:true}",
-                         "--rule", "no-undef:error",
-                         "--rule", "no-unreachable:error",
-                         "--no-color", "--format", "compact"]),
-    ".ts":   ("eslint", ["--no-eslintrc", "--no-config-lookup",
-                         "--rule", "no-undef:error",
-                         "--no-color", "--format", "compact"]),
-    ".tsx":  ("eslint", ["--no-eslintrc", "--no-config-lookup",
-                         "--parser-options=ecmaVersion:latest,ecmaFeatures:{jsx:true}",
-                         "--rule", "no-undef:error",
-                         "--no-color", "--format", "compact"]),
-}
+# Extension → linter map — Part B · W3 · 2026-08: moved to
+# services/capabilities.py (R1 — single source of truth for what
+# AUREM can actually verify). Imported here unchanged so every
+# existing `_LINTERS.get(ext)` call site below needs zero changes.
+from services.capabilities import VERIFIED_LANGUAGES as _LINTERS
 _SUBPROCESS_TIMEOUT_S = 8
 
 
@@ -154,6 +144,8 @@ async def verify_files(files: list[dict]) -> dict:
                 "path":   rel,
                 "ok":     True,
                 "linter": "skip",
+                "verified": False,   # R2 · W3 2026-08 — honest: no real check ran
+                "error_code": "FILE_LANGUAGE_UNVERIFIED",
                 "stdout": "",
                 "stderr": f"no linter mapping for {ext or '(no ext)'}",
             }, None)
@@ -180,6 +172,8 @@ async def verify_files(files: list[dict]) -> dict:
                 "path":   rel,
                 "ok":     True,
                 "linter": "skip",
+                "verified": False,   # R2 · W3 2026-08 — honest: tool missing, no real check ran
+                "error_code": "FILE_LANGUAGE_UNVERIFIED",
                 "stdout": "",
                 "stderr": se.decode(errors="ignore") or f"{tool} not available on runtime pod",
             }, None)
@@ -188,7 +182,7 @@ async def verify_files(files: list[dict]) -> dict:
         stderr = se.decode(errors="ignore")
         stdout = stdout.replace(disk_path, rel).replace(sandbox + "/", "")
         stderr = stderr.replace(disk_path, rel).replace(sandbox + "/", "")
-        row = {"path": rel, "ok": ok, "linter": tool,
+        row = {"path": rel, "ok": ok, "linter": tool, "verified": True,
                "stdout": stdout, "stderr": stderr}
         if ok:
             return (row, None)

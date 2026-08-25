@@ -43,5 +43,20 @@
     "title": "Something went wrong",
     "what_happened": "An unexpected internal error occurred.",
     "what_to_try": ["Try again.", "Contact support with the reference ID below if it persists."]
+  },
+  "FILE_BINARY_NOT_EDITABLE": {
+    "title": "Binary file — can't edit",
+    "what_happened": "This file is binary (an image, archive, or other non-text format), so it can't be safely read as text or rewritten.",
+    "what_to_try": ["Edit binary files directly (they're skipped, not modified).", "Ask for changes to text files only."]
+  },
+  "FILE_ENCODING_UNSUPPORTED": {
+    "title": "Unsupported text encoding",
+    "what_happened": "This file's text encoding isn't UTF-8, so it can't be safely read and rewritten without risking corruption.",
+    "what_to_try": ["Re-save the file as UTF-8, or ask for changes to other files."]
+  },
+  "FILE_LANGUAGE_UNVERIFIED": {
+    "title": "No real check ran on this file",
+    "what_happened": "This file's language isn't one AUREM can run a real lint/type check on yet, so the edit was made but not independently verified.",
+    "what_to_try": ["Double-check this file's changes yourself.", "Ask for changes to Python, JavaScript, or TypeScript files for automatic verification."]
   }
 }

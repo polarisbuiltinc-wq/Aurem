@@ -886,12 +886,16 @@ async def verify_pass_is_real(claimed_state: str, *, owner: str,
     regression. Empty checks → verified=None."""
     checks = {}
     from services.github_api_writer import _get_branch_head, fetch_file
+    from core.errors import BinaryFileError, UnsupportedEncodingError
     if claimed_state == "SHIPPED":
         latest_sha = await _get_branch_head(owner, repo, branch, token)
         checks["github_commit_exists"] = (
             bool(latest_sha) and latest_sha != pre_state_sha)
     if claimed_state == "ROLLBACK_FINISHED":
-        current = await fetch_file(owner, repo, marker_path, branch, token)
+        try:
+            current = await fetch_file(owner, repo, marker_path, branch, token)
+        except (BinaryFileError, UnsupportedEncodingError):
+            current = None
         checks["file_content_reverted"] = (
             current == (baseline_content
                          if baseline_content is not None

@@ -1283,6 +1283,7 @@ class LoopEngine:
                     MAX_PARALLEL_GENS, PER_FILE_TIMEOUT_S,
                 )
                 from services.github_api_writer import fetch_file
+                from core.errors import BinaryFileError, UnsupportedEncodingError
                 sem = asyncio.Semaphore(MAX_PARALLEL_GENS)
                 plan_bullets = "\n".join(
                     f"- {b}" for b in (plan.get("bullets") or [])[:12]
@@ -1316,6 +1317,60 @@ class LoopEngine:
                             current = await fetch_file(
                                 owner, repo, path, branch, token,
                             ) or ""
+                        except (BinaryFileError, UnsupportedEncodingError) as e:
+                            # Part B · W3 · 2026-08 · R2 graceful
+                            # degradation — mirrors the existing "huge
+                            # file" pattern below (Iter 362): typed
+                            # refusal, clear message, `return None` so
+                            # this ONE path is skipped while every
+                            # other planned file still generates
+                            # normally. NEVER falls through to
+                            # `current = ""` — that would make the LLM
+                            # treat a real binary/legacy-encoded file
+                            # as a brand-new empty file and overwrite
+                            # it with generated text on commit.
+                            _code = ("FILE_BINARY_NOT_EDITABLE"
+                                     if isinstance(e, BinaryFileError)
+                                     else "FILE_ENCODING_UNSUPPORTED")
+                            _msg = (
+                                f"{path} is a binary file — I can't "
+                                f"safely edit it, so it's being skipped."
+                                if isinstance(e, BinaryFileError) else
+                                f"{path} isn't UTF-8 text — I can't "
+                                f"safely edit it without risking "
+                                f"corruption, so it's being skipped."
+                            )
+                            logger.warning(
+                                "[parliament] %s for %s — skipping "
+                                "(no edit attempted).", _code, path,
+                            )
+                            try:
+                                await self.db.loop_run_log.insert_one({
+                                    "loop_id":    self.loop_id,
+                                    "user_id":    self.user_id,
+                                    "project_id": self.project_id,
+                                    "kind":       "executor_file_not_editable",
+                                    "path":       path,
+                                    "error_code": _code,
+                                    "ts":         _iso(),
+                                    "created_at": _now(),
+                                })
+                            except Exception:
+                                pass
+                            await self._emit(
+                                LoopState.EXECUTING, "execute",
+                                step=2, total_steps=5,
+                                message=_msg,
+                                data={"file": path,
+                                      "sub_step": "file_not_editable",
+                                      "error_code": _code},
+                            )
+                            await self._narrate(
+                                step="execute", tone="danger",
+                                text=_msg,
+                                correlation_id=f"execute:{path}",
+                            )
+                            return None
                         except Exception as e:                # noqa: BLE001
                             logger.warning(
                                 "[parliament] fetch_file failed for %s: "

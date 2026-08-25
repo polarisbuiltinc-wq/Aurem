@@ -47,6 +47,12 @@ class ErrorCode(str, Enum):
     # this specific case is machine-distinguishable from a generic
     # VERIFY_FAILED. No behavior change — additive metadata only.
     LOOP_SELF_HEAL_EXHAUSTED = "LOOP_SELF_HEAL_EXHAUSTED"
+    # Part B · W3 · 2026-08 — language-support small version. Refusal
+    # codes for the edit/verify/execute path's single shared read
+    # choke point (services/github_api_writer.py::fetch_file).
+    FILE_BINARY_NOT_EDITABLE = "FILE_BINARY_NOT_EDITABLE"
+    FILE_ENCODING_UNSUPPORTED = "FILE_ENCODING_UNSUPPORTED"
+    FILE_LANGUAGE_UNVERIFIED = "FILE_LANGUAGE_UNVERIFIED"
 
 
 # Only these classes are safe to blindly retry — deterministic failures
@@ -64,6 +70,27 @@ class ContractError(ValueError):
     """Raised by core/boundaries.py — always classifies as SCHEMA_MISMATCH."""
 
 
+class BinaryFileError(ValueError):
+    """Raised by fetch_file() when the file's first 8 KiB contain a
+    NUL byte — the standard binary-content heuristic. Carries `path`
+    so callers can surface which file was refused."""
+
+    def __init__(self, path: str):
+        self.path = path
+        super().__init__(f"binary content detected: {path}")
+
+
+class UnsupportedEncodingError(ValueError):
+    """Raised by fetch_file() when content fails strict UTF-8 decode
+    but has no NUL byte (legacy-encoding text, e.g. Latin-1/Cp1252).
+    Full legacy-encoding support is out of scope this pass — this is
+    a typed refusal, never a silent U+FFFD write-back."""
+
+    def __init__(self, path: str):
+        self.path = path
+        super().__init__(f"non-UTF-8 text encoding: {path}")
+
+
 def classify_exception(exc: BaseException) -> ErrorCode:
     """Classify by TYPE + STRUCTURE only. Never inspects `str(exc)`."""
     from services.retry_guard import BreakerOpenError
@@ -74,6 +101,11 @@ def classify_exception(exc: BaseException) -> ErrorCode:
 
     if isinstance(exc, ContractError):
         return ErrorCode.SCHEMA_MISMATCH
+
+    if isinstance(exc, BinaryFileError):
+        return ErrorCode.FILE_BINARY_NOT_EDITABLE
+    if isinstance(exc, UnsupportedEncodingError):
+        return ErrorCode.FILE_ENCODING_UNSUPPORTED
 
     # AttributeError with structured .name/.obj (py3.10+) — dict-shaped
     # access attempted on a non-dict. This is the exact class of the

@@ -1,0 +1,33 @@
+{
+  "summary": "Backend-only regression testing of Part B · W3 · A4 binary/legacy-encoding file corruption fix in services/github_api_writer.py::fetch_file(). Ran the new dedicated test file (5 tests) + all 9 unrelated regression suites specified by main agent (83 tests). All 88 tests pass green in ~11.7s. Verified the fix code in github_api_writer.py, both real call sites (loop_engine._gen_via_parliament + loop_execute._generate_one_inner), and the 3 defensive except additions in rollback_snapshot, rollback_two_phase (both spots), and qa_matrix.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter_w3_a4_binary_file_refusal.py",
+    "/app/test_reports/pytest/w3_a4_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix is correctly implemented: NUL-byte-in-first-8KiB heuristic is the standard, industry-accepted binary detection and correctly avoids the Latin-1 misclassification pitfall (verified by test_a4d).",
+    "fetch_file() uses a nested try that re-raises BinaryFileError/UnsupportedEncodingError explicitly BEFORE the generic 'except Exception: return None' — good pattern, preserves the existing 'never raises on network/parse errors' contract while surfacing the two typed data-integrity errors.",
+    "Both real call sites (loop_engine.py line 1320 and loop_execute.py line 231) catch the two typed exceptions BEFORE the pre-existing generic 'except Exception: current=\"\"' — critical ordering, otherwise binary would still be silently treated as blank-new-file. Verified correct.",
+    "The 3 defensive-only callers (rollback_snapshot._capture_files, rollback_two_phase._current_contents + read-back verify loop, qa_matrix.verify_pass_is_real) correctly map the new exceptions to None/absent, preserving their prior 'fetch_file never raises' assumption — no behavior change for normal text content, confirmed by the regression suite passing.",
+    "The engine-level test (test_a4_real_execute_path_skips_binary_generates_text) provides strong end-to-end proof — only httpx transport + Parliament.run are mocked; the real fetch_file, real _gen_via_parliament, real _do_execute, real emit pipeline all execute. Assertions cover the two invariants that matter: (a) binary/legacy files ABSENT from submitted_files (won't be committed), (b) real .py file PRESENT (no over-blocking), plus typed error_code + no raw exception class names leak into user-facing messages.",
+    "Test coverage is thorough — no additional edge cases required. The Latin-1 fixture correctly verifies NO NUL byte (line 148 asserts) before use, ensuring the test itself is not accidentally validating the wrong branch."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (88/88)", "frontend": "n/a (backend-only patch)"},
+  "test_credentials": "None required — all HTTP calls via httpx.MockTransport, LLM via monkeypatched Parliament.run",
+  "seed_data_creation": "None — tests self-contained with in-memory fixtures (real PNG built via zlib/struct, real Latin-1 bytes, real .py source)",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "This iteration validated a small, isolated data-integrity bug fix (binary/Latin-1 files silently corrupted by fetch_file). Nothing to carry forward — the 5 new tests are permanent regression guards in tests/test_iter_w3_a4_binary_file_refusal.py. Known pre-existing unrelated failures listed by main agent (test_iter367_rollback_fake_success_fix, test_iter363_phase3b_github_app_dispatch::*_app_installed, test_iteration_cto_projects_live env-dependent) were correctly NOT re-flagged — they are outside the scope of this patch.",
+  "rca of the issue": "PRE-FIX RCA — fetch_file did base64.b64decode(...).decode('utf-8', errors='replace') unconditionally. Real binary bytes (PNG, PDF, .git pack) → became strings full of U+FFFD replacement chars → LLM rewrote that garbage → commit_files wrote the LLM output back → original binary permanently destroyed. verify_files can't catch it (no linter for .png). FIX validated: NUL-in-first-8KiB → BinaryFileError; strict-UTF-8 fails without NUL → UnsupportedEncodingError; both typed errors caught in the two real call sites BEFORE the generic fallback, emitting a typed file_not_editable event and excluding the file from submitted_files. Latin-1 no-NUL fixture proves no misclassification. Real .py fixture proves no over-blocking."
+}

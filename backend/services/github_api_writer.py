@@ -26,6 +26,7 @@ from typing import Optional
 import httpx
 
 from services.http import ext_client
+from core.errors import BinaryFileError, UnsupportedEncodingError
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,16 @@ async def fetch_file(owner: str, repo: str,
     the read-path pool from the write-path raw client that commit_files
     and revert_commit still hold. Timeout + limits passed EXPLICITLY
     so a future change to _LIMITS_DEFAULTS doesn't shift writer behavior.
+
+    Part B · W3 · 2026-08 — this is the SINGLE shared choke point
+    where the edit/verify/execute path decodes file content from
+    bytes to str (services/loop_engine.py::_gen_via_parliament and
+    services/loop_execute.py both call this, nothing downstream
+    re-decodes). Binary content used to silently decode with
+    `errors="replace"`, writing back a corrupted file on commit — see
+    memory/W3_LANGUAGE_SUPPORT_A4_BINARY_FIX_2026_08.md for the live
+    repro. Now raises a typed `BinaryFileError`/`UnsupportedEncodingError`
+    instead so callers refuse the file instead of corrupting it.
     """
     url = f"{GITHUB_API}/repos/{owner}/{repo}/contents/{path}?ref={ref}"
     try:
@@ -73,9 +84,18 @@ async def fetch_file(owner: str, repo: str,
             data = r.json()
             if data.get("encoding") != "base64":
                 return None
-            return base64.b64decode(data.get("content", "")).decode(
-                "utf-8", errors="replace"
-            )
+            raw = base64.b64decode(data.get("content", ""))
+            # Binary heuristic: a NUL byte in the first 8 KiB. Do NOT
+            # use decode-failure alone — a Latin-1/Cp1252 TEXT file
+            # also fails strict UTF-8 but isn't binary.
+            if b"\x00" in raw[:8192]:
+                raise BinaryFileError(path)
+            try:
+                return raw.decode("utf-8")
+            except UnicodeDecodeError as e:
+                raise UnsupportedEncodingError(path) from e
+    except (BinaryFileError, UnsupportedEncodingError):
+        raise
     except Exception as e:
         logger.debug(f"fetch_file {path}@{ref} failed: {e!r}")
         return None

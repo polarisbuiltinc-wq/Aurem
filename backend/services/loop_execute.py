@@ -227,6 +227,18 @@ async def _generate_one_inner(
     try:
         current = await fetch_file(owner, repo, path, branch, token) or ""
     except Exception as e:                              # noqa: BLE001
+        from core.errors import BinaryFileError, UnsupportedEncodingError
+        if isinstance(e, (BinaryFileError, UnsupportedEncodingError)):
+            # Part B · W3 · 2026-08 — never treat a binary/legacy-
+            # encoded file as "new" (that would overwrite it with
+            # LLM-generated text on commit). Propagate so the caller's
+            # existing `except Exception: return None` skips this file
+            # cleanly instead — same contract, no new orphan crash.
+            logger.warning(
+                "[execute] %d/%d %s for %s — skipping (no edit "
+                "attempted).", idx, total, type(e).__name__, path,
+            )
+            raise
         logger.warning("[execute] fetch_file failed for %s: %r (treating as new file)", path, e)
         current = ""
 

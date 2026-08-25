@@ -44,11 +44,24 @@ def _sha256(text: str) -> str:
 async def _capture_files(owner: str, repo: str, branch: str, token: str,
                           file_paths: list[str]) -> dict:
     """Fetch each path's current content; records absence (path added
-    later) instead of raising so a restore always has a clean signal."""
+    later) instead of raising so a restore always has a clean signal.
+
+    Part B · W3 · 2026-08 — fetch_file() now raises BinaryFileError/
+    UnsupportedEncodingError for content it can't safely decode
+    (previously silently corrupted it). Snapshotting a binary file is
+    not a scenario this pillar builds full support for this pass —
+    caught here and recorded the same as "absent" so this function's
+    documented "never raises" contract still holds for callers."""
     from services.github_api_writer import fetch_file
+    from core.errors import BinaryFileError, UnsupportedEncodingError
     files: dict = {}
     for path in file_paths:
-        content = await fetch_file(owner, repo, path, branch, token)
+        try:
+            content = await fetch_file(owner, repo, path, branch, token)
+        except (BinaryFileError, UnsupportedEncodingError):
+            files[path] = {"present": False, "content": None,
+                           "sha256": None, "not_editable": True}
+            continue
         if content is None:
             files[path] = {"present": False, "content": None, "sha256": None}
         else:

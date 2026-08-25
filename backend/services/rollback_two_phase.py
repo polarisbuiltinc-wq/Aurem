@@ -34,9 +34,17 @@ def _iso() -> str:
 
 async def _current_contents(owner, repo, branch, token, paths):
     from services.github_api_writer import fetch_file
-    # fetch_file returns None for missing paths (does not raise).
-    return {p: await fetch_file(owner, repo, p, branch, token)
-            for p in paths}
+    from core.errors import BinaryFileError, UnsupportedEncodingError
+    # fetch_file returns None for missing paths, and (Part B · W3 ·
+    # 2026-08) now raises for content it can't safely decode as text
+    # — caught here and treated the same as "missing" so this
+    # function's documented "does not raise" contract still holds.
+    async def _safe(p):
+        try:
+            return await fetch_file(owner, repo, p, branch, token)
+        except (BinaryFileError, UnsupportedEncodingError):
+            return None
+    return {p: await _safe(p) for p in paths}
 
 
 async def preview_rollback(db, *, snapshot_id: str, token: str) -> dict:
@@ -167,6 +175,7 @@ async def execute_rollback_from_snapshot(
 
     try:
         from services.github_api_writer import commit_files, fetch_file
+        from core.errors import BinaryFileError, UnsupportedEncodingError
         res = await commit_files(
             owner=owner, repo=repo, branch=branch, token=token,
             files=restore,
@@ -181,7 +190,10 @@ async def execute_rollback_from_snapshot(
         # Independent read-back verification — never trust the write API.
         mismatches = []
         for path, content in restore.items():
-            after = await fetch_file(owner, repo, path, branch, token)
+            try:
+                after = await fetch_file(owner, repo, path, branch, token)
+            except (BinaryFileError, UnsupportedEncodingError):
+                after = None
             if after is None or _sha256(after) != _sha256(content):
                 mismatches.append({"path": path, "error": "hash_mismatch"
                                    if after is not None else "missing_after_restore"})
