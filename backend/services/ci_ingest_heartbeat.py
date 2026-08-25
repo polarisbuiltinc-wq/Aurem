@@ -36,6 +36,28 @@ EXPECTED_MAX_GAP_HOURS = int(os.environ.get("CI_HEARTBEAT_MAX_GAP_HOURS", "48"))
 _KINDS = ("g1_route_sweep", "g15_dep_scan")
 
 
+async def _check_kind_status(db, kind: str, now: dt.datetime) -> dict:
+    """Last-seen age for one CI ingest `kind` vs EXPECTED_MAX_GAP_HOURS."""
+    try:
+        last = await db.synthetic_checks.find_one(
+            {"kind": kind}, sort=[("finished_at", -1)],
+        )
+    except Exception as e:
+        return {"error": str(e)[:200]}
+    if not last:
+        return {"last_seen_at": None, "age_hours": None,
+                 "stale": True, "reason": "never_ingested"}
+    finished = last.get("finished_at")
+    if finished and finished.tzinfo is None:
+        finished = finished.replace(tzinfo=dt.timezone.utc)
+    age_hours = (now - finished).total_seconds() / 3600 if finished else None
+    return {
+        "last_seen_at": finished.isoformat() if finished else None,
+        "age_hours": round(age_hours, 1) if age_hours is not None else None,
+        "stale": age_hours is None or age_hours > EXPECTED_MAX_GAP_HOURS,
+    }
+
+
 async def heartbeat_status(db) -> dict:
     """Real read: last-seen age per kind vs EXPECTED_MAX_GAP_HOURS.
     Returns {available, kinds: {kind: {last_seen_at, age_hours, stale}}}."""
@@ -45,26 +67,7 @@ async def heartbeat_status(db) -> dict:
     out = {"available": True, "checked_at": now.isoformat(),
            "expected_max_gap_hours": EXPECTED_MAX_GAP_HOURS, "kinds": {}}
     for kind in _KINDS:
-        try:
-            last = await db.synthetic_checks.find_one(
-                {"kind": kind}, sort=[("finished_at", -1)],
-            )
-        except Exception as e:
-            out["kinds"][kind] = {"error": str(e)[:200]}
-            continue
-        if not last:
-            out["kinds"][kind] = {"last_seen_at": None, "age_hours": None,
-                                   "stale": True, "reason": "never_ingested"}
-            continue
-        finished = last.get("finished_at")
-        if finished and finished.tzinfo is None:
-            finished = finished.replace(tzinfo=dt.timezone.utc)
-        age_hours = (now - finished).total_seconds() / 3600 if finished else None
-        out["kinds"][kind] = {
-            "last_seen_at": finished.isoformat() if finished else None,
-            "age_hours": round(age_hours, 1) if age_hours is not None else None,
-            "stale": age_hours is None or age_hours > EXPECTED_MAX_GAP_HOURS,
-        }
+        out["kinds"][kind] = await _check_kind_status(db, kind, now)
     return out
 
 

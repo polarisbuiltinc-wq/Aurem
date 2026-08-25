@@ -158,6 +158,23 @@ async def create_org_repo(
     }
 
 
+async def _retry_push_with_sha(url: str, br: str, path: str, _try):
+    """422 handling: fetch the existing sha then retry as an update."""
+    async with ext_client(
+        "github",
+        timeout=httpx.Timeout(connect=5.0, read=_TIMEOUT, write=5.0, pool=5.0),
+    ) as cli:
+        g = await cli.get(url + f"?ref={br}", headers=_headers())
+    if g.status_code == 200 and g.json().get("sha"):
+        res2 = await _try(g.json()["sha"])
+        if res2["status"] in (200, 201):
+            return {"ok": True, "path": path, "updated": True,
+                    "commit": (res2["json"].get("commit") or {}).get("sha")}
+        return {"ok": False, "path": path, "reason": f"update_failed_{res2['status']}",
+                "detail": str(res2["json"])[:300]}
+    return None
+
+
 async def push_file(
     repo_name: str,
     path: str,
@@ -197,18 +214,9 @@ async def push_file(
 
     # Retry with sha if the file exists (create → conflict → update).
     if res["status"] == 422:
-        async with ext_client(
-            "github",
-            timeout=httpx.Timeout(connect=5.0, read=_TIMEOUT, write=5.0, pool=5.0),
-        ) as cli:
-            g = await cli.get(url + f"?ref={br}", headers=_headers())
-        if g.status_code == 200 and g.json().get("sha"):
-            res2 = await _try(g.json()["sha"])
-            if res2["status"] in (200, 201):
-                return {"ok": True, "path": path, "updated": True,
-                        "commit": (res2["json"].get("commit") or {}).get("sha")}
-            return {"ok": False, "path": path, "reason": f"update_failed_{res2['status']}",
-                    "detail": str(res2["json"])[:300]}
+        retried = await _retry_push_with_sha(url, br, path, _try)
+        if retried is not None:
+            return retried
 
     return {"ok": False, "path": path, "reason": f"github_{res['status']}",
             "detail": str(res["json"])[:300]}

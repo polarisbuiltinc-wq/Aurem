@@ -88,10 +88,12 @@ def test_advisor_context_response_shape_has_new_blocks():
 def test_advisor_context_never_raises_from_missing_repo():
     """Bug 4 root cause: projects without github_owner/repo silently
     blocked the PR fetch. Verify the fallback path sets an error
-    string rather than crashing."""
+    string rather than crashing. The PR-fetch helper was mechanically
+    split into services/advisor_open_prs.py (2026-08-27, file-size
+    guard) — same behaviour, different source file."""
     import inspect
-    from routers import advisor_context
-    src = inspect.getsource(advisor_context)
+    from services import advisor_open_prs
+    src = inspect.getsource(advisor_open_prs)
     assert 'open_prs["error"] = "repo_not_configured"' in src
 
 

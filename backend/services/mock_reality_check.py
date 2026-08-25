@@ -107,22 +107,8 @@ async def check_github(timeout: float = 8.0) -> dict:
     }
 
 
-async def check_openrouter(timeout: float = 8.0) -> dict:
-    """Hit OpenRouter's public model list and compare shape of the
-    first model entry."""
-    try:
-        async with ext_client(
-            "openrouter",
-            timeout=httpx.Timeout(connect=5.0, read=timeout, write=5.0, pool=5.0),
-        ) as c:
-            resp = await c.get(_OPENROUTER_PROBE_URL)
-    except httpx.TimeoutException:
-        return {"ok": False, "upstream": "openrouter",
-                "reason": "timeout", "url": _OPENROUTER_PROBE_URL}
-    except Exception as e:                                       # noqa: BLE001
-        return {"ok": False, "upstream": "openrouter",
-                "reason": "network_error", "error": repr(e)[:200],
-                "url": _OPENROUTER_PROBE_URL}
+def _parse_openrouter_response(resp) -> dict:
+    """Shape-check a 200 response body; maps parse failures to reasons."""
     if resp.status_code != 200:
         return {"ok": False, "upstream": "openrouter",
                 "reason": "unexpected_status", "status": resp.status_code,
@@ -149,6 +135,25 @@ async def check_openrouter(timeout: float = 8.0) -> dict:
         "sample_id":   first.get("id"),
         "url":         _OPENROUTER_PROBE_URL,
     }
+
+
+async def check_openrouter(timeout: float = 8.0) -> dict:
+    """Hit OpenRouter's public model list and compare shape of the
+    first model entry."""
+    try:
+        async with ext_client(
+            "openrouter",
+            timeout=httpx.Timeout(connect=5.0, read=timeout, write=5.0, pool=5.0),
+        ) as c:
+            resp = await c.get(_OPENROUTER_PROBE_URL)
+    except httpx.TimeoutException:
+        return {"ok": False, "upstream": "openrouter",
+                "reason": "timeout", "url": _OPENROUTER_PROBE_URL}
+    except Exception as e:                                       # noqa: BLE001
+        return {"ok": False, "upstream": "openrouter",
+                "reason": "network_error", "error": repr(e)[:200],
+                "url": _OPENROUTER_PROBE_URL}
+    return _parse_openrouter_response(resp)
 
 
 async def run_all(timeout: float = 8.0) -> dict:

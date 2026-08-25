@@ -35,6 +35,7 @@ from services.admin_analytics_cache import (
     invalidate as _cache_invalidate,
     mongo_swr_cache,
 )
+from services.admin_error_autofix import run_error_autofix
 
 logger = logging.getLogger(__name__)
 # Iter 358 — router-level admin gate (defense-in-depth). EVERY route on
@@ -285,38 +286,10 @@ async def autofix_error(
         "files first, then make the change."
     )
 
-    async def _run_autofix() -> None:
-        try:
-            from services.orchestrator import chat_with_tools
-            result = await chat_with_tools(
-                prompt=prompt,
-                user_id=admin.get("user_id"),
-                project_id=None,
-                history_lines=[],
-                live_invocations_ref=None,
-                mode="maxx",
-            )
-            ok = bool(result and result.get("ok"))
-            await db.frontend_errors.update_one(
-                {"_id": oid},
-                {"$set": {
-                    "autofix_status": "done" if ok else "failed",
-                    "autofix_finished": datetime.now(timezone.utc).isoformat(),
-                    "autofix_response": (result.get("content") or "")[:5_000]
-                                          if isinstance(result, dict) else "",
-                }},
-            )
-        except Exception as e:                       # noqa: BLE001
-            logging.getLogger("admin").warning(
-                "autofix_error %s failed: %r", error_id, e,
-            )
-            await db.frontend_errors.update_one(
-                {"_id": oid},
-                {"$set": {"autofix_status": "failed",
-                          "autofix_error": str(e)[:1_000]}},
-            )
-
-    asyncio.create_task(_run_autofix())
+    asyncio.create_task(run_error_autofix(
+        db, admin_user_id=admin.get("user_id"),
+        error_id=error_id, oid=oid, prompt=prompt,
+    ))
     return {"ok": True, "queued": True, "error_id": error_id}
 
 

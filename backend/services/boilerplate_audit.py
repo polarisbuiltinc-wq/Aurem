@@ -124,6 +124,20 @@ def load_python_boilerplate(stack: str, key: str) -> Any:
     return mod
 
 
+def _eval_simple_int_expr(expr: str) -> Optional[int]:
+    """Fallback evaluator for `A * B * C` or a bare integer literal,
+    used when Node isn't on PATH."""
+    if re.fullmatch(r"\s*(\d+)\s*(\*\s*\d+\s*)*", expr):
+        parts = [int(p) for p in re.findall(r"\d+", expr)]
+        val = 1
+        for p in parts:
+            val *= p
+        return val
+    if expr.isdigit():
+        return int(expr)
+    return None
+
+
 def read_js_constant(stack: str, key: str, name: str) -> Optional[int]:
     """Return the numeric value of `const NAME = <expr>;` from a
     boilerplate JS file. Runs Node.js in a subprocess to evaluate
@@ -155,17 +169,7 @@ def read_js_constant(stack: str, key: str, name: str) -> Optional[int]:
             return int(r.stdout.strip())
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
-    # Fallback — parse `A * B` / `A * B * C` etc.
-    if re.fullmatch(r"\s*(\d+)\s*(\*\s*\d+\s*)*", expr):
-        parts = [int(p) for p in re.findall(r"\d+", expr)]
-        val = 1
-        for p in parts:
-            val *= p
-        return val
-    # Single integer literal.
-    if expr.isdigit():
-        return int(expr)
-    return None
+    return _eval_simple_int_expr(expr)
 
 
 def audit_reset_token_flags(stack: str) -> dict:

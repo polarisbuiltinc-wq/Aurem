@@ -186,6 +186,14 @@ class _ClaimBody(BaseModel):
 
 
 @router.post("/claim")
+def _find_existing_claim(existing: list[dict], repo_id: str) -> Optional[dict]:
+    """Same user re-claiming the same (non-cancelled) repo_id."""
+    for c in existing:
+        if c.get("repo_id") == repo_id:
+            return c
+    return None
+
+
 async def claim_offer(
     body: _ClaimBody,
     authorization: Optional[str] = Header(None),
@@ -208,15 +216,15 @@ async def claim_offer(
 
     # Same user trying to re-claim the same repo (and that claim isn't
     # cancelled) — idempotent: hand them back the existing claim.
-    for c in existing:
-        if c.get("repo_id") == body.repo_id:
-            return {
-                "success":      True,
-                "claim_id":     c.get("claim_id"),
-                "already_claimed": True,
-                "fix_status":   c.get("fix_status"),
-                "preview":      c.get("preview") or {},
-            }
+    existing_claim = _find_existing_claim(existing, body.repo_id)
+    if existing_claim:
+        return {
+            "success":      True,
+            "claim_id":     existing_claim.get("claim_id"),
+            "already_claimed": True,
+            "fix_status":   existing_claim.get("fix_status"),
+            "preview":      existing_claim.get("preview") or {},
+        }
 
     # ── Atomic spot decrement ────────────────────────────────────
     # find_one_and_update guarantees we never hand out the same spot twice

@@ -167,6 +167,37 @@ async def log_gate_decision(
         logger.warning("[loop_beta] log_gate_decision failed: %r", e)
 
 
+async def _tier_parity_row(db, tier: str, since) -> dict:
+    """Denial-rate row for one tier across both entry points."""
+    row: dict = {"tier": tier}
+    rates: dict = {}
+    low_volume = False
+    for ep in ("loop_start", "chat_stream"):
+        try:
+            total = await db.loop_gate_log.count_documents({
+                "tier": tier, "entry_point": ep, "created_at": {"$gte": since},
+            })
+            denied = await db.loop_gate_log.count_documents({
+                "tier": tier, "entry_point": ep, "decision": "denied",
+                "created_at": {"$gte": since},
+            })
+        except Exception:
+            total, denied = 0, 0
+        rate = round(denied / total, 3) if total else None
+        row[f"{ep}_total"] = total
+        row[f"{ep}_denied"] = denied
+        row[f"{ep}_denial_rate"] = rate
+        rates[ep] = rate
+        if total < 5:
+            low_volume = True
+    row["mismatch"] = bool(
+        not low_volume
+        and rates["loop_start"] is not None and rates["chat_stream"] is not None
+        and abs(rates["loop_start"] - rates["chat_stream"]) >= 0.3
+    )
+    return row
+
+
 async def gate_parity_check(db, window_hours: int = 24) -> dict:
     """Per-tier denial-rate comparison between the two entry points
     over the trailing window. Flags a tier as `mismatch: True` when
@@ -179,32 +210,7 @@ async def gate_parity_check(db, window_hours: int = 24) -> dict:
     tiers_out = []
     mismatch_detected = False
     for tier in ("pro", "team", "founder"):
-        row = {"tier": tier}
-        rates = {}
-        low_volume = False
-        for ep in ("loop_start", "chat_stream"):
-            try:
-                total = await db.loop_gate_log.count_documents({
-                    "tier": tier, "entry_point": ep, "created_at": {"$gte": since},
-                })
-                denied = await db.loop_gate_log.count_documents({
-                    "tier": tier, "entry_point": ep, "decision": "denied",
-                    "created_at": {"$gte": since},
-                })
-            except Exception:
-                total, denied = 0, 0
-            rate = round(denied / total, 3) if total else None
-            row[f"{ep}_total"] = total
-            row[f"{ep}_denied"] = denied
-            row[f"{ep}_denial_rate"] = rate
-            rates[ep] = rate
-            if total < 5:
-                low_volume = True
-        row["mismatch"] = bool(
-            not low_volume
-            and rates["loop_start"] is not None and rates["chat_stream"] is not None
-            and abs(rates["loop_start"] - rates["chat_stream"]) >= 0.3
-        )
+        row = await _tier_parity_row(db, tier, since)
         if row["mismatch"]:
             mismatch_detected = True
         tiers_out.append(row)

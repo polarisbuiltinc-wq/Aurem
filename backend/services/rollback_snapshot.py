@@ -41,6 +41,22 @@ def _sha256(text: str) -> str:
     return hashlib.sha256((text or "").encode()).hexdigest()
 
 
+async def _capture_files(owner: str, repo: str, branch: str, token: str,
+                          file_paths: list[str]) -> dict:
+    """Fetch each path's current content; records absence (path added
+    later) instead of raising so a restore always has a clean signal."""
+    from services.github_api_writer import fetch_file
+    files: dict = {}
+    for path in file_paths:
+        content = await fetch_file(owner, repo, path, branch, token)
+        if content is None:
+            files[path] = {"present": False, "content": None, "sha256": None}
+        else:
+            files[path] = {"present": True, "content": content,
+                           "sha256": _sha256(content)}
+    return files
+
+
 async def create_snapshot(
     db,
     *,
@@ -56,22 +72,13 @@ async def create_snapshot(
 ) -> dict:
     """Capture pre-change state and persist it. Raises on failure —
     callers decide whether to fail open (ship path) or closed (API)."""
-    from services.github_api_writer import fetch_file, _get_branch_head
+    from services.github_api_writer import _get_branch_head
 
     snapshot_id = f"snap_{uuid.uuid4().hex[:20]}"
     head = await _get_branch_head(owner, repo, branch, token)
     base_sha = head["sha"] if isinstance(head, dict) else str(head)
 
-    files: dict = {}
-    for path in file_paths:
-        # fetch_file returns None when the path doesn't exist at ref —
-        # record absence so a restore knows the path was ADDED later.
-        content = await fetch_file(owner, repo, path, branch, token)
-        if content is None:
-            files[path] = {"present": False, "content": None, "sha256": None}
-        else:
-            files[path] = {"present": True, "content": content,
-                           "sha256": _sha256(content)}
+    files = await _capture_files(owner, repo, branch, token, file_paths)
 
     db_state: dict = {}
     if loop_id:

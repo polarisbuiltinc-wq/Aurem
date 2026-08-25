@@ -248,11 +248,14 @@ def test_admin_two_factor_card_exists():
     assert "/admin/2fa/enroll-verify" in src
     assert "/admin/2fa/disable" in src
     # QR + secret + backup codes must surface as DOM nodes with
-    # testids so the testing agent can find them.
-    assert 'data-testid="admin-2fa-qr"' in src
-    assert 'data-testid="admin-2fa-secret"' in src
-    assert 'data-testid="admin-2fa-backup-codes"' in src
-    assert 'data-testid="admin-2fa-confirm-submit"' in src
+    # testids so the testing agent can find them. The enroll form
+    # was mechanically split into TwoFactorEnrollPanel.jsx (2026-08-27,
+    # file-size guard) — same DOM output, different source file.
+    enroll_src = (FRONTEND / "components" / "TwoFactorEnrollPanel.jsx").read_text(encoding="utf-8")
+    assert 'data-testid="admin-2fa-qr"' in enroll_src
+    assert 'data-testid="admin-2fa-secret"' in enroll_src
+    assert 'data-testid="admin-2fa-backup-codes"' in enroll_src
+    assert 'data-testid="admin-2fa-confirm-submit"' in enroll_src
     assert 'data-testid="admin-2fa-disable-cta"' in src
 
 

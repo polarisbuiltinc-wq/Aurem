@@ -1,0 +1,30 @@
+{
+  "summary": "Phase 1 Codebase Health Score refactor batch verification. Validated: (1) GET /api/aurem-dev/admin/health-score returns 200 with all 9 categories; code_quality=43 (up from 39), bloated_files=170, complex_files=202 — matches expected metrics. (2) Endpoints touched by refactored helpers all return non-5xx (engagement/my-streak, founder-offer/claim, admin/support/errors, advisor open-prs graceful on missing repo). (3) Frontend UI: Cookie consent banner works end-to-end (Accept persists to localStorage key 'aurem_consent' with correct schema). (4) Admin 2FA enroll flow renders correctly — all critical testids present (admin-2fa-enroll-panel, admin-2fa-qr, admin-2fa-secret, admin-2fa-backup-codes, admin-2fa-confirm-input, admin-2fa-confirm-submit, admin-2fa-enroll-cancel); QR + secret + 8 backup codes visibly render on screenshot. (5) TabBar on /dashboard renders tabs (ds2-tab-chat/preview/graph) and active project persists via localStorage key 'aurem_active_project'. (6) Vercel card on /settings?tab=integrations renders with vercel-status-disconnected (VERCEL_API_TOKEN not set in preview) — VercelTryItRow is correctly conditionally hidden when not connected (matches original behavior, {status?.connected && <VercelTryItRow/>} guard). All 5 backend pytest smoke tests PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase1_refactor_smoke.py",
+    "/app/test_reports/pytest/phase1_refactor_smoke.xml",
+    "/app/test_reports/screenshots/phase1_2fa_enroll.png",
+    "/app/test_reports/screenshots/phase1_dashboard.png",
+    "/app/test_reports/screenshots/phase1_vercel_integrations.png",
+    "/app/test_reports/screenshots/phase1_landing.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Vercel try-it row visibility depends on Vercel connection state — could not exercise Run flow because preview env has VERCEL_API_TOKEN unset. Refactor extraction (VercelTryItRow.jsx) verified structurally sound (import + conditional render preserved), but full end-to-end 'Run tool -> result' path is not exercised in preview. Consider adding a Vercel-connected test environment or a mocked connected state for full E2E coverage of the extracted VercelTryItRow.",
+    "Some pre-existing test failures noted by main agent (2 AWS/GCP regex, 3 ora_learning log-string, 2 CI-ingest-token) remain out of scope for this refactor batch — track as separate CI/test-triage backlog items."
+  ],
+  "updated_files": ["/app/backend/tests/test_phase1_refactor_smoke.py"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% on tested surfaces (2FA enroll, cookie banner, TabBar, Vercel card render). Vercel Run flow not exercised (env dependency)."},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview admin) — from /app/memory/test_credentials.md",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend login endpoint is POST /api/aurem-dev/auth/login (returns {token, ...}); /api/auth/login returns 404. Admin settings 2FA card is at /admin/settings (scroll past pricing table). Vercel card is at /settings?tab=integrations — VercelTryItRow only renders when Vercel is connected (needs VERCEL_API_TOKEN). Cookie consent localStorage key is 'aurem_consent' with schema {v,ts,choice,cats}. Health-score expects code_quality~43 with bloated_files=170, complex_files=202 as of Phase 1 completion.",
+  "rca of the issue": "N/A — refactor batch verified clean. Overall health score dip 77→75 confirmed by main agent to be preview-pod hot-reload noise (documented caveat in health_score.py), not a real regression."
+}

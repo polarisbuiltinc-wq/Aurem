@@ -146,16 +146,8 @@ async def my_referrals(authorization: str = Header(None)) -> dict[str, Any]:
 
 # ─── Build streak ────────────────────────────────────────────────────
 @router.get("/streak/me")
-async def my_streak(authorization: str = Header(None)) -> dict[str, Any]:
-    """Reads onboarding_token_wallets.ledger and counts consecutive days
-    on which the user spent at least one cheap/frontier debit."""
-    me  = await current_dev(authorization)
-    db  = require_db()
-    uid = me["user_id"]
-    wallet = await db.onboarding_token_wallets.find_one(
-        {"user_id": uid}, {"_id": 0, "ledger": 1},
-    )
-    ledger = (wallet or {}).get("ledger") or []
+def _debit_days_from_ledger(ledger: list[dict]) -> set:
+    """Normalise ledger `debit_*` entries to a set of UTC YYYY-MM-DD days."""
     debit_days: set[str] = set()
     for e in ledger:
         kind = e.get("kind") or ""
@@ -175,6 +167,20 @@ async def my_streak(authorization: str = Header(None)) -> dict[str, Any]:
         else:
             continue
         debit_days.add(day)
+    return debit_days
+
+
+async def my_streak(authorization: str = Header(None)) -> dict[str, Any]:
+    """Reads onboarding_token_wallets.ledger and counts consecutive days
+    on which the user spent at least one cheap/frontier debit."""
+    me  = await current_dev(authorization)
+    db  = require_db()
+    uid = me["user_id"]
+    wallet = await db.onboarding_token_wallets.find_one(
+        {"user_id": uid}, {"_id": 0, "ledger": 1},
+    )
+    ledger = (wallet or {}).get("ledger") or []
+    debit_days = _debit_days_from_ledger(ledger)
 
     # Walk back from today (UTC) and count consecutive days.
     today = datetime.now(timezone.utc).date()

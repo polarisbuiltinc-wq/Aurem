@@ -8,34 +8,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Palette, Database, Settings2, FileText, RotateCcw, Rocket,
-  Eye, Code2,
-} from "lucide-react";
+import { RotateCcw, Rocket, Eye, Code2 } from "lucide-react";
 import { toast } from "sonner";
 import { PersonalShell, PrimaryButton, SecondaryButton } from "./_shell";
 import PreviewPanel from "./PreviewPanel";
 import { api } from "../../lib/api";
-
-/** Rule-based classification of a scaffolded path → a friendly bucket. */
-function bucketFor(path) {
-  const p = (path || "").toLowerCase();
-  if (p.startsWith("ui/") || p.endsWith(".jsx") || p.endsWith(".tsx") ||
-      p.endsWith(".html") || p.endsWith(".vue") || p.endsWith(".css"))
-    return "frontend";
-  if (p.includes("db") || p.includes("schema") || p.includes(".sql") ||
-      p.includes("model") || p.includes("aurem_db_client"))
-    return "database";
-  if (p === "readme.md") return "readme";
-  return "logic";
-}
-
-const BUCKETS = [
-  { key: "frontend", label: "Frontend",       Icon: Palette   },
-  { key: "database", label: "Database",       Icon: Database  },
-  { key: "logic",    label: "Logic & Config", Icon: Settings2 },
-  { key: "readme",   label: "Overview",       Icon: FileText  },
-];
+import { bucketFor, BUCKETS, toggleBtn } from "./draftReviewHelpers";
 
 export default function DraftReview() {
   const { draftId } = useParams();
@@ -305,18 +283,4 @@ export default function DraftReview() {
       </div>
     </PersonalShell>
   );
-}
-
-
-function toggleBtn(active) {
-  return {
-    display: "inline-flex", alignItems: "center", gap: 6,
-    padding: "6px 14px", borderRadius: 999,
-    background: active ? "#FFFFFF" : "transparent",
-    color: active ? "#1C1C19" : "#6B6B63",
-    border: "none", cursor: "pointer",
-    fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-    boxShadow: active ? "0 1px 3px rgba(28,28,25,0.10)" : "none",
-    transition: "background 200ms ease, color 200ms ease",
-  };
 }

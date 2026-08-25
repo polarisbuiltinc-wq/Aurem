@@ -44,6 +44,7 @@ from fastapi import APIRouter, Header, HTTPException
 from routers.auth import current_dev
 from cto_services.db import require_db
 from services.usage import is_founder_email
+from services.advisor_open_prs import fetch_open_prs
 
 router = APIRouter(prefix="/api/aurem-dev", tags=["advisor"])
 
@@ -219,40 +220,9 @@ async def get_advisor_context(
     # unauthenticated GitHub API (public repos work; private repos
     # will 404 gracefully). Hard 4s timeout so a slow GitHub can't
     # stall the advisor.
-    open_prs: dict = {"items": [], "error": None, "count": 0}
     _gh_owner = proj.get("github_owner")
     _gh_repo  = proj.get("github_repo")
-    if _gh_owner and _gh_repo:
-        try:
-            async with httpx.AsyncClient(timeout=4.0) as cx:
-                r = await cx.get(
-                    f"https://api.github.com/repos/{_gh_owner}/{_gh_repo}/pulls",
-                    params={"state": "open", "per_page": 10, "sort": "updated"},
-                    headers={"Accept": "application/vnd.github+json"},
-                )
-                if r.status_code == 200:
-                    _prs = r.json() or []
-                    open_prs["count"] = len(_prs)
-                    for pr in _prs[:10]:
-                        open_prs["items"].append({
-                            "number":     pr.get("number"),
-                            "title":      (pr.get("title") or "")[:200],
-                            "author":     (pr.get("user") or {}).get("login"),
-                            "draft":      bool(pr.get("draft")),
-                            "created_at": pr.get("created_at"),
-                            "updated_at": pr.get("updated_at"),
-                            "url":        pr.get("html_url"),
-                        })
-                elif r.status_code == 404:
-                    # Private repo without a token, or repo doesn't
-                    # exist — treat as "no data available", never guess.
-                    open_prs["error"] = "repo_not_public_or_missing"
-                else:
-                    open_prs["error"] = f"github_{r.status_code}"
-        except Exception as e:
-            open_prs["error"] = f"github_fetch_failed: {str(e)[:60]}"
-    else:
-        open_prs["error"] = "repo_not_configured"
+    open_prs = await fetch_open_prs(_gh_owner, _gh_repo)
 
     # ── 7. Token breakdown (Iter 388j · Bug 5 fix) ──────────────
     # "Token breakdown" chip previously described SCREENSHOT UI

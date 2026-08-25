@@ -41,6 +41,33 @@ def _git_churn_counts(days: int) -> dict[str, int]:
     return counts
 
 
+def _row_for_file(path: str, n_commits: int, bloated_by_rel: dict,
+                   complex_files: set, days: int) -> Optional[dict]:
+    """Build a risk row for one churned path, or None if it has no
+    quality signal (not in bloated/complex sets) or isn't backend/frontend."""
+    rel = None
+    if path.startswith("backend/"):
+        rel = path[len("backend/"):]
+    elif path.startswith("frontend/src/"):
+        rel = path[len("frontend/src/"):]
+    if rel is None:
+        return None
+    is_bloated = rel in bloated_by_rel
+    is_complex = rel in complex_files
+    if not (is_bloated or is_complex):
+        return None  # only files with a REAL, existing quality signal
+    # Risk score: churn is the multiplier, bloat/complexity the base.
+    risk = n_commits * (1 + int(is_bloated) + int(is_complex))
+    return {
+        "file": path,
+        "commits_last_%dd" % days: n_commits,
+        "bloated": is_bloated,
+        "lines": bloated_by_rel.get(rel),
+        "has_complex_function": is_complex,
+        "risk_score": risk,
+    }
+
+
 def compute_churn_risk(days: int = 90, top_n: int = 15,
                         report: Optional[dict] = None) -> dict:
     """Rank files by churn × (bloated + complex) risk.
@@ -63,29 +90,9 @@ def compute_churn_risk(days: int = 90, top_n: int = 15,
 
     rows = []
     for path, n_commits in churn.items():
-        # architecture_health's `rel` is relative to backend/ or
-        # frontend/src/ — strip the matching prefix to compare.
-        rel = None
-        if path.startswith("backend/"):
-            rel = path[len("backend/"):]
-        elif path.startswith("frontend/src/"):
-            rel = path[len("frontend/src/"):]
-        if rel is None:
-            continue
-        is_bloated = rel in bloated_by_rel
-        is_complex = rel in complex_files
-        if not (is_bloated or is_complex):
-            continue  # only files with a REAL, existing quality signal
-        # Risk score: churn is the multiplier, bloat/complexity the base.
-        risk = n_commits * (1 + int(is_bloated) + int(is_complex))
-        rows.append({
-            "file": path,
-            "commits_last_%dd" % days: n_commits,
-            "bloated": is_bloated,
-            "lines": bloated_by_rel.get(rel),
-            "has_complex_function": is_complex,
-            "risk_score": risk,
-        })
+        row = _row_for_file(path, n_commits, bloated_by_rel, complex_files, days)
+        if row is not None:
+            rows.append(row)
     rows.sort(key=lambda r: r["risk_score"], reverse=True)
     return {
         "ok": True,

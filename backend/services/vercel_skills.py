@@ -80,6 +80,23 @@ async def _audit(ctx: dict, tool: str, args: dict, status: str,
         logger.debug("vercel audit insert failed: %r", e)
 
 
+def _map_vercel_status_error(r) -> Optional[dict]:
+    """Non-2xx outcomes worth a distinct message; None means treat as ok."""
+    if r.status_code in (401, 403):
+        return {"ok": False, "error": "Vercel auth failed — token invalid or lacks scope"}
+    if r.status_code == 404:
+        return {"ok": False, "error": "Resource not found on Vercel"}
+    if r.status_code >= 500:
+        return {"ok": False, "error": f"Vercel upstream error ({r.status_code})"}
+    if r.status_code >= 400:
+        try:
+            return {"ok": False,
+                    "error": f"Vercel error: {r.json().get('error', {}).get('message', r.text[:200])}"}
+        except Exception:
+            return {"ok": False, "error": f"Vercel error {r.status_code}"}
+    return None
+
+
 async def _vercel_get(path: str, params: Optional[dict] = None) -> dict:
     """Thin GET wrapper — returns `{"ok": True, "data": json}` or
     `{"ok": False, "error": ...}`. Keeps the skill bodies short."""
@@ -89,18 +106,9 @@ async def _vercel_get(path: str, params: Optional[dict] = None) -> dict:
         async with ext_client("vercel") as c:
             r = await c.get(f"{VERCEL_API}{path}", headers=_headers(),
                             params=params or {})
-        if r.status_code == 401 or r.status_code == 403:
-            return {"ok": False, "error": "Vercel auth failed — token invalid or lacks scope"}
-        if r.status_code == 404:
-            return {"ok": False, "error": "Resource not found on Vercel"}
-        if r.status_code >= 500:
-            return {"ok": False, "error": f"Vercel upstream error ({r.status_code})"}
-        if r.status_code >= 400:
-            try:
-                return {"ok": False,
-                        "error": f"Vercel error: {r.json().get('error', {}).get('message', r.text[:200])}"}
-            except Exception:
-                return {"ok": False, "error": f"Vercel error {r.status_code}"}
+        err = _map_vercel_status_error(r)
+        if err is not None:
+            return err
         return {"ok": True, "data": r.json()}
     except httpx.TimeoutException:
         return {"ok": False, "error": "Vercel request timed out"}
