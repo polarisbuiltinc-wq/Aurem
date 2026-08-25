@@ -283,3 +283,54 @@ async def emit_funnel_event(
         })
     except Exception as e:
         logger.debug("funnel_event %s failed: %r", event_type, e)
+
+
+# ── Onboarding Step 4 — first-scan-aha funnel events (2026-08-26) ──
+# Thin, named wrappers around `emit_funnel_event` so call sites read
+# as intent, not a bare string literal. `first_scan_started` /
+# `first_scan_completed` / `first_scan_findings_viewed` /
+# `first_scan_fix_clicked` are wired into the real scan trigger in
+# Step 3's S-B build (the trigger itself doesn't exist yet at S-A
+# time); `connect_repo_install_failed` is wired into the real
+# `routers/github_app.py` callback failure branch below, today.
+
+async def emit_connect_repo_install_failed(db, *, user_id: str, error: str) -> None:
+    await emit_funnel_event(
+        db, user_id=user_id, event_type="connect_repo_install_failed",
+        metadata={"error": error},
+    )
+
+
+async def emit_first_scan_started(db, *, user_id: str, project_id: str) -> None:
+    await emit_funnel_event(
+        db, user_id=user_id, event_type="first_scan_started",
+        metadata={"project_id": project_id},
+    )
+
+
+async def emit_first_scan_completed(
+    db, *, user_id: str, project_id: str, findings_count: int,
+    scan_duration_ms: float, top_category: Optional[str] = None,
+) -> None:
+    await emit_funnel_event(
+        db, user_id=user_id, event_type="first_scan_completed",
+        metadata={"project_id": project_id, "findings_count": findings_count,
+                  "scan_duration_ms": scan_duration_ms,
+                  "top_category": top_category},
+    )
+
+
+async def emit_first_scan_findings_viewed(db, *, user_id: str, project_id: str) -> None:
+    await emit_funnel_event(
+        db, user_id=user_id, event_type="first_scan_findings_viewed",
+        metadata={"project_id": project_id},
+    )
+
+
+async def emit_first_scan_fix_clicked(
+    db, *, user_id: str, project_id: str, finding_id: Optional[str] = None,
+) -> None:
+    await emit_funnel_event(
+        db, user_id=user_id, event_type="first_scan_fix_clicked",
+        metadata={"project_id": project_id, "finding_id": finding_id},
+    )

@@ -1104,3 +1104,28 @@ async def delete_me(
         "report":   report,
     }
 
+
+class OnboardingIntentBody(BaseModel):
+    intent: str  # "has_repo" | "has_idea"
+
+
+@router.post("/onboarding-intent")
+async def set_onboarding_intent(
+    body: OnboardingIntentBody, authorization: Optional[str] = Header(None),
+) -> dict:
+    """Onboarding Step 4 · S-A (2026-08-26) — one 2-choice click, asked
+    at signup or on the connect screen: "Do you already have a repo,
+    or starting from an idea?" One click, no form. Idempotent —
+    overwrites on repeat calls (the UI should only show the prompt
+    once, but a second call is harmless)."""
+    if body.intent not in ("has_repo", "has_idea"):
+        raise HTTPException(400, "intent must be 'has_repo' or 'has_idea'")
+    user = await current_dev(authorization)
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "database unavailable")
+    await db.dev_users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"onboarding_intent": body.intent}},
+    )
+    return {"ok": True, "onboarding_intent": body.intent}

@@ -325,6 +325,14 @@ async def install_callback(
             "github_app callback: /app/installations/%s fetch failed: %r",
             installation_id, e,
         )
+        # Onboarding Step 4 · S-A (2026-08-26) — attributable failure
+        # (user_id_to_link is known here, from the validated state
+        # row) → real funnel signal instead of a silent redirect.
+        if user_id_to_link:
+            from services.signup_guards import emit_connect_repo_install_failed
+            await emit_connect_repo_install_failed(
+                db, user_id=user_id_to_link, error=repr(e)[:300],
+            )
         return RedirectResponse(
             url=_dashboard_url(request, _DEEP_LINK_ERR_PROBE),
             status_code=302,
