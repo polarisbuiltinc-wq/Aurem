@@ -3,6 +3,65 @@
 **Live URL**: https://auremcto.com
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
+## 2026-08-26 — Priority 1 (restore-drill BSON RecursionError + live mongod crash-loop) fixed & testing_agent-verified; Priority 2 (coverage-scan timeout) fixed with measured evidence
+
+Founder flagged the `RecursionError: maximum recursion depth exceeded while
+encoding an object to BSON` in restore-drill logs as Priority 1 (production-
+stability relevant: "briefly took MongoDB down"), ahead of the coverage-scan
+timeout (Priority 2). Both closed this session, in order.
+
+**Priority 1 — CONFIRMED root causes (two, both live-reproduced + fixed):**
+1. `services/restore_drill_cron.py::run_restore_drill()` — `row["fallback_attempts"]
+   = attempts` where `row` was itself one of the dicts already inside `attempts`
+   → self-referential document → pymongo's BSON encoder recursed forever on
+   `insert_one` → `RecursionError`. Reproduced locally via `bson.encode(row)`
+   (red), fixed by shallow-copying each attempt (`[dict(a) for a in attempts]`)
+   before assignment (green). Only triggers when the fallback path tries >1
+   `backup_history` candidate.
+2. Separate, more severe issue found while live-testing the fix: restoring into
+   ~167 per-source-collection scratch Mongo collections exhausted this Preview
+   pod's mongod open-FD ceiling (soft ulimit 1024, in a READONLY supervisor
+   conf — cannot be changed) → live `WT_PANIC`/`SIGABRT` crash-loop (confirmed:
+   737 of 904 collections were leaked, 3-4x nested `_restore_scratch_*` garbage,
+   because nightly `db_backup` was re-backing up leftover scratch collections
+   and each drill re-prefixed them again). Fixed in `services/db_restore.py`
+   (consolidated restore into ONE tagged scratch collection instead of N,
+   `_id` remapped to `__aurem_restore_drill_orig_id__` to avoid cross-collection
+   `_id` collisions e.g. shared `"global"` singleton ids, `_drop_prefixed()` now
+   sweeps ANY `_restore_scratch_`-prefixed leftover) and `services/db_backup.py`
+   (excludes `_restore_scratch_*` from what gets backed up — breaks the
+   accumulation cycle). One-time cleanup of the 737 existing leftovers done.
+   Also fixed a pre-existing unrelated test-assertion bug in
+   `test_iter369_restore_drill_and_ad_attribution.py::test_drill_now_writes_history_row`
+   (compared a `history` list length capped by the endpoint's `limit=20`).
+   New regression tests: `tests/test_iter_restore_drill_bson_recursion_fix.py`.
+   `testing_agent` (`/app/test_reports/iteration_381.json`): 7/7 passed, 5
+   back-to-back live `drill-now` calls with mongod staying up throughout, no
+   action items. Note: 3 pre-existing, unrelated failures remain in
+   `tests/test_db_backup.py` (stale `scratch_db`-as-literal-DB-name assumption
+   predating this session, out of scope).
+
+**Priority 2 — measured, not guessed:** ran the real `health_coverage_scan`
+pytest command to completion (background, ~238-251s actual, two separate
+measurements) instead of guessing a round number. Set
+`HEALTH_COVERAGE_TIMEOUT_S=400` (backend/.env) — comfortable margin over the
+measured duration. Verified live: triggered `POST
+/admin/health-score/test-coverage/run`, polled `GET /admin/health-score`, got
+a fresh `test_coverage.last_verified: 2026-08-25T11:48:10` with
+`duration_s: 250.7` (previously never persisted — the old 240s timeout was
+shorter than the real ~239-251s runtime).
+
+**DevOps/CI category:** no action — per founder instruction, waiting on a
+real post-sync GitHub Actions run before this can move.
+
+**Still pending (unchanged from prior handoff, not touched this session):**
+R3 verification-honesty ship-gating policy (deferred, risk-tiered recommended
+but not built), category-aware test-file-lock classifier (deferred by
+founder — do NOT build until founder gives go-ahead; default must stay
+LOCKED), full Latin-1/Cp1252 legacy-encoding support, six-file coverage-ratchet
+wave, source-of-truth CI steps still need a real GitHub Actions run to confirm
+(local marker run green, not GitHub-confirmed).
+
 
 ## 2026-08-27 (latest) — Founder decisions logged, holding for production deploy confirmation
 

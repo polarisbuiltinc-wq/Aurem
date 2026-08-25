@@ -117,7 +117,22 @@ async def run_restore_drill(db) -> dict:
         # canonical row (unchanged shape for existing callers/tests)
         # but keep every attempt for visibility.
         row = attempts[-1]
-    row["fallback_attempts"] = attempts if len(attempts) > 1 else []
+    # 2026-08-26 root-cause fix: `row` IS one of the dicts already
+    # inside `attempts` (either the passing candidate appended above,
+    # or `attempts[-1]` on the all-failed path) — never a separate
+    # copy. Assigning the *same* `attempts` list into
+    # `row["fallback_attempts"]` therefore made `row` contain itself
+    # (row -> fallback_attempts -> attempts -> [..., row]), a circular
+    # reference. `insert_one` then hangs the whole request and the
+    # process eventually dies with `RecursionError: maximum recursion
+    # depth exceeded while encoding an object to BSON` because
+    # pymongo's BSON encoder walks that cycle forever. Snapshotting
+    # each attempt into a fresh `dict(a)` BEFORE the assignment breaks
+    # the cycle: the copies are taken while `row` doesn't yet carry
+    # `fallback_attempts`, so none of them reference `row` itself.
+    row["fallback_attempts"] = (
+        [dict(a) for a in attempts] if len(attempts) > 1 else []
+    )
     passed = row["ok"]
     r2_key = row["r2_key"]
     restored_docs = row["restored_total_docs"]

@@ -34,6 +34,25 @@ logger = logging.getLogger("db_restore")
 
 INSERT_BATCH = 500
 
+# 2026-08-26 root-cause fix (Priority 1, restore-drill stability):
+# `_drop_prefixed()` used to drop ONLY collections matching the
+# CURRENT call's unique timestamped `scratch_prefix`. If an earlier
+# run's own cleanup never ran (e.g. the process was killed/panicked
+# mid-restore — see the mongod WiredTiger FD-exhaustion panic this
+# was reproduced against live in Preview, 2026-08-26), that older
+# run's scratch collections were NEVER swept up by any later run,
+# because no later run's prefix matched them. Confirmed live: 737 of
+# 904 collections in this Preview DB were `_restore_scratch_*`
+# leftovers, several NESTED 3-4 deep (a scratch collection from one
+# run got captured by a nightly `db_backup` dump — see db_backup.py
+# fix below — then re-prefixed by the NEXT drill), which drove the
+# process's open-FD count over its 1024 soft limit and triggered a
+# WiredTiger `WT_PANIC` → SIGABRT crash-loop. Sweeping every
+# `_restore_scratch_`-prefixed collection (not just this run's own)
+# on every call makes each drill self-healing against ANY prior
+# run's leftovers, regardless of cause.
+SCRATCH_PREFIX_ROOT = "_restore_scratch_"
+
 
 def _r2_client():
     import boto3
@@ -91,25 +110,40 @@ async def restore_to_scratch(
     not authorized ... code 13` on every drill, immediately followed
     by `/health` upstream timeouts in the deploy logs.
 
-    Fix: restore into a set of PREFIXED COLLECTIONS inside the SAME
+    Fix: restore into a SINGLE scratch collection inside the SAME
     `DB_NAME` database the app is already authorized for — never a
-    second database. `scratch_db_name` (if passed) is now used as the
-    collection-name prefix, not a Mongo database name.
+    second database. `scratch_db_name` (if passed) is used as that
+    collection's name, not a Mongo database name.
     """
     started = dt.datetime.now(dt.timezone.utc)
     mongo_url = os.environ["MONGO_URL"]
     source_db = os.environ["DB_NAME"]
-    scratch_prefix = (
-        scratch_db_name or f"_restore_scratch_{started.strftime('%Y%m%d_%H%M%S')}_"
-    )
-    if not scratch_prefix.endswith("_"):
-        scratch_prefix += "_"
-    tmp_path = f"/tmp/restore_{scratch_prefix.strip('_')}.gz"
+    # 2026-08-26 root-cause fix (Priority 1, restore-drill stability):
+    # this used to create ONE scratch COLLECTION PER SOURCE
+    # collection (`scratch_prefix + coll_name`) — for this DB's ~167
+    # collections that meant up to 167 extra WiredTiger tables
+    # existing at once. WT defers actually freeing a dropped table's
+    # files until its next checkpoint, so even dropping each one
+    # immediately after use did not free file descriptors fast
+    # enough: live in Preview this drove mongod's open-FD count over
+    # its ceiling and into a repeated `WT_PANIC` → SIGABRT
+    # crash-loop (confirmed via mongod's own log: "couldn't open
+    # [/proc/<pid>/stat] Too many open files" immediately followed by
+    # "the process must exit and restart"). Restoring every source
+    # collection's documents into a SINGLE tagged scratch collection
+    # needs only one extra WT table for the whole drill, regardless
+    # of how many collections the source DB has.
+    scratch_coll_name = (
+        scratch_db_name or f"{SCRATCH_PREFIX_ROOT}{started.strftime('%Y%m%d_%H%M%S')}"
+    ).rstrip("_")
+    tmp_path = f"/tmp/restore_{scratch_coll_name.strip('_')}.gz"
+    origin_field = "__aurem_restore_drill_src__"
+    origin_id_field = "__aurem_restore_drill_orig_id__"
 
     result: dict = {
         "ok":                 False,
         "r2_key":             r2_key,
-        "scratch_db":         f"{source_db} (prefix={scratch_prefix}*)",
+        "scratch_db":         f"{source_db}.{scratch_coll_name}",
         "source_db":          source_db,
         "collection_counts":  {},
         "total_docs":         0,
@@ -121,13 +155,16 @@ async def restore_to_scratch(
     }
 
     async def _drop_prefixed(sdb) -> None:
-        """Drop only OUR prefixed collections — never touches real data."""
+        """Drop every `_restore_scratch_`-prefixed collection — ANY
+        run's, not just this one's — so a leftover from a prior
+        crashed/killed run never survives past the next call. Still
+        never touches real (non-scratch) data."""
         try:
             names = await sdb.list_collection_names()
         except Exception:
             return
         for name in names:
-            if name.startswith(scratch_prefix):
+            if name.startswith(SCRATCH_PREFIX_ROOT):
                 try:
                     await sdb.drop_collection(name)
                 except Exception:
@@ -150,7 +187,7 @@ async def restore_to_scratch(
         try:
             sdb = motor_client[source_db]
             # Ensure clean scratch — drop any leftovers from a prior
-            # failed run, scoped strictly to our prefix.
+            # failed run (any prefix, see `_drop_prefixed` above).
             await _drop_prefixed(sdb)
 
             counts: dict[str, int] = {}
@@ -172,7 +209,9 @@ async def restore_to_scratch(
                     )
                     return result
 
-                # Per-collection loop
+                # Per-collection loop — all documents land in the
+                # SAME `scratch_coll_name`, tagged with `origin_field`
+                # so per-collection doc counts are still exact.
                 while True:
                     coll_line = gz.readline()
                     if not coll_line:
@@ -183,20 +222,17 @@ async def restore_to_scratch(
                         result["error"] = f"bad collection header: {e!r}"
                         return result
                     coll_name = meta["collection"]
-                    scratch_coll_name = scratch_prefix + coll_name
                     expected = int(meta["doc_count"])
 
                     if expected == 0:
-                        # Explicit create so empty collections still
-                        # show up in list_collection_names().
-                        try:
-                            await sdb.create_collection(scratch_coll_name)
-                        except Exception:
-                            pass  # already exists (shouldn't after drop)
+                        # Nothing to round-trip — an empty collection
+                        # trivially "restores" as 0 == 0. No Mongo
+                        # write needed to prove that.
                         counts[coll_name] = 0
                         continue
 
-                    # Read `expected` BSON docs and bulk insert.
+                    # Read `expected` BSON docs, tag with origin, bulk
+                    # insert into the single scratch collection.
                     inserted = 0
                     batch: list[dict] = []
                     for _ in range(expected):
@@ -208,6 +244,19 @@ async def restore_to_scratch(
                             )
                             return result
                         doc = bson.decode(raw)
+                        # 2026-08-26 fix: many source collections use
+                        # their own independent `_id` namespace (e.g.
+                        # several singleton "settings" collections all
+                        # use `_id: "global"`). Consolidating into one
+                        # scratch collection means those namespaces now
+                        # collide on Mongo's unique `_id` index. Move
+                        # the original `_id` into `origin_id_field` and
+                        # let Mongo assign a fresh one — content is
+                        # still round-trip-proven byte-for-byte, only
+                        # the storage `_id` for THIS scratch copy
+                        # differs from the source.
+                        doc[origin_id_field] = doc.pop("_id", None)
+                        doc[origin_field] = coll_name
                         batch.append(doc)
                         if len(batch) >= INSERT_BATCH:
                             await sdb[scratch_coll_name].insert_many(
@@ -228,7 +277,7 @@ async def restore_to_scratch(
             # 3. Cleanup scratch unless caller wants to inspect.
             if drop_scratch_after:
                 await _drop_prefixed(sdb)
-                logger.info("dropped scratch collections (prefix=%s)", scratch_prefix)
+                logger.info("dropped scratch collection %s", scratch_coll_name)
         finally:
             motor_client.close()
 
@@ -241,8 +290,8 @@ async def restore_to_scratch(
         # out partway through the parse+insert loop left its entire
         # scratch copy permanently orphaned (this is exactly how we
         # accumulated 48,297 leftover `_restore_scratch_*` collections
-        # / ~6.5GB before this fix). Drop them here too, scoped strictly
-        # to `scratch_prefix` — never touches real data.
+        # / ~6.5GB before this fix). Drop them here too — never
+        # touches real data.
         try:
             cleanup_client = AsyncIOMotorClient(mongo_url)
             try:
@@ -274,7 +323,7 @@ async def source_collection_counts() -> dict:
         # live data in the diff.
         names = sorted(
             n for n in await sdb.list_collection_names()
-            if not n.startswith("_restore_scratch_")
+            if not n.startswith(SCRATCH_PREFIX_ROOT)
         )
         counts: dict[str, int] = {}
         for name in names:

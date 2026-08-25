@@ -126,7 +126,22 @@ async def _dump_db_to_gzip_file(mongo_url: str, source_db: str, out_path: str) -
     total_docs = 0
     try:
         sdb = client[source_db]
-        names = sorted(await sdb.list_collection_names())
+        # 2026-08-26 root-cause fix (Priority 1, restore-drill
+        # stability): backups used to dump EVERY collection,
+        # including `_restore_scratch_*` leftovers from a
+        # crashed/killed restore drill. The next drill would then
+        # restore that backup, re-prefix those scratch collections
+        # AGAIN, and re-back them up next night — an unbounded,
+        # self-reinforcing accumulation (confirmed live: 737 of 904
+        # collections in Preview were scratch garbage nested 3-4
+        # prefixes deep) that drove mongod over its open-FD limit and
+        # into a WiredTiger panic crash-loop. Scratch collections are
+        # never real data, so they must never be backed up.
+        from services.db_restore import SCRATCH_PREFIX_ROOT
+        names = sorted(
+            n for n in await sdb.list_collection_names()
+            if not n.startswith(SCRATCH_PREFIX_ROOT)
+        )
         # Header line first (BEFORE any per-collection data) so a
         # reader can validate the format without seeking.
         header = {

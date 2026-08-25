@@ -69,16 +69,26 @@ class TestRestoreDrill:
             assert j.get("restore_error"), f"ok=False but no restore_error: {j}"
 
     def test_drill_now_writes_history_row(self, admin_h):
+        # 2026-08-26 test fix: `history` is capped at the endpoint's
+        # default `limit=20` — once there are 20+ rows (routine in
+        # this long-running Preview DB), `len(history)` never grows
+        # past 20 no matter how many new rows get inserted, so
+        # comparing raw list length always false-failed. Compare the
+        # freshest row's `checked_at` instead — that changes on every
+        # call regardless of pagination.
         before = requests.get(f"{API}/admin/backups/drill-history",
                               headers=admin_h, timeout=30).json()
-        before_ct = len(before.get("history") or [])
+        before_latest = (before.get("history") or [{}])[0].get("checked_at")
         rr = requests.post(f"{API}/admin/backups/drill-now",
                            headers=admin_h, timeout=180)
         assert rr.status_code == 200
         after = requests.get(f"{API}/admin/backups/drill-history",
                              headers=admin_h, timeout=30).json()
-        after_ct = len(after.get("history") or [])
-        assert after_ct >= before_ct + 1, f"drill-now did not append a history row ({before_ct} -> {after_ct})"
+        after_latest = (after.get("history") or [{}])[0].get("checked_at")
+        assert after_latest and after_latest != before_latest, (
+            f"drill-now did not append a fresh history row "
+            f"(before={before_latest!r}, after={after_latest!r})"
+        )
 
     def test_backup_run_regression(self, admin_h):
         # Existing manual backup trigger must still return 200

@@ -1,0 +1,32 @@
+{
+  "summary": "Priority-1 restore-drill BSON RecursionError fix verified end-to-end. Unit tests (3/3) and live integration tests (4/4) all passed. mongod stayed stable (pid 8958, no SIGABRT) throughout 5 back-to-back drill-now calls plus regression /run and /test-restore. No 502/499 seen.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter_restore_drill_bson_recursion_fix.py",
+    "/app/backend/tests/live/test_iter_restore_drill_live_verify.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "restore_drill_cron.py L133-135: fix is correct — shallow-copying attempts breaks self-reference. Consider adding a compact unit assertion inside the module itself (e.g. dev-mode `bson.encode(row)` self-check) if paranoid, but not required.",
+    "db_restore.restore_to_scratch consolidation into single tagged collection is a solid FD-exhaustion mitigation for the Preview pod's 1024 ulimit and is Atlas-safe; the __aurem_restore_drill_src__ / __aurem_restore_drill_orig_id__ fields correctly avoid _id collisions across singleton 'global' rows.",
+    "_drop_prefixed() sweeping ANY _restore_scratch_-prefixed collection is a good defensive cleanup for prior-run leftovers."
+  ],
+  "updated_files": [
+    "/app/backend/tests/live/test_iter_restore_drill_live_verify.py (new — 4 live integration tests against preview backend)"
+  ],
+  "success_rate": {"backend": "100% (3/3 unit + 4/4 live = 7/7)", "frontend": "n/a (backend-only scope)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (Preview) — used /api/aurem-dev/auth/login",
+  "seed_data_creation": "None — used existing backup_history + drill_history data",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Live verify file at /app/backend/tests/live/test_iter_restore_drill_live_verify.py hits /api/aurem-dev/admin/backups/{drill-now,drill-history,run,test-restore}. Runs in ~27s. Pre-existing failures in tests/test_db_backup.py (test_empty_collection_survives_round_trip, test_bson_native_types_preserved, test_large_document_round_trip) are OUT OF SCOPE per main agent — do not flag as new regressions.",
+  "rca_of_the_issue": "Original: row['fallback_attempts'] = attempts where row is itself an element of attempts → self-referential dict → pymongo BSON encoder recurses forever → RecursionError on insert_one. Fix: shallow-copy each attempt into a fresh dict before assignment. Verified via bson.encode(row) round-trip in unit test test_fallback_row_is_bson_encodable_no_recursion_error, and via 5 back-to-back live drill-now calls that all returned 200 without crashing mongod."
+}
