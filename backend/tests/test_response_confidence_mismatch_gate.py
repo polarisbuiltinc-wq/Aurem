@@ -82,8 +82,28 @@ def client_factory(monkeypatch):
     monkeypatch.setattr("services.usage.assert_has_budget", _noop)
     monkeypatch.setattr("services.usage.assert_has_task_budget", _noop)
 
+    # This suite unit-tests the response_confidence mismatch-gate
+    # specifically (post-generation fallback swap), independent of the
+    # separate intent-gateway casual/query/agentic routing decision
+    # (core/intent_gateway.py). "What is 5+5?" is the literal
+    # founder-reported prompt and is intentionally kept verbatim for
+    # regression fidelity — but on its own it now heuristically
+    # classifies as `casual` (no resource noun) and would bypass
+    # chat_with_tools entirely via the newer casual-reply short
+    # circuit. Force the classifier to `query` here so the mismatch
+    # gate itself still gets exercised by this suite.
+    async def _force_query(message, **kw):
+        return {"tier": "query", "confidence": 0.9, "method": "test-forced"}
+    monkeypatch.setattr("core.intent_gateway.classify", _force_query)
+
     def _build(reply_text):
         monkeypatch.setattr(chat_mod, "chat_with_tools", _make_fake_chat_with_tools(reply_text))
+        # The auto-retry-without-recall path (services/chat_helpers.py,
+        # added 2026-08-21) imports chat_with_tools directly from
+        # services.orchestrator rather than via routers.chat's
+        # namespace, so it needs its own patch to stay controllable —
+        # otherwise the retry falls through to a REAL LLM call.
+        monkeypatch.setattr("services.chat_helpers.chat_with_tools", _make_fake_chat_with_tools(reply_text))
         return TestClient(app)
 
     return _build
@@ -198,6 +218,10 @@ def test_mismatch_auto_retry_resolves_silently(monkeypatch, client_factory):
     fake, calls = _make_stateful_chat_with_tools(MISMATCHED_REPLY, "5 + 5 = 10.")
     client = client_factory("unused")  # placeholder, overridden below
     monkeypatch.setattr(chat_mod, "chat_with_tools", fake)
+    # Retry path (services/chat_helpers.py) imports chat_with_tools
+    # directly from services.orchestrator — patch there too so the
+    # SAME stateful fake sees both the first call and the retry.
+    monkeypatch.setattr("services.chat_helpers.chat_with_tools", fake)
 
     r = client.post(
         "/api/aurem-dev/chat/send",

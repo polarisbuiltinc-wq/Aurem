@@ -62,6 +62,10 @@ class _FakeCollection:
 
     def _match(self, row, query):
         for k, v in (query or {}).items():
+            if isinstance(v, dict) and "$exists" in v:
+                if (k in row) != v["$exists"]:
+                    return False
+                continue
             if row.get(k) != v:
                 return False
         return True
@@ -125,6 +129,14 @@ class _FakeCollection:
         if limit:
             matched = matched[:limit]
         return _FakeCursor(matched)
+
+    async def find_one_and_update(self, query, update, projection=None):
+        for r in self.rows:
+            if self._match(r, query):
+                for k, v in (update.get("$set") or {}).items():
+                    r[k] = v
+                return dict(r)
+        return None
 
 
 class _FakeDB:
@@ -919,3 +931,138 @@ class TestChatStreamSetup:
         with pytest.raises(Exception) as exc_info:
             asyncio.run(go())
         assert "400" in str(exc_info.value) or "cannot be processed" in str(exc_info.value)
+
+
+# ═════════════════════════════════════════════════════════════════════
+# POST /chat/opened — funnel event (Phase 2, 2026-08-28 coverage wave)
+# ═════════════════════════════════════════════════════════════════════
+
+class TestChatOpened:
+    def test_first_open_stamps_and_emits_funnel_event(self, client, fake_db):
+        fake_db.dev_users.rows.append({"user_id": "u1"})
+        with patch("services.signup_guards.emit_funnel_event",
+                  AsyncMock(return_value=None)) as mock_emit:
+            r = client.post("/api/aurem-dev/chat/opened", headers=AUTH, json={})
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+        assert "first_chat_opened_at" in fake_db.dev_users.rows[0]
+        mock_emit.assert_awaited_once()
+
+    def test_second_open_is_idempotent_no_emit(self, client, fake_db):
+        fake_db.dev_users.rows.append({
+            "user_id": "u1", "first_chat_opened_at": 123.0,
+        })
+        with patch("services.signup_guards.emit_funnel_event",
+                  AsyncMock(return_value=None)) as mock_emit:
+            r = client.post("/api/aurem-dev/chat/opened", headers=AUTH,
+                           json={"project_id": "p1"})
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+        mock_emit.assert_not_awaited()
+
+    def test_db_error_is_swallowed(self, client, fake_db):
+        with patch.object(fake_db.dev_users, "find_one_and_update",
+                        AsyncMock(side_effect=RuntimeError("boom"))):
+            r = client.post("/api/aurem-dev/chat/opened", headers=AUTH, json={})
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+    def test_unauthenticated(self, client):
+        r = client.post("/api/aurem-dev/chat/opened", json={})
+        assert r.status_code == 401
+
+
+# ═════════════════════════════════════════════════════════════════════
+# _handoff_brief_is_shell_command / _maybe_guard_shell_handoff_followup
+# (Phase 2, 2026-08-28 coverage wave)
+# ═════════════════════════════════════════════════════════════════════
+
+class TestHandoffShellCommandGuard:
+    def test_empty_brief_is_not_shell_command(self):
+        from routers.chat import _handoff_brief_is_shell_command as f
+        assert f("") is False
+        assert f(None) is False
+
+    def test_raw_pip_install_detected(self):
+        from routers.chat import _handoff_brief_is_shell_command as f
+        assert f("pip install twilio") is True
+
+    def test_json_envelope_with_empty_files_and_command_key(self):
+        from routers.chat import _handoff_brief_is_shell_command as f
+        assert f('{"command": "npm install stripe", "files": []}') is True
+
+    def test_real_file_edit_brief_is_not_shell_command(self):
+        from routers.chat import _handoff_brief_is_shell_command as f
+        assert f('{"title": "Fix checkout", "files": ["checkout.py"]}') is False
+
+    def test_git_clone_detected(self):
+        from routers.chat import _handoff_brief_is_shell_command as f
+        assert f("please run git clone https://x.com/repo.git") is True
+
+
+class TestMaybeGuardShellHandoffFollowup:
+    async def _run(self, db, prompt, session_id="s1"):
+        from routers.chat import _maybe_guard_shell_handoff_followup, ChatBody
+        from cto_services.db import set_db
+        set_db(db)
+        try:
+            body = ChatBody(prompt=prompt, project_id="p1", session_id=session_id)
+            return await _maybe_guard_shell_handoff_followup(body=body, user_id="u1")
+        finally:
+            set_db(None)
+
+    def test_no_db_returns_none(self):
+        from routers.chat import _maybe_guard_shell_handoff_followup, ChatBody
+        body = ChatBody(prompt="do it", project_id="p1", session_id="s1")
+        result = asyncio.run(_maybe_guard_shell_handoff_followup(body=body, user_id="u1"))
+        assert result is None
+
+    def test_long_prompt_returns_none(self, fake_db):
+        result = asyncio.run(self._run(fake_db, "x" * 61))
+        assert result is None
+
+    def test_prompt_with_path_returns_none(self, fake_db):
+        result = asyncio.run(self._run(fake_db, "fix app/routers/chat.py"))
+        assert result is None
+
+    def test_no_session_returns_none(self, fake_db):
+        result = asyncio.run(self._run(fake_db, "do it"))
+        assert result is None
+
+    def test_shell_handoff_followup_intercepted(self, fake_db):
+        fake_db.chat_sessions.rows.append({
+            "user_id": "u1", "session_id": "s1",
+            "messages": [
+                {"role": "user", "content": "add twilio"},
+                {"role": "assistant", "content":
+                 "```aurem-handoff\n"
+                 '{"command": "pip install twilio", "files": []}\n'
+                 "```"},
+            ],
+        })
+        result = asyncio.run(self._run(fake_db, "do it"))
+        assert result is not None
+        assert "shell command" in result.lower()
+
+    def test_non_shell_handoff_returns_none(self, fake_db):
+        fake_db.chat_sessions.rows.append({
+            "user_id": "u1", "session_id": "s1",
+            "messages": [
+                {"role": "assistant", "content":
+                 "```aurem-handoff\n"
+                 '{"title": "Fix checkout", "files": ["checkout.py"]}\n'
+                 "```"},
+            ],
+        })
+        result = asyncio.run(self._run(fake_db, "do it"))
+        assert result is None
+
+    def test_no_prior_handoff_returns_none(self, fake_db):
+        fake_db.chat_sessions.rows.append({
+            "user_id": "u1", "session_id": "s1",
+            "messages": [
+                {"role": "assistant", "content": "Sure, here's the answer."},
+            ],
+        })
+        result = asyncio.run(self._run(fake_db, "do it"))
+        assert result is None

@@ -23,32 +23,40 @@ _BACKEND = Path(__file__).resolve().parent.parent
 
 def test_casual_branch_uses_content_key():
     """The intent-gateway casual fast-path must write `content`
-    (not `reply`) so the SSE worker downstream streams it."""
-    text = (_BACKEND / "routers" / "chat.py").read_text()
-    # Locate the casual branch — fingerprint with its system prompt.
+    (not `reply`) so the SSE worker downstream streams it.
+
+    2026-08-25 — the casual-reply implementation (system prompt +
+    fallback string) was extracted into
+    services/intent_gateway_casual_reply.py (shared by chat_send and
+    chat_stream, testing_agent code-review flag on single-surface
+    drift risk). The result-dict shape (content key, provider tag)
+    still lives at the chat.py call sites. Check both."""
+    chat_text = (_BACKEND / "routers" / "chat.py").read_text()
+    reply_text = (_BACKEND / "services" / "intent_gateway_casual_reply.py").read_text()
     sys_anchor = 'For this casual message, respond naturally and briefly'
-    idx = text.index(sys_anchor)
-    # Slice ~2.5KB ahead — covers the whole branch including the
-    # result dict + the await q.put(...) call.
-    casual_block = text[idx:idx + 2500]
-    assert '"content":' in casual_block, casual_block
-    # And the buggy `"reply":` key must be gone.
-    assert '"reply":' not in casual_block, casual_block
-    # The new provider tag pins this is the intent-gateway path.
-    assert '"intent-gateway-casual"' in casual_block
+    assert sys_anchor in reply_text
+    # Both chat_send and chat_stream call sites build the result dict
+    # with `content` (never the buggy `reply` key) + the intent-gateway
+    # provider tag.
+    call_sites = [m.start() for m in __import__("re").finditer(
+        r'from services\.intent_gateway_casual_reply import casual_direct_reply', chat_text,
+    )]
+    assert len(call_sites) >= 2, "expected both chat_send and chat_stream call sites"
+    for idx in call_sites:
+        block = chat_text[idx:idx + 1200]
+        assert '"content":' in block, block
+        assert '"reply":' not in block, block
+        assert '"intent-gateway-casual"' in block
 
 
 def test_casual_branch_never_emits_empty_content():
     """Even when the LLM returns "" the fallback string keeps the
     bubble non-empty — no more silent "Hey!" that the SSE skipped."""
-    text = (_BACKEND / "routers" / "chat.py").read_text()
-    sys_anchor = 'For this casual message, respond naturally and briefly'
-    idx = text.index(sys_anchor)
-    casual_block = text[idx:idx + 2500]
+    reply_text = (_BACKEND / "services" / "intent_gateway_casual_reply.py").read_text()
     # The empty-string fallback must be a substantive multi-word string,
     # not just "Hey!" — that was the legacy fallback which still
     # surfaced as an empty bubble because of the key bug above.
-    assert "Hey! How can I help you ship today?" in casual_block
+    assert "Hey! How can I help you ship today?" in reply_text
 
 
 def test_sse_worker_has_empty_content_safety_net():

@@ -111,6 +111,10 @@ _RESOURCE_NOUNS = {
     "server", "backend", "frontend", "metric", "metrics", "analytics",
     "stat", "stats", "statistics", "history", "activity",
     "notification", "notifications", "alert", "alerts",
+    "readme", "auth", "authentication", "schema", "route", "routes",
+    "endpoint", "endpoints", "function", "class", "module", "modules",
+    "component", "components", "docs", "documentation", "pipeline",
+    "ship", "shipping",
 }
 
 
