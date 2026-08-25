@@ -247,6 +247,29 @@ jobs:
           echo "Diffing $BASE_SHA..$HEAD_SHA (override: ${OVERRIDE:-none})"
           python backend/scripts/ci_check_coverage_ratchet.py "$BASE_SHA" "$HEAD_SHA" backend/coverage.json $OVERRIDE
 
+      - name: Guard — Regression baseline lock (Fix 3, hardening)
+        # 2026-08 hardening — stricter than the coverage ratchet's
+        # touched-file floor above: blocks deploy if the suite's
+        # TOTAL failed/errored count goes UP versus the locked
+        # baseline in backend/tests/baseline_counts.txt, so a new
+        # regression anywhere in the suite can't hide inside the
+        # pre-existing red. if: always() — same reasoning as the
+        # ratchet guard above, this signal must never be swallowed
+        # by an unrelated "Run tests" step failure.
+        if: always()
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -e
+          OVERRIDE=""
+          if [ "$EVENT" = "pull_request" ] && printf '%s' "$PR_LABELS" | grep -q '"regression-approved"'; then
+            OVERRIDE="--override"
+          elif git log -1 --format=%B HEAD | grep -q '\[regression-approved\]'; then
+            OVERRIDE="--override"
+          fi
+          python backend/scripts/ci_check_regression_baseline.py /tmp/pytest_output.txt $OVERRIDE
+
       - name: Raw exception leak check (Guard 22, Phase 2.3)
         # 2026-08-24 — real, AST-based, CI-enforced check that a raw
         # Python exception message never flows into a customer-facing
@@ -608,7 +631,7 @@ jobs:
           echo "✅ Simulated-user QA: passed"
           echo "✅ Security scan: passed"
           echo "✅ Secret scan:   passed"
-          echo "🚀 Safe to deploy to aurem.live"
+          echo "🚀 Safe to deploy to auremcto.com"
 
       - name: Notify AUREM dashboard
         if: env.API_KEY != ''

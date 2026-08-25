@@ -1,0 +1,28 @@
+# tests/baseline_counts.txt — Production Hardening Fix 3 (2026-08)
+#
+# LOCKED pre-existing red baseline, captured via a clean full-suite
+# run with this session's own new work (Fix 1/2/3 files) git-stashed
+# out — i.e. this is the suite's true "without-session" state.
+#
+# Deploy is BLOCKED (scripts/ci_check_regression_baseline.py) if a
+# later run's failed/errors count exceeds these numbers. This is
+# STRICTER than the coverage ratchet's touched-file floor: it catches
+# a new regression ANYWHERE in the ~6,400-test suite, not just in
+# files touched by the current diff.
+#
+# The 259-ish (11 nodeids as of this run) @pytest.mark.legacy
+# quarantined tests (tests/legacy_quarantine.txt) are part of this
+# baseline's "failed" count where applicable — per founder ruling they
+# stay tracked, never fixed/deleted/blocking. This file does not
+# change that policy; it just stops the OTHER, non-quarantined red
+# from growing silently.
+#
+# Re-baseline ONLY via a fresh clean full-suite run + explicit human
+# sign-off. Never bump these numbers to make a real regression "pass."
+#
+# Locked from: full run, 2026-08-25, 1186.51s (0:19:46), git-stash
+# isolated from this session's Fix 1/2/3 changes.
+failed=321
+errors=62
+passed=5888
+locked_at=2026-08-25T22:29:00Z

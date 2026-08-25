@@ -442,6 +442,60 @@ async def _check_g16_auth_hardening() -> dict:
         f"lockout {raw['fail_limit']}/{raw['lockout_min']}m")
 
 
+async def _check_vanguard_e2b_sandbox() -> dict:
+    """Production Hardening Fix 2 (2026-08) — Vanguard's e2b sandbox
+    layer (the 3rd of 3 verify layers) is gated by the SAME master
+    `enabled` flag vanguard_config.py exposes for the LLM second-
+    opinion layer (services/vanguard_verify_agent.py::verify_patch,
+    ~line 565: `if not enabled: ... "e2b": {"skipped": True, "reason":
+    "disabled"}`). When an admin flips that master switch off from
+    /admin/vanguard, EVERY mode with an active block_level (!= "OFF")
+    silently drops from 3 verify layers to 1 (regex only) — this
+    check turns that silent state into a loud one instead.
+
+    gray  — E2B_API_KEY not configured (sandbox unavailable regardless
+            of the admin setting — nothing actionable to alert on)
+    green — master enabled=True — sandbox + LLM layer armed for every
+            active mode
+    red   — master enabled=False AND at least one mode has an active
+            block_level — that mode is running degraded right now.
+            This is a DECISION signal, not necessarily a bug: use the
+            existing /admin/health ack (POST /{check_id}/ack) to
+            confirm it's intentional, or flip it back on at
+            /admin/vanguard — this check never does either for you.
+    """
+    import os
+    from .vanguard_config import get_config
+
+    if not os.environ.get("E2B_API_KEY"):
+        return result_gray(
+            "E2B_API_KEY not configured — sandbox layer unavailable "
+            "regardless of the admin setting"
+        )
+
+    cfg = await get_config()
+    if cfg.get("enabled", True):
+        return result_green(
+            "e2b sandbox + verify-agent ON for every active mode"
+        )
+
+    active_modes = [
+        m for m, lvl in (cfg.get("levels") or {}).items() if lvl != "OFF"
+    ]
+    if not active_modes:
+        return result_gray(
+            "verify-agent + e2b disabled by admin, but no mode is "
+            "currently active — nothing is being scanned either way"
+        )
+    return result_red(
+        f"Security sandbox (e2b) is OFF for mode(s) "
+        f"{', '.join(active_modes)}. Your security scan for "
+        f"{'that mode' if len(active_modes) == 1 else 'those modes'} "
+        f"is running 1 of 3 layers (regex only). Confirm intentional "
+        f"(ack this check) or re-enable at /admin/vanguard."
+    )
+
+
 # ═══════════════════════════════════════════════════════════════
 # INTEGRATION ADAPTERS — reuse external_services_registry.is_configured()
 # and (where safe) a lightweight probe. is_configured=False → gray.
@@ -476,6 +530,7 @@ register_check("g19_recovery",     "G19 · Auto-Recovery",     "guard", _check_g
 register_check("g20_incidents",    "G20 · Open Incidents",    "guard", _check_g20_incidents)
 register_check("g21_security",     "G21 · Security Scan",     "guard", _check_g21_security_scan)
 register_check("g16_auth_hardening", "G16 · Auth Hardening",  "guard", _check_g16_auth_hardening)
+register_check("vanguard_e2b_sandbox", "Vanguard · E2B Sandbox Layer", "guard", _check_vanguard_e2b_sandbox)
 
 # Integrations (6 — matches founder's cockpit-tree count):
 register_check("int_stripe",       "Stripe",                  "integration", _make_integration_check("stripe"))

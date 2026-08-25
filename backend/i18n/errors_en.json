@@ -63,5 +63,10 @@
     "title": "Committed, but push failed",
     "what_happened": "A commit was created but GitHub rejected updating the branch (e.g. a branch-protection rule or a conflicting change), so the commit never reached your repo's history.",
     "what_to_try": ["Check the repo's branch-protection settings.", "Try the task again — it will create a fresh commit."]
+  },
+  "LOOP_SELF_HEAL_EXHAUSTED": {
+    "title": "Paused after a couple of tries",
+    "what_happened": "I tried to fix this automatically a couple of times and it didn't work, so I've paused. Here's what's going on and how you can help.",
+    "what_to_try": ["Review what I tried below and tell me what to adjust.", "Or take it from here yourself in the repo — nothing else will change until you do."]
   }
 }
