@@ -6768,6 +6768,9 @@ closing in a future round.
 - S4(a): pod-Readiness / rollout-complete lines from the deployment dashboard.
 - S4(c): search the last 30 min of production logs for `E11000` (topup_alerts race) — paste "none found" or the matching lines.
 
+**[BASELINE LOCK — owner: founder — due: this week, after deploy]**
+- Run ONE clean full-suite git-stash baseline (with-session vs without-session) to lock the REAL pre-existing failed/error count. Full-suite numbers moved between runs this session (earlier: 319 failed / 15 errors / 5687 passed; latest: 325 failed / 73 errors / 5862 passed / 75 skipped) — the onboarding-file git-stash spot-check confirmed 0 new failures from Step 3 specifically, but the FULL-SUITE delta (+6 failed / +58 errors) was never independently re-verified across the whole suite this session. Confirm the 325/73 are all pre-existing, not introduced by Step 1/2/3. Report the locked number. Until this runs, the baseline is "approximate," not "confirmed unchanged."
+
 **[POST-DEPLOY VALIDATION — due: 2 weeks post-deploy]**
 - S-C prod: confirm S-A/S-B funnel events fire for real NEW production signups (paste one real captured event via `/admin/funnel`).
 - Real 14-day funnel from `/admin/funnel` on the NEW cohort (post connection-fix + post S-B ship) — the 844-signup pre-fix number is NOT a baseline.
