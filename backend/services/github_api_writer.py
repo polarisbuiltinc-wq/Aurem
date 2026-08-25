@@ -26,7 +26,7 @@ from typing import Optional
 import httpx
 
 from services.http import ext_client
-from core.errors import BinaryFileError, UnsupportedEncodingError
+from core.errors import BinaryFileError, UnsupportedEncodingError, PushFailedError
 
 logger = logging.getLogger(__name__)
 
@@ -261,7 +261,19 @@ async def commit_files(
             headers=_headers(token),
             json={"sha": new_commit_sha, "force": False},
         )
-        r.raise_for_status()
+        # Ship/Commit Robustness · 2026-08-26 — the commit OBJECT above
+        # (step 3) already exists in GitHub's object store at this
+        # point even if THIS call fails (branch protection, 409
+        # conflict, etc). That is exactly "committed locally, push
+        # failed" — a different, more honest state than "nothing was
+        # committed at all" (steps 1-3 failing). Raise a typed error
+        # carrying the orphaned SHA so the ship-report path never
+        # collapses this into "nothing was committed."
+        if r.status_code >= 400:
+            raise PushFailedError(
+                commit_sha=new_commit_sha,
+                reason=f"HTTP {r.status_code}: {r.text[:200]}",
+            )
 
         html_url = (
             f"https://github.com/{owner}/{repo}/commit/{new_commit_sha}"

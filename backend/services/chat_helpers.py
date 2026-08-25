@@ -492,9 +492,35 @@ async def _persist_turn(user_id: str, session_id: str, user_prompt: str,
         logger.warning("persist_turn failed: %r", e)
 
 
-def _build_failed_followup(original: str, err: str, files: list[str]) -> str:
-    """Deterministic — no LLM. Fail-fast, fail-honest."""
-    bits = ["❌ Task failed — nothing was committed.\n"]
+def _build_failed_followup(
+    original: str, err: str, files: list[str],
+    sha: Optional[str] = None, push_failed: bool = False,
+    verify_failed: bool = False,
+) -> str:
+    """Deterministic — no LLM. Fail-fast, fail-honest.
+
+    2026-08-26 · Ship/Commit Robustness — Verification-honesty applied
+    to the SHIP path itself: `sha` being present means a commit
+    object genuinely exists, so "nothing was committed" is a LIE in
+    that case. Three distinct, truthful outcomes:
+      - push_failed  → a commit exists (by SHA) but never reached the
+                        branch (ref-update/push rejected).
+      - verify_failed→ the commit WAS pushed to the branch, but
+                        post-push verification couldn't confirm the
+                        content — tell the user to check manually,
+                        don't call it a plain failure.
+      - neither       → the original "nothing was committed" case is
+                        still accurate and stays unchanged.
+    """
+    if sha and push_failed:
+        bits = [f"⚠️ **Committed but push FAILED** — commit `{sha[:7]}` "
+                f"was created but never reached the branch history.\n"]
+    elif sha and verify_failed:
+        bits = [f"⚠️ **Pushed `{sha[:7]}`, but I couldn't confirm the "
+                f"content landed correctly.** Please double-check the "
+                f"file(s) below manually.\n"]
+    else:
+        bits = ["❌ Task failed — nothing was committed.\n"]
     if err:
         snippet = err[:400] + ("…" if len(err) > 400 else "")
         bits.append(f"**Error:** `{snippet}`\n")
@@ -504,6 +530,36 @@ def _build_failed_followup(original: str, err: str, files: list[str]) -> str:
     bits.append(
         "Want me to retry with a smaller scope? Or paste the exact "
         "error / steps to reproduce and I'll diagnose it in Mode D first."
+    )
+    return "".join(bits)
+
+
+def _build_blocked_followup(
+    original: str, blocked_reason: str, blocked_paths: list[str],
+) -> str:
+    """Deterministic — no LLM. A guard firing correctly is NEVER a
+    failure — this is the SUCCESS path for a guard doing its job.
+
+    2026-08-26 · Ship/Commit Robustness — the test-file lock (Iter
+    286) blocking a fix is exactly this: the fix is ready, it's just
+    waiting on a human. Must never render red / "failed" / "nothing
+    was committed" — that collapse is what made a correctly-working
+    guard look like a crash to the user."""
+    bits = ["✅ **Fix ready — awaiting your approval.**\n"]
+    if blocked_reason == "test_file_lock":
+        bits.append(
+            "This edit touches a test file, so I'm holding it for "
+            "review before shipping (test-file changes need a human "
+            "look, by design).\n"
+        )
+    elif blocked_reason:
+        bits.append(f"**Held for review:** {blocked_reason}\n")
+    if blocked_paths:
+        bits.append("**File(s):** "
+                    + ", ".join(f"`{p}`" for p in blocked_paths[:6]) + "\n")
+    bits.append(
+        "**Approve in Loop mode** to ship it, or reply here if you'd "
+        "like changes first."
     )
     return "".join(bits)
 

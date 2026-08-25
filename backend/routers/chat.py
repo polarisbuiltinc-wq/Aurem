@@ -38,8 +38,8 @@ from services.chat_helpers import (
     _TITLE_SYSTEM, _generate_title, _maybe_set_title,
     _regenerate_without_recall, _strip_council_block,
     _persist_turn,
-    _build_failed_followup, _build_done_fallback, _FOLLOWUP_SYS,
-    _generate_done_followup,
+    _build_failed_followup, _build_blocked_followup, _build_done_fallback,
+    _FOLLOWUP_SYS, _generate_done_followup,
 )
 # NOTE: `build_url_context` (eager URL scraper) was REMOVED.
 # URL fetching is now handled exclusively via the `fetch_url` tool
@@ -3466,7 +3466,7 @@ async def chat_task_followup(
     )
     if not task:
         raise HTTPException(404, "Task not found")
-    if task.get("status") not in ("done", "failed"):
+    if task.get("status") not in ("done", "failed", "blocked"):
         raise HTTPException(
             409,
             f"Task not yet complete (status={task.get('status')})",
@@ -3483,8 +3483,22 @@ async def chat_task_followup(
     sha = task.get("commit_sha")
     err = (task.get("error") or "").strip()
 
-    if task.get("status") == "failed":
-        message = _build_failed_followup(original, err, files)
+    if task.get("status") == "blocked":
+        # 2026-08-26 · Ship/Commit Robustness — a guard firing
+        # (e.g. the Iter 286 test-file lock) is a SUCCESS of the
+        # guard, never a failure. Must never fall through to
+        # `_build_failed_followup`.
+        message = _build_blocked_followup(
+            original,
+            task.get("blocked_reason") or "",
+            task.get("blocked_paths") or [],
+        )
+    elif task.get("status") == "failed":
+        message = _build_failed_followup(
+            original, err, files, sha=sha,
+            push_failed=bool(task.get("push_failed")),
+            verify_failed=bool(task.get("verify_failed")),
+        )
     else:
         try:
             message = await _generate_done_followup(

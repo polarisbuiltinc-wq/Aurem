@@ -261,13 +261,52 @@ function FailedCard({ taskId, task, project, onOpenLivePopup }) {
   );
 }
 
+// 2026-08-26 · Ship/Commit Robustness — a guard firing (e.g. the
+// Iter 286 test-file lock) is a SUCCESS of the guard, never a
+// failure. Distinct amber/neutral card so it never looks like the
+// red FailedCard above.
+function BlockedCard({ taskId, task }) {
+  const reason = task.blocked_reason || "";
+  const paths = Array.isArray(task.blocked_paths) ? task.blocked_paths : [];
+  return (
+    <div data-testid={`ship-status-${taskId}`} style={{
+      padding: "10px 12px",
+      background: "rgba(255,197,96,0.08)",
+      border: "1px solid rgba(255,197,96,0.35)",
+      borderRadius: 4,
+      fontSize: 12, color: "var(--accent-2)",
+      fontFamily: "'JetBrains Mono', monospace",
+      maxWidth: 460,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+        <span>⏸ Awaiting your approval · <span style={{ opacity: 0.7 }}>{taskId}</span></span>
+      </div>
+      <div data-testid={`ship-blocked-reason-${taskId}`}
+           style={{ marginTop: 8, fontSize: 12, color: "var(--text)", lineHeight: 1.5 }}>
+        {reason === "test_file_lock"
+          ? "This edit touches a test file, so it's held for review before shipping — the fix is ready."
+          : (reason || "This change is held for review before shipping.")}
+      </div>
+      {paths.length > 0 && (
+        <div data-testid={`ship-blocked-paths-${taskId}`}
+             style={{ marginTop: 6, fontSize: 11, color: "var(--text-dim)" }}>
+          {paths.map((p) => `\`${p}\``).join(", ")}
+        </div>
+      )}
+      <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-faint)" }}>
+        Approve in Loop mode to ship it.
+      </div>
+    </div>
+  );
+}
+
 export default function TaskProgressCard({ taskId, task, project, onRollback, onOpenLivePopup }) {
   const status = task?.status || "queued";
   const rbStatus = task?.rollback_status;
   const rbRunning = rbStatus === "queued" || rbStatus === "running";
 
   // While running
-  if (!task || (status !== "done" && status !== "failed")) {
+  if (!task || (status !== "done" && status !== "failed" && status !== "blocked")) {
     const stageIdx = STAGES.findIndex((s) => s.key === status);
     const current = stageIdx >= 0 ? STAGES[stageIdx] : { icon: "⏳", label: status };
     return (
@@ -295,6 +334,11 @@ export default function TaskProgressCard({ taskId, task, project, onRollback, on
         ))}
       </div>
     );
+  }
+
+  // Blocked (guard fired correctly) — own sub-component, never FailedCard
+  if (status === "blocked") {
+    return <BlockedCard taskId={taskId} task={task} />;
   }
 
   // Failed — own sub-component so hooks stay top-level

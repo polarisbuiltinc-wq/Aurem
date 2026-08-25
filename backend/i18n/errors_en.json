@@ -58,5 +58,10 @@
     "title": "No real check ran on this file",
     "what_happened": "This file's language isn't one AUREM can run a real lint/type check on yet, so the edit was made but not independently verified.",
     "what_to_try": ["Double-check this file's changes yourself.", "Ask for changes to Python, JavaScript, or TypeScript files for automatic verification."]
+  },
+  "PUSH_FAILED": {
+    "title": "Committed, but push failed",
+    "what_happened": "A commit was created but GitHub rejected updating the branch (e.g. a branch-protection rule or a conflicting change), so the commit never reached your repo's history.",
+    "what_to_try": ["Check the repo's branch-protection settings.", "Try the task again — it will create a fresh commit."]
   }
 }

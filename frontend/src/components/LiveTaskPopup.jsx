@@ -155,8 +155,9 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
     }
   }
 
-  const statusColor = status === "done"   ? C.green
-                    : status === "failed" ? C.red
+  const statusColor = status === "done"    ? C.green
+                    : status === "failed"  ? C.red
+                    : status === "blocked" ? C.amber
                     : C.amber;
 
   return (
@@ -221,12 +222,14 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
           <span style={{
             width: 7, height: 7, borderRadius: 99,
             background: statusColor,
-            boxShadow: status !== "done" && status !== "failed"
+            boxShadow: status !== "done" && status !== "failed" && status !== "blocked"
               ? `0 0 8px ${statusColor}` : "none",
           }}/>
-          <span style={{ color: statusColor, fontWeight: 600 }}>
+          <span style={{ color: statusColor, fontWeight: 600 }}
+                data-testid="ltp-status-label">
             {status === "done"     ? "✓ ORA done"
             : status === "failed"  ? "✗ ORA failed"
+            : status === "blocked" ? "⏸ Awaiting your approval"
             :                        "⚡ ORA working…"}
           </span>
         </div>
@@ -465,7 +468,8 @@ function Row({ icon, text, sub, color, testid }) {
 
 function iconFor(status) {
   if (status === "success" || status === "ok"     || status === "done")    return "✅";
-  if (status === "error"   || status === "failed" || status === "blocked") return "❌";
+  if (status === "error"   || status === "failed")                          return "❌";
+  if (status === "blocked")                                                 return "⏸";
   if (status === "warning" || status === "warn")                            return "⚠️";
   return "⚡";
 }

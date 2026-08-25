@@ -53,6 +53,14 @@ class ErrorCode(str, Enum):
     FILE_BINARY_NOT_EDITABLE = "FILE_BINARY_NOT_EDITABLE"
     FILE_ENCODING_UNSUPPORTED = "FILE_ENCODING_UNSUPPORTED"
     FILE_LANGUAGE_UNVERIFIED = "FILE_LANGUAGE_UNVERIFIED"
+    # Ship/Commit Robustness · 2026-08-26 — the commit OBJECT was
+    # created in GitHub's object store (git/commits succeeded) but
+    # the branch ref update (the actual "push") was rejected —
+    # branch protection, a 409 conflict, etc. Distinct from
+    # "nothing was committed at all" (blob/tree/commit step itself
+    # failing) so the ship-report path can tell a user the truth:
+    # a commit exists (by SHA) but never reached the branch.
+    PUSH_FAILED = "PUSH_FAILED"
 
 
 # Only these classes are safe to blindly retry — deterministic failures
@@ -91,6 +99,24 @@ class UnsupportedEncodingError(ValueError):
         super().__init__(f"non-UTF-8 text encoding: {path}")
 
 
+class PushFailedError(RuntimeError):
+    """Raised by services/github_api_writer.py::commit_files() when
+    the branch-ref-update step (the actual "push") is rejected AFTER
+    the commit object itself was already created in GitHub's object
+    store. Carries `commit_sha` — the orphaned commit exists (by SHA)
+    but is not reachable from any branch — so the ship-report path
+    can tell the truth: "committed, push failed" is NOT the same as
+    "nothing was committed"."""
+
+    def __init__(self, commit_sha: str, reason: str):
+        self.commit_sha = commit_sha
+        self.reason = reason
+        super().__init__(
+            f"commit {commit_sha[:7]} created but push (ref update) "
+            f"failed: {reason}"
+        )
+
+
 def classify_exception(exc: BaseException) -> ErrorCode:
     """Classify by TYPE + STRUCTURE only. Never inspects `str(exc)`."""
     from services.retry_guard import BreakerOpenError
@@ -106,6 +132,8 @@ def classify_exception(exc: BaseException) -> ErrorCode:
         return ErrorCode.FILE_BINARY_NOT_EDITABLE
     if isinstance(exc, UnsupportedEncodingError):
         return ErrorCode.FILE_ENCODING_UNSUPPORTED
+    if isinstance(exc, PushFailedError):
+        return ErrorCode.PUSH_FAILED
 
     # AttributeError with structured .name/.obj (py3.10+) — dict-shaped
     # access attempted on a non-dict. This is the exact class of the

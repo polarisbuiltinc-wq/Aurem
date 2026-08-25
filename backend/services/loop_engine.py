@@ -59,6 +59,8 @@ from services.loop_engine_helpers import (
     new_loop_id, load_session, _commit_message,
     _run_security_scan, _run_diff_security_scan,
 )
+from core.boundaries import coerce
+from core.errors import ContractError
 
 _PID = os.getpid()
 
@@ -2833,10 +2835,22 @@ class LoopEngine:
             return
 
         # Convert [{path, content}] → {path: content} for commit_files().
+        # 2026-08-26 · Ship/Commit Robustness — coerce() through the
+        # boundary instead of a bare `(f or {}).get(...)`: a truthy
+        # non-dict element here previously raised the same class of
+        # raw `'str' object has no attribute 'get'` crash the Phase 1
+        # fix already killed at its first known call site. Coercion
+        # failures are skipped (same as the pre-existing None-item
+        # behavior below) rather than aborting the whole ship over one
+        # malformed item.
         files_dict: dict[str, str] = {}
         for f in files_to_commit:
-            p = (f or {}).get("path")
-            c = (f or {}).get("content")
+            try:
+                f = coerce(f, dict, context="loop_ship.files_to_commit_item")
+            except ContractError:
+                continue
+            p = f.get("path")
+            c = f.get("content")
             if p and c is not None:
                 files_dict[str(p)] = str(c)
         if not files_dict:

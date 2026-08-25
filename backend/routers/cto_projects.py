@@ -24,6 +24,7 @@ from pydantic import BaseModel
 
 from cto_services.auth import current_dev
 from cto_services.db import get_db, require_db
+from core.errors import PushFailedError
 from services.llm import call_llm
 from services.usage import assert_has_budget, assert_has_task_budget, get_usage, is_founder_email
 from services.github_api_writer import (
@@ -3267,15 +3268,28 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
         async def _prog(step: str, status: str = "info"):
             await _log(task_id, step, status)
 
-        result = await _retry(
-            lambda: gh_api_commit(
-                owner=owner, repo=repo, branch=branch, token=user_token,
-                files=edits,
-                commit_message=f"AUREM: {task[:60]}",
-                progress=_prog,
-            ),
-            what="GitHub commit", task_id=task_id, attempts=4, base_sleep=2.0,
-        )
+        try:
+            result = await _retry(
+                lambda: gh_api_commit(
+                    owner=owner, repo=repo, branch=branch, token=user_token,
+                    files=edits,
+                    commit_message=f"AUREM: {task[:60]}",
+                    progress=_prog,
+                ),
+                what="GitHub commit", task_id=task_id, attempts=4, base_sleep=2.0,
+            )
+        except PushFailedError as e:
+            # Ship/Commit Robustness · 2026-08-26 — the commit object
+            # exists (by SHA) but never reached `branch`'s history.
+            # This is NOT "nothing was committed" — surface the real
+            # SHA + `push_failed=True` so chat_helpers can render the
+            # truth instead of the generic failure message.
+            err = f"Commit {e.commit_sha[:7]} created but push failed: {e.reason}"
+            await _log(task_id, f"🚫 {err}", "error")
+            await _set_status(task_id, status="failed", error=err[:2000],
+                              commit_sha=e.commit_sha, push_failed=True,
+                              completed_at=time.time())
+            return
         sha = result["sha"]
         commit_full_sha = result.get("full_sha") or sha
 
@@ -3331,7 +3345,8 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
             )
             await _log(task_id, f"🚫 {err}", "error")
             await _set_status(task_id, status="failed", error=err[:2000],
-                              commit_sha=sha, completed_at=time.time())
+                              commit_sha=sha, verify_failed=True,
+                              completed_at=time.time())
             return
         await _log(task_id,
                    f"✅ Verified {len(edits)} file(s) live on {branch}@{sha}",
