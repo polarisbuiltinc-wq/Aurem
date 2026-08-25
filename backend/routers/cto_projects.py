@@ -2257,6 +2257,20 @@ async def _run_task(task_id, proj, task, files, context, user_token, maxx_mode: 
     )
 
 
+async def _persist_push_failed(task_id: str, e: "PushFailedError") -> str:
+    """Ship/Commit Robustness · 2026-08-26 — extracted from the
+    `_run_task_via_api` commit try/except so this exact persistence
+    logic (real SHA + push_failed=True, never "nothing was
+    committed") is independently unit-testable without standing up
+    the whole ~1000-line worker. Returns the built error string."""
+    err = f"Commit {e.commit_sha[:7]} created but push failed: {e.reason}"
+    await _log(task_id, f"🚫 {err}", "error")
+    await _set_status(task_id, status="failed", error=err[:2000],
+                      commit_sha=e.commit_sha, push_failed=True,
+                      completed_at=time.time())
+    return err
+
+
 async def _run_task_via_api(task_id, proj, task, files, context, user_token, maxx_mode: bool = False,
                             resume_edits: Optional[dict] = None):
     """API-only worker — no `git` binary needed. Reads target files from
@@ -3284,11 +3298,7 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
             # This is NOT "nothing was committed" — surface the real
             # SHA + `push_failed=True` so chat_helpers can render the
             # truth instead of the generic failure message.
-            err = f"Commit {e.commit_sha[:7]} created but push failed: {e.reason}"
-            await _log(task_id, f"🚫 {err}", "error")
-            await _set_status(task_id, status="failed", error=err[:2000],
-                              commit_sha=e.commit_sha, push_failed=True,
-                              completed_at=time.time())
+            await _persist_push_failed(task_id, e)
             return
         sha = result["sha"]
         commit_full_sha = result.get("full_sha") or sha

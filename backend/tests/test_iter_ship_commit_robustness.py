@@ -90,6 +90,59 @@ def test_t1_files_to_commit_loop_never_raises_on_bad_element():
     assert files_dict == {"a.py": "x = 1"}
 
 
+def test_t1_do_ship_real_call_skips_bad_element_and_still_ships():
+    """Real invocation of `LoopEngine._do_ship` (not a replica) with a
+    bare string mixed into `submitted_files` — proves the actual
+    coerce()/ContractError branch in loop_engine.py executes and the
+    ship still proceeds on the one valid file, instead of crashing on
+    the malformed element."""
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+    from services import loop_engine as le
+
+    class _Coll:
+        def __init__(self):
+            self.rows: list[dict] = []
+        async def insert_one(self, d):
+            self.rows.append(dict(d))
+        async def update_one(self, q, u, upsert=False):
+            pass
+        async def find_one(self, q, *_a, **_kw):
+            return None
+        async def delete_one(self, q):
+            pass
+
+    class _DB:
+        def __init__(self):
+            self.loop_sessions = _Coll()
+            self.loop_backups = _Coll()
+            self.loop_plans = _Coll()
+            self.loop_lock = _Coll()
+            self.loop_failures = _Coll()
+            self.cto_projects = _Coll()
+
+    eng = le.LoopEngine(db=_DB(), loop_id="lp_test_t1", user_id="u1",
+                        project_id="p1", user_message="ship it")
+    eng.bin_ctx = type("B", (), {"repo_owner": "acme", "repo_name": "widgets",
+                                  "branch": "main", "pat": "tok"})()
+    eng.context["submitted_files"] = [
+        {"path": "app.py", "content": "print('hi')\n"},
+        "a_bare_string_element_not_a_dict",  # must be skipped via coerce()
+    ]
+
+    with patch("services.loop_integrity_guard.check_file_integrity",
+              return_value=None), \
+         patch("services.loop_diff_classifier.classify",
+              return_value={"source": ["app.py"], "tests": [],
+                            "test_touched": False, "test_lines": []}), \
+         patch("services.loop_independent_verifier.verify",
+              AsyncMock(return_value={"verdict": "yes"})):
+        asyncio.run(eng._do_ship())
+
+    assert eng.state == le.LoopState.PAUSED_FOR_USER
+    assert eng.context["ship_pending"]["files"] == {"app.py": "print('hi')\n"}
+
+
 def test_t1_original_crash_site_still_fixed():
     """Regression guard on the ORIGINAL site (belt-and-suspenders on
     top of tests/test_regression_iter286_mcp_test_file_lock.py) — the
@@ -333,15 +386,44 @@ def test_t4b_no_commit_at_all_keeps_the_honest_blank_copy():
 
 def test_t4_cto_projects_wires_push_failed_flag_on_persist():
     """The commit-call site must catch PushFailedError specifically and
-    persist commit_sha + push_failed=True — not fall into the generic
-    except that would silently drop the SHA."""
+    delegate to `_persist_push_failed`, which persists commit_sha +
+    push_failed=True — not fall into the generic except that would
+    silently drop the SHA."""
     src = open(os.path.join(BACKEND, "routers", "cto_projects.py")).read()
     idx = src.find("except PushFailedError as e:")
     assert idx > -1
-    region = src[idx: idx + 700]
-    assert 'commit_sha=e.commit_sha' in region
-    assert 'push_failed=True' in region
-    assert 'status="failed"' in region
+    region = src[idx: idx + 450]
+    assert '_persist_push_failed(task_id, e)' in region
+    idx2 = src.find("async def _persist_push_failed(")
+    assert idx2 > -1
+    region2 = src[idx2: idx2 + 700]
+    assert 'commit_sha=e.commit_sha' in region2
+    assert 'push_failed=True' in region2
+    assert 'status="failed"' in region2
+
+
+async def test_t4_persist_push_failed_helper_real_call():
+    """Real invocation (not a source-string check): `_persist_push_failed`
+    must call `_set_status` with the exact honest kwargs — real SHA,
+    push_failed=True — and never claim 'nothing was committed'."""
+    from unittest.mock import AsyncMock, patch
+    from core.errors import PushFailedError
+    from routers.cto_projects import _persist_push_failed
+
+    fake_set_status = AsyncMock()
+    fake_log = AsyncMock()
+    with patch("routers.cto_projects._set_status", fake_set_status), \
+         patch("routers.cto_projects._log", fake_log):
+        exc = PushFailedError(commit_sha="cafebabe1234567", reason="HTTP 409: conflict")
+        err = await _persist_push_failed("t_test123", exc)
+
+    assert "cafebab" in err
+    fake_set_status.assert_awaited_once()
+    _, kwargs = fake_set_status.call_args
+    assert kwargs["status"] == "failed"
+    assert kwargs["commit_sha"] == "cafebabe1234567"
+    assert kwargs["push_failed"] is True
+    fake_log.assert_awaited_once()
 
 
 def test_t4_cto_projects_wires_verify_failed_flag_on_persist():
