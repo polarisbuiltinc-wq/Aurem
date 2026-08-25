@@ -31,6 +31,7 @@ import MessageBubble from "./MessageBubble";
 import PostTaskScan from "./PostTaskScan";
 import LiveStepFloatingCard from "./LiveStepFloatingCard";  // Iter 212m-19
 import FounderOfferCard from "./FounderOfferCard";          // Iter 212m-30 PR-2
+import FirstScanCard from "./FirstScanCard";                 // Onboarding Step 4 · S-B
 import SecurityScanDrawer from "./SecurityScanDrawer";      // Iter 212m-55 1-click scan
 import { getScanSeverityCounts, onScanUpdated, setCachedScan } from "../lib/securityScanCache";  // Iter 212m-56
 // Iter 212m-58 — Prompt / Loop execution-mode switcher + ancillary
@@ -4854,6 +4855,11 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           below (which has a flat top edge here). Auto-hides when
           has_fully_claimed, sold-out, or >3 days since signup. */}
       <FounderOfferCard projectId={activeProject?.project_id} />
+
+      {/* Onboarding Step 4 · S-B (2026-08-26) — the first-scan aha.
+          Shows above FounderOfferCard's promo so the loud "I found
+          something in your site" moment isn't buried under it. */}
+      <FirstScanCard projectId={activeProject?.project_id} />
 
       {/* 2026-08-21 — Stream health pill moved to render inline right
           below the streaming assistant bubble (see the messages.map

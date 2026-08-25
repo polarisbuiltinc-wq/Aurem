@@ -1003,6 +1003,15 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
             db=db, user_id=me["user_id"], project_id=proj_id,
             github_token=_ix_token, github_owner=owner, github_repo=repo,
         ))
+        # Onboarding Step 4 · S-B (2026-08-26) — the first-scan aha.
+        # Separate from the scan above (that one quietly feeds the
+        # Prompt Starter chips); this one produces the loud "I found
+        # N things, here's the #1 one" results card + "Fix this for
+        # me" CTA. Fire-and-forget, same error-swallowing contract.
+        from services.onboarding_first_scan import trigger_first_scan
+        asyncio.create_task(trigger_first_scan(
+            db=db, user_id=me["user_id"], project_id=proj_id,
+        ))
     except Exception as _bbe:
         logger.warning("indexing scheduler skipped: %r", _bbe)
 

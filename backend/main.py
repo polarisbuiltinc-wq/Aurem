@@ -75,6 +75,7 @@ from routers.github_deploy import router as github_deploy_router   # iter 123
 from routers.thinking_hints import router as thinking_hints_router  # iter 158
 from routers.repo_indexing import router as repo_indexing_router    # Iter 212m-30 PR-2
 from routers.founder_offer import router as founder_offer_router    # Iter 212m-30 PR-2
+from routers.onboarding_first_scan import router as onboarding_first_scan_router  # Onboarding Step 4 · S-B
 from routers.onboarding import router as onboarding_router          # Iter 212m-32 nudge emails
 from routers.promo_first50 import router as promo_first50_router    # Track 3 (item #31) — First-50 signup promo + email verification
 from routers.email_unsubscribe import router as email_unsubscribe_router  # 2026-02-12 · CAN-SPAM/GDPR one-click unsubscribe
@@ -3246,6 +3247,7 @@ app.include_router(github_deploy_router, prefix="/api/aurem-dev")   # iter 123
 app.include_router(thinking_hints_router, prefix="/api/aurem-dev")  # iter 158
 app.include_router(repo_indexing_router,  prefix="/api/aurem-dev")  # Iter 212m-30 PR-2
 app.include_router(founder_offer_router,  prefix="/api/aurem-dev")  # Iter 212m-30 PR-2
+app.include_router(onboarding_first_scan_router, prefix="/api/aurem-dev")  # Onboarding Step 4 · S-B
 app.include_router(onboarding_router,     prefix="/api/aurem-dev")  # Iter 212m-32 nudge emails
 app.include_router(promo_first50_router,  prefix="/api/aurem-dev")  # Track 3 (item #31) — First-50 signup promo + email verification
 app.include_router(email_unsubscribe_router,        prefix="/api/aurem-dev")  # 2026-02-12 · one-click unsubscribe
