@@ -880,10 +880,29 @@ _PROBES: list[tuple[str, str, Callable[[], Awaitable[dict]]]] = [
 ]
 
 
-async def run_all_probes() -> list[dict]:
-    """Run every probe concurrently. Returns a list of result dicts in
-    the same order as _PROBES. Used by the on-demand admin endpoint
-    where latency matters."""
+async def run_all_probes_CONCURRENT_TEST_ONLY() -> list[dict]:
+    """Run every probe CONCURRENTLY. TEST-ONLY — never call this from a
+    live request/cron path.
+
+    W3·2026-08 architectural decision: live probe paths must use
+    `run_all_probes_serial()`. The concurrent 13-probe burst (Stripe,
+    e2b sandbox boot, LLM completion, TLS x11...) starves a
+    single-worker's event loop via GIL contention badly enough to fail
+    Kubernetes' `/health` check — this happened TWICE in production
+    (the periodic cron, then separately the admin cold-start path),
+    both since fixed to call `run_all_probes_serial()` instead. This
+    function is kept ONLY because tests want the fast concurrent
+    variant and don't care about starving their own event loop. It
+    refuses to run outside a pytest process so that gap can never
+    reopen a third time from a new call site.
+    """
+    if os.environ.get("PYTEST_CURRENT_TEST") is None:
+        raise RuntimeError(
+            "run_all_probes_CONCURRENT_TEST_ONLY() must never be called "
+            "from live code — it starves the event loop and has already "
+            "caused two production /health outages. Use "
+            "run_all_probes_serial() instead."
+        )
     coros = [_run(fn(), id_, name) for id_, name, fn in _PROBES]
     results = await asyncio.gather(*coros, return_exceptions=False)
     return list(results)

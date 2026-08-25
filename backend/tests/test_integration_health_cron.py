@@ -63,7 +63,7 @@ async def test_probe_persist_writes_latest_and_history(monkeypatch):
     def _fake_counts(r):
         return {"ok": 1, "warn": 1, "broken": 0, "missing": 0, "total": 2}
     from services import integration_health as ih
-    monkeypatch.setattr(ih, "run_all_probes", _fake_run)
+    monkeypatch.setattr(ih, "run_all_probes_serial", _fake_run)
     monkeypatch.setattr(ih, "summary_counts", _fake_counts)
 
     db = MagicMock()
@@ -89,7 +89,6 @@ async def test_probe_persist_fails_open(monkeypatch):
     # limits).  Patch the CURRENT symbol so the boom fires; patching
     # the old symbol did nothing → real probes ran → 10s timeout.
     monkeypatch.setattr(ih, "run_all_probes_serial", _boom)
-    monkeypatch.setattr(ih, "run_all_probes", _boom)
 
     db = MagicMock()
     # If persist tries to write on error, verify it doesn't:

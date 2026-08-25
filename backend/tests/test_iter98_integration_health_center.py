@@ -33,7 +33,7 @@ def _load_env():
 
 def test_service_module_exports():
     from services import integration_health as ih
-    assert hasattr(ih, "run_all_probes")
+    assert hasattr(ih, "run_all_probes_CONCURRENT_TEST_ONLY")
     assert hasattr(ih, "summary_counts")
     assert hasattr(ih, "_PROBES")
     assert len(ih._PROBES) >= 11, f"expected 11+ probes, got {len(ih._PROBES)}"
@@ -128,8 +128,9 @@ def test_live_run_all_probes_mostly_ok():
     return status='ok'. MongoDB may be 'broken' in a bare pytest process
     because the lifespan hasn't set up the DB client — that's acceptable
     for this test, the live HTTP smoke earlier confirmed it works in-app."""
-    from services.integration_health import run_all_probes, summary_counts
-    results = asyncio.run(run_all_probes())
+    from services.integration_health import (
+        run_all_probes_CONCURRENT_TEST_ONLY, summary_counts)
+    results = asyncio.run(run_all_probes_CONCURRENT_TEST_ONLY())
     summary = summary_counts(results)
     print(f"\nLive probe summary: {summary}")
     for r in results:

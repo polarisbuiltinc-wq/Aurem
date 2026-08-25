@@ -7,15 +7,22 @@ Plus `npm install -g eslint` raised FileNotFoundError every boot
 (no npm on the prod base image).
 """
 import asyncio
+import os
 import time
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from services import integration_health as ih
 
 CRON_SRC = Path(
     "/app/backend/services/integration_health_cron.py").read_text()
 MAIN_SRC = Path("/app/backend/main.py").read_text()
+
+
+async def _ok() -> dict:
+    return {"status": "ok"}
 
 
 class TestSerialProbes:
@@ -47,7 +54,31 @@ class TestSerialProbes:
         assert "await run_all_probes()" not in seg
 
     def test_concurrent_variant_still_exists_for_admin(self):
-        assert hasattr(ih, "run_all_probes")
+        assert hasattr(ih, "run_all_probes_CONCURRENT_TEST_ONLY")
+
+    # ── 2026-08-26 · guard proof cases ──────────────────────────────
+    # W3·2026-08: live probe paths must use the serialized runner —
+    # the concurrent 13-probe burst starved the single-worker event
+    # loop, TWICE (the periodic cron, then separately the admin
+    # cold-start path). `run_all_probes_CONCURRENT_TEST_ONLY()` now
+    # refuses to run outside a pytest process, so a THIRD call site
+    # can never reopen this class of bug.
+
+    async def test_a_live_code_call_raises(self, monkeypatch):
+        """Proof case (a): simulate a call from live code (no pytest
+        marker in the environment) — must raise, not run."""
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+        with pytest.raises(RuntimeError, match="run_all_probes_serial"):
+            await ih.run_all_probes_CONCURRENT_TEST_ONLY()
+
+    async def test_b_test_call_still_works(self):
+        """Proof case (b): a real test invocation (pytest sets
+        PYTEST_CURRENT_TEST automatically) must still work."""
+        assert os.environ.get("PYTEST_CURRENT_TEST") is not None
+        fake_probes = [("p0", "P0", lambda: _ok())]
+        with patch.object(ih, "_PROBES", fake_probes):
+            results = await ih.run_all_probes_CONCURRENT_TEST_ONLY()
+        assert len(results) == 1
 
 
 class TestNpmGuard:
