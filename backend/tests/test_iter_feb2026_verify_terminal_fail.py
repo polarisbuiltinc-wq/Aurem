@@ -141,15 +141,34 @@ def _always_failing_verify_factory():
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Contract 1 — Terminal FAILED state (not PAUSED_FOR_USER)
+# Contract 1 — PAUSED_FOR_USER on first exhaustion, hard FAILED (no
+# duplicate) on retry-reentry with the global cap already consumed.
+#
+# W3 · 2026-08 — REWRITTEN. A `tests/test_iter309_phase03_self_heal_
+# paused.py` guard (predating this file) explicitly locks in
+# PAUSED_FOR_USER on first verify-self-heal-exhaustion; the original
+# version of this test asserted the opposite (FAILED, no pause) and
+# was never reconciled with that guard when it landed — a genuine
+# undetected contradiction, not a deliberate joint decision.
+# LIVE-REPRO'D (2026-08): calling `_do_verify()` twice on the same
+# engine — first call exhausts MAX_SELF_HEALS and pauses; second call
+# (simulating the router's retry) hits the PRE-EXISTING global heal
+# cap guard (`total_heal_attempts`, loop_engine.py ~line 1927) BEFORE
+# running any new heal attempts, and hard-fails with a DIFFERENT
+# message ("Global heal cap reached..."/"Self-heal exhausted
+# globally..."), not a repeat of "Verify failed after 2 attempts".
+# So the original founder-reported bug (4+ duplicate "Verify failed"
+# events from unlimited retries) is fixed by the loop-wide
+# `total_heal_attempts` cap, NOT by removing PAUSED_FOR_USER — the
+# pause is safe to keep because a second attempt can never get a
+# fresh allowance.
 # ═══════════════════════════════════════════════════════════════════
-def test_verify_hard_fails_after_max_heals_no_pause(monkeypatch):
+@pytest.mark.source_of_truth
+def test_verify_pauses_once_then_hard_fails_on_reentry_no_duplicate(monkeypatch):
     from services import loop_engine as le
 
     # Shrink self-heal timeout so a stalled Parliament healer can't
-    # keep the test running for minutes — the healer is expected to
-    # either fail fast or time out, which is fine because we're
-    # asserting the OUTER contract (state=FAILED after MAX_SELF_HEALS).
+    # keep the test running for minutes.
     monkeypatch.setattr(le, "SELF_HEAL_LLM_TIMEOUT_S", 1)
 
     eng = _make_engine()
@@ -173,9 +192,6 @@ def test_verify_hard_fails_after_max_heals_no_pause(monkeypatch):
     import core.parliament as _pmod
     monkeypatch.setattr(_pmod, "Parliament", _Parliament)
 
-    # Capture every _emit + _fail call so we can assert:
-    #   • exactly one FAILED event
-    #   • no PAUSED_FOR_USER event
     emitted: list[dict] = []
     orig_emit = eng._emit
 
@@ -188,56 +204,72 @@ def test_verify_hard_fails_after_max_heals_no_pause(monkeypatch):
 
     monkeypatch.setattr(eng, "_emit", spy_emit)
 
-    async def go():
-        await eng._do_verify()
+    # ── First call: exhausts MAX_SELF_HEALS, must PAUSE (not fail). ──
+    asyncio.run(eng._do_verify())
 
-    asyncio.run(go())
-
-    # Contract 1a — terminal state is FAILED, not PAUSED_FOR_USER.
-    assert eng.state == le.LoopState.FAILED, (
-        f"verify must hard-fail after {le.MAX_SELF_HEALS} heals, "
+    assert eng.state == le.LoopState.PAUSED_FOR_USER, (
+        f"first verify exhaustion must pause for user (preserves "
+        f"plan+execute context per Iter309 founder rationale), "
         f"got state={eng.state.value}"
     )
-
-    # Contract 1b — outer pipeline halts.
-    assert eng._should_stop(), (
-        "terminal FAILED state must halt the pipeline (_should_stop=True)"
-    )
-
-    # Contract 1c — NO PAUSED_FOR_USER event was emitted during
-    # verify. This is the specific regression the bug_testing_agent
-    # caught: the pre-fix code emitted PAUSED_FOR_USER *and then*
-    # (on user retry) FAILED, so the user saw two "Verify failed
-    # after 2 attempts" messages.
     paused_events = [e for e in emitted
                      if e["state"] == le.LoopState.PAUSED_FOR_USER]
-    assert paused_events == [], (
-        f"verify must NOT pause for user on heal-cap exhaustion. "
-        f"Found paused events: {paused_events}"
+    # 2 expected: the main pause emit (requires_user_action=True) +
+    # its narrate() companion event (pre-existing Iter309 narration
+    # system, drives the ECG strip — always paired, not a new
+    # duplicate introduced by this contract).
+    assert len(paused_events) == 2, (
+        f"expected the main pause emit + its narrate companion on "
+        f"first exhaustion, got {len(paused_events)}: {paused_events}"
     )
-
-    # Contract 1d — exactly ONE FAILED event.
-    failed_events = [e for e in emitted
-                     if e["state"] == le.LoopState.FAILED]
-    assert len(failed_events) == 1, (
-        f"expected exactly 1 FAILED event, got {len(failed_events)}: "
-        f"{failed_events}"
-    )
-
-    # Contract 1e — the FAILED event surfaces the cap.
-    assert le.MAX_SELF_HEALS == 2
-    assert "self-heal" in (failed_events[0]["message"] or "").lower()
-
-    # Contract 1f — heal rounds actually ran up to (not past) the cap.
+    main_pause = next(e for e in paused_events
+                      if e["requires_user_action"] is True)
+    assert "Verify failed after 2 self-heal attempts" in main_pause["message"]
+    first_call_messages = {e["message"] for e in paused_events}
+    assert eng.context.get("total_heal_attempts") == le.MAX_SELF_HEALS
     # Initial verify (1) + heal_round × subset_reverify (MAX_SELF_HEALS)
-    # = 1 + 2 = 3 verify calls total.
+    # = 1 + 2 = 3 verify calls for the first call.
     assert len(verify_calls) == 1 + le.MAX_SELF_HEALS, (
         f"expected {1 + le.MAX_SELF_HEALS} verify calls, "
         f"got {len(verify_calls)}: {verify_calls}"
     )
 
-    # Contract 1g — total_heal_attempts advanced to the cap.
-    assert eng.context.get("total_heal_attempts") == le.MAX_SELF_HEALS
+    # ── Second call (simulates router retry re-entering _do_verify):
+    # global cap already consumed → hard-fail immediately, NO new
+    # heal attempts, NO duplicate "Verify failed after 2 attempts". ──
+    emitted.clear()
+    eng.state = le.LoopState.VERIFYING
+    asyncio.run(eng._do_verify())
+
+    assert eng.state == le.LoopState.FAILED, (
+        f"reentry with the global heal cap already consumed must "
+        f"hard-fail (no more free heals to grant), got "
+        f"{eng.state.value}"
+    )
+    new_paused_events = [e for e in emitted
+                         if e["state"] == le.LoopState.PAUSED_FOR_USER]
+    assert new_paused_events == [], (
+        f"reentry must NOT emit a second PAUSED_FOR_USER — this is "
+        f"the duplicate-event bug the founder originally reported. "
+        f"Found: {new_paused_events}"
+    )
+    failed_events = [e for e in emitted
+                     if e["state"] == le.LoopState.FAILED]
+    assert len(failed_events) == 1
+    # The reentry message must not repeat any exact message text
+    # already shown to the user in the first pause — proves no
+    # literal duplicate is shown to the user on retry (the founder-
+    # reported bug this whole file exists to prevent).
+    assert failed_events[0]["message"] not in first_call_messages, (
+        f"reentry FAILED message repeats a first-pause message: "
+        f"{failed_events[0]['message']}"
+    )
+    # No new self-heal attempts ran on reentry (no fresh allowance).
+    self_heal_events = [e for e in emitted if e["phase"] == "self_heal"]
+    assert self_heal_events == [], (
+        f"reentry with cap already consumed must not run new heal "
+        f"attempts: {self_heal_events}"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -273,6 +305,7 @@ def test_pause_response_refuses_retry_on_terminal_state():
 # ═══════════════════════════════════════════════════════════════════
 # Contract 3 — Second _do_verify entry hard-fails on cap-consumed
 # ═══════════════════════════════════════════════════════════════════
+@pytest.mark.source_of_truth
 def test_reentered_do_verify_short_circuits_when_cap_consumed(
         monkeypatch):
     """Defensive contract: if `_do_verify` is somehow re-entered
@@ -411,10 +444,19 @@ def test_pause_response_persisted_terminal_returns_409(monkeypatch):
     assert detail.get("state") == le.LoopState.FAILED.value
 
 
-def test_pause_response_persisted_terminal_403_for_wrong_user(
+@pytest.mark.source_of_truth
+def test_pause_response_persisted_terminal_404_for_wrong_user(
         monkeypatch):
-    """Ownership check must run BEFORE surfacing the terminal state
-    so we never leak a stranger's loop's state to a non-owner."""
+    """SEC-004 (documented 2026-08-19, `routers/loop.py` — see the
+    inline "SEC-004 fix" comments + memory/CODEBASE_AUDIT.md /
+    memory/PRD.md): an authenticated non-owner receives 404 (same as
+    a genuinely not-found loop), not 403 — a distinguishable 403
+    would let a caller enumerate valid loop IDs belonging to other
+    users. Ownership check must still run BEFORE surfacing the
+    terminal state, so a stranger's loop's state/phase is never
+    leaked either way. Updated from an 403 assertion in W3·2026-08 —
+    that assertion predated the SEC-004 decision and was never
+    reconciled with it."""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
@@ -461,7 +503,10 @@ def test_pause_response_persisted_terminal_403_for_wrong_user(
         json={"action": "retry"},
         headers={"Authorization": "Bearer irrelevant"},
     )
-    assert resp.status_code == 403, (
-        f"non-owner must get 403, not a leaked terminal state. "
+    assert resp.status_code == 404, (
+        f"SEC-004: non-owner must get uniform 404 (not a distinguishable "
+        f"403 that would leak resource existence/ownership), and must "
+        f"not see the leaked terminal state/phase either way. "
         f"Got {resp.status_code}: {resp.text}"
     )
+    assert resp.json().get("detail") == "Loop not found"

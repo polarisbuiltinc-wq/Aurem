@@ -267,6 +267,22 @@ jobs:
           fi
           python backend/scripts/ci_check_raw_exception_leak.py $OVERRIDE
 
+      - name: Guard — Source-of-truth trip-wires (must never be silently red)
+        # W3 · 2026-08 governance ruling — a founder-directed behavior
+        # contract test (`@pytest.mark.source_of_truth`) must be its
+        # OWN loud, isolated CI signal, never lumped into the general
+        # "Run tests" pass/fail count. Root cause this exists: the
+        # "Feb 2026 terminal-fail" verify change landed against
+        # tests/test_iter309_phase03_self_heal_paused.py without
+        # updating it, and it sat silently red inside the wider suite
+        # for ~5 weeks because nothing isolated it. if: always() so
+        # this signal is never swallowed by an unrelated red "Run
+        # tests" step above (same pattern as the Coverage ratchet
+        # guard step).
+        if: always()
+        working-directory: backend
+        run: python -m pytest -m source_of_truth -v --tb=short --timeout=30
+
       - name: Legacy lane (deferred failures — non-blocking)
         # Iter 345 — founder ruling: 259 pre-existing failures
         # (iter36–iter267 era) are quarantined via @pytest.mark.legacy

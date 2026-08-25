@@ -55,6 +55,7 @@ class _Coll:
 
 
 @pytest.mark.asyncio
+@pytest.mark.source_of_truth
 async def test_verify_self_heal_exhausted_transitions_to_paused_for_user(
         monkeypatch):
     """Iter 309 Phase 0.3 — direct contract test.
@@ -109,6 +110,7 @@ async def test_verify_self_heal_exhausted_transitions_to_paused_for_user(
     )
 
 
+@pytest.mark.source_of_truth
 def test_verify_pauses_on_exhaustion_not_fails_source_of_truth():
     """Static assertion — the line in loop_engine.py that runs after
     MAX_SELF_HEALS is exhausted MUST reference LoopState.PAUSED_FOR_USER,

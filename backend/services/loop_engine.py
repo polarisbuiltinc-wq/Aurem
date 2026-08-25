@@ -2176,22 +2176,45 @@ class LoopEngine:
                 )
                 return
 
-        # Feb 2026 · Terminal hard-fail — founder-directed change.
-        # Previously this fallback set state=PAUSED_FOR_USER and gave
-        # the user a "retry" button, which just re-entered _do_verify
-        # with fresh counters and emitted duplicate "Verify failed
-        # after 2 attempts" events. Founder's exact ask:
-        #   "loop halts at exactly 2 heal attempts and surfaces a
-        #    terminal state (not a silent retry)."
-        # So: after MAX_SELF_HEALS heal rounds are exhausted and files
-        # are STILL failing, we hard-fail the loop (LoopState.FAILED)
-        # in a single terminal event and stop. No pause_for_user, no
-        # further self-heals, no outer-loop verify retries.
+        # MAX_SELF_HEALS exhausted with files still failing — pause
+        # for user input (G1 — no silent failures).
+        # Feb 2026 · Verify-phase retry cap — store failing files + top
+        # errors in context so pause_response(retry) can inject them
+        # into the executor feedback for the next outer attempt, and
+        # so each subsequent retry sees genuinely different context.
+        # W3 · 2026-08 — reinstated PAUSED_FOR_USER as the source of
+        # truth per tests/test_iter309_phase03_self_heal_paused.py
+        # (founder rationale: FAILED throws away all plan+execute work;
+        # PAUSED lets the founder step in with context intact). A prior
+        # "Feb 2026 · Terminal hard-fail" change had silently routed
+        # this to LoopState.FAILED without updating that guard test —
+        # reverted. LOOP_SELF_HEAL_EXHAUSTED taxonomy code kept, now
+        # attached to this (correct) pause path instead.
         _failing_files = [
             r["path"] for r in report["results"] if not r["ok"]
         ]
         self.context["verify_failed_files"] = _failing_files
         self.context["verify_last_errors"]  = report["errors"][:25]
+        from core.errors import ErrorCode as _ErrorCode
+        self.context["error_code"] = _ErrorCode.LOOP_SELF_HEAL_EXHAUSTED.value
+        self.state = LoopState.PAUSED_FOR_USER
+        await _persist_session(self.db, self._doc())
+        await self._emit(
+            LoopState.PAUSED_FOR_USER, "verify",
+            step=3, total_steps=5,
+            message=(
+                f"Verify failed after {MAX_SELF_HEALS} self-heal "
+                "attempts. Your input needed."
+            ),
+            data={"errors": report["errors"][:25],
+                  "failed_files": _failing_files,
+                  "error_code": self.context["error_code"],
+                  "verify_retry_count": int(
+                      self.context.get("verify_retry_count", 0)
+                  ),
+                  "max_verify_retries": 3},
+            requires_user_action=True,
+        )
         # Iter 309 · Narration — DANGER as the FINAL narration for the
         # verify step. The last-event tone is what drives the ECG strip
         # to flatline red for this step (founder Part 1.6 rule).
@@ -2200,16 +2223,6 @@ class LoopEngine:
             text=f"Verify failed after {MAX_SELF_HEALS} attempts",
             correlation_id="verify:final",
         )
-        _err_preview = " | ".join(str(e)[:120]
-                                  for e in report["errors"][:5])
-        await self._fail(
-            "verify",
-            (f"Verify failed after {MAX_SELF_HEALS} self-heal "
-             f"attempts. Loop halted (terminal). "
-             f"Failing files: {_failing_files[:6]}. "
-             f"Top errors: {_err_preview}"),
-        )
-        return
 
     # ── Phase 4 — Scan (Phase C: real Vanguard via direct internals) ──
     async def _do_scan(self) -> None:

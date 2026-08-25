@@ -20,9 +20,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 _REPO = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.source_of_truth
 def test_global_heal_cap_enforced_in_do_verify():
     """`_do_verify` must consult a loop-run-wide counter BEFORE
     entering the per-file heal loop, and hard-fail (not pause) when

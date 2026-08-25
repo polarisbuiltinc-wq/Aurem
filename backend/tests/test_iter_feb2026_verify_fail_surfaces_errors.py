@@ -77,11 +77,25 @@ def _make_engine():
 
 # ═══════════════════════════════════════════════════════════════════
 # Contract 1 — _fail("verify") emits structured data payload
+#
+# W3 · 2026-08 — REWRITTEN. The original version drove `_do_verify()`
+# to FAILED via a single call (first-exhaustion path), which is now
+# PAUSED_FOR_USER (see test_iter309_phase03_self_heal_paused.py,
+# reinstated as source of truth — the original "Feb 2026" FAILED-on-
+# first-exhaustion routing was an undetected contradiction with that
+# guard). `_fail("verify", ...)`'s rich-data behavior itself is
+# UNCHANGED and still real: it now fires on RETRY-REENTRY once the
+# loop-wide `total_heal_attempts` cap is already consumed (the
+# genuinely terminal case) — same enriched payload, different, later
+# call site. Two-call structure mirrors the live repro used to
+# resolve this (call 1: pause + persist context; call 2: reentry
+# hits the pre-existing global-cap guard and hard-fails with that
+# context already in place).
 # ═══════════════════════════════════════════════════════════════════
 def test_verify_fail_emits_failing_files_and_errors_in_data(monkeypatch):
-    """When _do_verify hard-fails after MAX_SELF_HEALS, the emitted
-    FAILED event must carry `data.failed_files` and `data.errors` so
-    the frontend LoopFailureCard has real content to render — not
+    """The terminal FAILED event (reached on retry-reentry once the
+    global heal cap is consumed) must carry `data.failed_files` and
+    `data.errors` so the frontend has real content to render — not
     just a generic message string."""
     from services import loop_engine as le
 
@@ -138,10 +152,16 @@ def test_verify_fail_emits_failing_files_and_errors_in_data(monkeypatch):
 
     monkeypatch.setattr(eng, "_emit", spy_emit)
 
-    async def go():
-        await eng._do_verify()
+    # Call 1 — first exhaustion, pauses and persists verify_failed_
+    # files / verify_last_errors into context (unchanged behavior).
+    asyncio.run(eng._do_verify())
+    assert eng.state == le.LoopState.PAUSED_FOR_USER
 
-    asyncio.run(go())
+    # Call 2 — simulates router retry re-entering _do_verify with the
+    # global cap already consumed → hits the entry guard → _fail().
+    emitted.clear()
+    eng.state = le.LoopState.VERIFYING
+    asyncio.run(eng._do_verify())
 
     # Find the terminal FAILED event.
     failed_events = [e for e in emitted

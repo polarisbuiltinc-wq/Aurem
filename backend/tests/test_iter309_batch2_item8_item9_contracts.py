@@ -61,7 +61,10 @@ def test_loop_metrics_source_exposes_sse_buffer_block():
     """/admin/loop-metrics response contains an `sse_buffer` key
     with active_loops + total_buffered + max_seq fields. Verified
     at the source level to avoid needing a live admin token."""
-    text = Path("/app/backend/routers/admin.py").read_text()
+    # 2026-08-25 — /admin/loop-metrics moved from admin.py to
+    # admin_analytics.py during the admin-router split; test updated
+    # to match (mechanical cleanup, not a behavior change).
+    text = Path("/app/backend/routers/admin_analytics.py").read_text()
     assert '"sse_buffer": sse_summary' in text, (
         "loop_metrics response missing sse_buffer field"
     )

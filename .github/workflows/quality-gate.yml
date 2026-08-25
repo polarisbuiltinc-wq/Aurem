@@ -264,6 +264,23 @@ jobs:
             --only-rerun "ConnectionError|ConnectionRefusedError|TimeoutError|RemoteDisconnected|ConnectionResetError" \
             --ignore=tests/test_iter138_acceptance_seven.py \
             --ignore=tests/test_iter212m163_aggression_chat.py
+      - name: Guard — Source-of-truth trip-wires (isolated, must never be silently red)
+        # W3 · 2026-08 — same governance rule as ci.yml's dedicated
+        # step: this exact job's broad -k filter above already ran
+        # these tests (it matches "self_heal_paused"/"loop"), but
+        # lumped into one aggregate pass/fail count where a single
+        # red trip-wire is invisible inside a wider red job. Isolate
+        # it so it's loud regardless of the step above's outcome.
+        if: always()
+        working-directory: backend
+        env:
+          MONGO_URL: mongodb://localhost:27017
+          DB_NAME:   aurem_ci_smoke
+          JWT_SECRET: ci-test-secret-32-chars-minimum!!
+          REACT_APP_BACKEND_URL: http://localhost:8001
+          AUREM_MASTER_KEY: ci-vault-master-key-32-chars-min!!
+          AUREM_CTO_MASTER_KEY: ci-cto-vault-master-key-32-chars!!
+        run: python -m pytest -m source_of_truth -v --tb=short --timeout=30
       - name: Stop backend
         if: always()
         run: |

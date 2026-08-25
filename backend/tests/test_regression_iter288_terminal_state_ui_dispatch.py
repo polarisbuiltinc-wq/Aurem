@@ -90,7 +90,10 @@ def test_regression_iter288_error_step_maps_to_actual_failed_phase():
         "the failed SSE frame's `phase` field"
     )
     # The mapping must be present near the LoopStepBar render.
-    assert "{plan:1, execute:2, verify:3, security:4, scan:4, ship:5}" in src, (
+    # 2026-08-25 — `cancelled`/`aborted` keys were added to the map
+    # after this test was written (mechanical drift, same map, same
+    # purpose); matched substring updated to the current dict shape.
+    assert "{plan:1, execute:2, verify:3, security:4, scan:4, ship:5," in src, (
         "phase → step-id map must be present so ship/verify fails "
         "colour the RIGHT step red"
     )

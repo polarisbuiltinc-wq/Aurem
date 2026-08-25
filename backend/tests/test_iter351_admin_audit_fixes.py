@@ -128,7 +128,10 @@ def test_built_at_never_has_offset_plus_z():
 
 # ── 5. loop-metrics owner classification uses user_id field ─────────
 def test_loop_metrics_lookup_by_user_id_field():
+    # 2026-08-25 — moved from admin.py to admin_analytics.py during
+    # the admin-router split; test updated to match (mechanical
+    # cleanup, not a behavior change).
     src = open(os.path.join(
-        os.path.dirname(__file__), "..", "routers", "admin.py")).read()
+        os.path.dirname(__file__), "..", "routers", "admin_analytics.py")).read()
     assert 'dev_users.find_one(\n                    {"user_id": uid}' in src
     assert 'doc.get("phase") or doc.get("current_phase")' in src

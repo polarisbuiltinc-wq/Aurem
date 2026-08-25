@@ -24,6 +24,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 _REPO = Path(__file__).resolve().parents[2]
 
 
@@ -54,29 +56,41 @@ def test_verify_retry_cap_present_in_pause_response_handler():
     )
 
 
-def test_verify_pause_event_removed_after_terminal_hard_fail():
-    """Contract update (Feb 2026 · terminal hard-fail) — the founder
-    reported that the outer-retry path was still causing duplicate
-    "Verify failed after 2 attempts" events. The bug_testing_agent
-    confirmed the loop was still pausing for user instead of hard-
-    failing at the cap. New contract:
+@pytest.mark.source_of_truth
+def test_verify_pause_event_reinstated_with_global_cap_dedup():
+    """Contract update (W3 · 2026-08) — SUPERSEDES the "Feb 2026 ·
+    terminal hard-fail" contract this test previously locked in.
 
-      When MAX_SELF_HEALS heal rounds are exhausted with files still
-      failing, `_do_verify` HARD-FAILS via `_fail("verify", ...)`
-      (LoopState.FAILED). It does NOT emit a PAUSED_FOR_USER event
-      and does NOT forward verify_retry_count/max_verify_retries
-      into any event (those payload keys stopped being emitted by
-      the engine — the router-side outer-retry cap is now dead code
-      protected by an explicit terminal-state guard).
+    That contract was an undetected contradiction with the earlier,
+    still-live `tests/test_iter309_phase03_self_heal_paused.py`
+    guard (PAUSED_FOR_USER on first exhaustion, so plan+execute
+    context isn't thrown away). Live-repro (2026-08) proved the
+    ACTUAL founder-reported bug this file's sibling
+    (`test_iter_feb2026_verify_terminal_fail.py`) was fixing — "4+
+    duplicate Verify failed events across retries" — is independently
+    fixed by the pre-existing loop-wide `total_heal_attempts` cap
+    (`services/loop_engine.py` ~line 1927): a retry-reentry with the
+    cap already consumed hard-fails immediately with a DISTINCT
+    message, before any new heal attempt runs, so no duplicate
+    "Verify failed after N attempts" text can ever repeat. That
+    means PAUSED_FOR_USER is safe to keep on first exhaustion — no
+    need to remove it. New contract:
 
-    This test locks the removal in so a refactor can't quietly
-    reintroduce the pause-for-user fallback.
+      First-time MAX_SELF_HEALS exhaustion within a loop's lifetime
+      → `_do_verify` sets PAUSED_FOR_USER (not FAILED), and DOES
+      forward `verify_retry_count`/`max_verify_retries` in the event
+      (the router-side outer-retry cap in `routers/loop.py` is live,
+      reachable code again, not dead).
+
+    This test locks the reinstatement in so a future refactor can't
+    quietly re-remove the pause-for-user path without re-checking
+    the Iter309 guard + this file's sibling live-repro evidence.
     """
     src = (_REPO / "backend" / "services" / "loop_engine.py").read_text(
         encoding="utf-8")
 
     # Context keys are still persisted (for the router's fallback
-    # feedback carrier if a legacy client ever needs them).
+    # feedback carrier + diagnostics/audit trail).
     assert 'self.context["verify_failed_files"]' in src, (
         "loop_engine must still persist verify_failed_files for "
         "diagnostics + audit trail."
@@ -85,23 +99,33 @@ def test_verify_pause_event_removed_after_terminal_hard_fail():
         "loop_engine must still persist verify_last_errors."
     )
 
-    # The engine no longer emits a PAUSED_FOR_USER event for verify
-    # exhaustion — it emits a terminal FAILED via _fail().
+    # The engine emits PAUSED_FOR_USER for the FIRST verify-exhaustion
+    # in a loop's lifetime — reinstated per Iter309.
     verify_block = src[src.find("async def _do_verify"):
                        src.find("async def _do_scan")]
-    assert "LoopState.PAUSED_FOR_USER" not in verify_block, (
-        "Feb 2026 terminal-fail contract: _do_verify must NOT "
-        "transition to PAUSED_FOR_USER when heals are exhausted. "
-        "Use `_fail('verify', ...)` for the terminal state instead."
+    assert "LoopState.PAUSED_FOR_USER" in verify_block, (
+        "W3 · 2026-08 contract: _do_verify must transition to "
+        "PAUSED_FOR_USER on first heal-exhaustion (Iter309 founder "
+        "rationale: preserve plan+execute context) — the earlier "
+        "'Feb 2026 terminal-fail' removal was an undetected "
+        "contradiction with that still-live guard."
     )
-    # And the emit payload no longer carries the retry-count keys
-    # (they were only meaningful for the removed pause path).
-    assert '"verify_retry_count": int(' not in verify_block, (
-        "Feb 2026 terminal-fail contract: _do_verify must not emit "
-        "verify_retry_count in any event — the outer-retry pause "
-        "path was removed."
+    # And the emit payload DOES carry the retry-count keys again —
+    # the outer-retry pause path is reinstated, not dead code.
+    assert '"verify_retry_count": int(' in verify_block, (
+        "W3 · 2026-08 contract: _do_verify's pause emit must carry "
+        "verify_retry_count — routers/loop.py's outer-retry cap "
+        "consumes this and is live code again."
     )
-    assert '"max_verify_retries": 3' not in verify_block, (
-        "Feb 2026 terminal-fail contract: max_verify_retries=3 "
-        "leftover from the removed pause path must be gone."
+    assert '"max_verify_retries": 3' in verify_block, (
+        "W3 · 2026-08 contract: max_verify_retries=3 must be present "
+        "in the pause emit again."
+    )
+    # The loop-wide global heal cap guard (the actual dedup fix) must
+    # still be present and still hard-fail on cap-consumed reentry —
+    # this is what makes PAUSED_FOR_USER safe against duplicate events.
+    assert "_global_healed" in verify_block and "MAX_SELF_HEALS" in verify_block, (
+        "the pre-existing loop-wide total_heal_attempts cap guard "
+        "must remain — it is what prevents duplicate 'Verify failed' "
+        "events on retry, not the removal of PAUSED_FOR_USER."
     )

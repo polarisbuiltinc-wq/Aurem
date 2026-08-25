@@ -41,7 +41,10 @@ def test_admin_analytics_cache_exports_mongo_swr_cache():
 def test_activation_funnel_uses_swr_cache():
     """The route must use the new SWR cache helper, not the legacy
     60 s in-process cache that 499s on cold starts."""
-    text = (_BACKEND / "routers" / "admin.py").read_text()
+    # 2026-08-25 — activation-funnel route moved from admin.py to
+    # admin_users.py during the admin-router split; test updated to
+    # match (mechanical cleanup, not a behavior change).
+    text = (_BACKEND / "routers" / "admin_users.py").read_text()
     # The new helper is wired into the route.
     assert "mongo_swr_cache(" in text
     # And the activation-funnel key is what it caches.
@@ -118,7 +121,8 @@ def test_no_mixed_cache_for_funnel_key():
     """The funnel cache key should be set ONLY through the SWR call.
     A docstring mention in the `invalidate` endpoint is allowed (it's
     just documentation, not a write path)."""
-    text = (_BACKEND / "routers" / "admin.py").read_text()
+    # 2026-08-25 — see note in test_activation_funnel_uses_swr_cache.
+    text = (_BACKEND / "routers" / "admin_users.py").read_text()
     code_lines = [ln for ln in text.splitlines()
                   if "admin:activation_funnel" in ln
                   and not ln.lstrip().startswith(('#', '"""', '"'))]

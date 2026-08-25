@@ -42,6 +42,11 @@ class ErrorCode(str, Enum):
     CONTEXT_LEAK = "CONTEXT_LEAK"
     RATE_LIMITED = "RATE_LIMITED"
     INTERNAL_UNKNOWN = "INTERNAL_UNKNOWN"
+    # W3 · 2026-08 — distinct code for the verify self-heal-exhausted
+    # terminal FAILED path (services/loop_engine.py::_do_verify), so
+    # this specific case is machine-distinguishable from a generic
+    # VERIFY_FAILED. No behavior change — additive metadata only.
+    LOOP_SELF_HEAL_EXHAUSTED = "LOOP_SELF_HEAL_EXHAUSTED"
 
 
 # Only these classes are safe to blindly retry — deterministic failures
