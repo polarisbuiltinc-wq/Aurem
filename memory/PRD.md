@@ -6732,3 +6732,57 @@ round's scope):** the reachability gate only fires when `github_pat` is present;
 connection itself is unauthenticated/unreachable, `run_debug_session()` still falls through to
 `llm_diagnosis()` with empty file_contents rather than saying "I can't read your repo." Worth
 closing in a future round.
+
+## 2026-08-26 — Ship/Commit Robustness (Step 1) + Deploy-Loop Closure (Step 2) + Onboarding Step 4 First-Scan Aha (Step 3, S-A + S-B)
+
+**STEP 1 — Ship/Commit Robustness (Preview, tested, ready for deploy).**
+- A1 audit: the original `'str' object has no attribute 'get'` crash (task `t_4d07055adb99`) was already fixed in `routers/cto_projects.py` (Resilience Layer Phase 1, prior session). Found and fixed a SIBLING un-audited site in `services/loop_engine.py`'s `_do_ship` files-to-commit loop (~line 2837) — now routes through `core/boundaries.coerce()`, skips malformed elements via `ContractError`, never crashes. FIX is CONFIRMED (test proves no raw AttributeError escapes); the ORIGIN of the original production str is LIKELY (reconstructed from code comment + git history, not re-captured from a live traceback).
+- R2 (blocked ≠ failed): `routers/chat.py`'s `/task-followup` now routes `status="blocked"` to a new `chat_helpers._build_blocked_followup` (never the generic failure text), `status="failed"` extended with `sha`/`push_failed`/`verify_failed` params for honest delivery reporting. Frontend `TaskProgressCard.jsx`/`LiveTaskPopup.jsx` render a distinct neutral/amber "awaiting your approval" state, never red/failed.
+- R3 (delivery honesty): `core/errors.py::PushFailedError(commit_sha, reason)` — `services/github_api_writer.py::commit_files()` now raises it (with the real orphaned commit SHA) when the commit object was created but the branch ref-update/push was rejected, instead of a bare `httpx.HTTPStatusError`. `cto_projects.py::_persist_push_failed()` persists `commit_sha` + `push_failed=True` — "Committed but push FAILED", never "nothing was committed" when something WAS committed.
+- Real-remote push proof (T3): NOT available in Preview (no writable GitHub token). `backend/scripts/one_time_real_push_proof.py` created for the founder to run themselves against a disposable repo — **PENDING founder run**, tracked below.
+- Tested: 24 new tests (`test_iter_ship_commit_robustness.py`), 0 new regressions (targeted + full-suite git-stash verified). Ratchet green — diff-coverage 80-100% on all touched files; 3 pre-existing FLOOR violations (chat.py 67%, cto_projects.py 71.75%, loop_engine.py 65.5%, all confirmed pre-existing via full-suite baseline) accepted as out-of-scope debt by founder.
+- `testing_agent` verified: `/app/test_reports/iteration_ship_commit_robustness_2026_01.json` — 40/40 pass, 0 bugs.
+
+**STEP 2 — Deploy-Loop Closure (C2 hardening built + tested; S4 production checks PENDING founder).**
+- C2 (Option A, per founder decision): `services/integration_health_cron.py::_startup_jitter_s()` — bounded (0-60s) per-worker startup offset, seeded by PID (not boot wall-clock time, which would be identical for two workers booting simultaneously and defeat the purpose). Injectable/seedable for deterministic tests. 4 new tests + 33/33 regression green, ratchet green.
+- S4 production verification (4 checks): (b) GET /health, 13/13 200s over one full ~26s cycle — DONE, founder-captured. (d) cold-start `/admin/integrations/health` via the real Admin UI — DONE, all integrations OK/live, founder-captured. (a) K8s rollout/readiness lines and (c) `topup_alerts` E11000 log search — PENDING, require founder's deployment-dashboard/log access (confirmed I have neither; an internal deployment-scanning tool was tried and only does static analysis, not live log retrieval).
+- Step 2 closed as **functionally complete** (fix deployed + prod confirmed healthy) with T3 + S4(a) + S4(c) tracked as a named founder-owned follow-up (see below), not silently dropped.
+
+**STEP 3 — Onboarding Step 4, First-Scan Aha (S-A + S-B built + tested; ready for deploy).**
+- SEO-capability decision: YES, `services/seo/orchestrator.py::run_seo_fixes()` already exists (detects+patches meta/schema/robots/sitemap/alts, `dry_run` supported), already wired into `routers/founder_offer.py`'s promotional claim/confirm flow. **Path: SEO-first by reuse** — decoupled the onboarding aha from the promo's "500 spots" counter (founder decision (c)): new `routers/onboarding_first_scan.py` (`GET /status`, `POST /viewed`, `POST /apply`) + `services/onboarding_first_scan.py` call `run_seo_fixes()` directly, `founder_offer.py` untouched.
+- S-A: extended the existing generic `funnel_events` store (`services/signup_guards.py::emit_funnel_event`, already used for `signup_completed`/`first_chat_sent`/`task_submitted`/etc.) with `connect_repo_install_failed` (wired into the real `github_app.py` callback failure branch) + 4 first-scan event helpers. Added `onboarding_intent` field (`POST /auth/onboarding-intent`, one 2-choice click). `GET /admin/funnel` (pre-existing) needed no changes — new event types just appear in its aggregate.
+- S-B: `services/seo/finding_translator.py` — thin, deterministic (no LLM) translator turning `run_seo_fixes`' patch/diff output into plain-language finding cards (one card per file, one bullet per semicolon-split action). Trigger moved from `app_installed` (github_app.py:358, fires before any repo/project_id exists) to `project_add_success` (cto_projects.py, the true earliest moment a scannable project exists) — explicit, disclosed deviation from the original spec's suggested hook. Frontend `FirstScanCard.jsx`, mounted in `ChatPanel.jsx`.
+- 2 real bugs caught and fixed by writing the tests (not by review): (1) the auto-scan passed no `title`/`description`, so a "meta description missing" bullet could fire from an unrelated `og:type` check and be a **false claim** most of the time — fixed by deriving a real default title/description from the repo name and softening the copy to stay accurate regardless of which sub-check fired. (2) the one-time-per-user dedup flag write (`dev_users.first_scan_at`) was missing `upsert=True` — masked in the common case (row already exists from signup) but would silently no-op and re-trigger the scan on every repo add in an edge case (race/migration/new-user path) — fixed.
+- `run_seo_fixes()` does NOT clone the repo (direct GitHub REST reads) — no double-clone cost. Real scan duration not measurable without a live GitHub token (LIKELY ~1.5-2.5s typical / ~4-5s worst-case, estimated from orchestration overhead + real GitHub API latency captured elsewhere this session); kept the spec's 5s "still scanning..." safety net.
+- Architectural note recorded in code (`services/onboarding_first_scan.py` docstring): the SEO patches are deterministic, not LLM-generated — if `run_seo_fixes` ever generates LLM-written content, this flow MUST be routed through the `cto_tasks` Plan→Build→Verify pipeline; do not keep using the direct-commit path silently if that changes.
+- Tested: 14 tests (5 S-A + 9 S-B, including T-B1..B6 + the second-repo no-retrigger guard), all real/live-reproduced against the real orchestrator/translator/endpoints (GitHub I/O mocked at the same seam already used by the pre-existing `test_iter212m29_seo_core_engine.py` — no live GitHub token in Preview, same disclosed limit as T3). Ratchet green — all 3 new files clear their 60% floor at 88.9-93.1%; only the pre-existing `cto_projects.py` FLOOR gap remains (unchanged, 2 new lines there are 100% covered).
+- **Honest capability statement**: a user who connects their first repo gets a real background SEO scan (real `run_seo_fixes`, no LLM, ~2-5s LIKELY). If the site has SEO gaps, they see a plain-language card with the top issue(s) + one-click "Fix all N for me." Clicking it makes a real GitHub commit attempt and shows the real SHA (mocked-transport-tested here; no live GitHub write proof available in this Preview, same as T3). The aha fires ONCE per user (first repo only). Clean/non-web repos get an honest message, never a fake finding. NOT real yet: production event stream confirmation (S-C), live GitHub write proof in this environment.
+- S-C: confirmed the `/admin/funnel` aggregation pipe is real and live in Preview (real captured output: 844 signups, existing event_counts). Cannot confirm production events/14-day funnel — no production access; tracked below. **The 844-signup/6% figure is PRE-connection-fix data and must NOT be used as an "is the aha working" baseline** — that requires a new post-fix, post-ship cohort that doesn't exist yet.
+
+**Full suite after all Step 1-3 work**: 325 failed / 5862 passed / 75 skipped / 73 errors (unchanged range from the 319-326 pre-existing baseline established at session start — confirmed via repeated git-stash spot-checks, not a new regression).
+
+### TRACKED FOLLOW-UPS (owner: founder)
+
+**[PROD VERIFICATION — due: this week, before next deploy]**
+- T3: re-run `backend/scripts/one_time_real_push_proof.py` against the populated disposable repo, paste the real SHA (or real `PushFailedError`), then revoke/regenerate the token.
+- S4(a): pod-Readiness / rollout-complete lines from the deployment dashboard.
+- S4(c): search the last 30 min of production logs for `E11000` (topup_alerts race) — paste "none found" or the matching lines.
+
+**[POST-DEPLOY VALIDATION — due: 2 weeks post-deploy]**
+- S-C prod: confirm S-A/S-B funnel events fire for real NEW production signups (paste one real captured event via `/admin/funnel`).
+- Real 14-day funnel from `/admin/funnel` on the NEW cohort (post connection-fix + post S-B ship) — the 844-signup pre-fix number is NOT a baseline.
+- Aha visibility test: founder creates a test account, connects a repo with a known SEO gap, confirms `FirstScanCard` appears with real findings.
+- Aha conversion: of new-cohort connected users, how many saw the card / clicked Fix / completed a task?
+
+**[DEFERRED — tracked, not started]**
+- Option B (single-refresher / Mongo TTL lock) — C2 hardening, only if real CPU-throttle symptoms are observed.
+- CT-log brand monitor (crt.sh) — phishing/typosquat detection, read-only + human-review (no auto-accuse).
+- 6-file coverage wave (original task) — next up after this lands.
+- R3 (verification-honesty hard gate).
+- Model wiring (`config/models.py`).
+- Fitness-function triage (57 failed/17 errors, `quality-gate.yml`).
+- Email re-engagement (infra exists; design after S-C prod data).
+- Legacy-encoding (Latin-1/Cp1252) read/write support.
+
+**Status: Preview-only. All of Step 1 + Step 2 (code) + Step 3 (S-A+S-B) is built, tested, ratchet-green, and ready for the founder to push (Save to GitHub) + deploy. Production adoption unconfirmed pending founder action.**
+

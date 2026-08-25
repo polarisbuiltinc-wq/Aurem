@@ -755,3 +755,27 @@ Also this session: production build `f754390bb863` confirmed live (`/api/aurem-d
 - Closed the 2 identified leak spots: chat/log tape line now includes the ref_id alongside the already-classified friendly message; `TaskProgressCard.jsx`'s collapsed "technical details" panel now shows an `error_code`/`ref_id` header above the raw (still-collapsed) exception text.
 - Deferred to Phase 2 (founder-approved, explicit): retry-with-strategy-mutation (`resilient_execute`), Hindi i18n content, `/admin/health-score` failure-class metrics, ADR, full codebase-wide `.get()` call-site audit.
 - **Tested**: 41 new tests in `backend/tests/resilience/` + 1 pre-existing test updated (stale literal-source match, same class as the fitness-invariant category #2 above) — all 46 pass locally. `testing_agent` independently verified (`/app/test_reports/iteration_resilience_layer_phase1_2026_08_25.json`): 100%/100% backend/frontend, 0 critical/minor issues, 0 action items. Preview-only — not yet Production-deployed.
+
+## 2026-08-26 — Ship/Commit Robustness + Deploy-Loop C2 Hardening + Onboarding Step 4 First-Scan Aha
+
+**Ship/Commit Robustness:**
+- Fixed a sibling (uncaught) `.get()`-on-str crash site in `services/loop_engine.py`'s ship loop, via `core/boundaries.coerce()`.
+- New: `core/errors.py::PushFailedError` — a commit that succeeds but fails to push now surfaces the real orphaned SHA + "push FAILED" instead of the generic "nothing was committed."
+- New: `chat_helpers._build_blocked_followup` — a blocked (e.g. test-file-lock) task now renders as a neutral "awaiting your approval" state end-to-end (DB → API → `TaskProgressCard.jsx`/`LiveTaskPopup.jsx`), never as a failure.
+- New: `backend/scripts/one_time_real_push_proof.py` for founder-run real-GitHub-push verification (T3, pending).
+- 24 new tests, 0 new regressions, ratchet green. `testing_agent`: 40/40 pass.
+
+**Deploy-Loop C2 Hardening:**
+- New: `services/integration_health_cron.py::_startup_jitter_s()` — PID-seeded, bounded (0-60s) per-worker startup offset so a multi-worker prod pod doesn't run the integration-health probe cycle in perfect lockstep. 4 new tests, ratchet green.
+
+**Onboarding Step 4 — First-Scan Aha:**
+- New: background SEO scan fires on first project add (~2-5s LIKELY, no LLM) via `services.onboarding_first_scan` — reuses `services.seo.orchestrator.run_seo_fixes()` directly, decoupled from `founder_offer.py`'s promotional "500 spots" counter.
+- New: plain-language findings card (`services/seo/finding_translator.py`) with a one-click "Fix all N for me" CTA (`frontend/src/components/FirstScanCard.jsx`).
+- New: 3 endpoints in `routers/onboarding_first_scan.py` (`GET /status`, `POST /viewed`, `POST /apply`).
+- New: `connect_repo_install_failed` + 4 first-scan funnel events (reusing the existing `funnel_events` store), `onboarding_intent` field (`POST /auth/onboarding-intent`).
+- Fixed: a false "meta description missing" claim that could fire from an unrelated `og:type` check (caught before shipping — would have been the first thing a new user saw being wrong).
+- Fixed: the one-time-per-user dedup flag write was missing `upsert=True` (caught by writing the test for the guard, not by review) — could have silently re-triggered the scan on every repo add in an edge case.
+- Reused: `run_seo_fixes`, `project_add_success` hook (moved here from `app_installed`, which fires before any project exists — disclosed deviation), `GET /admin/funnel` (no changes needed), 8 existing funnel events.
+- 14 new tests (T-B1..B6 + second-repo no-retrigger guard), all real/live-reproduced (GitHub I/O mocked at the same seam as the pre-existing SEO-engine tests — no live GitHub token in this Preview). Ratchet green.
+- Status: Preview-only, built + tested, ready for founder push + deploy. Production adoption and post-deploy cohort validation are tracked founder follow-ups (see PRD.md).
+
