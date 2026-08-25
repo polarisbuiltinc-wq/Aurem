@@ -3,6 +3,35 @@
 **Live URL**: https://auremcto.com
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
+## 2026-08-26 (later) — Production deployment failure fixed: `/health` upstream timeouts + topup_alerts duplicate-key race
+
+Founder shared live production deploy logs showing recurring nginx
+`upstream timed out (110) ... GET /health` errors (deployment health-check
+failures) plus a MongoDB E11000 duplicate-key warning on `topup_alerts`.
+
+**Root cause (CONFIRMED):** `services/integration_health_cron.py` already
+used the safe `run_all_probes_serial()` (Iter 336b fix) to avoid starving the
+single-worker event loop with a concurrent 13-probe burst (Stripe, e2b sandbox
+boot, LLM completion — all real external calls). But THREE other live call
+sites still used the unsafe CONCURRENT `run_all_probes()`: `GET
+/admin/integrations/health` (cold-start path — fires with no cached snapshot,
+exactly the state right after a fresh deploy), `POST
+/admin/integrations/refresh` (manual), and `services/daily_digest.py`. Fixed
+all three to use `run_all_probes_serial()`. Verified live: triggered a manual
+refresh (26s serialized) while polling `/health` every 2s — stayed 200 OK
+throughout (previously would have starved the loop).
+
+Also fixed the `topup_alerts` E11000: `upsert_alerts_from_snapshot`'s
+"first sighting" branch used `InsertOne(doc)` — two probe runs racing the
+same pre-fetch-then-write window could both try to insert the same
+`alert_key`. Changed to `UpdateOne({"alert_key": key}, {"$setOnInsert": doc},
+upsert=True)` — idempotent.
+
+New tests: `tests/test_iter_deploy_health_probe_serial_everywhere.py`,
+race-idempotency test added to `tests/test_iter212m17_topup_alerts.py`.
+58-test regression run: only 2 pre-existing unrelated failures (confirmed via
+git-stash A/B). `deployment_agent` re-scan: no hard blockers.
+
 ## 2026-08-26 — Priority 1 (restore-drill BSON RecursionError + live mongod crash-loop) fixed & testing_agent-verified; Priority 2 (coverage-scan timeout) fixed with measured evidence
 
 Founder flagged the `RecursionError: maximum recursion depth exceeded while

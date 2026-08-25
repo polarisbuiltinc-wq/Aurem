@@ -118,7 +118,7 @@ async def upsert_alerts_from_snapshot(db, snap: dict) -> list[dict]:
     healthy comes back broken.  Prevents the daily-pile-up while
     keeping the "new incident after resolution" story intact.
     """
-    from pymongo import InsertOne, UpdateOne, UpdateMany
+    from pymongo import UpdateOne, UpdateMany
 
     results = (snap or {}).get("results") or []
     day = _day_key((snap or {}).get("generated_at"))
@@ -223,7 +223,22 @@ async def upsert_alerts_from_snapshot(db, snap: dict) -> list[dict]:
             "status":            "active",
             "email_sent":        False,
         }
-        ops.append(InsertOne(doc))
+        # 2026-08-26 deploy-log fix: this was `InsertOne(doc)`. The
+        # pre-fetch-then-write window above is a classic TOCTOU race —
+        # two probe runs (e.g. the periodic cron and a manual
+        # `/admin/integrations/refresh`) landing close together can
+        # BOTH see "no active row" for the same (integration_id,
+        # severity) and both try to insert the same `alert_key`,
+        # tripping the unique index (confirmed live:
+        # E11000 dup key on `alert_key_1`). `$setOnInsert` + upsert
+        # makes this idempotent: whichever write lands first creates
+        # the row, the other becomes a harmless no-op instead of an
+        # error.
+        ops.append(UpdateOne(
+            {"alert_key": key},
+            {"$setOnInsert": doc},
+            upsert=True,
+        ))
         new_alerts.append({k: v for k, v in doc.items() if k != "_id"})
 
     if ops:

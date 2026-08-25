@@ -310,8 +310,20 @@ async def integrations_health(
     )
     if not snap:
         # Cold start — probe immediately so the founder sees real data.
-        from services.integration_health import run_all_probes, summary_counts
-        results = await run_all_probes()
+        # 2026-08-26 deploy fix: this cold-start path used the
+        # CONCURRENT `run_all_probes()` — a 13-probe burst (Stripe,
+        # e2b sandbox boot, LLM completion, TLS x11...) inline inside
+        # an HTTP request handler. On a fresh deployment there's no
+        # cached snapshot yet, so this fires right when Kubernetes'
+        # readiness/liveness `/health` probe is most sensitive,
+        # starving the single-worker event loop via GIL contention
+        # and causing the exact nginx `upstream timed out ... /health`
+        # errors seen in prod deploy logs. `run_all_probes_serial()`
+        # (already used by the cron for this same reason — see Iter
+        # 336b) spreads the same work out with a gap between probes.
+        from services.integration_health import (
+            run_all_probes_serial, summary_counts)
+        results = await run_all_probes_serial()
         snap = {
             "results":      results,
             "summary":      summary_counts(results),
@@ -333,8 +345,13 @@ async def integrations_refresh(
     """Force-re-probe every integration NOW. Founder-only — each call
     actually hits all the external APIs."""
     await _require_admin(authorization)
-    from services.integration_health import run_all_probes, summary_counts
-    results = await run_all_probes()
+    # 2026-08-26 deploy fix: same event-loop-starvation risk as the
+    # cold-start path above — use the serial runner, not the
+    # concurrent one, so a manual refresh can never reproduce the
+    # `/health` upstream-timeout deploy failure.
+    from services.integration_health import (
+        run_all_probes_serial, summary_counts)
+    results = await run_all_probes_serial()
     snap = {
         "results":      results,
         "summary":      summary_counts(results),

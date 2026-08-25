@@ -143,11 +143,17 @@ class _FakeColl:
                 if "$inc" in update:
                     for k, v in update["$inc"].items():
                         d[k] = d.get(k, 0) + v
+                # $setOnInsert is a no-op when the doc already matched
+                # (real pymongo semantics — it only applies on insert).
                 class R: matched_count = 1
                 return R()
-        if upsert and "$set" in update:
-            new = {**query, **update["$set"]}
+        if upsert and ("$set" in update or "$setOnInsert" in update):
+            new = {**query, **update.get("$set", {}), **update.get("$setOnInsert", {})}
             self.docs.append(new)
+            class R:
+                matched_count = 0
+                upserted_id = "fake_oid"
+            return R()
         class R: matched_count = 0
         return R()
 
@@ -262,6 +268,32 @@ async def test_upsert_first_sighting_creates_alert():
     assert new[0]["integration_id"] == "openrouter"
     assert len(db.topup_alerts.docs) == 1
     assert db.topup_alerts.docs[0]["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_upsert_concurrent_race_on_new_alert_is_idempotent():
+    """2026-08-26 deploy-log fix: prod hit E11000 dup-key on
+    `alert_key_1` when the periodic cron and a manual refresh both
+    landed in the same pre-fetch-then-write race window and both
+    tried to `InsertOne` the same brand-new alert. `upsert_alerts_
+    from_snapshot` now uses an upsert instead of a bare insert — two
+    calls processing the SAME "first sighting" snapshot back-to-back
+    (simulating the race) must never raise and must leave exactly one
+    row, not two."""
+    db = _FakeDB()
+    snap = {
+        "generated_at": time.time(),
+        "results": [
+            {"id": "openrouter", "name": "OpenRouter", "status": "warn",
+             "summary": "$0.37 remaining", "fix_hint": "Top up",
+             "detail": ""},
+        ],
+    }
+    await upsert_alerts_from_snapshot(db, snap)
+    # Second "racer" processing the identical snapshot again — must
+    # not raise and must not duplicate the row.
+    await upsert_alerts_from_snapshot(db, snap)
+    assert len(db.topup_alerts.docs) == 1
 
 
 @pytest.mark.asyncio

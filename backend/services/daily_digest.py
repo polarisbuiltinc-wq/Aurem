@@ -173,10 +173,15 @@ async def _run_once() -> None:
     # refresh, the founder would see stale data.
     try:
         from cto_services.db import get_db
-        from services.integration_health import run_all_probes, summary_counts
+        # 2026-08-26 deploy fix: same event-loop-starvation risk as
+        # the admin cold-start/refresh paths — use the serial runner
+        # so this daily background job can never reproduce the
+        # `/health` upstream-timeout deploy failure.
+        from services.integration_health import (
+            run_all_probes_serial, summary_counts)
         _db = get_db()
         if _db is not None:
-            results = await run_all_probes()
+            results = await run_all_probes_serial()
             snap = {
                 "results":      results,
                 "summary":      summary_counts(results),
