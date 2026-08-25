@@ -851,3 +851,5 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `services/session_pattern_extractors.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-25T00:27:09.507528Z] <!-- inv:service:services/session_pattern_extractors.py -->
 - `PYTEST_CURRENT_TEST` — auto-detected in backend/services/integration_health.py (verify) (default: unset) [Iter 0, 2026-08-25T13:41:37.684884Z] <!-- inv:envvar:PYTEST_CURRENT_TEST -->
 - `GH_PUSH_PROOF_BRANCH` — auto-detected in backend/scripts/one_time_real_push_proof.py (verify) (default: unset) [Iter 0, 2026-08-25T15:04:38.131729Z] <!-- inv:envvar:GH_PUSH_PROOF_BRANCH -->
+| `routers/onboarding_first_scan.py` | `/onboarding/first-scan` | 3 | auto-detected new router (verify) (Iter 0, 2026-08-25T17:16:59.023172Z) | <!-- inv:router:routers/onboarding_first_scan.py -->
+- `services/onboarding_first_scan.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-25T17:16:59.023203Z] <!-- inv:service:services/onboarding_first_scan.py -->
