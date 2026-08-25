@@ -165,6 +165,16 @@ jobs:
             [ "$attempt" -eq 3 ] && exit 1
             sleep $((attempt * 5))
           done
+      # 2026-08-25 — same CI-tooling gap fix as ci.yml: this job runs
+      # test_iter212m62_loop_verify.py (via the "loop" keyword filter
+      # below) which shells out to real `ruff`/`eslint` binaries;
+      # neither was ever installed on this runner, so every linter-
+      # outcome assertion there saw the documented graceful "skip"
+      # fallback instead of a real lint result.
+      - name: Install ruff + eslint (for loop_verify tests)
+        run: |
+          pip install --quiet ruff
+          npm install -g eslint@8 --quiet
       - name: Map workspace to /app (legacy hardcoded test paths)
         # Iter 349 — 35 collection errors on runners: older tests
         # exec scripts via hardcoded /app/backend/... paths (pod

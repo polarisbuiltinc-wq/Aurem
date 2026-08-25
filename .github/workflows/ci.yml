@@ -149,6 +149,19 @@ jobs:
             sleep $((attempt * 5))
           done
 
+      # 2026-08-25 — services/loop_verify.py shells out to `ruff`/`eslint`
+      # for the loop's real static-analysis step, with a documented
+      # graceful "skip" fallback when a binary is missing (Iter 212m-166,
+      # so production never crashes over it). Neither binary was ever
+      # installed on this runner, so test_iter212m62_loop_verify.py's
+      # linter-outcome assertions always saw "skip" here — a CI-tooling
+      # gap, not an app bug. Matching install now added so the runner
+      # can exercise the real linter path like the pod does.
+      - name: Install ruff + eslint (for loop_verify tests)
+        run: |
+          pip install --quiet ruff
+          npm install -g eslint@8 --quiet
+
       - name: Map workspace to /app (legacy hardcoded test paths)
         run: sudo ln -sfn "$GITHUB_WORKSPACE" /app
 
