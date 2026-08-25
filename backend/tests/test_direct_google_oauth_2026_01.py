@@ -30,10 +30,10 @@ import pytest
 import requests
 from pymongo import MongoClient
 
-BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 API = f"{BASE_URL}/api/aurem-dev"
-MONGO_URL = os.environ["MONGO_URL"]
-DB_NAME = os.environ["DB_NAME"]
+MONGO_URL = os.environ.get("MONGO_URL", "")
+DB_NAME = os.environ.get("DB_NAME", "")
 
 # ─── Shared client ────────────────────────────────────────────────────
 @pytest.fixture(scope="module")

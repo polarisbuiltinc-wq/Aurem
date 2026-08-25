@@ -14,7 +14,7 @@ import pytest
 import requests
 from pymongo import MongoClient
 
-BACKEND = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
+BACKEND = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 API = f"{BACKEND}/api/aurem-dev"
 
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")

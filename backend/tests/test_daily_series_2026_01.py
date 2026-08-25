@@ -4,7 +4,7 @@ import os
 import pytest
 import requests
 
-BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 ADMIN_EMAIL = "test@aurem.dev"
 ADMIN_PASSWORD = "AuremTest2026!"
 

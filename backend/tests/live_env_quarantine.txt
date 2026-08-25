@@ -55,3 +55,8 @@ tests/test_ship_turn_index.py
 tests/test_token_enforcement.py
 tests/test_welcome_email.py
 tests/test_session6_item5_developers_metric.py::test_public_stats_exposes_real_developers_field
+tests/test_optional_phone_signup_2026_01.py
+tests/test_direct_google_oauth_2026_01.py
+tests/test_daily_series_2026_01.py
+tests/test_cost_alert_and_cookie_batch_2026_01.py
+tests/test_iteration_cto_projects_live.py

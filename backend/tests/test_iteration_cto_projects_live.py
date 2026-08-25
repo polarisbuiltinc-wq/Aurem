@@ -15,7 +15,6 @@ import pytest
 import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
-assert BASE_URL, "REACT_APP_BACKEND_URL must be set"
 
 API = f"{BASE_URL}/api/aurem-dev"
 EMAIL = "test@aurem.dev"

@@ -840,3 +840,12 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `services/loop_engine_helpers.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-24T17:59:36.424375Z] <!-- inv:service:services/loop_engine_helpers.py -->
 - `services/sensitive_path_guard.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-24T20:51:59.165604Z] <!-- inv:service:services/sensitive_path_guard.py -->
 - `services/intent_gateway_casual_reply.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-24T22:57:13.462835Z] <!-- inv:service:services/intent_gateway_casual_reply.py -->
+
+### Iter 0 · 2026-08-25
+
+- `services/admin_error_autofix.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-25T00:27:09.507414Z] <!-- inv:service:services/admin_error_autofix.py -->
+- `services/advisor_open_prs.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-25T00:27:09.507447Z] <!-- inv:service:services/advisor_open_prs.py -->
+- `services/faithfulness_judge.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-25T00:27:09.507476Z] <!-- inv:service:services/faithfulness_judge.py -->
+- `EMERGENT_LLM_KEY` — auto-detected in backend/services/faithfulness_judge.py (verify) (default: unset) [Iter 0, 2026-08-25T00:27:09.507496Z] <!-- inv:envvar:EMERGENT_LLM_KEY -->
+- `services/generation_rules_triggers.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-25T00:27:09.507512Z] <!-- inv:service:services/generation_rules_triggers.py -->
+- `services/session_pattern_extractors.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-25T00:27:09.507528Z] <!-- inv:service:services/session_pattern_extractors.py -->

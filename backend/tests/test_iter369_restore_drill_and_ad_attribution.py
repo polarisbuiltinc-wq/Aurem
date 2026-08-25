@@ -15,7 +15,7 @@ import uuid
 import pytest
 import requests
 
-BASE = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
+BASE = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 ADMIN_EMAIL = "test@aurem.dev"
 ADMIN_PASS  = "AuremTest2026!"
 API = f"{BASE}/api/aurem-dev"

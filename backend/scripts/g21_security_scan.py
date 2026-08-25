@@ -38,6 +38,12 @@ def scan_supply_chain(requirements_path: str | None = None,
         s = line.strip()
         if not s or s.startswith(("#", "--")):
             continue
+        if s.startswith("-e "):
+            # Editable install of a local relative path (e.g. the
+            # in-repo ora-grounding package) — there is no external
+            # registry version to pin, so this isn't a supply-chain
+            # risk the way an unpinned PyPI/URL package is.
+            continue
         if "==" not in s and " @ " not in s:
             unpinned.append(s)
     return {"unpinned_deps": unpinned,

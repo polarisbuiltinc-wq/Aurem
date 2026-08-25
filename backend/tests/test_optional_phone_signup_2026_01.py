@@ -15,7 +15,7 @@ import uuid
 import requests
 import pytest
 
-BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 API = f"{BASE_URL}/api/aurem-dev/auth"
 
 # Preview seeded admin (see /app/memory/test_credentials.md)
