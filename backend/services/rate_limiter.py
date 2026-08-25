@@ -333,3 +333,14 @@ def redis_diag() -> dict:
         "backend_active":    _REDIS_BACKEND_ACTIVE,
     }
 
+
+def reset_buckets_for_tests() -> None:
+    """Test-only: clear the in-memory sliding-window buckets so
+    accumulated request counts don't bleed across unrelated tests in
+    the same pytest process (2026-08-25 — CI evidence showed a single
+    pytest run tripping every /auth/login-calling test after the
+    first ~10 with a shared 429). This resets STATE only — the real
+    production check_rate_limit()/check_rate_limit_async() logic and
+    limits are exercised exactly as-is, nothing is disabled."""
+    _buckets.clear()
+

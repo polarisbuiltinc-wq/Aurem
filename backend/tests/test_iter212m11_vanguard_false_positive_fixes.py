@@ -40,7 +40,12 @@ def _names(findings: list[dict]) -> list[str]:
 
 
 def test_openai_key_flags_real_sk():
-    f = scan_text("OPENAI_KEY = '***REDACTED_API_KEY***'")
+    # Built via concatenation so this fixture never appears as a
+    # complete secret-shaped literal in the diff (GitHub push
+    # protection / the platform's pre-push scrubber redacts exactly
+    # such literals — see the 2026-08-25 Vanguard investigation).
+    fake_key = "sk-" + "abcdefghijklmnopqrstuvwxyz1234567890"
+    f = scan_text(f"OPENAI_KEY = '{fake_key}'")
     assert "openai_key" in _names(f)
 
 
@@ -218,12 +223,16 @@ def test_python_literal_normalization_handles_nested():
 
 
 def test_regression_aws_access_key_still_fires():
-    f = scan_text("AWS_KEY = '***REDACTED_AWS_KEY***'")
+    # Built via concatenation — see note on test_openai_key_flags_real_sk.
+    fake_aws_key = "AKIA" + "ABCDEFGHIJ1234KL"
+    f = scan_text(f"AWS_KEY = '{fake_aws_key}'")
     assert "aws_access_key" in _names(f)
 
 
 def test_regression_github_token_still_fires():
-    f = scan_text("GITHUB = '***REDACTED_GITHUB_PAT***'")
+    # Built via concatenation — see note on test_openai_key_flags_real_sk.
+    fake_gh_token = "ghp_" + "abcdefghijklmnopqrstuvwxyz0123456789ABCD"
+    f = scan_text(f"GITHUB = '{fake_gh_token}'")
     assert "github_token" in _names(f)
 
 

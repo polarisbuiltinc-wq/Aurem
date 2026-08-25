@@ -197,3 +197,26 @@ def clean_signup_rate_limit():
     _clear_signup_state_for_test_ips()
     yield
 
+
+# ── 2026-08-25 — general in-memory rate-limiter isolation ────────────
+#
+# Separate root cause from Iter 367 above: services.rate_limiter._buckets
+# is a PROCESS-WIDE in-memory dict backing every /auth/login (and other
+# decorator-based) rate-limit check across the WHOLE pytest session.
+# Live CI evidence (quality-gate.yml "Fitness-function invariants" job,
+# commit 4a9cd8ddc321): once ~10 tests in one pytest process had each
+# called a rate-limited endpoint, every subsequent test in that process
+# started getting real 429s regardless of its own test's intent —
+# cascading into unrelated failures/errors. Same fix philosophy as
+# above: reset accumulated STATE between tests, keep the real
+# production-shaped check (limits, windows, Redis-fallback logic)
+# fully intact — do NOT set RATE_LIMIT_DISABLED.
+@_pytest.fixture(autouse=True)
+def reset_in_memory_rate_limit_buckets():
+    """AUTOUSE — clear services.rate_limiter's in-memory sliding-window
+    buckets before every test so one test's rate-limited calls can't
+    trip a 429 in a completely unrelated test later in the same run."""
+    from services.rate_limiter import reset_buckets_for_tests
+    reset_buckets_for_tests()
+    yield
+
