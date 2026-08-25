@@ -334,3 +334,34 @@ async def test_tb6_full_end_to_end_connect_scan_view_fix(fake_db, monkeypatch):
     assert ev == ["first_scan_started", "first_scan_completed",
                   "first_scan_findings_viewed", "first_scan_fix_clicked"]
     print("\n=== T-B6 COMPLETE ===")
+
+
+# ── S-B edge case: second repo -> aha does NOT re-run ──────────────────
+
+@pytest.mark.asyncio
+async def test_second_project_does_not_retrigger_first_scan(fake_db, monkeypatch):
+    """Guard: services/onboarding_first_scan.py:70 — checked BEFORE any
+    scan work, dedup flag set immediately (line 74) to close the
+    race window between two quick project-adds."""
+    _seed_project(fake_db)
+    _patch_seo_io(monkeypatch, tree=WEB_TREE, files=WEB_FILES)
+    from services.onboarding_first_scan import trigger_first_scan
+
+    await trigger_first_scan(db=fake_db, user_id=USER_ID, project_id=PROJECT_ID)
+    first_row = await fake_db.first_scan_results.find_one({"project_id": PROJECT_ID})
+    assert first_row["status"] == "ready"
+
+    second_project_id = "p_scan_2"
+    fake_db.cto_projects.rows.append({
+        "project_id": second_project_id, "user_id": USER_ID,
+        "github_owner": "acme", "github_repo": "second-repo", "branch": "main",
+    })
+    await trigger_first_scan(db=fake_db, user_id=USER_ID, project_id=second_project_id)
+
+    second_row = await fake_db.first_scan_results.find_one({"project_id": second_project_id})
+    print("second-repo captured result:", second_row)
+    assert second_row is None, "second repo must NOT get a first_scan_results row at all"
+
+    ev_types = [e["event_type"] for e in fake_db.funnel_events.rows if e["user_id"] == USER_ID]
+    assert ev_types.count("first_scan_started") == 1, "must fire exactly once, not per-repo"
+

@@ -72,6 +72,7 @@ async def trigger_first_scan(*, db, user_id: str, project_id: str) -> None:
         await db.dev_users.update_one(
             {"user_id": user_id},
             {"$set": {"first_scan_at": datetime.now(timezone.utc)}},
+            upsert=True,
         )
 
         from services.signup_guards import (
