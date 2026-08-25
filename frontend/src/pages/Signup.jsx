@@ -167,16 +167,14 @@ export default function Signup() {
                         : `Ready to ship! Hit <strong>Create account & start</strong> below. <span class="ora-arrow">🚀</span>`
             }
           />
-          {/* Iter 212m-183 — Google OAuth (Emergent-managed) one-click */}
-          {/* REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR
-              REDIRECT URLS, THIS BREAKS THE AUTH */}
+          {/* 2026-08-28 — flipped to AUREM's own Google OAuth (routers/google_oauth.py),
+              replacing the Emergent-managed broker so users see AUREM's own consent screen. */}
           <button
             type="button"
             data-testid="signup-google-oauth"
             onClick={() => {
-              const redirectUrl = window.location.origin + "/oauth-finish";
-              window.location.href =
-                `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+              const base = window.location.origin;
+              window.location.href = `${base}/api/aurem-dev/google/oauth/start?intent=signup`;
             }}
             style={{
               padding: "12px 14px", marginBottom: 12,

@@ -44,16 +44,15 @@ def test_signup_defaults_track_to_developer():
 
 
 def test_google_oauth_defaults_track_to_developer():
-    src = _read(AUTH_PY)
-    # Google OAuth session handler exists further down.
-    marker = "async def google_session("
-    if marker not in src:
-        # Older name — try the endpoint decorator instead.
-        marker = "/google/session"
+    # 2026-08-28 — old Emergent-broker /google/session (routers/auth.py)
+    # was deleted entirely; direct Google OAuth (routers/google_oauth.py)
+    # is now the ONLY Google auth path.
+    src = _read(BACKEND / "routers" / "google_oauth.py")
+    marker = "async def callback("
     idx = src.index(marker)
     insert_idx = src.index("dev_users.insert_one", idx)
     block = src[insert_idx:insert_idx + 2000]
-    assert '"track":              "developer"' in block, (
+    assert '"track":            "developer"' in block, (
         "Iter 390: Google OAuth new-user insert must default track to 'developer'"
     )
 

@@ -6789,3 +6789,18 @@ closing in a future round.
 
 **Status: Preview-only. All of Step 1 + Step 2 (code) + Step 3 (S-A+S-B) is built, tested, ratchet-green, and ready for the founder to push (Save to GitHub) + deploy. Production adoption unconfirmed pending founder action.**
 
+## 2026-08-28 — Google sign-in bug: Emergent-broker OAuth removed entirely, own Google OAuth is now the only path
+
+**Root cause (founder-reported on PRODUCTION):** clicking "Sign up with Google" landed on `https://auth.emergentagent.com/oauth/consent/?app_slug=launch-pad-237...` — the Emergent-managed OAuth broker — instead of the founder's own Google Cloud OAuth consent screen. Founder had configured their own `GOOGLE_OAUTH_CLIENT_ID`/`SECRET` and expected their own branded consent screen.
+
+**Investigation finding:** a fully-built direct Google OAuth flow (`routers/google_oauth.py` + `services/google_oauth.py`, using the founder's own credentials) already existed from a 2026-08-25 session, but was explicitly built as a "parallel path" and the `Signup.jsx`/`Login.jsx` buttons were never flipped over to call it — they still pointed at the old Emergent broker URL.
+
+**Fix:**
+- Flipped `Signup.jsx`/`Login.jsx` "Continue with Google" buttons to `GET /api/aurem-dev/google/oauth/start?intent=signup|login` (same pattern already used for the GitHub OAuth button).
+- **Deleted the Emergent-broker route entirely** (`POST /auth/google/session` in `routers/auth.py`, `_EMERGENT_SESSION_URL`, `GoogleSessionBody`) per founder's explicit request: "remove this totally from my codebase so never land any user to Emergent's managed OAuth." Confirmed via live test: the route now 404s.
+- Removed the matching `#session_id=...` branch in `OAuthFinish.jsx` — only the GitHub/direct-Google `#token=...` branch remains.
+- Updated 4 stale tests that asserted against the now-deleted `google_session` function/route to instead assert against `routers/google_oauth.py` (the only remaining Google auth path); added a regression test confirming the broker route 404s.
+- Live-verified in Preview (screenshot): both Login and Signup "Continue with Google" now go straight to `accounts.google.com` with the founder's real `client_id`, no Emergent broker involved.
+- **Founder-owned follow-up:** the Google consent screen currently shows the raw preview/production domain, not "AUREM" branding — that's controlled by the OAuth consent screen app name/logo config in Google Cloud Console, outside this codebase.
+- Self-tested (curl + pytest + screenshot), not sent to `testing_agent` — small, well-scoped auth-flip + deletion, verified directly.
+

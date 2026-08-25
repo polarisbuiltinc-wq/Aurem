@@ -54,14 +54,16 @@ def test_email_signup_writes_created_at_as_float():
 
 
 def test_google_signup_writes_created_at_as_float():
-    src = open("/app/backend/routers/auth.py").read()
+    # 2026-08-28 — old Emergent-broker /google/session (routers/auth.py)
+    # was deleted entirely; direct Google OAuth (routers/google_oauth.py)
+    # is now the ONLY Google auth path.
+    src = open("/app/backend/routers/google_oauth.py").read()
     m = re.search(
-        r'@router\.post\("/google/session"\).*?'
-        r'(?:created_at\s*=\s*[^\n]+)',
+        r'async def callback\(.*?'
+        r'(?:created_at\s*=?\s*[^\n]*time\.time\(\)[^\n]*)',
         src, re.DOTALL,
     )
-    assert m, "could not locate google session handler"
-    assert "created_at = time.time()" in m.group(0), (
+    assert m, (
         "Google-OAuth signup path is not writing `time.time()` into "
         "created_at — admin window filter will not see these users."
     )

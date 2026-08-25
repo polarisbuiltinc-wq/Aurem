@@ -72,9 +72,12 @@ def test_signup_writes_float_epoch_created_at():
     idx_signup = src.index("@router.post(\"/signup\")")
     signup_body = src[idx_signup:idx_signup + 3500]
     assert "time.time()" in signup_body
-    # /google/session uses `time.time()` for created_at
-    idx_gs = src.index("async def google_session(")
-    google_body = src[idx_gs:idx_gs + 3500]
+    # google/oauth callback (routers/google_oauth.py) uses `time.time()`
+    # for created_at — the old Emergent-broker /google/session route
+    # was deleted 2026-08-28.
+    google_src = open("/app/backend/routers/google_oauth.py").read()
+    idx_gs = google_src.index("async def callback(")
+    google_body = google_src[idx_gs:idx_gs + 3500]
     assert "time.time()" in google_body
 
 

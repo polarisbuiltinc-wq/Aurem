@@ -10,9 +10,10 @@ Emergent-broker redirect (auth.emergentagent.com) so the consent screen
 shows AUREM's own branding. Identity-only scope (email/profile) — Google
 is never used for repo/Drive/Calendar access here.
 
-Parallel path: the existing /auth/google/session (Emergent-broker) route
-in routers/auth.py is untouched. This is additive until Login.jsx's
-button is flipped.
+2026-08-28 — Login.jsx/Signup.jsx buttons flipped to this flow and the
+old Emergent-broker route (/auth/google/session in routers/auth.py) was
+deleted entirely, so no traffic can ever land on auth.emergentagent.com.
+This is now the ONLY Google auth path.
 """
 from __future__ import annotations
 import os

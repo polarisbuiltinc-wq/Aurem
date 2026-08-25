@@ -33,73 +33,15 @@ export default function OAuthFinish() {
       if (hasRun.current) return;
       hasRun.current = true;
       try {
-        // Read fragment: "#token=eyJ...&login=octocat" (GitHub) OR
-        // "#session_id=..." (Google via Emergent-managed OAuth).
+        // Read fragment: "#token=eyJ...&login=octocat&provider=github|google".
+        // Both GitHub OAuth and AUREM's own direct Google OAuth
+        // (routers/google_oauth.py) redirect here the same way — the
+        // Emergent-managed broker (#session_id=...) path was removed
+        // 2026-08-28 so no traffic can ever land there again.
         const raw = (window.location.hash || "").replace(/^#/, "");
         const parts = new URLSearchParams(raw);
 
-        // ── Google path (Emergent-managed OAuth) ──────────────────
-        // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR
-        // REDIRECT URLS, THIS BREAKS THE AUTH
-        const sessionId = parts.get("session_id");
-        if (sessionId) {
-          let d;
-          try {
-            const resp = await api.post("/auth/google/session", {
-              session_id: sessionId,
-            });
-            d = resp.data || {};
-          } catch (e) {
-            setStatus("Google sign-in failed. Sending you back…");
-            setTimeout(() => nav("/login?google=error", { replace: true }), 1000);
-            return;
-          }
-          if (!d.token) {
-            setStatus("No sign-in token returned. Redirecting…");
-            setTimeout(() => nav("/login?google=missing_token", { replace: true }), 800);
-            return;
-          }
-          setToken(d.token);
-          setUser({
-            user_id:          d.user_id,
-            email:            d.email,
-            name:             d.name || d.email,
-            tier:             d.tier,
-            tokens_remaining: d.tokens_remaining,
-          });
-          // 2026-08-25 — root-cause fix: same class of bug fixed below
-          // in the GitHub/direct-Google branch — these were `await`ed
-          // sequentially before navigating, each eligible for the full
-          // 60s axios timeout, which could leave the user stuck on a
-          // blank page for minutes on a slow network. Fire in the
-          // background instead; neither is needed for the redirect.
-          try {
-            const ref = localStorage.getItem("aurem_ref");
-            if (ref && ref !== d.user_id) {
-              api.post("/referrals/attribute", { ref_code: ref }).catch(() => {});
-              localStorage.removeItem("aurem_ref");
-            }
-          } catch { /* non-blocking */ }
-          // 2026-08-20 — Attribute ad click captured on landing.
-          try {
-            const raw = localStorage.getItem("aurem_ad_attr");
-            if (raw) {
-              api.post("/ads/attribute-click", JSON.parse(raw)).catch(() => {});
-              localStorage.removeItem("aurem_ad_attr");
-            }
-          } catch { /* non-blocking */ }
-          try { localStorage.setItem("aurem_just_logged_in", "1"); } catch {}
-          if (d.new) {
-            trackSignup();
-            metaCompleteRegistration("google");
-          }
-          try { window.history.replaceState(null, "", "/oauth-finish"); } catch {}
-          setStatus("Signed in. Redirecting to your dashboard…");
-          nav("/dashboard", { replace: true });
-          return;
-        }
-
-        // ── GitHub path (backend redirect with #token=…) ──────────
+        // ── GitHub / direct-Google path (backend redirect with #token=…) ──
         const token = parts.get("token");
         const login = parts.get("login") || "";
         // 2026-08-25 — the direct-Google-OAuth callback reuses this

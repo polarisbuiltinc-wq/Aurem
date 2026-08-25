@@ -7,9 +7,9 @@ code (dev_users lookup/merge, is_admin/tier bootstrap, JWT minting) is
 100% reused, unchanged.
 
 2026-08-25 — built as a PARALLEL path alongside the existing Emergent-
-broker route (POST /auth/google/session in routers/auth.py). That route
-is untouched. Login.jsx keeps pointing at the old broker until this is
-proven end-to-end in Preview.
+broker route (POST /auth/google/session in routers/auth.py).
+2026-08-28 — Login.jsx/Signup.jsx flipped to this flow and the broker
+route was deleted entirely. This is now the ONLY Google auth path.
 
 Identity-only — no repo/Drive/Calendar scopes. Mounted at
 /api/aurem-dev/google/oauth/* (see main.py), matching the exact same

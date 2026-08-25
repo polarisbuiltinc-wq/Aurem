@@ -1,6 +1,8 @@
 """
-Backend tests for the new DIRECT Google OAuth path (parallel to the
-Emergent-broker /auth/google/session route).
+Backend tests for the DIRECT Google OAuth path — the ONLY Google auth
+path since 2026-08-28 (the old Emergent-broker /auth/google/session
+route was deleted entirely so no traffic can land on
+auth.emergentagent.com).
 
 Covers:
   * GET /api/aurem-dev/google/oauth/start
@@ -16,8 +18,7 @@ Covers:
     - new email creates dev_users row with correct bootstrap
     - existing email is matched (no dup) + google sub-doc updated
     - redirect points to {origin}/oauth-finish#token=...&login=...&new=...
-  * Regression: /auth/google/session (Emergent broker) still mounted &
-    responds (shape check only — we don't have a real session_id).
+  * Regression: /auth/google/session (Emergent broker) is GONE (404).
 """
 from __future__ import annotations
 import os
@@ -261,11 +262,13 @@ class TestCallbackFullFlowMocked:
             db.dev_users.delete_many({"email": mock_email})
 
 
-# ─── Regression: Emergent-broker route still exists ───────────────────
-class TestEmergentBrokerRegression:
-    def test_broker_route_still_mounted(self, s):
-        # Should reject with a JSON error (not 404) — proving router still mounted.
+# ─── Regression: Emergent-broker route must be GONE ───────────────────
+class TestEmergentBrokerRemoved:
+    def test_broker_route_returns_404(self, s):
+        # 2026-08-28 — the Emergent-broker route was deleted entirely so
+        # no traffic can ever land on auth.emergentagent.com. Must 404.
         r = s.post(f"{API}/auth/google/session",
                    json={"session_id": "definitely-invalid"})
-        assert r.status_code != 404, "broker route disappeared!"
-        # Any 400/401/500 shape is fine — we're just checking it's still there.
+        assert r.status_code == 404, (
+            "broker route /auth/google/session must be fully removed"
+        )

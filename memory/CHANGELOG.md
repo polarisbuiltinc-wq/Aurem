@@ -779,3 +779,9 @@ Also this session: production build `f754390bb863` confirmed live (`/api/aurem-d
 - 14 new tests (T-B1..B6 + second-repo no-retrigger guard), all real/live-reproduced (GitHub I/O mocked at the same seam as the pre-existing SEO-engine tests — no live GitHub token in this Preview). Ratchet green.
 - Status: Preview-only, built + tested, ready for founder push + deploy. Production adoption and post-deploy cohort validation are tracked founder follow-ups (see PRD.md).
 
+## 2026-08-28 — Google sign-in: removed Emergent-broker OAuth entirely
+- Root cause: a direct Google OAuth flow using the founder's own credentials already existed (`routers/google_oauth.py`) but the Signup/Login buttons were never flipped over — they still redirected to the Emergent-managed broker (`auth.emergentagent.com`), which the founder saw live on production.
+- Fixed: flipped both buttons to `/api/aurem-dev/google/oauth/start`; **deleted the old broker route** (`POST /auth/google/session`, `routers/auth.py`) and its frontend handling (`OAuthFinish.jsx` `#session_id=` branch) entirely, per founder's explicit "remove this totally" request — confirmed via live test the route now 404s.
+- Updated 4 stale tests referencing the deleted function/route; added a regression test locking in the 404.
+- Live-verified in Preview: both buttons go straight to `accounts.google.com` with the real client_id. Founder-owned follow-up: Google's consent screen branding (app name/logo) is a Google Cloud Console setting, not a code fix.
+

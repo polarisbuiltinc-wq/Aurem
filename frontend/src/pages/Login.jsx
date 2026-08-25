@@ -236,16 +236,14 @@ export default function Login() {
               GitHub sign-in cancelled. You can try again or use email below.
             </div>
           )}
-          {/* Iter 212m-183 — Google OAuth (Emergent-managed) one-click */}
-          {/* REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR
-              REDIRECT URLS, THIS BREAKS THE AUTH */}
+          {/* 2026-08-28 — flipped to AUREM's own Google OAuth (routers/google_oauth.py),
+              replacing the Emergent-managed broker so users see AUREM's own consent screen. */}
           <button
             type="button"
             data-testid="login-google-oauth"
             onClick={() => {
-              const redirectUrl = window.location.origin + "/oauth-finish";
-              window.location.href =
-                `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+              const base = window.location.origin;
+              window.location.href = `${base}/api/aurem-dev/google/oauth/start?intent=login`;
             }}
             style={{
               padding: "12px 14px", marginBottom: 12,
