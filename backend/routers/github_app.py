@@ -764,6 +764,112 @@ async def list_my_installations(
 
 
 # ═════════════════════════════════════════════════════════════════════
+# 4a. GET /status — 2026-08 hardening (F4-github-connect · I4b).
+#
+# THE authoritative live-status endpoint the connect investigation
+# found missing. Both wizards previously guessed "did the connect
+# finish?" from either a postMessage OR "installation count went up" —
+# the count check can never detect "repo added to an EXISTING
+# installation" (the common case after the first connect), and if the
+# initial repo-list fetch failed even once, the row stayed cached with
+# 0 repos FOREVER (confirmed live in this exact DB: installation
+# 152797252 has 0 cached repos today).
+#
+# Self-healing short-TTL cache: if the cached `repositories` is <10s
+# old AND non-empty, trust it (bounds live GitHub calls to ~1 per 10s
+# even though the frontend polls every ~2.5s — rate-limit safe). If
+# it's stale OR EMPTY, live-refetch from GitHub and persist — this is
+# exactly what self-heals a poisoned 0-repo row. On a live-fetch
+# failure, DO NOT persist the empty result (so the next poll retries
+# immediately) and return state=error with a plain-language reason.
+# ═════════════════════════════════════════════════════════════════════
+_STATUS_CACHE_TTL_S = 10
+
+
+@router.get("/status")
+async def connect_status(authorization: Optional[str] = Header(None)):
+    user = await current_dev(authorization)
+    db = require_db()
+
+    rows = await db.github_installations.find(
+        {"user_id": user["user_id"], "active": True},
+    ).to_list(length=50)
+
+    if not rows:
+        return {
+            "installation_active": False,
+            "installations": [],
+            "repos": [],
+            "connected_repo": None,
+            "state": "pending",
+            "error": None,
+        }
+
+    now = time.time()
+    any_error: Optional[str] = None
+    out_installs = []
+    for row in rows:
+        iid = row.get("installation_id")
+        cached_repos = row.get("repositories")
+        updated_at = row.get("updated_at") or 0
+        fresh = (
+            isinstance(cached_repos, list) and len(cached_repos) > 0
+            and (now - updated_at) < _STATUS_CACHE_TTL_S
+        )
+        if fresh:
+            repos = cached_repos
+        else:
+            try:
+                fetched = await _ga.list_installation_repos(int(iid))
+                repos = [_slim_repo(r) for r in fetched]
+                await db.github_installations.update_one(
+                    {"installation_id": iid},
+                    {"$set": {"repositories": repos, "updated_at": now}},
+                )
+            except Exception as e:
+                logger.warning(
+                    "[status] live repo fetch failed for install %s: %r",
+                    iid, e,
+                )
+                # Do NOT overwrite/long-cache the failure — keep whatever
+                # was cached (even if empty) and let the NEXT poll retry.
+                repos = cached_repos if isinstance(cached_repos, list) else []
+                if not repos:
+                    any_error = "github_fetch_failed"
+        out_installs.append({
+            "installation_id": iid,
+            "github_login":    row.get("github_login"),
+            "repositories":    repos,
+        })
+
+    all_repos = [
+        {**r, "installation_id": inst["installation_id"],
+         "github_login": inst["github_login"]}
+        for inst in out_installs for r in inst["repositories"]
+    ]
+    connected_repo = all_repos[0]["full_name"] if len(all_repos) == 1 else None
+
+    if all_repos:
+        state = "connected"
+    elif any_error:
+        state = "error"
+    else:
+        state = "pending"
+
+    return {
+        "installation_active": True,
+        "installations": out_installs,
+        "repos": all_repos,
+        "connected_repo": connected_repo,
+        "state": state,
+        "error": (
+            "Couldn't verify your GitHub repos just now — retrying "
+            "automatically."
+        ) if any_error else None,
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════
 # 4b. GET /installations/health — Settings + revoked-banner CTA
 # ═════════════════════════════════════════════════════════════════════
 #

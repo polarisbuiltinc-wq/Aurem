@@ -14,12 +14,13 @@
  * Iter 73 Task 3.
  */
 import React, { useEffect, useRef, useState } from "react";
-import { Loader2, X, ArrowRight, Github } from "lucide-react";
+import { Loader2, X, ArrowRight, Github, RefreshCw } from "lucide-react";
 import { api, getToken, API_BASE } from "../lib/api";
 import { trackFunnel, withFunnelParams, getFunnelSessionId } from "../lib/githubFunnel";
 import { setActiveProjectId } from "./TabBar";
 import RobotGuide, { RobotGuideKeyframes, escapeHtml, oraPulseRingStyle } from "./RobotGuide";
 import useModalA11y from "../hooks/useModalA11y";
+import useGitHubConnectStatus from "../hooks/useGitHubConnectStatus";
 
 const DISMISS_KEY = "aurem_wizard_dismissed";
 const REPO_RX = /^(https?:\/\/)?(www\.)?github\.com\/[\w.-]+\/[\w.-]+\/?$/i;
@@ -61,17 +62,20 @@ export default function NewUserWizard({ onComplete }) {
   const pollRef = useRef(null);
   const popupRef = useRef(null);
 
-  // ─── 2026-02-10 · Phase 4 · GitHub App install state ──────────────
-  // `appInstalls` — list of `github_installations` rows owned by the
-  //                current user (populated after they complete an App
-  //                install via the wizard popup).
-  // `appPickerActive` — flips to true after a successful install so
-  //                the UI transitions from "Continue with GitHub App"
-  //                CTA → repo picker sourced from installation.repositories.
-  const [appInstalls, setAppInstalls]           = useState([]);
-  const [appInstallsBusy, setAppInstallsBusy]   = useState(false);
-  const [appPickerActive, setAppPickerActive]   = useState(false);
-  const appPopupRef = useRef(null);
+  // ─── 2026-08 hardening (GitHub Connect: PERMANENT fix) ───────────
+  // ONE shared hook (also used by AddProjectWizard.jsx) — the wizard
+  // is a pure function of the authoritative /github/app/status
+  // endpoint (live-verified against GitHub), not a local
+  // postMessage/count-poll guess that could never detect "repo added
+  // to an existing installation" and could get stuck forever if
+  // postMessage was dropped.
+  const {
+    status: ghConnectStatus, connecting: appConnecting,
+    timedOut: appTimedOut, startConnect: startAppConnect,
+    retry: retryAppConnect, refresh: refreshGhConnectStatus,
+  } = useGitHubConnectStatus();
+  const appInstalls = ghConnectStatus.installations;
+  const appPickerActive = ghConnectStatus.installation_active;
 
   // Initial OAuth status check.
   useEffect(() => {
@@ -89,9 +93,9 @@ export default function NewUserWizard({ onComplete }) {
         // old logic treated them as equivalent. Fix: always check for
         // an active App installation FIRST. Only skip straight past
         // the App CTA if one already exists.
-        const [oauthRes, installsRes] = await Promise.allSettled([
+        const [oauthRes, ghStatusData] = await Promise.allSettled([
           api.get("/github/oauth/status"),
-          api.get("/github/app/installations"),
+          refreshGhConnectStatus(),
         ]);
         if (cancelled) return;
 
@@ -101,13 +105,18 @@ export default function NewUserWizard({ onComplete }) {
           fetchRepos();  // convenience dropdown for OAuth-linked accounts
         }
 
-        const installs = (installsRes.status === "fulfilled" && installsRes.value.data?.installations) || [];
-        if (installs.length > 0) {
+        const data = ghStatusData.status === "fulfilled" ? ghStatusData.value : null;
+        if (data?.installation_active) {
           // Already has the App installed — go straight to its repo
           // picker, no CTA needed.
-          setAppInstalls(installs);
-          setAppPickerActive(true);
-          maybeAutoSelectSingleRepo(installs);
+          if (data.connected_repo) {
+            setRepoUrl(`https://github.com/${data.connected_repo}`);
+            const inst = (data.installations || []).find(
+              (i) => (i.repositories || []).some((r) => r.full_name === data.connected_repo),
+            );
+            const repo = inst?.repositories?.find((r) => r.full_name === data.connected_repo);
+            setBranch(repo?.default_branch || "main");
+          }
           setGhStatus("choosing");
         } else {
           // No App installed yet (whether or not legacy OAuth is
@@ -126,6 +135,17 @@ export default function NewUserWizard({ onComplete }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-select the repo the moment status resolves to exactly one —
+  // whether that's on initial load or right after a connect completes.
+  useEffect(() => {
+    if (ghConnectStatus.connected_repo && !repoUrl) {
+      setRepoUrl(`https://github.com/${ghConnectStatus.connected_repo}`);
+      const repo = (ghConnectStatus.repos || [])[0];
+      setBranch(repo?.default_branch || "main");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ghConnectStatus.connected_repo]);
+
   async function fetchRepos() {
     setReposBusy(true);
     try {
@@ -138,115 +158,27 @@ export default function NewUserWizard({ onComplete }) {
     }
   }
 
-  // 2026-08-20 — auto-select the repo when an install grants exactly
-  // ONE repo — there's no real choice to make, so requiring a click
-  // is pointless friction. Distinct from the earlier "no auto-fill"
-  // fix, which was specifically about MULTI-repo installs (auto-
-  // highlighting one of several created false confidence about which
-  // repo was chosen). A single repo has no such ambiguity.
-  function maybeAutoSelectSingleRepo(installs) {
-    const allRepos = (installs || []).flatMap((inst) => inst.repositories || []);
-    if (allRepos.length === 1) {
-      setRepoUrl(`https://github.com/${allRepos[0].full_name}`);
-      setBranch(allRepos[0].default_branch || "main");
-    }
-  }
-
-  // ─── 2026-02-10 · Phase 4 · GitHub App install handlers ─────────
-  async function fetchAppInstallations() {
-    setAppInstallsBusy(true);
-    try {
-      const r = await api.get("/github/app/installations");
-      const list = r.data?.installations || [];
-      setAppInstalls(list);
-      if (list.length > 0) {
-        setAppPickerActive(true);
-        // 2026-08-20 — deliberately NOT auto-filling repoUrl here
-        // anymore when there's more than 1 repo. Auto-picking the
-        // first repo of a multi-repo installation and rendering it
-        // pre-highlighted created a false sense of completion right
-        // after "App installed" — a user could reasonably believe
-        // the connect was already done and never click the still-
-        // required Continue button below. Requiring an explicit repo
-        // click keeps the "done" state honest for multi-repo installs.
-        // A single-repo install has no such ambiguity — auto-select it.
-        maybeAutoSelectSingleRepo(list);
-      }
-    } catch {
-      setAppInstalls([]);
-    } finally {
-      setAppInstallsBusy(false);
-    }
-  }
-
+  // ─── 2026-08 hardening (GitHub Connect: PERMANENT fix) — replaces
+  // the old fetchAppInstallations/openAppInstallPopup/count-poll with
+  // the shared hook's startAppConnect(). See useGitHubConnectStatus.js.
   function openAppInstallPopup() {
-    const token = getToken();
-    if (!token) {
-      setErr("Session expired — please log in again.");
-      return;
+    const r = startAppConnect();
+    if (!r.ok) {
+      setErr(r.reason === "popup_blocked"
+        ? "Popup blocked — please allow popups for this site and try again."
+        : "Session expired — please log in again.");
     }
-    // Popup MUST open synchronously in the click handler or browsers
-    // will block it. Auth via `?auth=<jwt>` query param since we
-    // can't set Authorization headers on window.open() nav.
-    const url = `${API_BASE}/github/app/install?auth=${encodeURIComponent(token)}`;
-    const w = 720, h = 800;
-    const left = Math.max(0, window.screenX + (window.outerWidth  - w) / 2);
-    const top  = Math.max(0, window.screenY + (window.outerHeight - h) / 2);
-    appPopupRef.current = window.open(
-      url, "aurem_github_app_install",
-      `width=${w},height=${h},left=${left},top=${top}`,
-    );
-    // Rule 6 — no silent failures. A blocked popup makes `window.open`
-    // return null/undefined synchronously with no thrown error and no
-    // console message — same gap fixed in RevokedRepoBanner.jsx's
-    // `reconnect()`. Without this check, the wizard would silently
-    // poll for up to 180s with zero visible feedback, exactly what a
-    // fresh signup would see if their browser blocked the popup.
-    if (!appPopupRef.current) {
-      setErr("Popup blocked — please allow popups for this site and try again.");
-      return;
-    }
-    // Polling fallback in case postMessage is dropped (some browsers
-    // block cross-origin messages back to opener). Every 1.5s, refetch
-    // the /installations list; if it grows, we know install completed.
-    const started = Date.now();
-    const startCount = appInstalls.length;
-    const poll = setInterval(async () => {
-      if (appPopupRef.current?.closed) {
-        clearInterval(poll);
-        await fetchAppInstallations();
-        return;
-      }
-      if (Date.now() - started > 180_000) {          // 3-minute timeout
-        clearInterval(poll);
-        return;
-      }
-      try {
-        const r = await api.get("/github/app/installations");
-        if ((r.data?.installations || []).length > startCount) {
-          clearInterval(poll);
-          try { appPopupRef.current?.close?.(); } catch {}
-          setAppInstalls(r.data.installations);
-          setAppPickerActive(true);
-          // 2026-08-20 — no auto-fill here either for multi-repo
-          // installs, same reasoning as fetchAppInstallations() above.
-          // Single-repo installs still get auto-selected.
-          maybeAutoSelectSingleRepo(r.data.installations);
-        }
-      } catch { /* keep polling */ }
-    }, 1500);
   }
 
-
-  // Listen for the postMessage handshake from /api/aurem-dev/github/app/installed.
+  // postMessage is now just a fast-path nudge inside the hook itself;
+  // this listener only surfaces the wizard-specific error/pending
+  // toasts (unchanged copy), since the hook's polling of the
+  // authoritative status endpoint is what actually drives correctness.
   useEffect(() => {
     function onMessage(e) {
       const d = e.data;
       if (!d || d.type !== "aurem-app-installed") return;
-      if (d.status === "success") {
-        // Popup already closed itself; refresh our list of installations.
-        fetchAppInstallations();
-      } else if (d.status === "err") {
+      if (d.status === "err") {
         setErr(
           d.err === "invalid_state"
             ? "Session expired while installing. Please try again."
@@ -627,6 +559,38 @@ export default function NewUserWizard({ onComplete }) {
                               RECOMMENDED
                             </span>
                           </div>
+                          {appConnecting ? (
+                            <div data-testid="wizard-app-connecting" style={{
+                              display: "flex", alignItems: "center", gap: 8,
+                              fontSize: 12, color: "var(--text-faint)",
+                            }}>
+                              <Loader2 size={14} className="spin" color="#ff9d5c" />
+                              Waiting for you to finish in the GitHub popup…
+                            </div>
+                          ) : appTimedOut ? (
+                            <div data-testid="wizard-app-timeout" style={{
+                              display: "flex", alignItems: "center", gap: 10,
+                            }}>
+                              <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                                It looks like the connection didn't finish.
+                              </span>
+                              <button
+                                type="button"
+                                data-testid="wizard-app-retry-btn"
+                                onClick={retryAppConnect}
+                                style={{
+                                  display: "inline-flex", alignItems: "center", gap: 6,
+                                  padding: "6px 12px",
+                                  background: "var(--accent, #ff6608)",
+                                  color: "#fff", border: "none",
+                                  borderRadius: 5, fontSize: 11.5, fontWeight: 600,
+                                  cursor: "pointer",
+                                }}>
+                                <RefreshCw size={11} /> Try again
+                              </button>
+                            </div>
+                          ) : (
+                          <>
                           <p style={{
                             fontSize: 12, color: "var(--text-faint)",
                             margin: "0 0 12px", lineHeight: 1.5,
@@ -639,7 +603,7 @@ export default function NewUserWizard({ onComplete }) {
                             data-guide-target="connect-github-btn"
                             type="button"
                             onClick={openAppInstallPopup}
-                            disabled={appInstallsBusy}
+                            disabled={appConnecting}
                             style={{
                               display: "inline-flex", alignItems: "center", gap: 8,
                               padding: "8px 14px",
@@ -677,6 +641,8 @@ export default function NewUserWizard({ onComplete }) {
                             search box (or wait a second and reopen it) —
                             it's a GitHub-side hiccup, your repos are there.
                           </div>
+                          </>
+                          )}
                         </>
                       )}
                       {appPickerActive && appInstalls.length > 0 && (

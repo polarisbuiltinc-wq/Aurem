@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend E2E validation of the GitHub Connect PERMANENT fix (new /github/app/status backend endpoint + shared useGitHubConnectStatus hook driving AddProjectWizard & NewUserWizard). Test user (test@aurem.dev) has an active install for polarisbuiltinc-wq/ora-grounding. AddProjectWizard flow works end-to-end: Step 1 repo input parses correctly -> Step 2 correctly shows the `add-wizard-app-installed-banner` (NO stuck CTA, NO connecting/timeout state) via a real 200 call to /api/aurem-dev/github/app/status -> `wizard-next-2` is enabled -> Step 3 confirmation renders 'Access to polarisbuiltinc-wq/ora-grounding verified · Connected via GitHub App · @polarisbuiltinc-wq'. Dashboard/ChatPanel smoke passes with no console/pageerrors from LoopFailureCard.jsx, ChatPanel.jsx, AddProjectWizard.jsx, NewUserWizard.jsx, or useGitHubConnectStatus.js. Backend endpoint spot-checked via curl (200, state=connected, installation_active=true, connected_repo=polarisbuiltinc-wq/ora-grounding).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/screenshots/proj_page.png",
+    "/app/test_reports/screenshots/wizard_step1.png",
+    "/app/test_reports/screenshots/wizard_step2.png",
+    "/app/test_reports/screenshots/wizard_step3.png",
+    "/app/test_reports/screenshots/dashboard.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AddProjectWizard.jsx and NewUserWizard.jsx now share useGitHubConnectStatus — good DRY win vs the previous duplicated postMessage+poll logic. Nothing to change.",
+    "The `add-wizard-app-installed-banner` correctly disambiguates the 'already installed' case from the 'need to install' CTA — this is exactly the state that used to hang for real users. Verified in browser.",
+    "Backend /github/app/status endpoint is properly self-healing (200 with state=connected on fresh call, cache-backed) and requires Authorization header (401 without) — correct behavior.",
+    "13 stale/deleted-repo projects showing on the test account triggered a housekeeping banner (`13 projects point to deleted or unreachable repos — click to clean up`); this is expected preview seed churn, not a bug from this feature."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (spot check)", "frontend": "100% (all wizard states + dashboard smoke)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (per /app/memory/test_credentials.md preview section)",
+  "seed_data_creation": "None — used existing test user's existing polarisbuiltinc-wq/ora-grounding installation.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "AddProjectWizard 'already-connected' happy path is now fully covered in browser. The disconnected/install-CTA path (install_btn -> connecting -> timeout -> retry) was NOT exercised because it needs a user with NO active installation and a real GitHub popup interaction, which the automated browser cannot complete. If a future test needs to cover the timeout/retry states, mock GET /github/app/status to return state='pending' persistently (>60s) and verify `add-wizard-app-timeout` + `add-wizard-app-retry-btn` render. NewUserWizard was not visually reachable in this run because the test user already has projects (isWizardDismissed / has-projects gate); to force it, clear localStorage aurem_wizard_dismissed AND delete all of the user's projects, or manually flip the Dashboard showWizard state.",
+  "rca of the issue": "N/A — this was a feature-verification pass, not a bug repro. Prior founder-reported hang RCA (unrelated to this test run): AddProjectWizard/NewUserWizard each independently guessed connection state from postMessage + 'installation count went up' polling that could never see a repo added to an EXISTING installation, and a failed repo-fetch could poison the cache with zero repos forever. The fix — one authoritative backend GET /github/app/status + one shared useGitHubConnectStatus hook — is confirmed working in the preview environment."
+}

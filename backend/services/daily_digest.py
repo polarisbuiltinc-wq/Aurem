@@ -63,6 +63,19 @@ async def build_digest() -> dict:
         tokens_used = d.get("tokens") or 0
     ai_cost = round((tokens_used / 1000) * 0.30, 2)
 
+    # 2026-08 hardening — same proxy, real-customers-only (excludes the
+    # founder's own admin/QA account + orphaned test IDs). Task 2 cost
+    # audit found this proxy was otherwise counting test_admin_001's
+    # own task runs as if they were customer spend.
+    from services.customer_cost_tracker import real_customer_match_stages
+    pipe_customers_only = (
+        pipe[:1] + real_customer_match_stages() + pipe[1:]
+    )
+    tokens_used_customers_only = 0
+    async for d in db.cto_tasks.aggregate(pipe_customers_only):
+        tokens_used_customers_only = d.get("tokens") or 0
+    ai_cost_customers_only = round((tokens_used_customers_only / 1000) * 0.30, 2)
+
     # Top failed task (if any) — actionable signal for admin
     failed_sample = None
     if tasks_failed > 0:
@@ -86,7 +99,9 @@ async def build_digest() -> dict:
         "chat_sessions": chat_sessions,
         "open_tickets": open_tickets,
         "ai_cost_usd": ai_cost,
+        "ai_cost_usd_customers_only": ai_cost_customers_only,
         "tokens_used": tokens_used,
+        "tokens_used_customers_only": tokens_used_customers_only,
         "failed_sample": failed_sample,
     }
 
@@ -104,7 +119,9 @@ def _render_text(d: dict) -> str:
         f"Tasks failed:     {d['tasks']['failed']}",
         f"Chat sessions:    {d['chat_sessions']}",
         f"Open tickets:     {d['open_tickets']}",
-        f"AI cost (24h):    ${d['ai_cost_usd']}   ({d['tokens_used']} tokens)",
+        f"AI cost (24h):    ${d['ai_cost_usd']}   ({d['tokens_used']} tokens)   "
+        f"[real customers only: ${d['ai_cost_usd_customers_only']} / "
+        f"{d['tokens_used_customers_only']} tokens]",
     ]
     if d.get("failed_sample"):
         f = d["failed_sample"]

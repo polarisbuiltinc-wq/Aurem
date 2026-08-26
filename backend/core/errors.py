@@ -61,6 +61,10 @@ class ErrorCode(str, Enum):
     # failing) so the ship-report path can tell a user the truth:
     # a commit exists (by SHA) but never reached the branch.
     PUSH_FAILED = "PUSH_FAILED"
+    # 2026-08 hardening (F2) — LLM cost-cap breach mid-loop. Distinct from
+    # VERIFY_FAILED/INTERNAL_UNKNOWN so loop_engine.py can PAUSE (not fail)
+    # on this specific code — "blocked ≠ failed" (C4) applied to budget.
+    COST_CAP_REACHED = "COST_CAP_REACHED"
 
 
 # Only these classes are safe to blindly retry — deterministic failures

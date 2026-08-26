@@ -81,6 +81,58 @@ def model_slug_for_provider(provider: str) -> str:
     return next(iter(_COST_PER_M_TOKENS))  # unknown → cheapest-known default
 
 
+# ─── Real-customer filter (2026-08 hardening) ─────────────────────
+# Task 2 cost audit found 95.1% of `customer_chat_cost` docs (99.3% of
+# its $) belong to `user_id="test_admin_001"` — the founder's own
+# admin/QA account, not a paying customer. `ora_chat_usage` is
+# similarly dominated by `system:health_check`/`canary`/`test-*`
+# harness tags that were never signed up at all. Rather than a
+# hardcoded literal-string list (which rots as new test IDs get
+# invented), a user_id counts as a REAL customer only if it resolves
+# to an actual `dev_users` signup that isn't the founder/admin's own
+# account — orphaned IDs (canary, system:health_check, unsigned-up
+# harness tags) have no dev_users row at all and are excluded here
+# automatically.
+_NON_CUSTOMER_TIERS = frozenset({"founder"})
+
+
+def real_customer_match_stages() -> list[dict]:
+    """$lookup + $match stages to inject into any aggregation pipeline
+    (on a collection with a `user_id` field) right after the initial
+    time-window $match, to restrict to REAL customer rows only.
+    Cleans up its own temp field via a trailing $project."""
+    return [
+        {"$lookup": {
+            "from":         "dev_users",
+            "localField":   "user_id",
+            "foreignField": "user_id",
+            "as":           "_du",
+        }},
+        {"$match": {
+            "_du.0":        {"$exists": True},
+            "_du.tier":     {"$nin": list(_NON_CUSTOMER_TIERS)},
+            "_du.is_admin": {"$ne": True},
+        }},
+        {"$project": {"_du": 0}},
+    ]
+
+
+async def real_customer_user_ids(db, user_ids: list) -> set:
+    """Non-pipeline variant — resolve a list of user_ids down to the
+    subset that are real customers. Used where a pipeline injection
+    isn't practical (e.g. a Python-side loop)."""
+    ids = list({u for u in (user_ids or []) if u})
+    if not ids:
+        return set()
+    cursor = db.dev_users.find(
+        {"user_id": {"$in": ids},
+         "tier": {"$nin": list(_NON_CUSTOMER_TIERS)},
+         "is_admin": {"$ne": True}},
+        {"_id": 0, "user_id": 1},
+    )
+    return {d["user_id"] async for d in cursor}
+
+
 async def log_customer_chat_cost(
     *, user_id: str, session_id: str, project_id: Optional[str],
     route: str, provider: str, prompt_text: str, system_text: str,

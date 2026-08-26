@@ -17,7 +17,7 @@ import {
   render, screen, fireEvent, cleanup,
 } from "@testing-library/react";
 import {
-  describe, it, expect, afterEach,
+  describe, it, expect, afterEach, vi,
 } from "vitest";
 
 import LoopFailureCard from "../LoopFailureCard";
@@ -130,5 +130,73 @@ describe("LoopFailureCard — Iter 362 Bug fix", () => {
     const title = screen.getByTestId("loop-failure-title");
     expect(title.textContent).toMatch(/ship failed/i);
     expect(title.textContent).not.toMatch(/self-heal/i);
+  });
+
+  // 2026-08 hardening (F4) — the 3 confirmed common GitHub connection
+  // failures must render a plain-language, actionable message + a
+  // clickable "reconnect/connect" button instead of the raw backend
+  // string with an error code in parentheses.
+  it("F4-1: GitHub connection expired (revoked) shows a clear message + Reconnect action", () => {
+    render(
+      <LoopFailureCard
+        phase="plan"
+        reason="GitHub App auth failed (app_installation_revoked): App installation revoked."
+      />,
+    );
+    expect(screen.getByTestId("loop-failure-title").textContent)
+      .toMatch(/GitHub connection expired/i);
+    expect(screen.getByTestId("loop-failure-reason").textContent)
+      .not.toMatch(/app_installation_revoked/);
+    const action = screen.getByTestId("loop-failure-github-action");
+    expect(action.textContent).toMatch(/Reconnect GitHub/i);
+  });
+
+  it("F4-2: GitHub App missing shows a Connect action", () => {
+    render(
+      <LoopFailureCard
+        phase="plan"
+        reason="GitHub App auth failed (app_installation_missing): No installation found."
+      />,
+    );
+    expect(screen.getByTestId("loop-failure-title").textContent)
+      .toMatch(/GitHub not connected/i);
+    expect(screen.getByTestId("loop-failure-github-action").textContent)
+      .toMatch(/Connect GitHub/i);
+  });
+
+  it("F4-3: repo/branch not accessible shows an actionable check-connection message", () => {
+    render(
+      <LoopFailureCard
+        phase="plan"
+        reason="GitHub auth preflight failed (repo_not_found_or_no_access). Check the GitHub App installation for this repo, then retry."
+      />,
+    );
+    expect(screen.getByTestId("loop-failure-title").textContent)
+      .toMatch(/Repo not found/i);
+    expect(screen.getByTestId("loop-failure-github-action")).toBeInTheDocument();
+  });
+
+  it("F4: the action button dispatches aurem:open-connect-repo when clicked", () => {
+    const handler = vi.fn();
+    window.addEventListener("aurem:open-connect-repo", handler);
+    render(
+      <LoopFailureCard
+        phase="plan"
+        reason="GitHub App auth failed (app_installation_missing): No installation found."
+      />,
+    );
+    fireEvent.click(screen.getByTestId("loop-failure-github-action"));
+    expect(handler).toHaveBeenCalledTimes(1);
+    window.removeEventListener("aurem:open-connect-repo", handler);
+  });
+
+  it("F4: an unrelated failure reason is NOT mistaken for a GitHub connection error", () => {
+    render(
+      <LoopFailureCard
+        phase="execute"
+        reason="Code generation failed: something else entirely"
+      />,
+    );
+    expect(screen.queryByTestId("loop-failure-github-action")).not.toBeInTheDocument();
   });
 });

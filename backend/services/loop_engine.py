@@ -178,6 +178,16 @@ class LoopState(str, Enum):
     EXPIRED                = "expired"
 
 
+class _CostCapPaused(Exception):
+    """2026-08 hardening (F2) — raised when the G13 LLM cost cap blocks
+    a call mid-loop. Caught in start() and _do_execute() to PAUSE (not
+    fail) the loop — "blocked ≠ failed" (C4) applied to budget. Additive
+    only; does not change any other exception's handling."""
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+
 # ─── Resume after crash (G3) ──────────────────────────────────────────
 
 async def resume_stale(db) -> int:
@@ -430,6 +440,9 @@ class LoopEngine:
                 "budget and was stopped. Try again — or rephrase with a "
                 "shorter, more specific request.",
             )
+        except _CostCapPaused as e:
+            # 2026-08 hardening (F2) — additive: budget PAUSE, not FAILED.
+            await self._pause_for_cost_cap("plan", e.message)
         except Exception as e:                          # noqa: BLE001
             # Iter 349 — RuntimeError carries a user-facing message
             # (e.g. the 30s plan-LLM timeout); show it clean, not repr.
@@ -1701,6 +1714,16 @@ class LoopEngine:
                                     "[loop %s] risk_routing skipped: %r",
                                     self.loop_id, _rr_err)
                             return {"path": path, "content": result["output"]}
+                        # 2026-08 hardening (F2) — additive: a cost-cap
+                        # breach must PAUSE the whole loop (once), not
+                        # silently skip this file and retry-cap on the
+                        # next one. Distinguish it from every other
+                        # manual_review/fail reason below.
+                        if result.get("error_code") == "COST_CAP_REACHED":
+                            raise _CostCapPaused(
+                                result.get("reasoning")
+                                or "Monthly task budget reached."
+                            )
                         # manual_review or fail → skip this file; verify
                         # phase will surface anything else that breaks.
                         logger.warning(
@@ -1718,6 +1741,10 @@ class LoopEngine:
                     "[parliament] EXECUTE generated %d/%d files",
                     len(generated), len(paths),
                 )
+        except _CostCapPaused as e:
+            # 2026-08 hardening (F2) — additive: budget PAUSE, not FAILED.
+            await self._pause_for_cost_cap("execute", e.message)
+            return
         except Exception as e:                              # noqa: BLE001
             logger.exception("[loop %s] EXECUTE — parliament raised", self.loop_id)
             await self._fail("execute", f"Code generation failed: {e}")
@@ -3927,6 +3954,31 @@ class LoopEngine:
         except Exception:                               # noqa: BLE001
             pass
 
+    async def _pause_for_cost_cap(self, phase: str, message: str) -> None:
+        """2026-08 hardening (F2) — a cost-cap breach is a budget PAUSE,
+        not a failure (C4: "blocked ≠ failed" applied to budget). Mirrors
+        the verify self-heal-exhausted PAUSED_FOR_USER pattern (see
+        _do_verify) instead of routing through _fail(). Additive-only
+        helper; does not touch any other state-transition path."""
+        self.context["error_code"] = "COST_CAP_REACHED"
+        self.state = LoopState.PAUSED_FOR_USER
+        self.phase = phase
+        await _persist_session(self.db, self._doc())
+        try:
+            from services.loop_safety import release_loop_lock
+            await release_loop_lock(
+                self.db, self.project_id or "_no_project",
+                self.user_id, self.loop_id,
+            )
+        except Exception:
+            pass
+        await self._emit(
+            LoopState.PAUSED_FOR_USER, phase,
+            message=message,
+            data={"error_code": "COST_CAP_REACHED", "kind": "cost_cap_paused"},
+            requires_user_action=True,
+        )
+
     async def _fail(self, phase: str, reason: str,
                      data: Optional[dict] = None) -> None:
         self.state = LoopState.FAILED
@@ -4123,6 +4175,12 @@ async def _generate_plan(user_id: str, project_id: Optional[str],
             "model didn't respond in time. Try again, or rephrase with a "
             "shorter request."
         )
+    # 2026-08 hardening (F2) — additive: cost-cap breach comes back as a
+    # normal ok:False dict (see _meta.py), not an exception. Raise the
+    # distinguishable _CostCapPaused so start()'s except clause PAUSES
+    # (not fails) the loop.
+    if isinstance(meta, dict) and meta.get("error_code") == "COST_CAP_REACHED":
+        raise _CostCapPaused(meta.get("error") or "Monthly task budget reached.")
     _profile["llm_call_s"] = round(
         _time.monotonic() - _t0 - _profile["graph_refresh_s"]
         - _profile["repo_map_read_s"], 3,

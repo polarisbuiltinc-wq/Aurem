@@ -26,12 +26,14 @@ import {
   ArrowLeft,
   X as XIcon,
   ShieldCheck,
+  RefreshCw,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { api, API_BASE, getToken } from "../lib/api";
+import { api } from "../lib/api";
 import { toast } from "./Toast";
 import { setActiveProjectId } from "./TabBar";
 import { metaLead } from "../lib/analytics";
+import useGitHubConnectStatus from "../hooks/useGitHubConnectStatus";
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -67,82 +69,56 @@ export default function AddProjectWizard({ onClose, onAdded }) {
   const [projectName, setProjectName] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // ─── 2026-02-10 · Phase 4 · GitHub App install (additive) ────────
-  const [appInstalls, setAppInstalls]         = useState([]);
-  const appPopupRef = useRef(null);
+  // ─── 2026-08 hardening (GitHub Connect: PERMANENT fix) ───────────
+  // ONE shared hook (also used by NewUserWizard.jsx) — the wizard is a
+  // pure function of the authoritative /github/app/status endpoint,
+  // not a local postMessage/count-poll guess.
+  const { status, connecting, timedOut, startConnect, retry } = useGitHubConnectStatus();
+  const justConnectedRef = useRef(false);
 
   // The specific installation (if any) that covers the current `repo`.
   // Non-null → App-install branch is available for this repo; the
   // Save button uses installation_id.
   const installationForRepo = React.useMemo(() => {
     if (!repo) return null;
-    for (const inst of (appInstalls || [])) {
+    for (const inst of (status.installations || [])) {
       const has = (inst.repositories || []).some(
         (r) => (r.full_name || "").toLowerCase() === repo.full_name.toLowerCase(),
       );
       if (has) return inst;
     }
     return null;
-  }, [repo, appInstalls]);
-
-  async function fetchAppInstallations() {
-    try {
-      const r = await api.get("/github/app/installations");
-      setAppInstalls(r.data?.installations || []);
-    } catch { /* silent */ }
-  }
-  useEffect(() => { fetchAppInstallations(); }, []);
+  }, [repo, status.installations]);
 
   function openAppInstallPopup() {
-    const token = getToken();
-    if (!token) {
-      toast({ message: "Session expired — please log in again.", kind: "error" });
-      return;
+    justConnectedRef.current = true;
+    const r = startConnect();
+    if (!r.ok) {
+      toast({
+        message: r.reason === "popup_blocked"
+          ? "Popup blocked — please allow popups for this site and try again."
+          : "Session expired — please log in again.",
+        kind: "error",
+      });
     }
-    const url = `${API_BASE}/github/app/install?auth=${encodeURIComponent(token)}`;
-    const w = 720, h = 800;
-    const left = Math.max(0, window.screenX + (window.outerWidth  - w) / 2);
-    const top  = Math.max(0, window.screenY + (window.outerHeight - h) / 2);
-    appPopupRef.current = window.open(
-      url, "aurem_github_app_install",
-      `width=${w},height=${h},left=${left},top=${top}`,
-    );
-    // Rule 6 — no silent failures. A blocked popup makes `window.open`
-    // return null/undefined with no thrown error and no console
-    // message — same gap fixed in RevokedRepoBanner.jsx's `reconnect()`
-    // and NewUserWizard.jsx's install/OAuth popups.
-    if (!appPopupRef.current) {
-      toast({ message: "Popup blocked — please allow popups for this site and try again.", kind: "error" });
-      return;
-    }
-    // Polling fallback in case postMessage is dropped.
-    const started = Date.now();
-    const startCount = appInstalls.length;
-    const poll = setInterval(async () => {
-      if (appPopupRef.current?.closed) {
-        clearInterval(poll);
-        await fetchAppInstallations();
-        return;
-      }
-      if (Date.now() - started > 180_000) { clearInterval(poll); return; }
-      try {
-        const r = await api.get("/github/app/installations");
-        if ((r.data?.installations || []).length > startCount) {
-          clearInterval(poll);
-          try { appPopupRef.current?.close?.(); } catch { /* xorigin */ }
-          setAppInstalls(r.data.installations);
-        }
-      } catch { /* keep polling */ }
-    }, 1500);
   }
+
+  // Auto-advance to Step 3 the moment the just-completed connect
+  // resolves to a matching repo — this is the "repo not vanishing"
+  // fix: the wizard reacts to real status, it doesn't need the user
+  // to notice a banner changed and click Next themselves.
+  useEffect(() => {
+    if (justConnectedRef.current && !connecting && installationForRepo && step === 2) {
+      justConnectedRef.current = false;
+      setStep(3);
+    }
+  }, [connecting, installationForRepo, step]);
 
   useEffect(() => {
     function onMessage(e) {
       const d = e.data;
       if (!d || d.type !== "aurem-app-installed") return;
-      if (d.status === "success") {
-        fetchAppInstallations();
-      } else if (d.status === "err") {
+      if (d.status === "err") {
         toast({
           message: d.err === "invalid_state"
             ? "Session expired during install — please try again."
@@ -386,6 +362,52 @@ export default function AddProjectWizard({ onClose, onAdded }) {
                     Click Continue to name and save this project.
                   </div>
                 </div>
+              </div>
+            ) : connecting ? (
+              <div
+                data-testid="add-wizard-app-connecting"
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: 14, marginBottom: 14,
+                  background: "rgba(255,138,42,0.06)",
+                  border: "1px solid rgba(255,138,42,0.28)",
+                  borderRadius: 8,
+                }}>
+                <Loader2 size={16} className="spin" color="#FF8A2A" />
+                <div style={{ fontSize: 13, lineHeight: 1.4 }}>
+                  Waiting for you to finish in the GitHub popup…
+                  <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 3 }}>
+                    This picks up automatically — no need to click anything else.
+                  </div>
+                </div>
+              </div>
+            ) : timedOut ? (
+              <div
+                data-testid="add-wizard-app-timeout"
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: 14, marginBottom: 14,
+                  background: "rgba(239,68,68,0.08)",
+                  border: "1px solid rgba(239,68,68,0.32)",
+                  borderRadius: 8,
+                }}>
+                <div style={{ fontSize: 13, lineHeight: 1.4, flex: 1 }}>
+                  It looks like the connection didn't finish.
+                </div>
+                <button
+                  type="button"
+                  data-testid="add-wizard-app-retry-btn"
+                  onClick={openAppInstallPopup}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "7px 12px",
+                    background: "var(--accent-2, #FF8A2A)",
+                    color: "#fff", border: "none",
+                    borderRadius: 6, fontSize: 12, fontWeight: 600,
+                    cursor: "pointer", whiteSpace: "nowrap",
+                  }}>
+                  <RefreshCw size={12} /> Try again
+                </button>
               </div>
             ) : (
               <div

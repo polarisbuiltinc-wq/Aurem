@@ -68,5 +68,10 @@
     "title": "Paused after a couple of tries",
     "what_happened": "I tried to fix this automatically a couple of times and it didn't work, so I've paused. Here's what's going on and how you can help.",
     "what_to_try": ["Review what I tried below and tell me what to adjust.", "Or take it from here yourself in the repo — nothing else will change until you do."]
+  },
+  "COST_CAP_REACHED": {
+    "title": "Monthly budget reached",
+    "what_happened": "You've used up your tasks for this month. Your work is safe.",
+    "what_to_try": ["Upgrade your plan for more tasks this month.", "Or come back next billing cycle — nothing was lost."]
   }
 }

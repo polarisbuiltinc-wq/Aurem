@@ -422,6 +422,17 @@ async def _llm_call_protected(*, system: str, user: str, max_tokens: int,
                 span.record_error(e)
                 return "", latency_ms, err_tag
         latency_ms = round((time.monotonic() - t0) * 1000, 1)
+        # 2026-08 hardening (F2) — a cost-cap breach comes back as a
+        # normal {"ok": False, "error_code": "COST_CAP_REACHED"} dict
+        # from _meta.py, not an exception. Tag it distinctly so callers
+        # (CEO.decide, Parliament._fallback_single_call) can tell
+        # "budget exhausted" apart from a generic empty/error response —
+        # this is NOT a circuit-breaker-worthy failure (it's not the
+        # provider being unhealthy), so skip recording it there.
+        if isinstance(meta, dict) and meta.get("error_code") == "COST_CAP_REACHED":
+            span.set_metadata({"latency_ms": latency_ms, "error": "cost_cap_reached"})
+            span.record_error("cost_cap_reached")
+            return "", latency_ms, "cost_cap_reached"
         content = (meta or {}).get("content", "") or ""
         if not content.strip():
             _GLOBAL_BREAKER.record_failure(latency_ms, kind="empty")
@@ -493,28 +504,34 @@ class _CouncilMember:
             _effective_max = min(32_000, max(self.max_tokens, _mto))
         else:
             _effective_max = self.max_tokens
-        content, latency_ms, err = await _llm_call_protected(
-            system=self.persona, user=task,
-            max_tokens=_effective_max, mode=self.mode,
-            review_mode=self.review_mode,
-            user_id=context.get("user_id"),
-            temperature=self.temperature,
-            trace_name=f"parliament.council.{council_id or '?'}.{self.name}",
-            trace_metadata={
-                "trace_id":         context.get("parliament_trace_id"),
-                "council":          council_id,
-                "member":           self.name,
-                "task_type":        context.get("task_type"),
-                "user_id":          context.get("user_id"),
-                "file_path":        context.get("file_path"),
-                "primary_model":    primary_model,
-                "v2_longcat":       LONGCAT_ENABLED,
-                "v2_council_b_glm": COUNCIL_B_GLM_ENABLED,
-                "v2_ceo_rescue":    CEO_RESCUE_ENABLED,
-                "max_tokens":       _effective_max,
-                "max_tokens_default": self.max_tokens,
-            },
-        )
+        # 2026-08 hardening (F3) — per-agent label so this member's
+        # ledger row is separable from the other 2 members + CEO
+        # (Council-premium pricing needs this, not a "loop.execute" blob).
+        from services.loop_token_ledger import agent_call_context
+        _agent_label = f"council-{self.name.split('-')[0].lower()}"
+        async with agent_call_context(_agent_label):
+            content, latency_ms, err = await _llm_call_protected(
+                system=self.persona, user=task,
+                max_tokens=_effective_max, mode=self.mode,
+                review_mode=self.review_mode,
+                user_id=context.get("user_id"),
+                temperature=self.temperature,
+                trace_name=f"parliament.council.{council_id or '?'}.{self.name}",
+                trace_metadata={
+                    "trace_id":         context.get("parliament_trace_id"),
+                    "council":          council_id,
+                    "member":           self.name,
+                    "task_type":        context.get("task_type"),
+                    "user_id":          context.get("user_id"),
+                    "file_path":        context.get("file_path"),
+                    "primary_model":    primary_model,
+                    "v2_longcat":       LONGCAT_ENABLED,
+                    "v2_council_b_glm": COUNCIL_B_GLM_ENABLED,
+                    "v2_ceo_rescue":    CEO_RESCUE_ENABLED,
+                    "max_tokens":       _effective_max,
+                    "max_tokens_default": self.max_tokens,
+                },
+            )
         if err:
             return {
                 "member":     self.name,
@@ -752,15 +769,24 @@ class CEO:
         if not usable:
             logger.warning("CEO deciding — temp %.2f — but no usable votes",
                            ceo_temp)
+            # 2026-08 hardening (F2) — if every vote failed because the
+            # cost cap blocked the call (not a real LLM error), surface a
+            # distinguishable error_code so loop_engine.py's additive
+            # pause-check can PAUSE (not fail) the loop cleanly.
+            _all_cost_capped = bool(votes) and all(
+                v.get("error") == "cost_cap_reached" for v in votes
+            )
             return {
                 "status":         "manual_review",
                 "output":         None,
                 "winner":         None,
                 "scores":         scores,
                 "ceo_picked":     False,
-                "reasoning":      "All council members refused or errored.",
+                "reasoning":      ("Monthly task budget reached." if _all_cost_capped
+                                    else "All council members refused or errored."),
                 "ceo_temp_key":   output_type,
                 "ceo_temp_value": ceo_temp,
+                **({"error_code": "COST_CAP_REACHED"} if _all_cost_capped else {}),
             }
         # Heuristic pick: best score, ties broken by lowest temperature.
         usable.sort(key=lambda v: (-v["score"], v["temp"]))
@@ -885,24 +911,31 @@ async def _ceo_judge_call_with_rescue(
     from services.llm import CEO_RESCUE_ENABLED, CEO_PRIMARY_TIMEOUT_S
 
     md_primary = {**trace_metadata, "ceo_role": "primary", "ceo_rescue_enabled": CEO_RESCUE_ENABLED}
+    # 2026-08 hardening (F3) — CEO calls (primary + rescue) get their
+    # own "ceo" agent label, separable from the 3 council-member votes.
+    from services.loop_token_ledger import agent_call_context
 
     if not CEO_RESCUE_ENABLED:
-        return await _llm_call_protected(
-            system=system, user=user, max_tokens=max_tokens,
-            mode="chat", review_mode="swift",
-            user_id=user_id, temperature=temperature,
-            trace_name="parliament.ceo.judge",
-            trace_metadata=md_primary,
-        )
+        async with agent_call_context("ceo"):
+            return await _llm_call_protected(
+                system=system, user=user, max_tokens=max_tokens,
+                mode="chat", review_mode="swift",
+                user_id=user_id, temperature=temperature,
+                trace_name="parliament.ceo.judge",
+                trace_metadata=md_primary,
+            )
 
     # V2 — primary with hard timeout
-    primary_task = _llm_call_protected(
-        system=system, user=user, max_tokens=max_tokens,
-        mode="chat", review_mode="swift",
-        user_id=user_id, temperature=temperature,
-        trace_name="parliament.ceo.judge",
-        trace_metadata=md_primary,
-    )
+    async def _primary_call():
+        async with agent_call_context("ceo"):
+            return await _llm_call_protected(
+                system=system, user=user, max_tokens=max_tokens,
+                mode="chat", review_mode="swift",
+                user_id=user_id, temperature=temperature,
+                trace_name="parliament.ceo.judge",
+                trace_metadata=md_primary,
+            )
+    primary_task = _primary_call()
     t0 = time.monotonic()
     primary_timed_out = False
     primary_err: Optional[str] = None
@@ -933,13 +966,14 @@ async def _ceo_judge_call_with_rescue(
         "primary_latency_ms": primary_latency,
     }
     # DeepSeek rescue via mode="chat" (no review_mode → bypasses GLM, uses DeepSeek)
-    rescue_content, rescue_latency, rescue_err = await _llm_call_protected(
-        system=system, user=user, max_tokens=max_tokens,
-        mode="chat", review_mode="",
-        user_id=user_id, temperature=temperature,
-        trace_name="parliament.ceo.rescue",
-        trace_metadata=md_rescue,
-    )
+    async with agent_call_context("ceo"):
+        rescue_content, rescue_latency, rescue_err = await _llm_call_protected(
+            system=system, user=user, max_tokens=max_tokens,
+            mode="chat", review_mode="",
+            user_id=user_id, temperature=temperature,
+            trace_name="parliament.ceo.rescue",
+            trace_metadata=md_rescue,
+        )
     if rescue_err or not (rescue_content or "").strip():
         # Both primary and rescue failed → return whichever has signal.
         if (primary_content or "").strip():
@@ -1219,19 +1253,22 @@ class Parliament:
                                      trace_id: str, started: float) -> dict:
         """Single low-temperature LLM call to keep Loop Mode alive
         when the council fan-out would just multiply failures."""
-        content, latency_ms, err = await _llm_call_protected(
-            system=_COUNCIL_A_PERSONA, user=task,
-            max_tokens=4000, mode="code", review_mode="pro",
-            user_id=context.get("user_id"),
-            temperature=0.1,
-            trace_name="parliament.fallback_single",
-            trace_metadata={
-                "trace_id":   trace_id,
-                "reason":     "circuit_breaker_open",
-                "council":    context.get("council"),
-                "task_type":  context.get("task_type"),
-            },
-        )
+        from services.loop_token_ledger import agent_call_context
+        # 2026-08 hardening (F3) — separable from council/CEO calls.
+        async with agent_call_context("single-model"):
+            content, latency_ms, err = await _llm_call_protected(
+                system=_COUNCIL_A_PERSONA, user=task,
+                max_tokens=4000, mode="code", review_mode="pro",
+                user_id=context.get("user_id"),
+                temperature=0.1,
+                trace_name="parliament.fallback_single",
+                trace_metadata={
+                    "trace_id":   trace_id,
+                    "reason":     "circuit_breaker_open",
+                    "council":    context.get("council"),
+                    "task_type":  context.get("task_type"),
+                },
+            )
         gateway_ms = round((time.monotonic() - started) * 1000, 1)
         if err or not content.strip():
             decision = {
@@ -1249,6 +1286,7 @@ class Parliament:
                 "circuit_breaker_stats":   self._breaker.stats(),
                 "ceo_temp_key":            "code_output",
                 "ceo_temp_value":          0.0,
+                **({"error_code": "COST_CAP_REACHED"} if err == "cost_cap_reached" else {}),
             }
         else:
             out = _strip_fences(content)

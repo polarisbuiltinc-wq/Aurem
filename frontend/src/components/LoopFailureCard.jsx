@@ -18,8 +18,9 @@
  */
 import React, { useState } from "react";
 import {
-  AlertTriangle, Copy, ChevronDown, ChevronUp, FileCode,
+  AlertTriangle, Copy, ChevronDown, ChevronUp, FileCode, LinkIcon,
 } from "lucide-react";
+import { translateGithubConnectError } from "../lib/githubConnectErrors";
 
 function shortenErr(s) {
   if (typeof s !== "string") return "";
@@ -38,6 +39,10 @@ export default function LoopFailureCard({
 }) {
   const [expanded, setExpanded] = useState(true);
   const [copied, setCopied] = useState(false);
+
+  // 2026-08 hardening (F4) — plain-language, actionable message for
+  // the 3 confirmed common GitHub connection failures.
+  const ghError = translateGithubConnectError(reason);
 
   const hasDetail = (failedFiles && failedFiles.length > 0)
                  || (errors && errors.length > 0);
@@ -84,7 +89,9 @@ export default function LoopFailureCard({
             textTransform: "uppercase",
           }}
         >
-          {phase === "verify"
+          {ghError
+            ? ghError.title
+            : phase === "verify"
             ? `Verify failed${
                 typeof maxSelfHeals === "number"
                   ? ` after ${maxSelfHeals} self-heal attempts`
@@ -116,8 +123,28 @@ export default function LoopFailureCard({
             fontSize: 11.5, color: "#c2c9d6", lineHeight: 1.55,
           }}
         >
-          {reason}
+          {ghError ? ghError.message : reason}
         </div>
+      )}
+
+      {ghError && (
+        <button
+          type="button"
+          data-testid="loop-failure-github-action"
+          onClick={() => window.dispatchEvent(new CustomEvent("aurem:open-connect-repo"))}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            alignSelf: "flex-start",
+            padding: "7px 14px",
+            background: "#f87171", color: "#1a1a1a",
+            border: "none", borderRadius: 8,
+            fontSize: 11.5, fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          <LinkIcon size={12} strokeWidth={2.5} />
+          {ghError.actionLabel}
+        </button>
       )}
 
       {hasDetail && expanded && (

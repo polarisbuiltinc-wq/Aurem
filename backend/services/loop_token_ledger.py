@@ -51,6 +51,27 @@ _PHASE_TAG_CV: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
 _USER_ID_CV: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
     "loop_token_ledger.user_id", default=None,
 )
+# 2026-08 hardening (F3) — per-call agent label, layered ON TOP of the
+# phase-level loop context above. Council premium pricing needs each of
+# the 3 council-member votes + the CEO call + a single-model fallback
+# call separable, not one "loop.execute" blob. Nested/scoped per call
+# (not per phase) — see agent_call_context().
+_AGENT_LABEL_CV: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "loop_token_ledger.agent_label", default=None,
+)
+
+
+@asynccontextmanager
+async def agent_call_context(agent_label: str):
+    """Wrap a SINGLE LLM call (not a whole phase) so its ledger row is
+    tagged with which agent made it — e.g. "council-a1", "council-a2",
+    "council-a3", "ceo", "single-model". Nests inside an outer
+    `loop_call_context(...)`; never raises."""
+    t = _AGENT_LABEL_CV.set(agent_label)
+    try:
+        yield
+    finally:
+        _AGENT_LABEL_CV.reset(t)
 
 
 @asynccontextmanager
@@ -128,9 +149,12 @@ async def log_llm_usage(model: str, usage: dict,
         return
 
     try:
-        # Route encodes loop-phase so `/admin/loop-token-metrics`
-        # can filter with `route ^= "loop."` and group by phase.
-        route = f"loop.{phase_tag}"
+        # Route encodes loop-phase (+ agent, when set) so
+        # `/admin/loop-token-metrics` can filter with `route ^= "loop."`
+        # and group by phase — and 2026-08 hardening (F3) group by
+        # agent for future Council-premium per-agent pricing.
+        agent_label = _AGENT_LABEL_CV.get()
+        route = f"loop.{phase_tag}.{agent_label}" if agent_label else f"loop.{phase_tag}"
         # Reuse the shipped cost_tracker so cost_usd is computed
         # from the existing price table (founder-approved reuse
         # per iter 309 pre-Phase-1 scope).

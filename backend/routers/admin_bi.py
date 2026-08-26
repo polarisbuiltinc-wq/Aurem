@@ -240,9 +240,19 @@ async def _fetch_inference_metrics() -> dict:
     # Real customer chat cost — new collection, see module docstring.
     cust_today_usd = 0.0
     cust_month_usd = 0.0
+    cust_today_usd_customers_only = 0.0
+    cust_month_usd_customers_only = 0.0
     try:
         cust_today_usd = await _sum_cost(db.customer_chat_cost, _ct._current_day_key(now), "ts_day")
         cust_month_usd = await _sum_cost(db.customer_chat_cost, _ct._current_month_key(now), "ts_month")
+        # 2026-08 hardening — Task 2 cost audit found 95%+ of the two
+        # figures above is test_admin_001 (founder/QA account), not
+        # real customers. Same sums, real-customers-only filter
+        # applied (services/customer_cost_tracker.py::real_customer_match_stages).
+        cust_today_usd_customers_only = await _sum_cost_real_customers(
+            db.customer_chat_cost, _ct._current_day_key(now), "ts_day")
+        cust_month_usd_customers_only = await _sum_cost_real_customers(
+            db.customer_chat_cost, _ct._current_month_key(now), "ts_month")
     except Exception as e:
         logger.warning("bi.inference-metrics: customer cost sum failed: %r", e)
 
@@ -327,6 +337,8 @@ async def _fetch_inference_metrics() -> dict:
         "admin_tool_month_usd":   round(admin_month_usd, 6),
         "customer_chat_today_usd": round(cust_today_usd, 6),
         "customer_chat_month_usd": round(cust_month_usd, 6),
+        "customer_chat_today_usd_customers_only": round(cust_today_usd_customers_only, 6),
+        "customer_chat_month_usd_customers_only": round(cust_month_usd_customers_only, 6),
         "budget":           budget,
         "daily_series_30d": daily,
         "by_model":         by_model,
@@ -342,7 +354,13 @@ async def _fetch_inference_metrics() -> dict:
             "volume) and is what the $30/day personal guard enforces. "
             "Budget modes: normal < 70% of daily soft cap; warning "
             "≥ 70%; economy ≥ 100% (forces GLM-5.2 route); "
-            "spike_hard_stop ≥ daily spike cap (blocks new chats)."
+            "spike_hard_stop ≥ daily spike cap (blocks new chats). "
+            "2026-08 hardening: customer_chat_today_usd/month_usd "
+            "still include the founder's own admin/QA test account "
+            "(test_admin_001) — use the new "
+            "customer_chat_*_usd_customers_only fields for the real "
+            "paying/free-customer-only number (Task 2 cost audit found "
+            "95%+ of the non-filtered figure was test traffic)."
         ),
     }
 
@@ -351,6 +369,21 @@ async def _sum_cost(collection, key_value: str, key_field: str) -> float:
         {"$match": {key_field: key_value}},
         {"$group": {"_id": None, "total": {"$sum": "$cost_usd"}}},
     ]
+    total = 0.0
+    async for row in collection.aggregate(pipe):
+        total = float(row.get("total") or 0.0)
+    return total
+
+
+async def _sum_cost_real_customers(collection, key_value: str, key_field: str) -> float:
+    """Same as _sum_cost but excludes founder/admin/QA + orphaned
+    test IDs — see services/customer_cost_tracker.py::real_customer_match_stages."""
+    from services.customer_cost_tracker import real_customer_match_stages
+    pipe = (
+        [{"$match": {key_field: key_value}}]
+        + real_customer_match_stages()
+        + [{"$group": {"_id": None, "total": {"$sum": "$cost_usd"}}}]
+    )
     total = 0.0
     async for row in collection.aggregate(pipe):
         total = float(row.get("total") or 0.0)

@@ -1630,6 +1630,7 @@ async def admin_agent_performance(
     month_ago = now - 30 * 86_400
 
     per_model: list[dict] = []
+    per_model_customers_only: list[dict] = []
     try:
         pipeline = [
             {"$match": {"ts": {"$gte": month_ago},
@@ -1652,10 +1653,35 @@ async def admin_agent_performance(
                 "avg_input_tokens":   round(float(row.get("avg_input_tokens") or 0)),
                 "avg_output_tokens":  round(float(row.get("avg_output_tokens") or 0)),
             })
+        # 2026-08 hardening — SAME data, real-customers-only (excludes
+        # the founder/admin/QA account + orphaned test/canary IDs). See
+        # services/customer_cost_tracker.py::real_customer_match_stages.
+        from services.customer_cost_tracker import real_customer_match_stages
+        pipeline_customers = (
+            pipeline[:1] + real_customer_match_stages() + pipeline[1:]
+        )
+        async for row in db.customer_chat_cost.aggregate(pipeline_customers):
+            per_model_customers_only.append({
+                "model":              row.get("_id"),
+                "calls":              int(row.get("n") or 0),
+                "total_cost_usd":     round(float(row.get("total_cost_usd") or 0), 4),
+                "avg_input_tokens":   round(float(row.get("avg_input_tokens") or 0)),
+                "avg_output_tokens":  round(float(row.get("avg_output_tokens") or 0)),
+            })
     except Exception as e:
         logger.warning("admin/agent-performance: %r", e)
 
-    return {"per_model_30d": per_model, "source": "customer_chat_cost"}
+    return {
+        "per_model_30d":               per_model,
+        "per_model_30d_customers_only": per_model_customers_only,
+        "source": "customer_chat_cost",
+        "_note": (
+            "per_model_30d = ALL traffic (includes founder/admin/QA "
+            "test accounts). per_model_30d_customers_only = real "
+            "paying/free customers only (Task 2 cost audit, 2026-08: "
+            "95%+ of the 'all' number here was test_admin_001)."
+        ),
+    }
 
 
 class _SeoRunPayload(BaseModel):

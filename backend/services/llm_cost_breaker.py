@@ -11,7 +11,15 @@ auto-killed and marked FAILED with resume_reason="llm_cost_cap".
 Env:
   LLM_COST_CAP_HOURLY    default 2.00  ($)
   LLM_COST_CAP_DAILY     default 10.00 ($)
-  LLM_COST_CAP_PER_LOOP  default 0.50  ($)
+  LLM_COST_CAP_PER_LOOP  default 3.00  ($)
+
+2026-08 hardening (F2 · B3) — per-loop cap raised 0.50 → 3.00. The cap's
+job is to stop a RUNAWAY loop, not a normal complex task: a real Council
+run (3 members + CEO, possibly several files + self-heal retries) can
+legitimately land near $1 for a large task. $0.50 would trip on ordinary
+work; $3.00 is well above any observed real loop cost (see Task-2 cost
+audit — the one real Council loop cost ~$0.006) while still catching a
+genuine runaway (e.g. a stuck retry storm).
 
 Collections used:
   llm_cost_ledger — {ts, provider, cost_usd, user_id, loop_id, model}
@@ -37,9 +45,9 @@ def _envf(k: str, d: float) -> float:
     except (ValueError, TypeError): return d
 
 
-LLM_COST_CAP_HOURLY   = _envf("LLM_COST_CAP_HOURLY",   2.00)
+LLM_COST_CAP_HOURLY   = _envf("LLM_COST_CAP_HOURLY",   5.00)
 LLM_COST_CAP_DAILY    = _envf("LLM_COST_CAP_DAILY",   10.00)
-LLM_COST_CAP_PER_LOOP = _envf("LLM_COST_CAP_PER_LOOP", 0.50)
+LLM_COST_CAP_PER_LOOP = _envf("LLM_COST_CAP_PER_LOOP", 3.00)
 
 
 async def _sum_cost_since(db, since: datetime,
@@ -76,24 +84,14 @@ async def assert_within_cap(
     spend_d = await _sum_cost_since(db, d1)
 
     cost = float(est_cost_usd or 0.0)
-    if spend_h + cost > LLM_COST_CAP_HOURLY:
-        await _fire_cap_alert(db, "hourly", spend_h, LLM_COST_CAP_HOURLY)
-        raise HTTPException(429, {
-            "error": "llm_cost_cap_hit",
-            "cap":   "hourly", "limit": LLM_COST_CAP_HOURLY,
-            "spent_last_hour": round(spend_h, 4),
-            "message": ("Hourly LLM spend cap reached — new requests "
-                        "temporarily blocked. Retry in ~1h."),
-        })
-    if spend_d + cost > LLM_COST_CAP_DAILY:
-        await _fire_cap_alert(db, "daily", spend_d, LLM_COST_CAP_DAILY)
-        raise HTTPException(429, {
-            "error": "llm_cost_cap_hit",
-            "cap":   "daily", "limit": LLM_COST_CAP_DAILY,
-            "spent_last_24h": round(spend_d, 4),
-            "message": ("Daily LLM spend cap reached — new requests "
-                        "blocked until UTC midnight."),
-        })
+    # 2026-08 hardening (F2 · B3) — check the per-loop cap FIRST, before
+    # hourly/daily. Raising the per-loop cap (0.50 → 3.00) put it ABOVE
+    # the (pre-existing) hourly cap; if hourly were checked first, a
+    # single loop's own spend (which also counts toward the global
+    # hourly sum) would always trip the generic hourly message before
+    # the specific, actionable per-loop budget message ever fired.
+    # Checking per-loop first keeps the message correctly scoped to
+    # "this loop's budget", not a vague org-wide cap.
     if loop_id:
         spend_l = await _sum_cost_since(db, h1 - timedelta(hours=23),
                                           loop_id=loop_id)
@@ -108,13 +106,38 @@ async def assert_within_cap(
                 pass
             raise HTTPException(429, {
                 "error": "llm_cost_cap_hit",
+                # 2026-08 hardening (F2) — distinguishable code so the
+                # _meta.py translation layer + loop_engine.py's additive
+                # pause-check can tell "budget exhausted" apart from a
+                # timeout (retry) or a genuine error (fail). Do NOT
+                # rename without updating loop_engine.py's check.
+                "error_code": "COST_CAP_REACHED",
                 "cap":   "per_loop", "limit": LLM_COST_CAP_PER_LOOP,
                 "loop_id":  loop_id,
                 "loop_spend_usd": round(spend_l, 4),
-                "message": ("This loop hit the per-run cost cap "
-                            f"(${LLM_COST_CAP_PER_LOOP:.2f}) and was "
-                            "auto-stopped."),
+                "message": ("You've used up your tasks for this month. "
+                            "Your work is safe."),
             })
+    if spend_h + cost > LLM_COST_CAP_HOURLY:
+        await _fire_cap_alert(db, "hourly", spend_h, LLM_COST_CAP_HOURLY)
+        raise HTTPException(429, {
+            "error": "llm_cost_cap_hit",
+            "error_code": "COST_CAP_HOURLY",
+            "cap":   "hourly", "limit": LLM_COST_CAP_HOURLY,
+            "spent_last_hour": round(spend_h, 4),
+            "message": ("Hourly LLM spend cap reached — new requests "
+                        "temporarily blocked. Retry in ~1h."),
+        })
+    if spend_d + cost > LLM_COST_CAP_DAILY:
+        await _fire_cap_alert(db, "daily", spend_d, LLM_COST_CAP_DAILY)
+        raise HTTPException(429, {
+            "error": "llm_cost_cap_hit",
+            "error_code": "COST_CAP_DAILY",
+            "cap":   "daily", "limit": LLM_COST_CAP_DAILY,
+            "spent_last_24h": round(spend_d, 4),
+            "message": ("Daily LLM spend cap reached — new requests "
+                        "blocked until UTC midnight."),
+        })
 
 
 async def record_cost(

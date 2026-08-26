@@ -40,6 +40,7 @@ import logging
 from typing import Optional
 
 import httpx
+from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,46 @@ async def call_llm_with_meta(system: str, user: str,
     """
     # Iter 212m-119 — Langfuse observability wrapper.
     from services.langfuse_tracing import trace_llm_call
+    # 2026-08 hardening (Task 2 cost audit → Fix 2) — wire the G13 cost
+    # breaker that already existed but was never called anywhere real
+    # (llm_cost_ledger had 0 rows). Wrapped here at the THIN public
+    # entry-point (not the 472-line _inner body's many branches) so
+    # every caller — orchestrator, chat router, loop_engine's council
+    # calls — is covered from ONE place, with zero signature change.
+    from cto_services.db import get_db
+    from services.llm_cost_breaker import assert_within_cap, record_cost
+    from services.loop_token_ledger import current_loop_context
+    from services.customer_cost_tracker import estimate_tokens
+    from services.ora_chat.cost_tracker import compute_cost_usd
+
+    db = get_db()
+    loop_id, _phase_tag, _ctx_user_id = current_loop_context()
+    pre_est_cost = compute_cost_usd(
+        "deepseek/deepseek-chat",  # cheapest-plausible model for the pre-check
+        estimate_tokens(system) + estimate_tokens(user),
+        max_tokens,
+    )
+    # 2026-08 hardening (F2) — assert_within_cap() raises HTTPException(429)
+    # on cap breach (correct — that's a real web-request contract elsewhere).
+    # Here, _meta.py is the ONE translation layer every caller (chat,
+    # loop plan, Council members, CEO) goes through: we catch it and
+    # return the SAME {"ok": False, "error": ...} shape every other LLM
+    # failure branch in this function already uses, plus a distinguishable
+    # `error_code` so callers (loop_engine.py, core/parliament.py) can
+    # tell "budget exhausted" apart from a timeout or a genuine error.
+    # This keeps every OTHER caller's existing graceful-failure handling
+    # working unchanged — no new raise reaches them.
+    try:
+        await assert_within_cap(db, loop_id=loop_id, est_cost_usd=pre_est_cost)
+    except HTTPException as e:
+        detail = e.detail if isinstance(e.detail, dict) else {}
+        return {
+            "ok": False, "provider": None, "content": "",
+            "mode": mode, "review_mode": review_mode,
+            "error_code": detail.get("error_code") or "COST_CAP_REACHED",
+            "error": detail.get("message") or "LLM cost cap reached.",
+        }
+
     with trace_llm_call(
         name="ora.llm.call_llm_with_meta",
         mode=mode, review_mode=review_mode,
@@ -102,7 +143,40 @@ async def call_llm_with_meta(system: str, user: str,
             step_hook=step_hook,
         )
         _lf["success"](result)
+
+        # Best-effort, never raises — a logging failure must never
+        # affect the response the caller already has in hand.
+        try:
+            model_slug = _provider_to_model_slug(result.get("provider") or "")
+            in_tok  = estimate_tokens(system) + estimate_tokens(user)
+            out_tok = estimate_tokens(result.get("content") or "")
+            await record_cost(
+                db, provider=result.get("provider") or "unknown",
+                cost_usd=compute_cost_usd(model_slug, in_tok, out_tok),
+                user_id=user_id, loop_id=loop_id, model=model_slug,
+            )
+        except Exception as e:
+            logger.debug(f"[hardening F2] record_cost skipped: {e!r}")
+
         return result
+
+
+def _provider_to_model_slug(provider: str) -> str:
+    """Map call_llm_with_meta's free-form `provider` label (e.g.
+    'claude-sonnet-pro-fallback', 'deepseek-v3-council-c') to the
+    OpenRouter model slug services.ora_chat.cost_tracker's price
+    table expects. Substring-matched so it stays correct even as new
+    provider labels get added — falls through to compute_cost_usd's
+    own conservative default for anything unrecognized (e.g. longcat,
+    not yet in the price table)."""
+    p = (provider or "").lower()
+    if "claude" in p:
+        return "anthropic/claude-sonnet-4.5"
+    if "glm" in p:
+        return "z-ai/glm-5.2"
+    if "deepseek" in p:
+        return "deepseek/deepseek-chat"
+    return ""
 
 
 async def _call_llm_with_meta_inner(system: str, user: str,
