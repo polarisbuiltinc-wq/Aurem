@@ -38,6 +38,7 @@ export default function AdminOverview() {
   const [slo, setSlo] = useState(null); // 2026-08-26 — Phase 5.3, SLO compliance
   const [costAlert, setCostAlert] = useState(null); // 2026-08-27 — Live Cost Alert
   const [refreshingHealth, setRefreshingHealth] = useState(false);
+  const [refreshingAll, setRefreshingAll] = useState(false); // 2026-08-27 · Admin Compact M1
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -95,19 +96,53 @@ export default function AdminOverview() {
     finally { setLoading(false); }
   }, []);
 
-  // Iter 118 — useEffect runs load() then sets up a 60s refresh interval.
-  // We intentionally pass `[]` so it only re-arms when the component
-  // remounts. The lint rule react-hooks/set-state-in-effect (React 19)
-  // can fire on conditional setState inside callbacks called from an
-  // effect — that pattern is correct here because load() also runs
-  // independently from event handlers.
+  // 2026-08-27 · Admin Compact M1 — the full 22-call load() above is
+  // expensive to re-run every 60s. Split: only the genuinely
+  // fast-changing OPERATIONAL signals (is something broken RIGHT NOW)
+  // re-poll on an interval. Everything else (funnel, cost, DORA/SLO
+  // trend data, marketplace status, etc.) is fetched once on mount
+  // and again only via the manual "↻ Refresh all" button — nothing
+  // is dropped, it's just no longer re-fetched unattended every 60s.
+  const loadFast = useCallback(async () => {
+    const h = { Authorization: `Bearer ${getToken()}` };
+    const HEALTH_URL = `${process.env.REACT_APP_BACKEND_URL}/api/health`;
+    try {
+      const [healthRes, dbHealthRes, councilHealthRes, ghSyncRes, breakersRes, alertsRes] =
+        await Promise.allSettled([
+          fetch(HEALTH_URL, { signal: AbortSignal.timeout(10000) }).then((r) => r.json()),
+          api.get("/admin/db-health", { headers: h }),
+          api.get("/admin/council/health", { headers: h }),
+          api.get("/admin/github-sync", { headers: h }),
+          api.get("/admin/qa/guard17-breakers", { headers: h }),
+          api.get("/admin/alerts", { headers: h }),
+        ]);
+      if (healthRes.status === "fulfilled") setHealth(healthRes.value);
+      if (dbHealthRes.status === "fulfilled") setDbHealth(dbHealthRes.value.data);
+      if (councilHealthRes.status === "fulfilled") setCouncilHealth(councilHealthRes.value.data);
+      if (ghSyncRes.status === "fulfilled") setGhSync(ghSyncRes.value.data);
+      if (breakersRes.status === "fulfilled") setBreakers(breakersRes.value.data);
+      if (alertsRes.status === "fulfilled") setAlerts(alertsRes.value.data);
+    } catch { /* silent */ }
+  }, []);
+
+  // Iter 118 — full load() runs once on mount (all 22 signals, so
+  // nothing is missing on first paint). 2026-08-27 · Admin Compact
+  // M1 — the recurring interval now only re-fires the 6-call
+  // `loadFast()` subset, at 120s (was 60s), and only while the tab is
+  // actually visible (background tabs stop polling entirely). The
+  // "↻ Refresh all" button below re-runs the full `load()` on demand
+  // so nothing the founder relied on is unreachable, it's just not
+  // fetched unattended every 60s any more.
   useEffect(() => {
     let cancelled = false;
-    const run = () => { if (!cancelled) load(); };
-    run();
-    const t = setInterval(run, 60_000);
+    load();
+    const t = setInterval(() => {
+      if (cancelled) return;
+      if (document.visibilityState !== "visible") return;
+      loadFast();
+    }, 120_000);
     return () => { cancelled = true; clearInterval(t); };
-  }, []);
+  }, [load, loadFast]);
 
   if (loading) return (
     <div style={{ padding: 40, textAlign: "center", color: "var(--text-dim)", fontSize: 13 }}>
@@ -145,8 +180,30 @@ export default function AdminOverview() {
   const dbOk = health?.db === true;
   const uptimeMin = health?.uptime_s ? Math.floor(health.uptime_s / 60) : 0;
 
+  // 2026-08-27 · Admin Compact M1 — manual escape hatch for the 16
+  // "slow" signals that no longer auto-poll every 60s.
+  const refreshAll = async () => {
+    setRefreshingAll(true);
+    try { await load(); } finally { setRefreshingAll(false); }
+  };
+
   return (
     <div style={{ padding: "24px 20px", maxWidth: 900 }}>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+        <button
+          data-testid="admin-overview-refresh-all-btn"
+          onClick={refreshAll}
+          disabled={refreshingAll}
+          title="Reload every signal on this page (funnel, cost, DORA/SLO, etc. no longer auto-refresh every 60s)"
+          style={{
+            fontSize: 11, padding: "5px 12px", borderRadius: 5,
+            background: "transparent", color: "var(--text-dim)",
+            border: "1px solid var(--border)", cursor: "pointer",
+            opacity: refreshingAll ? 0.6 : 1,
+          }}
+        >{refreshingAll ? "Refreshing…" : "↻ Refresh all"}</button>
+      </div>
 
       {/* Iter 360 · Guard 17 — DEPENDENCIES strip: live circuit-breaker
           state per outbound provider. Green=closed, red=open (blocked),

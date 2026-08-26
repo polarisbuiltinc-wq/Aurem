@@ -422,7 +422,12 @@ export default function App() {
           <Route path="/admin/financials"   element={<AdminRoute><AdminFinancials /></AdminRoute>} />
           <Route path="/admin/vanguard"     element={<AdminRoute><AdminVanguard /></AdminRoute>} />
           <Route path="/admin/system-stats" element={<AdminRoute><SystemStatsPage /></AdminRoute>} />
-          <Route path="/admin/observability" element={<AdminRoute><SystemStatsPage /></AdminRoute>} />
+          {/* 2026-08-27 · Admin Compact M3 — /admin/observability used to
+              render an EXACT duplicate of /admin/system-stats (same
+              component, same data). Redirected (not deleted) so any
+              existing bookmark/deep-link to the old URL still lands on
+              the real page instead of a dead route. */}
+          <Route path="/admin/observability" element={<Navigate to="/admin/system-stats" replace />} />
           <Route path="/tools" element={<PrivateRoute><ToolsPage /></PrivateRoute>} />
           {/* Iter 212m-198 — Sidebar Bug Hunt bug: `/tools/bug-hunt` was
               rendering the marketing landing (BugHunt.jsx), so clicking

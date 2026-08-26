@@ -10,10 +10,11 @@ import {
   Cpu, CreditCard, Network as SitemapIcon, Settings as SettingsIcon,
   LogOut, ExternalLink, ArrowLeft, Loader2, Brain, Eye, Terminal,
   Mail, Activity, Plug, GitBranch, Zap, ShieldAlert, DollarSign, ShieldCheck,
-  Menu, X, Wrench,
+  Menu, X, Wrench, KeyRound,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { toast } from "../components/Toast";
+import { buildGroupedAdminNav } from "../lib/adminNav";
 import AuremAdminPanel from "../components/AuremAdminPanel";
 import OraChatDrawer from "../components/OraChatDrawer";        // Iter 212m-238
 import NotificationBell from "../components/NotificationBell";   // Feb 2026 · cockpit bell
@@ -30,13 +31,25 @@ import AdminFeatureFlags from "./AdminFeatureFlags";           // Iter 212m-171
 import { LLMCreditMonitor } from "./AdminLLMCredits";          // Iter 212m-171
 import { ParliamentLivePanel } from "./AdminParliamentLive";   // Iter 212m-171
 
+// 2026-08-27 · Admin Compact M6 — these 5 tabs used to be defined
+// inline in this file (~1900 lines total: Support, Architecture,
+// Settings + its 4 config sub-cards, Audit). Extracted verbatim into
+// their own modules and lazy-loaded so a tab's code only downloads
+// when that tab is actually opened. M2 also merged the old inline
+// "Payments" tab into AdminFinancials (see the "payments" case below).
+const AdminSupportPageLazy = React.lazy(() => import("./AdminSupportPage"));
+const AdminArchitecturePageLazy = React.lazy(() => import("./AdminArchitecturePage"));
+const AdminSettingsPageLazy = React.lazy(() => import("./AdminSettingsPage"));
+const AdminAuditPageLazy = React.lazy(() => import("./AdminAuditPage"));
+const AdminFinancialsLazy = React.lazy(() => import("./AdminFinancials"));
+
 // ── Helpers ────────────────────────────────────────────────────────────
 const fmt = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n ?? 0));
-const fmtMoney = (n) => `$${(n || 0).toFixed(2)}`;
+export const fmtMoney = (n) => `$${(n || 0).toFixed(2)}`;
 // Iter 212m-96 — accept BOTH numeric epoch seconds AND ISO date strings.
 // Backend returns ISO strings for newer users (Iter 211+) and Unix epoch
 // numbers for legacy rows. Either way we normalize to epoch seconds.
-const ago = (v) => {
+export const ago = (v) => {
   if (v == null || v === "") return "—";
   let sec;
   if (typeof v === "number") {
@@ -54,7 +67,7 @@ const ago = (v) => {
   return `${Math.floor(s / 86400)}d ago`;
 };
 
-const STATUS_COLOR = {
+export const STATUS_COLOR = {
   done: "var(--ok)",
   failed: "var(--danger)",
   running: "var(--accent-2)",
@@ -63,7 +76,7 @@ const STATUS_COLOR = {
   suspended: "var(--danger)",
 };
 
-function Badge({ children, color }) {
+export function Badge({ children, color }) {
   return (
     <span style={{
       display: "inline-block", padding: "2px 8px",
@@ -78,7 +91,7 @@ function Badge({ children, color }) {
   );
 }
 
-function Card({ children, style }) {
+export function Card({ children, style }) {
   return (
     <div style={{
       background: "var(--panel-2)",
@@ -91,7 +104,7 @@ function Card({ children, style }) {
   );
 }
 
-function MCard({ label, value, sub, accent }) {
+export function MCard({ label, value, sub, accent }) {
   return (
     <Card style={{ padding: "14px 16px" }}>
       <div style={{ fontSize: 10, letterSpacing: "0.1em",
@@ -108,7 +121,7 @@ function MCard({ label, value, sub, accent }) {
   );
 }
 
-function Table({ cols, rows, onRowClick }) {
+export function Table({ cols, rows, onRowClick }) {
   if (!rows || rows.length === 0) {
     return <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "var(--text-faint)" }}>
       No data yet.
@@ -1605,229 +1618,7 @@ function PaymentsPage() {
   );
 }
 
-function SupportPage() {
-  const [tickets, setTickets] = useState([]);
-  const [selected, setSelected] = useState(null);
-  const [reply, setReply] = useState("");
-  const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const r = await api.get("/admin/support");
-      setTickets(r.data.tickets || []);
-      if (r.data.tickets?.length && !selected) setSelected(r.data.tickets[0]);
-    } finally { setLoading(false); }
-  }, [selected]);
-
-  useEffect(() => { load(); }, []); // eslint-disable-line
-
-  async function sendReply() {
-    if (!reply.trim() || !selected) return;
-    try {
-      await api.post(`/admin/support/${selected.ticket_id}/reply`, { message: reply });
-      setReply("");
-      toast({ message: "Reply sent", kind: "success" });
-      await load();
-    } catch (e) {
-      toast({ message: e?.response?.data?.detail || "Send failed", kind: "error" });
-    }
-  }
-
-  async function resolve(tid) {
-    if (!window.confirm("Mark as resolved?")) return;
-    try {
-      await api.post(`/admin/support/${tid}/resolve`);
-      toast({ message: "Resolved", kind: "success" });
-      await load();
-    } catch (e) {
-      toast({ message: "Failed", kind: "error" });
-    }
-  }
-
-  if (loading) return <div style={{ padding: 24, color: "var(--text-faint)" }}>Loading…</div>;
-
-  return (
-    <div style={{ padding: 24 }}>
-      <h3 style={{ fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase",
-                    color: "var(--text-faint)", margin: "0 0 12px" }}>
-        Support inbox ({tickets.filter(t => t.status === "open").length} open)
-      </h3>
-      {tickets.length === 0 ? (
-        <Card style={{ padding: 24, textAlign: "center", color: "var(--text-faint)" }}>
-          No tickets yet.
-        </Card>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "280px 1fr",
-                       gap: 12, height: 520 }}>
-          <Card style={{ overflowY: "auto" }}>
-            {tickets.map((t) => (
-              <div
-                key={t.ticket_id}
-                data-testid={`admin-support-ticket-${t.ticket_id}`}
-                onClick={() => setSelected(t)}
-                style={{
-                  padding: "10px 12px", borderBottom: "1px solid var(--border)",
-                  cursor: "pointer",
-                  background: selected?.ticket_id === t.ticket_id ? "var(--bg-elev)" : "",
-                }}>
-                <div style={{ fontSize: 12, fontWeight: 600 }}>{t.subject}</div>
-                <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2 }}>
-                  {t.user_email} · {ago(t.created_at)}
-                </div>
-                <div style={{ marginTop: 4, display: "flex", gap: 6, alignItems: "center" }}>
-                  <Badge color={STATUS_COLOR[t.status === "resolved" ? "done" : (t.status === "open" ? "failed" : "running")]}>
-                    {t.status}
-                  </Badge>
-                  {t.source && (
-                    <span
-                      data-testid={`admin-support-ticket-source-${t.ticket_id}`}
-                      style={{
-                        fontSize: 10, color: "var(--text-faint)",
-                        padding: "1px 6px", border: "1px solid var(--border)",
-                        borderRadius: 3, fontFamily: "monospace",
-                      }}>
-                      {t.source}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </Card>
-          {selected && (
-            <Card style={{ display: "flex", flexDirection: "column" }}>
-              <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)",
-                             display: "flex", justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{selected.subject}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
-                    {selected.user_email} · {ago(selected.created_at)}
-                  </div>
-                </div>
-                {selected.status !== "resolved" && (
-                  <button
-                    data-testid={`admin-support-resolve-${selected.ticket_id}`}
-                    className="btn-ghost" style={{ padding: "4px 10px", fontSize: 11 }}
-                    onClick={() => resolve(selected.ticket_id)}>
-                    resolve
-                  </button>
-                )}
-              </div>
-              <div style={{ flex: 1, overflowY: "auto", padding: 12,
-                             display: "flex", flexDirection: "column", gap: 8 }}>
-                {(selected.messages || []).map((m, i) => (
-                  <div key={i} style={{
-                    alignSelf: m.sender === "admin" ? "flex-end" : "flex-start",
-                    maxWidth: "80%",
-                    padding: "8px 12px", borderRadius: 4, fontSize: 12,
-                    background: m.sender === "admin"
-                      ? "rgba(255,138,42,0.1)" : "var(--bg-elev)",
-                    border: "1px solid var(--border)",
-                  }}>
-                    <div style={{ fontSize: 10, color: "var(--text-faint)", marginBottom: 4 }}>
-                      {m.sender} · {ago(m.ts)}
-                    </div>
-                    {m.message}
-                  </div>
-                ))}
-              </div>
-              {selected.status !== "resolved" && (
-                <div style={{ padding: 10, borderTop: "1px solid var(--border)",
-                               display: "flex", gap: 8 }}>
-                  <input
-                    data-testid="admin-support-reply-input"
-                    value={reply}
-                    onChange={(e) => setReply(e.target.value)}
-                    placeholder="Type reply…"
-                    className="input"
-                    onKeyDown={(e) => e.key === "Enter" && sendReply()}
-                    style={{ flex: 1 }}
-                  />
-                  <button
-                    data-testid="admin-support-reply-send"
-                    className="btn-primary" onClick={sendReply}>
-                    send
-                  </button>
-                </div>
-              )}
-            </Card>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Architecture() {
-  const [d, setD] = useState(null);
-  useEffect(() => {
-    api.get("/admin/architecture").then((r) => setD(r.data)).catch(() => {});
-  }, []);
-  if (!d) return <div style={{ padding: 24, color: "var(--text-faint)" }}>Loading…</div>;
-  // Iter 64 — sort: live → degraded → unreachable so green stays on top
-  const order = { live: 0, degraded: 1, unreachable: 2, down: 3 };
-  const services = Object.entries(d.services).sort(
-    ([, a], [, b]) => (order[a.status] ?? 9) - (order[b.status] ?? 9)
-  );
-  return (
-    <div style={{ padding: 24 }}>
-      <PersonaQualityTile />
-      <LearningHealthTile />
-      <IntentGateTile />
-      <h3 style={{ fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase",
-                    color: "var(--text-faint)", margin: "0 0 8px" }}>External services</h3>
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-        gap: 12, marginBottom: 18,
-      }}>
-        {services.map(([name, info]) => (
-          <Card key={name} style={{ padding: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between",
-                          alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <b style={{ fontSize: 13, overflowWrap: "anywhere" }}>{name}</b>
-              <Badge color={
-                info.status === "live" ? "var(--ok)" :
-                info.status === "degraded" ? "var(--warn, #ffc560)" :
-                "var(--danger)"
-              }>
-                {info.status}
-              </Badge>
-            </div>
-            <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 6,
-                           fontFamily: "'JetBrains Mono', monospace" }}>
-              {info.latency_ms != null ? `${info.latency_ms}ms` : "—"}
-              {info.note ? ` · ${info.note}` : ""}
-            </div>
-          </Card>
-        ))}
-      </div>
-      <h3 style={{ fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase",
-                    color: "var(--text-faint)", margin: "0 0 8px" }}>Integrations</h3>
-      <Card style={{ padding: 14 }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {Object.entries(d.integrations).map(([k, v]) => (
-            <Badge key={k} color={v ? "var(--ok)" : "var(--text-faint)"}>
-              {k} · {v ? "OK" : "missing"}
-            </Badge>
-          ))}
-        </div>
-        {d.note && (
-          <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-dim)", lineHeight: 1.6 }}>
-            {d.note}
-          </div>
-        )}
-      </Card>
-
-      <h3 style={{ fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase",
-                    color: "var(--text-faint)", margin: "22px 0 8px" }}>
-        Code surface · routers · services · pages
-      </h3>
-      <CodeSurfaceLive />
-      <SupervisedTasksTile />
-    </div>
-  );
-}
 
 // Session G · Item 3 — Cron-death dashboard tile.
 // Reads `supervised_tasks: {supervised_count, alive[], dead[]}` from
@@ -2043,1208 +1834,9 @@ export function LearningHealthTile() {
   );
 }
 
-function PersonaQualityTile() {
-  const [d, setD] = useState(null);
-  useEffect(() => {
-    api.get("/admin/eval-quality").then((r) => setD(r.data)).catch(() => {});
-  }, []);
-  if (!d) return null;
-  const t = d.totals || {};
-  const latest = d.latest || {};
-  const score = latest.total
-    ? Math.round(100 * (latest.passed / latest.total))
-    : null;
-  const blocked = (latest.hard_fails || 0) > 0;
-  const color = blocked ? "var(--danger)"
-              : score == null ? "var(--text-faint)"
-              : score >= 90 ? "var(--ok)"
-              : score >= 75 ? "var(--warn, #ffc560)"
-              : "var(--danger)";
-  return (
-    <div data-testid="persona-quality-tile" style={{ marginBottom: 18 }}>
-      <h3 style={{ fontSize: 12, letterSpacing: "0.1em",
-        textTransform: "uppercase", color: "var(--text-faint)",
-        margin: "0 0 8px" }}>Persona Quality Score · last 30 days</h3>
-      <Card style={{ padding: 16 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 30, fontWeight: 700, color, fontFamily: "'JetBrains Mono', monospace" }}>
-            {score == null ? "—" : `${score}/100`}
-          </div>
-          <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
-            latest: {latest.passed ?? 0}/{latest.total ?? 0} pass ·
-            hard fails {latest.hard_fails ?? 0} · runs {t.runs ?? 0}
-          </div>
-          <div style={{ marginLeft: "auto", display: "flex", gap: 3, alignItems: "flex-end", height: 22 }}>
-            {(d.trend || []).slice(-30).map((p, i) => (
-              <div key={i} title={`${p.ts} — ${p.score}/100 · ${p.hard_fails} hard fail(s)`}
-                style={{
-                  width: 5,
-                  height: Math.max(3, Math.round((p.score / 100) * 22)),
-                  background: p.hard_fails > 0 ? "var(--danger)"
-                            : p.score >= 90 ? "var(--ok)"
-                            : "var(--warn, #ffc560)",
-                  borderRadius: 1,
-                }} />
-            ))}
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-
-function CodeSurfaceLive() {
-  const [data, setData] = useState(null);
-  const [err, setErr]   = useState(null);
-  useEffect(() => {
-    api.get("/admin/code-surface")
-      .then((r) => setData(r.data))
-      .catch((e) => setErr(e?.response?.data?.detail || e?.message || "unreachable"));
-  }, []);
-  if (err) {
-    return (
-      <div data-testid="arch-code-surface-error" style={{
-        padding: 14,
-        border: "1px solid rgba(226,75,74,0.3)",
-        background: "rgba(226,75,74,0.08)",
-        borderRadius: 8,
-        color: "var(--text-dim)",
-        fontSize: 12,
-      }}>
-        Code surface unreachable: <code>{err}</code>
-      </div>
-    );
-  }
-  if (!data) {
-    return (
-      <div style={{ padding: 14, color: "var(--text-faint)", fontSize: 12 }}>
-        Loading code surface…
-      </div>
-    );
-  }
-  const surface = data.surface || {};
-  const columns = [
-    { key: "routers",    title: "Routers" },
-    { key: "services",   title: "Services" },
-    { key: "pages",      title: "Pages" },
-    { key: "components", title: "Components" },
-  ];
-  return (
-    <>
-      <div style={{
-        fontSize: 11, color: "var(--text-faint)", marginBottom: 10,
-      }}>
-        Live · {data.total_files} files across 4 surfaces · auto-walked from disk
-        {" · "}drift-proof (no hand-maintained list)
-      </div>
-      <div data-testid="arch-code-surface" style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-        gap: 12,
-      }}>
-        {columns.map((col) => {
-          const items = surface[col.key] || [];
-          return (
-            <Card key={col.key} style={{ padding: 14 }}>
-              <div style={{
-                fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase",
-                color: "var(--accent-2, #ffb347)", marginBottom: 8,
-                fontWeight: 600,
-              }}>{col.title} · {items.length}</div>
-              <ul style={{ listStyle: "none", margin: 0, padding: 0,
-                            display: "grid", gap: 4,
-                            maxHeight: 360, overflowY: "auto" }}>
-                {items.map((it) => (
-                  <li key={it.file || it.name}
-                      title={it.desc || ""}
-                      style={{
-                    fontSize: 11.5, color: "var(--text-dim)",
-                    fontFamily: "'JetBrains Mono', monospace",
-                    display: "flex", justifyContent: "space-between",
-                    gap: 8,
-                  }}>
-                    <span style={{ overflowWrap: "anywhere" }}>{it.file || it.name}</span>
-                    {it.lines > 0 && (
-                      <span style={{
-                        color: "var(--text-faint)", fontSize: 10,
-                        whiteSpace: "nowrap", flexShrink: 0,
-                      }}>{it.lines}L</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
-function SettingsPage() {
-  const [s, setS] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [upgrading, setUpgrading] = useState(null);  // tier id while in flight
-  useEffect(() => {
-    api.get("/admin/settings").then((r) => setS(r.data)).catch(() => {});
-    // After Stripe redirect, poll status once
-    const params = new URLSearchParams(window.location.search);
-    const sid = params.get("session_id");
-    if (sid) {
-      api.get(`/payments/status/${sid}`).then((r) => {
-        if (r.data.payment_status === "paid") {
-          toast({ message: `Upgraded to ${r.data.tier} ✓`, kind: "success" });
-        } else {
-          toast({ message: `Payment ${r.data.payment_status}`, kind: "info" });
-        }
-        window.history.replaceState({}, "", "/admin");
-      }).catch(() => {});
-    }
-  }, []);
-
-  function upgrade(tier) {
-    setUpgrading(tier);
-    api.post("/payments/checkout", {
-      tier,
-      origin_url: window.location.origin,
-    })
-      .then((r) => { window.location.href = r.data.url; })
-      .catch((e) => {
-        toast({ message: e?.response?.data?.detail || "Could not start checkout", kind: "error" });
-        setUpgrading(null);
-      });
-  }
-
-  if (!s) return <div style={{ padding: 24, color: "var(--text-faint)" }}>Loading…</div>;
-
-  async function save() {
-    setBusy(true);
-    try {
-      await api.post("/admin/settings", s);
-      toast({ message: "Settings saved", kind: "success" });
-    } catch (e) {
-      toast({ message: e?.response?.data?.detail || "Save failed", kind: "error" });
-    } finally { setBusy(false); }
-  }
-
-  return (
-    <div style={{ padding: 24, maxWidth: 960 }}>
-      <h3 style={{ fontSize: 13, margin: "0 0 14px" }}>Upgrade your plan</h3>
-
-      {/* Monthly (4 tiers: Free is display-only, Starter/Pro/Team are clickable) */}
-      <div style={{ fontSize: 11, color: "var(--text-faint)",
-                     textTransform: "uppercase", letterSpacing: ".08em",
-                     margin: "0 0 8px" }}>Monthly</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
-                     gap: 10, marginBottom: 18 }}>
-        {[
-          { id: "free",    label: "Free",    price: "$0/mo",  clickable: false },
-          { id: "starter", label: "Starter", price: "$9/mo",  clickable: true  },
-          { id: "pro",     label: "Pro",     price: "$19/mo", clickable: true  },
-          { id: "team",    label: "Team",    price: "$49/mo", clickable: true  },
-        ].map((p) => (
-          <Card key={p.id} style={{ padding: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{p.label}</div>
-            <div style={{ fontSize: 11, color: "var(--text-faint)",
-                          marginBottom: 10 }}>{p.price}</div>
-            {p.clickable ? (
-              <button
-                data-testid={`upgrade-${p.id}`}
-                onClick={() => upgrade(p.id)}
-                disabled={upgrading === p.id}
-                className="btn-primary"
-                style={{ width: "100%" }}>
-                {upgrading === p.id ? "redirecting…" : `Upgrade → ${p.label}`}
-              </button>
-            ) : (
-              <button
-                disabled
-                className="btn-primary"
-                style={{ width: "100%", opacity: 0.4, cursor: "not-allowed" }}>
-                Current baseline
-              </button>
-            )}
-          </Card>
-        ))}
-      </div>
-
-      {/* Annual (3 tiers, 20% discount) */}
-      <div style={{ fontSize: 11, color: "var(--text-faint)",
-                     textTransform: "uppercase", letterSpacing: ".08em",
-                     margin: "0 0 8px" }}>Annual · 20% off</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)",
-                     gap: 10, marginBottom: 20 }}>
-        {[
-          { id: "starter_annual", label: "Starter", price: "$86.40/yr"  },
-          { id: "pro_annual",     label: "Pro",     price: "$182.40/yr" },
-          { id: "team_annual",    label: "Team",    price: "$470.40/yr" },
-        ].map((p) => (
-          <Card key={p.id} style={{ padding: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{p.label}</div>
-            <div style={{ fontSize: 11, color: "var(--text-faint)",
-                          marginBottom: 10 }}>{p.price}</div>
-            <button
-              data-testid={`upgrade-${p.id}`}
-              onClick={() => upgrade(p.id)}
-              disabled={upgrading === p.id}
-              className="btn-primary"
-              style={{ width: "100%" }}>
-              {upgrading === p.id ? "redirecting…" : `Upgrade → ${p.label} annual`}
-            </button>
-          </Card>
-        ))}
-      </div>
-
-      <h3 style={{ fontSize: 13, margin: "20px 0 14px" }}>Token limits per plan</h3>
-      {["free", "starter", "pro", "team"].map((plan) => (
-        <div key={plan} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-          <span style={{ width: 80, textTransform: "capitalize", fontSize: 12 }}>{plan}</span>
-          <input
-            data-testid={`admin-limit-${plan}`}
-            type="number" className="input"
-            value={s.token_limits?.[plan] || 0}
-            onChange={(e) => setS({
-              ...s, token_limits: { ...s.token_limits, [plan]: +e.target.value }
-            })} />
-        </div>
-      ))}
-      <h3 style={{ fontSize: 13, margin: "20px 0 14px" }}>Pricing ($/mo)</h3>
-      {["free", "starter", "pro", "team"].map((plan) => (
-        <div key={plan} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-          <span style={{ width: 80, textTransform: "capitalize", fontSize: 12 }}>{plan}</span>
-          <input
-            data-testid={`admin-price-${plan}`}
-            type="number" className="input"
-            value={s.pricing?.[plan] || 0}
-            onChange={(e) => setS({
-              ...s, pricing: { ...s.pricing, [plan]: +e.target.value }
-            })} />
-        </div>
-      ))}
-      <button
-        data-testid="admin-settings-save"
-        onClick={save} disabled={busy}
-        className="btn-primary" style={{ marginTop: 14 }}>
-        {busy ? "Saving…" : "Save settings"}
-      </button>
-
-      {/* Iter 212m-20 — Admin 2FA enrollment card. Place this BEFORE
-          the Stripe card so a brand-new admin is nudged toward the
-          security best practice first. */}
-      <TwoFactorCard />
-
-      {/* Iter 191 — Stripe API key card with edit/save + live ping
-          (green/red status light, account info, error reason). */}
-      <StripeApiKeyCard />
-      <StripePriceIdsCard />
-      <GitHubAppConfigCard />
-
-      {/* Iter 158 — thinking-hint manager (tier-aware upsell pills
-          shown next to the chat spinner). Full CRUD + global toggle
-          + delay slider. */}
-      <ThinkingHintsConfigCard />
-      <AdminThinkingHints />
-
-      {/* Iter 195 — ORA Council moved into Settings (was its own
-          sidebar tab). Council settings live alongside other admin
-          tunables (Stripe key, thinking hints) so configuration
-          surfaces are in one place. */}
-      <div style={{ marginTop: 28, paddingTop: 20,
-                     borderTop: "1px solid var(--line, rgba(255,255,255,0.06))" }}>
-        <h3 style={{ fontSize: 13, margin: "0 0 14px",
-                      display: "flex", alignItems: "center", gap: 8 }}>
-          <Brain size={14} style={{ color: "var(--accent, #ff8a2a)" }} />
-          ORA Council
-        </h3>
-        <AuremAdminPanel />
-      </div>
-    </div>
-  );
-}
-
-// ─── Iter 191 — Stripe API key card ──────────────────────────────────
-// Live status indicator (green = key verified via Account.retrieve,
-// red = the exact reason returned by Stripe). Edit/Save flow validates
-// the new key BEFORE persisting so a broken key can never overwrite a
-// working one.
-function StripeApiKeyCard() {
-  const [data, setData] = useState(null);
-  const [editing, setEditing] = useState(false);
-  const [newKey, setNewKey] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function refresh() {
-    try {
-      const r = await api.get("/admin/stripe-config");
-      setData(r.data);
-    } catch (e) {
-      setData({ configured: false, status: "error",
-                error: e?.response?.data?.detail || "Could not load Stripe config" });
-    }
-  }
-
-  useEffect(() => { refresh(); }, []);
-
-  async function save() {
-    if (!newKey.trim()) return;
-    setSaving(true);
-    try {
-      await api.post("/admin/stripe-config", { api_key: newKey.trim() });
-      toast({ message: "Stripe key validated & saved ✓", kind: "success" });
-      setNewKey("");
-      setEditing(false);
-      await refresh();
-    } catch (e) {
-      toast({
-        message: e?.response?.data?.detail || "Validation failed",
-        kind: "error",
-      });
-    } finally { setSaving(false); }
-  }
-
-  if (!data) {
-    return (
-      <Card style={{ padding: 18, marginTop: 24 }}>
-        <div style={{ color: "var(--text-faint)", fontSize: 12 }}>
-          Loading Stripe status…
-        </div>
-      </Card>
-    );
-  }
-
-  const ok = data.status === "ok";
-  const dot = ok ? "#22c55e" : "#ef4444";
-  const dotShadow = ok ? "rgba(34,197,94,0.35)" : "rgba(239,68,68,0.35)";
-  const acct = data.account || {};
-
-  return (
-    <Card style={{ padding: 18, marginTop: 24 }} data-testid="admin-stripe-card">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-                    marginBottom: 12, gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span
-            data-testid="admin-stripe-status-dot"
-            style={{
-              width: 12, height: 12, borderRadius: "50%",
-              background: dot,
-              boxShadow: `0 0 0 4px ${dotShadow}, 0 0 12px ${dot}`,
-              animation: ok ? "pulseDot 2.4s ease-in-out infinite" : "none",
-              flexShrink: 0,
-            }}
-          />
-          <h3 style={{ fontSize: 13, margin: 0 }}>Stripe API key</h3>
-          {data.mode && data.mode !== "unknown" && (
-            <Badge color={data.mode === "live" ? "var(--ok)" : "var(--warn)"}>
-              {data.mode}
-            </Badge>
-          )}
-          {data.source && (
-            <span style={{ fontSize: 10, color: "var(--text-faint)",
-                            fontFamily: "'JetBrains Mono', monospace",
-                            textTransform: "uppercase", letterSpacing: "0.06em" }}>
-              source: {data.source}
-            </span>
-          )}
-        </div>
-        {!editing && (
-          <button
-            data-testid="admin-stripe-edit"
-            className="btn-secondary"
-            style={{ fontSize: 12, padding: "6px 14px" }}
-            onClick={() => { setNewKey(""); setEditing(true); }}
-          >
-            Edit
-          </button>
-        )}
-      </div>
-
-      {!editing && (
-        <>
-          {ok ? (
-            <div data-testid="admin-stripe-ok"
-                 style={{
-                   padding: "10px 12px", marginBottom: 8,
-                   background: "rgba(34,197,94,0.06)",
-                   border: "1px solid rgba(34,197,94,0.18)",
-                   borderRadius: 8,
-                   fontSize: 12, color: "#86efac",
-                   fontFamily: "'JetBrains Mono', monospace",
-                 }}>
-              ● Connected — sk_{data.mode}_…{data.last4}
-            </div>
-          ) : (
-            <div data-testid="admin-stripe-err"
-                 style={{
-                   padding: "10px 12px", marginBottom: 8,
-                   background: "rgba(239,68,68,0.06)",
-                   border: "1px solid rgba(239,68,68,0.2)",
-                   borderRadius: 8,
-                   fontSize: 12, color: "#fca5a5",
-                   lineHeight: 1.5,
-                 }}>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>● Not working</div>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
-                {data.error || "Unknown error"}
-              </div>
-            </div>
-          )}
-
-          {ok && (
-            <div style={{ display: "grid", gridTemplateColumns: "120px 1fr",
-                          gap: "6px 14px", fontSize: 11,
-                          color: "var(--text-faint)",
-                          fontFamily: "'JetBrains Mono', monospace",
-                          marginTop: 4 }}>
-              <span>Account</span><span style={{ color: "var(--text)" }}>{acct.id || "—"}</span>
-              <span>Business</span><span style={{ color: "var(--text)" }}>{acct.business_name || "—"}</span>
-              <span>Email</span><span style={{ color: "var(--text)" }}>{acct.email || "—"}</span>
-              <span>Country</span><span style={{ color: "var(--text)" }}>{acct.country || "—"}</span>
-              <span>Charges</span>
-              <span style={{ color: acct.charges_enabled ? "var(--ok)" : "var(--danger)" }}>
-                {acct.charges_enabled ? "enabled" : "disabled"}
-              </span>
-              <span>Payouts</span>
-              <span style={{ color: acct.payouts_enabled ? "var(--ok)" : "var(--danger)" }}>
-                {acct.payouts_enabled ? "enabled" : "disabled"}
-              </span>
-            </div>
-          )}
-        </>
-      )}
-
-      {editing && (
-        <div style={{ marginTop: 8 }}>
-          <label style={{ fontSize: 11, color: "var(--text-faint)",
-                          display: "block", marginBottom: 6,
-                          fontFamily: "'JetBrains Mono', monospace",
-                          textTransform: "uppercase", letterSpacing: "0.08em" }}>
-            Paste new key (sk_live_… or sk_test_…)
-          </label>
-          <input
-            data-testid="admin-stripe-key-input"
-            className="input"
-            type="password"
-            value={newKey}
-            onChange={(e) => setNewKey(e.target.value)}
-            placeholder="sk_live_……"
-            autoFocus
-            style={{ width: "100%", fontFamily: "'JetBrains Mono', monospace",
-                     fontSize: 12 }}
-          />
-          <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-            <button
-              data-testid="admin-stripe-save"
-              className="btn-primary"
-              onClick={save}
-              disabled={saving || !newKey.trim()}
-              style={{ fontSize: 12 }}>
-              {saving ? "Validating with Stripe…" : "Save"}
-            </button>
-            <button
-              data-testid="admin-stripe-cancel"
-              className="btn-secondary"
-              onClick={() => { setEditing(false); setNewKey(""); }}
-              disabled={saving}
-              style={{ fontSize: 12 }}>
-              Cancel
-            </button>
-          </div>
-          <div style={{ marginTop: 10, fontSize: 10, color: "var(--text-faint)",
-                        lineHeight: 1.5 }}>
-            Key is validated via a live <code>Account.retrieve()</code> call
-            before saving. If Stripe rejects it, nothing is persisted and the
-            old key keeps working.
-          </div>
-        </div>
-      )}
-
-      <style>{`
-        @keyframes pulseDot {
-          0%, 100% { box-shadow: 0 0 0 4px ${dotShadow}, 0 0 12px ${dot}; }
-          50%      { box-shadow: 0 0 0 8px ${dotShadow}, 0 0 18px ${dot}; }
-        }
-      `}</style>
-    </Card>
-  );
-}
-
-// ─── Session-fork · 2026-02-09 — Stripe Price IDs card ────────────────
-// Multi-worker split-brain fix. All 6 price IDs live in Mongo
-// (admin_settings._id="stripe_price_ids") and are hydrated into every
-// worker at boot. This UI is the ONLY correct place to rotate prices —
-// env-panel edits require a full pod recycle and race between workers.
-const PRICE_PLAN_LABELS = [
-  { id: "starter",        label: "Starter",         interval: "month" },
-  { id: "pro",            label: "Pro",             interval: "month" },
-  { id: "team",           label: "Team",            interval: "month" },
-  { id: "starter_annual", label: "Starter Annual",  interval: "year"  },
-  { id: "pro_annual",     label: "Pro Annual",      interval: "year"  },
-  { id: "team_annual",    label: "Team Annual",     interval: "year"  },
-];
-
-function StripePriceIdsCard() {
-  const [data, setData] = useState(null);
-  const [editing, setEditing] = useState(false);
-  const [inputs, setInputs] = useState({});
-  const [saving, setSaving] = useState(false);
-
-  async function refresh() {
-    try {
-      const r = await api.get("/admin/stripe-prices");
-      setData(r.data);
-    } catch (e) {
-      setData({ plans: {},
-                error: e?.response?.data?.detail || "Could not load Stripe prices" });
-    }
-  }
-  useEffect(() => { refresh(); }, []);
-
-  function startEdit() {
-    // Pre-populate empty so a paste replaces cleanly.
-    setInputs(Object.fromEntries(PRICE_PLAN_LABELS.map(p => [p.id, ""])));
-    setEditing(true);
-  }
-
-  async function save() {
-    const trimmed = Object.fromEntries(
-      Object.entries(inputs).map(([k, v]) => [k, (v || "").trim()])
-    );
-    const anyProvided = Object.values(trimmed).some(v => v);
-    if (!anyProvided) {
-      toast({ message: "Paste at least one price ID first", kind: "warning" });
-      return;
-    }
-    setSaving(true);
-    try {
-      const r = await api.post("/admin/stripe-prices", trimmed);
-      toast({ message: `Saved ${r.data.saved} price ID(s) ✓`, kind: "success" });
-      setEditing(false);
-      setInputs({});
-      await refresh();
-    } catch (e) {
-      toast({
-        message: e?.response?.data?.detail || "Save failed",
-        kind: "error",
-      });
-    } finally { setSaving(false); }
-  }
-
-  if (!data) {
-    return (
-      <Card style={{ padding: 18, marginTop: 24 }}>
-        <div style={{ color: "var(--text-faint)", fontSize: 12 }}>
-          Loading Stripe price IDs…
-        </div>
-      </Card>
-    );
-  }
-
-  const plans = data.plans || {};
-  const anyDbOverride = Object.values(plans).some(p => p.source === "db_override");
-  const anyBroken = Object.values(plans).some(p => !p.valid);
-
-  return (
-    <div data-testid="admin-stripe-prices-card">
-    <Card style={{ padding: 18, marginTop: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-                    marginBottom: 12, gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{
-            width: 12, height: 12, borderRadius: "50%",
-            background: anyBroken ? "#ef4444" : "#22c55e",
-            boxShadow: anyBroken
-              ? "0 0 0 4px rgba(239,68,68,0.35), 0 0 12px #ef4444"
-              : "0 0 0 4px rgba(34,197,94,0.35), 0 0 12px #22c55e",
-            flexShrink: 0,
-          }} />
-          <h3 style={{ fontSize: 13, margin: 0 }}>Stripe Price IDs</h3>
-          <Badge color={anyDbOverride ? "var(--ok)" : "var(--warn)"}>
-            {anyDbOverride ? "db override" : "env fallback"}
-          </Badge>
-        </div>
-        {!editing && (
-          <button
-            data-testid="admin-stripe-prices-edit"
-            className="btn-secondary"
-            style={{ fontSize: 12, padding: "6px 14px" }}
-            onClick={startEdit}>
-            Edit
-          </button>
-        )}
-      </div>
-
-      {!editing && (
-        <>
-          <div style={{ padding: "8px 12px", marginBottom: 10,
-                        background: "rgba(255,138,42,0.06)",
-                        border: "1px solid rgba(255,138,42,0.18)",
-                        borderRadius: 8, fontSize: 11,
-                        color: "var(--text-faint)", lineHeight: 1.5 }}>
-            Store all 6 price IDs here (in Mongo) instead of env vars. This
-            eliminates the multi-worker split-brain where different uvicorn
-            workers could serve different price IDs after an env-panel edit.
-            Values are hot-swapped into every worker on Save + hydrated at boot.
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "160px 100px 90px 1fr",
-                        gap: "6px 14px", fontSize: 11,
-                        fontFamily: "'JetBrains Mono', monospace" }}>
-            <span style={{ color: "var(--text-faint)" }}>PLAN</span>
-            <span style={{ color: "var(--text-faint)" }}>SOURCE</span>
-            <span style={{ color: "var(--text-faint)" }}>STATUS</span>
-            <span style={{ color: "var(--text-faint)" }}>DETAIL</span>
-            {PRICE_PLAN_LABELS.map(({ id, label, interval }) => {
-              const info = plans[id] || {};
-              const src = info.source || "none";
-              const valid = info.valid;
-              return (
-                <React.Fragment key={id}>
-                  <span style={{ color: "var(--text)" }}
-                        data-testid={`admin-price-plan-${id}`}>
-                    {label} <span style={{ color: "var(--text-faint)" }}>· {interval}</span>
-                  </span>
-                  <span style={{
-                    color: src === "db_override" ? "#86efac"
-                         : src === "env"         ? "#fbbf24"
-                         : "#fca5a5",
-                    fontSize: 10, textTransform: "uppercase" }}>
-                    {src}
-                  </span>
-                  <span data-testid={`admin-price-valid-${id}`}
-                        style={{ color: valid ? "#86efac" : "#fca5a5" }}>
-                    {valid ? "● valid" : "● broken"}
-                  </span>
-                  <span style={{ color: "var(--text-faint)" }}>
-                    {info.last6 ? `…${info.last6}` : "—"}
-                    {info.interval && info.interval !== interval && (
-                      <span style={{ color: "#fca5a5", marginLeft: 6 }}>
-                        (interval={info.interval}, expected {interval})
-                      </span>
-                    )}
-                    {info.error && (
-                      <span style={{ color: "#fca5a5", marginLeft: 6 }}>
-                        {info.error}
-                      </span>
-                    )}
-                  </span>
-                </React.Fragment>
-              );
-            })}
-          </div>
-          {data.updated_by && (
-            <div style={{ marginTop: 10, fontSize: 10, color: "var(--text-faint)",
-                          fontFamily: "'JetBrains Mono', monospace" }}>
-              Last updated by {data.updated_by} at{" "}
-              {new Date((data.last_updated || 0) * 1000).toISOString()}
-            </div>
-          )}
-        </>
-      )}
-
-      {editing && (
-        <div style={{ marginTop: 8 }}>
-          <div style={{ padding: "8px 12px", marginBottom: 12,
-                        background: "rgba(59,130,246,0.06)",
-                        border: "1px solid rgba(59,130,246,0.2)",
-                        borderRadius: 8, fontSize: 11,
-                        color: "#93c5fd", lineHeight: 1.5 }}>
-            Paste all 6 LIVE-mode price IDs from Stripe Dashboard → Products.
-            Each is validated (recurring + correct interval) before persistence.
-            Empty fields fall back to the corresponding STRIPE_*_PRICE_ID env var.
-          </div>
-          {PRICE_PLAN_LABELS.map(({ id, label, interval }) => (
-            <div key={id} style={{ display: "flex", alignItems: "center",
-                                    gap: 10, marginBottom: 8 }}>
-              <label style={{ width: 160, fontSize: 11,
-                              color: "var(--text-faint)",
-                              fontFamily: "'JetBrains Mono', monospace",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.06em" }}>
-                {label} · {interval}
-              </label>
-              <input
-                data-testid={`admin-price-input-${id}`}
-                className="input"
-                value={inputs[id] || ""}
-                onChange={(e) => setInputs({ ...inputs, [id]: e.target.value })}
-                placeholder={`price_… (${interval}ly)`}
-                style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace",
-                         fontSize: 12 }} />
-            </div>
-          ))}
-          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-            <button
-              data-testid="admin-stripe-prices-save"
-              className="btn-primary"
-              onClick={save}
-              disabled={saving}
-              style={{ fontSize: 12 }}>
-              {saving ? "Validating each with Stripe…" : "Save & Hot-swap"}
-            </button>
-            <button
-              data-testid="admin-stripe-prices-cancel"
-              className="btn-secondary"
-              onClick={() => { setEditing(false); setInputs({}); }}
-              disabled={saving}
-              style={{ fontSize: 12 }}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-    </Card>
-    </div>
-  );
-}
-
-// ─── 2026-02-10 — GitHub App credential card ─────────────────────────
-// Mirrors the Stripe cards: presence-only summary (never echoes secrets),
-// live probe pill, edit modal with 4 paste fields, validates against
-// GitHub before persisting. Used to bootstrap the Phase 1.1 service and
-// wizard integration that come next.
-function GitHubAppConfigCard() {
-  const [data, setData] = useState(null);
-  const [editing, setEditing] = useState(false);
-  const [inputs, setInputs] = useState({
-    app_id: "", app_slug: "", private_key: "", webhook_secret: "",
-  });
-  const [saving, setSaving] = useState(false);
-
-  async function refresh() {
-    try {
-      const r = await api.get("/admin/github-app-config");
-      setData(r.data);
-    } catch (e) {
-      setData({
-        configured: false,
-        error: e?.response?.data?.detail || "Could not load GitHub App config",
-      });
-    }
-  }
-  useEffect(() => { refresh(); }, []);
-
-  function startEdit() {
-    setInputs({
-      app_id: data?.app_id || "",
-      app_slug: data?.app_slug || "",
-      private_key: "",       // never pre-fill secrets
-      webhook_secret: "",    // never pre-fill secrets
-    });
-    setEditing(true);
-  }
-
-  async function save() {
-    const trimmed = {
-      app_id:         (inputs.app_id || "").trim(),
-      app_slug:       (inputs.app_slug || "").trim().toLowerCase(),
-      private_key:    (inputs.private_key || "").trim(),
-      webhook_secret: (inputs.webhook_secret || "").trim(),
-    };
-    if (!trimmed.app_id || !trimmed.app_slug
-        || !trimmed.private_key || !trimmed.webhook_secret) {
-      toast({
-        message: "All four fields are required — partial configs are refused.",
-        kind: "warning",
-      });
-      return;
-    }
-    setSaving(true);
-    try {
-      const r = await api.post("/admin/github-app-config", trimmed);
-      toast({
-        message: `GitHub App @${r.data.app_slug} validated & saved ✓`,
-        kind: "success",
-      });
-      setEditing(false);
-      setInputs({ app_id: "", app_slug: "", private_key: "", webhook_secret: "" });
-      await refresh();
-    } catch (e) {
-      const d = e?.response?.data?.detail;
-      const msg = typeof d === "string"
-        ? d
-        : (d?.message || "Save failed");
-      toast({ message: msg, kind: "error" });
-    } finally { setSaving(false); }
-  }
-
-  if (!data) {
-    return (
-      <Card style={{ padding: 18, marginTop: 24 }}>
-        <div style={{ color: "var(--text-faint)", fontSize: 12 }}>
-          Loading GitHub App config…
-        </div>
-      </Card>
-    );
-  }
-
-  const live = data.live || {};
-  const configured = !!data.configured;
-  const healthy = configured && live.ok;
-
-  return (
-    <div data-testid="admin-github-app-config-card">
-    <Card style={{ padding: 18, marginTop: 16 }}>
-      <div style={{ display: "flex", alignItems: "center",
-                    justifyContent: "space-between",
-                    marginBottom: 12, gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{
-            width: 12, height: 12, borderRadius: "50%",
-            background: !configured ? "#71717a"
-                      : healthy      ? "#22c55e"
-                      : "#ef4444",
-            boxShadow: !configured
-              ? "0 0 0 4px rgba(113,113,122,0.25)"
-              : healthy
-                ? "0 0 0 4px rgba(34,197,94,0.35), 0 0 12px #22c55e"
-                : "0 0 0 4px rgba(239,68,68,0.35), 0 0 12px #ef4444",
-            flexShrink: 0,
-          }} />
-          <h3 style={{ fontSize: 13, margin: 0 }}>GitHub App</h3>
-          <Badge color={configured ? (healthy ? "var(--ok)" : "var(--danger)") : "var(--warn)"}>
-            {!configured ? "not configured"
-              : healthy   ? "connected"
-              : "invalid"}
-          </Badge>
-        </div>
-        {!editing && (
-          <button
-            data-testid="admin-github-app-edit"
-            className="btn-secondary"
-            style={{ fontSize: 12, padding: "6px 14px" }}
-            onClick={startEdit}>
-            {configured ? "Rotate credentials" : "Paste credentials"}
-          </button>
-        )}
-      </div>
-
-      {!editing && (
-        <>
-          <div style={{ padding: "8px 12px", marginBottom: 10,
-                        background: "rgba(255,138,42,0.06)",
-                        border: "1px solid rgba(255,138,42,0.18)",
-                        borderRadius: 8, fontSize: 11,
-                        color: "var(--text-faint)", lineHeight: 1.5 }}>
-            Credentials for the <strong>Aurem GitHub App</strong> (installable
-            App, not the OAuth App). Stored in Mongo — every uvicorn worker
-            hydrates on boot, POST hot-swaps immediately. The private key is
-            never echoed back after paste; only a last-6 fingerprint is shown.
-            Once configured, the PAT-vs-App gate in{" "}
-            <code style={{ margin: "0 4px", fontSize: 10 }}>
-              cto_projects.py::/projects/add
-            </code>
-            will accept either.
-          </div>
-
-          <div style={{ display: "grid",
-                        gridTemplateColumns: "160px 1fr",
-                        gap: "6px 14px", fontSize: 11,
-                        fontFamily: "'JetBrains Mono', monospace" }}>
-            <span style={{ color: "var(--text-faint)" }}>APP ID</span>
-            <span data-testid="gh-app-appid">
-              {data.app_id || <em style={{ color: "var(--text-faint)" }}>—</em>}
-            </span>
-
-            <span style={{ color: "var(--text-faint)" }}>SLUG</span>
-            <span data-testid="gh-app-slug">
-              {data.app_slug
-                ? <>
-                    {data.app_slug}
-                    {data.install_url && (
-                      <a href={data.install_url}
-                         target="_blank" rel="noopener noreferrer"
-                         style={{ marginLeft: 10, color: "var(--accent)",
-                                  fontSize: 10 }}>
-                        install URL ↗
-                      </a>
-                    )}
-                  </>
-                : <em style={{ color: "var(--text-faint)" }}>—</em>}
-            </span>
-
-            <span style={{ color: "var(--text-faint)" }}>PRIVATE KEY</span>
-            <span style={{ color: data.private_key_last6 ? "var(--text)"
-                                                          : "var(--text-faint)" }}>
-              {data.private_key_last6
-                ? `…${data.private_key_last6} (fingerprint)`
-                : "—"}
-            </span>
-
-            <span style={{ color: "var(--text-faint)" }}>WEBHOOK SECRET</span>
-            <span style={{ color: data.webhook_secret_last4 ? "var(--text)"
-                                                             : "var(--text-faint)" }}>
-              {data.webhook_secret_last4
-                ? `…${data.webhook_secret_last4}`
-                : "—"}
-            </span>
-
-            <span style={{ color: "var(--text-faint)" }}>LIVE PROBE</span>
-            <span data-testid="gh-app-live" style={{
-              color: live.ok ? "#86efac" : "#fca5a5",
-            }}>
-              {live.ok
-                ? <>● GitHub returned 200 · App name: <strong>{live.app_name}</strong>
-                    {live.owner_login && <> · owner: {live.owner_login} ({live.owner_type})</>}</>
-                : <>● {live.error || "not tested"}</>}
-            </span>
-
-            {live.ok && live.permissions && (
-              <>
-                <span style={{ color: "var(--text-faint)" }}>PERMISSIONS</span>
-                <span style={{ color: "var(--text-faint)", fontSize: 10 }}>
-                  {Object.entries(live.permissions)
-                    .map(([k, v]) => `${k}:${v}`).join(" · ") || "—"}
-                </span>
-                <span style={{ color: "var(--text-faint)" }}>EVENTS</span>
-                <span style={{ color: "var(--text-faint)", fontSize: 10 }}>
-                  {(live.events || []).join(", ") || "—"}
-                </span>
-              </>
-            )}
-          </div>
-
-          {data.updated_by && (
-            <div style={{ marginTop: 10, fontSize: 10, color: "var(--text-faint)",
-                          fontFamily: "'JetBrains Mono', monospace" }}>
-              Last updated by {data.updated_by} at{" "}
-              {new Date((data.last_updated || 0) * 1000).toISOString()}
-            </div>
-          )}
-        </>
-      )}
-
-      {editing && (
-        <div style={{ marginTop: 8 }}>
-          <div style={{ padding: "8px 12px", marginBottom: 12,
-                        background: "rgba(59,130,246,0.06)",
-                        border: "1px solid rgba(59,130,246,0.2)",
-                        borderRadius: 8, fontSize: 11,
-                        color: "#93c5fd", lineHeight: 1.5 }}>
-            Paste all 4 credentials from your GitHub App settings page
-            (<code style={{ fontSize: 10 }}>
-              github.com/organizations/&lt;org&gt;/settings/apps/&lt;slug&gt;
-            </code>).
-            The private key + App ID are validated against GitHub
-            (<code style={{ fontSize: 10 }}>GET /app</code>) before anything
-            is written. Partial configs are refused.
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center",
-                        gap: 10, marginBottom: 10 }}>
-            <label style={{ width: 160, fontSize: 11,
-                            color: "var(--text-faint)",
-                            fontFamily: "'JetBrains Mono', monospace",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.06em" }}>
-              App ID
-            </label>
-            <input
-              data-testid="admin-gh-app-input-appid"
-              className="input"
-              inputMode="numeric"
-              value={inputs.app_id}
-              onChange={(e) => setInputs({ ...inputs, app_id: e.target.value })}
-              placeholder="e.g. 12345678 (numeric, from App settings header)"
-              style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace",
-                       fontSize: 12 }} />
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center",
-                        gap: 10, marginBottom: 10 }}>
-            <label style={{ width: 160, fontSize: 11,
-                            color: "var(--text-faint)",
-                            fontFamily: "'JetBrains Mono', monospace",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.06em" }}>
-              App slug
-            </label>
-            <input
-              data-testid="admin-gh-app-input-slug"
-              className="input"
-              value={inputs.app_slug}
-              onChange={(e) => setInputs({ ...inputs, app_slug: e.target.value })}
-              placeholder="aurem-devops (lowercase, from github.com/apps/<slug>)"
-              style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace",
-                       fontSize: 12 }} />
-          </div>
-
-          <div style={{ display: "flex", alignItems: "flex-start",
-                        gap: 10, marginBottom: 10 }}>
-            <label style={{ width: 160, fontSize: 11,
-                            color: "var(--text-faint)",
-                            fontFamily: "'JetBrains Mono', monospace",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.06em",
-                            paddingTop: 8 }}>
-              Private key (PEM)
-            </label>
-            <textarea
-              data-testid="admin-gh-app-input-pem"
-              className="input"
-              value={inputs.private_key}
-              onChange={(e) => setInputs({ ...inputs, private_key: e.target.value })}
-              placeholder={"-----BEGIN RSA PRIVATE KEY-----\n... paste full PEM ...\n-----END RSA PRIVATE KEY-----"}
-              rows={8}
-              style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace",
-                       fontSize: 11, resize: "vertical", minHeight: 140,
-                       whiteSpace: "pre" }} />
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center",
-                        gap: 10, marginBottom: 12 }}>
-            <label style={{ width: 160, fontSize: 11,
-                            color: "var(--text-faint)",
-                            fontFamily: "'JetBrains Mono', monospace",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.06em" }}>
-              Webhook secret
-            </label>
-            <input
-              data-testid="admin-gh-app-input-webhook"
-              className="input"
-              type="password"
-              autoComplete="off"
-              value={inputs.webhook_secret}
-              onChange={(e) => setInputs({ ...inputs, webhook_secret: e.target.value })}
-              placeholder="opaque random string (min 8 chars)"
-              style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace",
-                       fontSize: 12 }} />
-          </div>
-
-          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-            <button
-              data-testid="admin-gh-app-save"
-              className="btn-primary"
-              onClick={save}
-              disabled={saving}
-              style={{ fontSize: 12 }}>
-              {saving ? "Validating against GitHub…" : "Validate & Save"}
-            </button>
-            <button
-              data-testid="admin-gh-app-cancel"
-              className="btn-secondary"
-              onClick={() => {
-                setEditing(false);
-                setInputs({ app_id: "", app_slug: "", private_key: "", webhook_secret: "" });
-              }}
-              disabled={saving}
-              style={{ fontSize: 12 }}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-    </Card>
-    </div>
-  );
-}
 
 
 
-function ThinkingHintsConfigCard() {
-  const [cfg, setCfg] = useState(null);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    api.get("/admin/thinking-hints-config")
-      .then((r) => setCfg({
-        enabled: r.data?.enabled ?? true,
-        delay_ms: r.data?.delay_ms ?? 600,
-      }))
-      .catch(() => setCfg({ enabled: true, delay_ms: 600 }));
-  }, []);
-
-  if (!cfg) return null;
-
-  async function save() {
-    setSaving(true);
-    try {
-      await api.post("/admin/thinking-hints-config", cfg);
-      toast({ message: "Hint config saved", kind: "success" });
-    } catch (e) {
-      toast({
-        message: e?.response?.data?.detail || "Save failed",
-        kind: "error",
-      });
-    } finally { setSaving(false); }
-  }
-
-  return (
-    <div
-      data-testid="hints-config-card"
-      style={{
-        marginTop: 28, padding: 14, borderRadius: 10,
-        background: "rgba(255,255,255,0.02)",
-        border: "1px solid var(--border)",
-      }}
-    >
-      <h3 style={{ fontSize: 13, margin: "0 0 6px" }}>
-        💡 Thinking-Hint Global Config
-      </h3>
-      <p style={{ fontSize: 11, color: "var(--text-faint)", margin: "0 0 14px" }}>
-        Master kill-switch + delay tuner. Per-hint copy is managed below.
-      </p>
-      <label style={{
-        display: "flex", alignItems: "center", gap: 10, fontSize: 12,
-        marginBottom: 14, cursor: "pointer",
-      }}>
-        <input
-          data-testid="hints-config-enabled"
-          type="checkbox"
-          checked={!!cfg.enabled}
-          onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })}
-        />
-        Show thinking hints to users
-        <span style={{
-          marginLeft: 8, fontSize: 10, letterSpacing: "0.1em",
-          padding: "2px 8px", borderRadius: 999,
-          background: cfg.enabled
-            ? "rgba(110, 231, 183, 0.12)"
-            : "rgba(255, 80, 80, 0.10)",
-          color: cfg.enabled ? "var(--ok, #6ee7b7)" : "var(--danger, #ef4444)",
-          border: `1px solid ${cfg.enabled
-            ? "rgba(110, 231, 183, 0.35)"
-            : "rgba(255, 80, 80, 0.35)"}`,
-        }}>
-          {cfg.enabled ? "ENABLED" : "DISABLED"}
-        </span>
-      </label>
-      <div style={{ marginBottom: 10 }}>
-        <div style={{
-          display: "flex", justifyContent: "space-between",
-          fontSize: 11, color: "var(--text-dim)", marginBottom: 4,
-        }}>
-          <span>Delay before hint appears</span>
-          <span data-testid="hints-config-delay-value"
-                style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-            {cfg.delay_ms} ms
-          </span>
-        </div>
-        <input
-          data-testid="hints-config-delay"
-          type="range"
-          min={200} max={5000} step={100}
-          value={cfg.delay_ms}
-          onChange={(e) => setCfg({ ...cfg, delay_ms: +e.target.value })}
-          style={{ width: "100%" }}
-        />
-        <div style={{
-          display: "flex", justifyContent: "space-between",
-          fontSize: 10, color: "var(--text-faint)", marginTop: 2,
-        }}>
-          <span>200ms (instant)</span><span>5000ms (slow)</span>
-        </div>
-      </div>
-      <button
-        data-testid="hints-config-save"
-        onClick={save} disabled={saving} className="btn-primary"
-        style={{ fontSize: 11 }}
-      >
-        {saving ? "Saving…" : "Save config"}
-      </button>
-    </div>
-  );
-}
 
 // ── Shell ──────────────────────────────────────────────────────────────
 // Iter 192 — sidebar consolidated per founder feedback:
@@ -3255,176 +1847,47 @@ function ThinkingHintsConfigCard() {
 //   • Graph Status: was its own tab → folded into Projects (per-project
 //     row already shows graph state).
 // ──────────────────────────────────────────────────────────────────
-// Iter 210 — Audit feed page
-// Hits GET /admin/audit and renders one row per ORA turn. Plain
-// dark-theme table matching the rest of the panel.
-// ──────────────────────────────────────────────────────────────────
-function AuditPage() {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState(null);
-  const [err, setErr] = useState("");
-
-  async function load() {
-    setLoading(true); setErr("");
-    try {
-      const r = await api.get("/admin/audit?limit=100");
-      setRows(r.data?.rows || []);
-    } catch (e) {
-      setErr(e?.response?.data?.detail || e.message || "Failed to load audit feed");
-    } finally { setLoading(false); }
-  }
-  useEffect(() => { load(); }, []);
-
-  return (
-    <div data-testid="admin-audit-page" style={{ padding: 24 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-        <h2 style={{ margin: 0, fontSize: 16, color: "var(--text)" }}>Audit feed</h2>
-        <button onClick={load} data-testid="admin-audit-refresh"
-                className="btn-ghost" style={{ fontSize: 11 }}>
-          Refresh
-        </button>
-      </div>
-      {loading && <div style={{ color: "var(--text-faint)", fontSize: 12 }}>Loading…</div>}
-      {err && <div style={{ color: "#ef4444", fontSize: 12 }}>{err}</div>}
-      {!loading && rows.length === 0 && !err && (
-        <div style={{ color: "var(--text-faint)", fontSize: 12 }}>
-          No audit rows yet. Have a user chat with ORA and refresh.
-        </div>
-      )}
-      {rows.length > 0 && (
-        <div style={{ overflowX: "auto" }}>
-        <table data-testid="admin-audit-table" style={{
-          width: "100%", borderCollapse: "collapse", fontSize: 11,
-          fontFamily: "'JetBrains Mono', monospace",
-        }}>
-          <thead>
-            <tr style={{ color: "var(--text-faint)", textAlign: "left",
-                          borderBottom: "1px solid var(--border)" }}>
-              <th style={th}>Timestamp</th>
-              <th style={th}>User</th>
-              <th style={th}>Project</th>
-              <th style={th}>Tools</th>
-              <th style={th} title="Citation guard triggered?">🛡️</th>
-              <th style={th}>⚠️ Signals</th>
-              <th style={th}>Model</th>
-              <th style={th}>Retry</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const isOpen = expanded === r.turn_id;
-              const sigs = r.system_signals_emitted || [];
-              return (
-                <React.Fragment key={r.turn_id}>
-                  <tr
-                    data-testid={`admin-audit-row-${r.turn_id}`}
-                    onClick={() => setExpanded(isOpen ? null : r.turn_id)}
-                    style={{
-                      cursor: "pointer",
-                      borderBottom: "1px solid rgba(255,255,255,0.04)",
-                      background: isOpen ? "var(--bg-elev)" : "transparent",
-                      color: "var(--text-dim)",
-                    }}
-                  >
-                    <td style={td}>{(r.timestamp || "").slice(0, 19).replace("T", " ")}</td>
-                    <td style={td} title={r.user_id}>{(r.user_id || "").slice(0, 10) + "…"}</td>
-                    <td style={td} title={r.project_id || ""}>{(r.project_id || "—").slice(0, 14)}</td>
-                    <td style={td}>{(r.tools_called || []).length}</td>
-                    <td style={td}>
-                      {r.citation_guard_triggered
-                        ? <span style={{ color: "#f59e0b" }}>YES</span>
-                        : <span style={{ color: "#22c55e" }}>—</span>}
-                    </td>
-                    <td style={td}>
-                      {sigs.length === 0
-                        ? <span style={{ color: "var(--text-faint)" }}>—</span>
-                        : <span style={{ color: "#ef4444" }}>{sigs.join(", ")}</span>}
-                    </td>
-                    <td style={td}>{r.llm_model || "—"}</td>
-                    <td style={td}>{r.was_retry ? "↻" : "—"}</td>
-                  </tr>
-                  {isOpen && (
-                    <tr data-testid={`admin-audit-detail-${r.turn_id}`}>
-                      <td colSpan={8} style={{
-                        padding: "10px 14px",
-                        background: "var(--bg-elev)",
-                        borderBottom: "1px solid var(--border)",
-                        color: "var(--text-dim)",
-                        whiteSpace: "pre-wrap", wordBreak: "break-word",
-                      }}>
-                        <div><strong style={{ color: "var(--text)" }}>turn_id:</strong> {r.turn_id}</div>
-                        <div><strong style={{ color: "var(--text)" }}>tools_called:</strong> {(r.tools_called || []).join(" · ") || "—"}</div>
-                        <div><strong style={{ color: "var(--text)" }}>citation_guard_paths_fetched:</strong> {(r.citation_guard_paths_fetched || []).join(", ") || "—"}</div>
-                        <div><strong style={{ color: "var(--text)" }}>citation_guard_unverified:</strong> {(r.citation_guard_unverified || []).join(", ") || "—"}</div>
-                        <div><strong style={{ color: "var(--text)" }}>response_tokens:</strong> {r.response_tokens || 0}</div>
-                        {r.extra ? <div><strong style={{ color: "var(--text)" }}>extra:</strong> {JSON.stringify(r.extra)}</div> : null}
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
-        </div>
-      )}
-    </div>
-  );
-}
-const th = { padding: "8px 10px", fontWeight: 500 };
-const td = { padding: "7px 10px" };
 
 
 
 //   • Warm Start + Post-scan Issues: merged into one "Reliability" tab.
-const NAV = [
-  // Feb 2026 — Cockpit is the new admin landing page. Kept at top so
-  // one click from any tab returns to the live-status overview.
-  { id: "cockpit", label: "Cockpit", Icon: Eye, route: "/admin/cockpit" },
-  // Iter 212m-171 — sidebar grouped by responsibility.
-  // Feb 2026 · Sidebar Integrity fix — every entry now has a real
-  // `route:` so browser Back / Forward work naturally across tab
-  // switches (previously 12 items were internal-state-only and the
-  // URL never changed, breaking browser back). The App.jsx <Route>
-  // table has matching paths for each id.
-  { group: "MONITOR" },
-  { id: "overview", label: "Overview", Icon: Eye, route: "/admin/overview" },
-  { id: "llm_credits", label: "LLM Credits", Icon: DollarSign, route: "/admin/llm-credits" },
-  { id: "parliament_live", label: "Parliament Live", Icon: Cpu, route: "/admin/parliament-live" },
+const NAV = buildGroupedAdminNav({
+  cockpit: Eye,
+  overview: Eye,
+  llm_credits: DollarSign,
+  parliament_live: Cpu,
   // Iter 307 — QA Health dashboard is a separate route (/admin/qa),
   // so `route:` short-circuits the internal setPage(id) switch and
   // uses react-router's navigate(...) instead. Same visual pattern
   // as every other sidebar entry; keeps the founder one click away
   // from the live QA metrics without having to memorize a URL.
-  { id: "qa_health", label: "QA Health", Icon: ShieldCheck, route: "/admin/qa" },
-  { id: "maintenance", label: "Maintenance", Icon: Wrench, route: "/admin/maintenance" },
+  qa_health: ShieldCheck,
+  maintenance: Wrench,
   // Iter 331 — Architecture() (learning-health + persona-quality +
   // code-surface tiles) was defined but never wired into renderPage;
   // /admin/architecture silently fell through to Overview.
-  { id: "arch", label: "Architecture", Icon: Cpu, route: "/admin/architecture" },
-  { group: "USERS" },
-  { id: "bin_tracker", label: "BIN Tracker", Icon: Users, route: "/admin/bin-tracker" },
-  { id: "users", label: "Users (Legacy)", Icon: Users, route: "/admin/users" },
-  { id: "support", label: "Support", Icon: Mail, route: "/admin/support" },
-  { id: "suggestions", label: "Suggestions", Icon: MessageCircle, route: "/admin/suggestions" },   // Iter 212m-193
-  { id: "audit", label: "Audit Log", Icon: ShieldAlert, route: "/admin/audit" },
-  { group: "CONFIG" },
-  { id: "feature_flags", label: "Feature Flags", Icon: Zap, route: "/admin/feature-flags" },
-  { id: "house_rules", label: "House Rules V2", Icon: ShieldCheck, route: "/admin/house-rules" },
-  { id: "robot_guide", label: "Robot Guide", Icon: MessageCircle, route: "/admin/robot-guide" },
-  { group: "BUSINESS" },
-  { id: "payments", label: "Payments & Revenue", Icon: DollarSign, route: "/admin/payments" },
-  { id: "tokens", label: "Token P&L", Icon: Cpu, route: "/admin/token-pnl" },
-  { group: "SYSTEM" },
-  { id: "dash", label: "Dashboard", Icon: LayoutDashboard, route: "/admin/dashboard" },
-  { id: "projects", label: "Projects", Icon: Folder, route: "/admin/projects" },
-  { id: "tasks", label: "Tasks", Icon: ListChecks, route: "/admin/tasks" },
-  { id: "agent_perf", label: "Agent Performance", Icon: Activity, route: "/admin/agent-performance" },
-  { id: "mcp", label: "MCP Usage", Icon: Plug, route: "/admin/mcp-usage" },
-  { id: "reliability", label: "Reliability", Icon: ShieldAlert, route: "/admin/reliability" },
-  { id: "settings", label: "Settings", Icon: SettingsIcon, route: "/admin/settings" },
-];
+  arch: Cpu,
+  bin_tracker: Users,
+  users: Users,
+  support: Mail,
+  suggestions: MessageCircle,   // Iter 212m-193
+  audit: ShieldAlert,
+  feature_flags: Zap,
+  house_rules: ShieldCheck,
+  robot_guide: MessageCircle,
+  // 2026-08-27 · Admin Compact M4 — folded in from the rail's
+  // rail-only ADMIN_ITEMS; previously unreachable from the sidebar.
+  api_keys: KeyRound,
+  payments: DollarSign,
+  tokens: Cpu,
+  dash: LayoutDashboard,
+  projects: Folder,
+  tasks: ListChecks,
+  agent_perf: Activity,
+  mcp: Plug,
+  reliability: ShieldAlert,
+  settings: SettingsIcon,
+});
 
 export default function Admin({ initialTab = "overview" }) {
   const navigate = useNavigate();
@@ -3562,7 +2025,7 @@ export default function Admin({ initialTab = "overview" }) {
     switch (page) {
       case "overview":       return <AdminOverview />;
       case "cockpit":        return <AdminCockpit />;
-      case "arch":           return <Architecture />;
+      case "arch":           return <AdminArchitecturePageLazy />;
       case "llm_credits":    return <div style={{ padding: "24px 20px", maxWidth: 900 }}>
                                        <h1 style={{ fontSize: 20, fontWeight: 600, margin: "0 0 16px", color: "var(--text)" }}>LLM Credits</h1>
                                        <LLMCreditMonitor />
@@ -3581,13 +2044,13 @@ export default function Admin({ initialTab = "overview" }) {
       case "agent_perf":     return <AgentPerformancePage />;
       case "mcp":            return <McpUsagePage />;
       case "reliability":    return <ReliabilityPage />;
-      case "payments":       return <PaymentsPage />;
-      case "support":        return <SupportPage />;
+      case "payments":       return <AdminFinancialsLazy />;
+      case "support":        return <AdminSupportPageLazy />;
       case "suggestions":    return <AdminSuggestions />;
-      case "audit":          return <AuditPage />;
+      case "audit":          return <AdminAuditPageLazy />;
       case "house_rules":    return <AdminHouseRules />;
       case "robot_guide":    return <AdminRobotGuide />;
-      case "settings":       return <SettingsPage />;
+      case "settings":       return <AdminSettingsPageLazy />;
       default:               return <AdminOverview />;
     }
   };
@@ -3737,7 +2200,13 @@ export default function Admin({ initialTab = "overview" }) {
             <NotificationBell />
           </div>
         </div>
-        {renderPage()}
+        <React.Suspense fallback={
+          <div style={{ padding: "24px 20px", fontSize: 12, color: "var(--text-faint)" }}>
+            Loading…
+          </div>
+        }>
+          {renderPage()}
+        </React.Suspense>
       </main>
       {/* Iter 212m-238 — floating ORA Chat drawer, available on every admin tab */}
       <OraChatDrawer />

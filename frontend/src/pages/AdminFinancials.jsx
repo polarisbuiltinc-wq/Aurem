@@ -8,11 +8,29 @@
  *  • Every input change → POST /admin/financials/settings → full
  *    recompute returned and rendered in one atomic swap.
  *  • 6-month roadmap chart drawn pure-SVG (no chart lib bloat).
+ *
+ * 2026-08-27 · Admin Compact M2 — merged with the sidebar's old
+ * standalone "Payments & Revenue" tab (was `PaymentsPage()` inside
+ * Admin.jsx). This page is now the ONE financials view: P&L/cost
+ * modeling (above) + the Stripe transaction ledger + reconcile action
+ * (new section below). Both `/admin/financials` (rail) and
+ * `/admin/payments` (sidebar) render this same component — nothing
+ * from either side was dropped, see the "Stripe transactions" section.
  */
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, getToken } from "../lib/api";
 import { cleanErr } from "../lib/cleanErr";
+
+function timeAgo(iso) {
+  if (!iso) return "";
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 0 || isNaN(s)) return "";
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
 
 const TIER_TINT = {
   free:    "#888d99",
@@ -156,6 +174,13 @@ export default function AdminFinancials() {
   const [draft, setDraft] = useState(null);
   const [saving, setSaving] = useState(false);
 
+  // 2026-08-27 · Admin Compact M2 — merged-in payments ledger state
+  // (previously lived only in Admin.jsx's PaymentsPage()).
+  const [payments, setPayments] = useState(null);
+  const [revenue30d, setRevenue30d] = useState(null);
+  const [reconciling, setReconciling] = useState(false);
+  const [reconcileResult, setReconcileResult] = useState(null);
+
   const load = useCallback(async () => {
     setErr("");
     try {
@@ -168,6 +193,32 @@ export default function AdminFinancials() {
       setErr(cleanErr(e, "Failed to load."));
     }
   }, []);
+
+  const loadPayments = useCallback(() => {
+    const h = { Authorization: `Bearer ${getToken()}` };
+    api.get("/admin/payments", { headers: h })
+      .then((r) => setPayments(r.data))
+      .catch(() => setPayments({ payments: [], total_revenue: 0, count: 0 }));
+    api.get("/admin/overview-metrics", { headers: h })
+      .then((r) => setRevenue30d(r.data?.revenue_30d ?? 0))
+      .catch(() => setRevenue30d(0));
+  }, []);
+
+  // Iter 352 — reconcile stuck "pending" rows against Stripe truth.
+  const reconcile = useCallback(async () => {
+    setReconciling(true);
+    try {
+      const r = await api.post("/admin/payments/reconcile", null, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      setReconcileResult(r.data);
+      loadPayments();
+    } catch (e) {
+      setErr(cleanErr(e, "Reconcile failed."));
+    } finally {
+      setReconciling(false);
+    }
+  }, [loadPayments]);
 
   const save = useCallback(async (patch) => {
     setSaving(true);
@@ -184,7 +235,7 @@ export default function AdminFinancials() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); loadPayments(); }, [load, loadPayments]);
 
   if (!data) {
     return (
@@ -545,6 +596,99 @@ export default function AdminFinancials() {
             verticalAlign: "middle", marginRight: 6,
           }}/>Net profit</span>
         </div>
+      </div>
+
+      {/* ── Stripe transactions (merged from the old sidebar
+          "Payments & Revenue" tab, 2026-08-27 · Admin Compact M2) ── */}
+      <div data-testid="admin-financials-payments-section" style={{ marginTop: 28 }}>
+        <h3 style={{ fontSize: 11, color: "var(--text-dim)",
+                     letterSpacing: ".08em", textTransform: "uppercase",
+                     margin: "0 0 14px" }}>
+          Stripe transactions
+        </h3>
+        {!payments ? (
+          <div style={{ fontSize: 12, color: "var(--text-faint)" }}>Loading transactions…</div>
+        ) : (
+          <>
+            <div style={{
+              display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
+              gap: 12, marginBottom: 14,
+            }}>
+              <MetricCard testid="revenue-30d" label="Revenue (30d)"
+                value={dollars(revenue30d || 0)} tone="ok" sub="paid checkouts" />
+              <MetricCard testid="lifetime-revenue" label="Lifetime revenue"
+                value={dollars(payments.total_revenue)} tone="ok" />
+              <MetricCard testid="txn-count" label="Transactions"
+                value={payments.count} tone="neutral" />
+              <MetricCard testid="txn-pending" label="Pending"
+                value={(payments.payments || []).filter((p) => p.payment_status !== "paid").length}
+                tone="warn" />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <button
+                data-testid="reconcile-pending-btn"
+                onClick={reconcile}
+                disabled={reconciling}
+                style={{
+                  padding: "8px 16px", fontSize: 12, fontWeight: 600,
+                  background: "var(--accent, #5eb3f5)", color: "#0a0e14",
+                  border: "none", borderRadius: 6,
+                  cursor: reconciling ? "default" : "pointer",
+                  opacity: reconciling ? 0.6 : 1,
+                }}
+              >{reconciling ? "Reconciling…" : "Reconcile pending with Stripe"}</button>
+              <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
+                Pulls each non-paid session from Stripe and syncs the real status
+                (paid / expired / open) + amount.
+              </span>
+            </div>
+            {reconcileResult && (
+              <div data-testid="reconcile-summary" style={{
+                padding: "10px 14px", marginBottom: 14, fontSize: 11,
+                fontFamily: "'JetBrains Mono', monospace", color: "var(--text-dim)",
+                background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 6,
+              }}>
+                scanned {reconcileResult.scanned} · paid {reconcileResult.counts?.paid ?? 0} ·
+                expired {reconcileResult.counts?.expired ?? 0} ·
+                still open {reconcileResult.counts?.open ?? 0} ·
+                errors {reconcileResult.counts?.error ?? 0}
+              </div>
+            )}
+            <div data-testid="payments-ledger" style={{
+              background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8,
+              overflow: "hidden",
+            }}>
+              <div style={{
+                display: "grid", gridTemplateColumns: "90px 1fr 100px 100px 100px",
+                gap: 8, padding: "8px 16px", fontSize: 10, color: "var(--text-faint)",
+                textTransform: "uppercase", letterSpacing: ".04em",
+                borderBottom: "1px solid var(--border)",
+              }}>
+                <span>Tier</span><span>User</span><span>Amount</span><span>Status</span><span>When</span>
+              </div>
+              {(payments.payments || []).map((p, i) => (
+                <div key={p.id || i} style={{
+                  display: "grid", gridTemplateColumns: "90px 1fr 100px 100px 100px",
+                  gap: 8, padding: "9px 16px", fontSize: 12,
+                  borderTop: i > 0 ? "1px solid var(--border)" : "none",
+                }}>
+                  <span style={{ color: TIER_TINT[p.tier] || "var(--text)" }}>{p.tier}</span>
+                  <span style={{ color: "var(--text-faint)" }}>{p.user_email}</span>
+                  <span style={{ fontFamily: "monospace" }}>{dollars(p.amount)}</span>
+                  <span style={{ color: p.payment_status === "paid" ? "#6dd4a1" : "var(--text-faint)" }}>
+                    {p.payment_status || p.status}
+                  </span>
+                  <span style={{ color: "var(--text-faint)" }}>{timeAgo(p.created_at)}</span>
+                </div>
+              ))}
+              {!(payments.payments || []).length && (
+                <div style={{ padding: "16px", fontSize: 12, color: "var(--text-faint)" }}>
+                  No transactions yet.
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

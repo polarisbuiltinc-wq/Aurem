@@ -52,12 +52,19 @@ const SETTINGS_ITEMS = [
   { to: "/settings?tab=vault",        label: "Vault",           icon: Lock,     testid: "rail-item-vault" },
   { to: "/integrations",              label: "IDE setup (MCP)", icon: Plug,     testid: "rail-item-mcp" },
 ];
+import { findAdminNavItem } from "../../lib/adminNav";
+
+// 2026-08-27 · Admin Compact M4/M5 — labels/routes now sourced from the
+// single shared `ADMIN_NAV` (lib/adminNav.js) instead of a separately
+// hand-maintained list; this is what fixes the "Overview" mislabel
+// (M5) — it was pointing at Cockpit because this list drifted out of
+// sync with the sidebar's own copy. Icons stay rail-specific.
 const ADMIN_ITEMS = [
-  { to: "/admin",             label: "Overview",    icon: LayoutDashboard, testid: "rail-item-admin-overview" },
-  { to: "/admin/financials",  label: "Financials",  icon: Landmark,        testid: "rail-item-admin-financials" },
-  { to: "/admin/users",       label: "Users",       icon: UsersIcon,       testid: "rail-item-admin-users" },
-  { to: "/admin/suggestions", label: "Suggestions", icon: Lightbulb,       testid: "rail-item-admin-suggestions" },
-  { to: "/admin/api-keys",    label: "API keys",    icon: KeyRound,        testid: "rail-item-admin-apikeys" },
+  { to: findAdminNavItem("cockpit").route,  label: findAdminNavItem("cockpit").label,  icon: LayoutDashboard, testid: "rail-item-admin-overview" },
+  { to: "/admin/financials", label: "Financials",  icon: Landmark,        testid: "rail-item-admin-financials" },
+  { to: findAdminNavItem("users").route,    label: "Users",       icon: UsersIcon,       testid: "rail-item-admin-users" },
+  { to: findAdminNavItem("suggestions").route, label: "Suggestions", icon: Lightbulb,    testid: "rail-item-admin-suggestions" },
+  { to: findAdminNavItem("api_keys").route, label: "API keys",    icon: KeyRound,        testid: "rail-item-admin-apikeys" },
 ];
 
 const SECTIONS = [
