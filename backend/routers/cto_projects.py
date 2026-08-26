@@ -3504,7 +3504,7 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
                 asyncio.create_task(update_brain_after_task(
                     db=db,
                     project_id=proj.get("project_id", ""),
-                    user_id=user_id,
+                    user_id=proj.get("user_id"),
                     changed_files=list(edits.keys()),
                     task_id=task_id,
                     github_token=user_token or "",
@@ -4023,7 +4023,7 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
                 asyncio.create_task(update_brain_after_task(
                     db=db,
                     project_id=proj.get("project_id", ""),
-                    user_id=user_id,
+                    user_id=proj.get("user_id"),
                     changed_files=list(edits.keys()),
                     task_id=task_id,
                     github_token=user_token or "",

@@ -129,6 +129,10 @@ GET_ENDPOINTS = [
     # admin_ops_config
     ("ops:settings", "/admin/settings"),
     ("ops:db-health", "/admin/db-health"),
+    # 2026-08 security-triage fix — GET /admin/cache/analytics-stats
+    # used to 500 on every call (undefined `_cache_stats`). Now wired
+    # to services.admin_analytics_cache.stats().
+    ("ops:cache-analytics-stats", "/admin/cache/analytics-stats"),
     # admin_analytics
     ("analytics:dashboard", "/admin/dashboard"),
     ("analytics:loop-metrics", "/admin/loop-metrics"),

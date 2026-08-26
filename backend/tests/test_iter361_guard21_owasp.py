@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from scripts.g21_security_scan import (
     check_admin_router_gates,
     run_scan,
+    scan_dangerous_calls,
     scan_misconfig,
     scan_supply_chain,
 )
@@ -79,6 +80,76 @@ class TestStaticScan:
         (rdir / "admin_leak.py").write_text(
             "from fastapi import APIRouter\nrouter = APIRouter(prefix='/admin/leak')\n")
         assert "admin_leak.py" in check_admin_router_gates(routers_dir=str(rdir))
+
+
+# ══════════════ C. AST DANGEROUS-CALL GATE (2026-08 security triage) ══════════════
+# Replaces naive substring matching (which flagged vanguard_scanner.py's
+# own regex-pattern literals, generation_rules_triggers.py's rule
+# descriptions, tools_bridge.py's ast.literal_eval, and orchestrator.py's
+# asyncio.create_subprocess_exec as if they were real eval()/exec()
+# calls). This gate walks the real AST, so those lookalikes are
+# structurally different nodes and are never matched.
+class TestAstDangerousCallGate:
+    def test_real_codebase_is_clean(self):
+        """Ratchet baseline — the AUREM backend must have ZERO real
+        eval/exec/os.system/shell=True/verify=False/pickle.load calls
+        today. Verified during the 2026-08 security triage."""
+        d = scan_dangerous_calls()
+        assert d["finding_count"] == 0, f"real dangerous calls found: {d['findings']}"
+
+    def test_full_scan_still_passes_with_ast_gate_wired_in(self):
+        assert run_scan()["pass"] is True
+
+    def test_detects_real_eval_and_exec_calls(self, tmp_path):
+        (tmp_path / "risky.py").write_text(
+            "def handler(user_input):\n"
+            "    eval(user_input)\n"
+            "    exec(user_input)\n"
+        )
+        d = scan_dangerous_calls(root=str(tmp_path))
+        kinds = {f["kind"] for f in d["findings"]}
+        assert "real_eval_call" in kinds
+        assert "real_exec_call" in kinds
+
+    def test_detects_os_system_shell_true_verify_false_pickle(self, tmp_path):
+        (tmp_path / "risky2.py").write_text(
+            "import os, subprocess, pickle, requests\n"
+            "def handler(x):\n"
+            "    os.system(x)\n"
+            "    subprocess.run(['sh', '-c', x], shell=True)\n"
+            "    requests.get('https://x', verify=False)\n"
+            "    pickle.loads(x)\n"
+        )
+        d = scan_dangerous_calls(root=str(tmp_path))
+        kinds = {f["kind"] for f in d["findings"]}
+        assert kinds == {"real_os_system", "real_shell_true",
+                          "real_verify_false", "real_pickle_load"}
+
+    def test_does_not_flag_literal_eval_or_create_subprocess_exec(self, tmp_path):
+        """The exact false-positive class found during triage: safe
+        code whose name merely CONTAINS "eval(" / "exec(" as a
+        substring must never be flagged."""
+        (tmp_path / "safe.py").write_text(
+            "import ast, asyncio\n"
+            "def handler(raw):\n"
+            "    return ast.literal_eval(raw)\n"
+            "async def run(path):\n"
+            "    return await asyncio.create_subprocess_exec('python3', path)\n"
+        )
+        d = scan_dangerous_calls(root=str(tmp_path))
+        assert d["finding_count"] == 0, d["findings"]
+
+    def test_does_not_flag_regex_pattern_literals_or_description_strings(self, tmp_path):
+        """The exact vanguard_scanner.py / generation_rules_triggers.py
+        false-positive: a STRING that contains the text "exec(" /
+        "eval(" (regex pattern source, or a human-readable rule
+        description) is not a Call node and must never be flagged."""
+        (tmp_path / "rules.py").write_text(
+            "PATTERN = r'(?<![.\\\\w])exec\\\\s*\\\\('\n"
+            "TRIGGER = {'eval_usage': 'any call to `eval(`'}\n"
+        )
+        d = scan_dangerous_calls(root=str(tmp_path))
+        assert d["finding_count"] == 0, d["findings"]
 
 
 # ══════════════════════ B. LIVE INJECTION FUZZ ══════════════════════

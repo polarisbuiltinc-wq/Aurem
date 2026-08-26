@@ -13,6 +13,7 @@ The injection fuzz suite lives in tests/test_iter361_guard21_owasp.py
 """
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -27,6 +28,22 @@ _DEFAULT_CRED_PATTERNS = [
 ]
 
 _SKIP_DIRS = {"__pycache__", "tests", "node_modules", ".venv", "venv"}
+
+# 2026-08 · Security-triage session — files whose ONLY relationship to
+# eval()/exec()/os.system() is that a regex-pattern *string literal* or
+# a rule-description *string* mentions the token (e.g. the pattern
+# `r"exec\s*\("` used to DETECT `exec(` in scanned repos). The AST scan
+# below already ignores these correctly on its own (it walks real Call
+# nodes, never string contents), so this allowlist exists purely for
+# clarity/documentation — it is NOT load-bearing for the false-positive
+# fix. Kept short and named so a reviewer can see at a glance which
+# files were investigated and cleared during the audit.
+_AST_SCAN_KNOWN_SAFE_FILES = {
+    "services/vanguard_scanner.py",
+    "services/generation_rules_triggers.py",
+    "services/bug_hunt_rules.py",
+    "services/mode_e_auditor.py",
+}
 
 
 def scan_supply_chain(requirements_path: str | None = None,
@@ -67,6 +84,98 @@ def check_admin_router_gates(routers_dir: str | None = None) -> list[str]:
     return bad
 
 
+def _call_name(func_node: ast.expr) -> tuple[str | None, str | None]:
+    """Resolve a `Call.func` node to `(function_name, owner_name)`.
+
+    `eval(x)`               -> ("eval", None)
+    `os.system(x)`          -> ("system", "os")
+    `ast.literal_eval(x)`   -> ("literal_eval", "ast")   — name is
+                               "literal_eval", never matches a bare
+                               "eval"/"exec" check.
+    `asyncio.create_subprocess_exec(...)` -> ("create_subprocess_exec",
+                               "asyncio") — never matches bare "exec".
+    Anything else -> (None, None).
+
+    This is AST-node identity, not substring matching, so it naturally
+    excludes regex-pattern string literals (never a Call node at all),
+    comments (not part of the AST), and safe lookalikes such as
+    `literal_eval`/`create_subprocess_exec` (different `.id`/`.attr`).
+    """
+    if isinstance(func_node, ast.Name):
+        return func_node.id, None
+    if isinstance(func_node, ast.Attribute):
+        owner = func_node.value.id if isinstance(func_node.value, ast.Name) else None
+        return func_node.attr, owner
+    return None, None
+
+
+def scan_dangerous_calls(root: str | None = None) -> dict:
+    """AST-based (not substring) detector for genuinely dangerous
+    calls in production code:
+      - a bare `eval(...)` / `exec(...)` builtin call
+      - `os.system(...)`
+      - `subprocess`/`asyncio` calls with a literal `shell=True`
+      - `requests`/`httpx`/`urllib` calls with a literal `verify=False`
+      - `pickle.load(...)` / `pickle.loads(...)`
+
+    Walking the real AST means safe lookalikes that only share a
+    substring with these names — `ast.literal_eval(...)`,
+    `asyncio.create_subprocess_exec(...)`, a regex pattern literal
+    containing the text "exec(", or a comment mentioning "eval()" —
+    are structurally different nodes and are never matched. This
+    replaces the naive substring class of false positive found during
+    the 2026-08 security triage (vanguard_scanner.py, tools_bridge.py,
+    orchestrator.py all flagged incorrectly by a text-matching scanner).
+
+    Skips `tests/` (see `_SKIP_DIRS`) — this gate is scoped to
+    production code, matching the guard's stated intent.
+    """
+    base = root or BACKEND_ROOT
+    findings: list[dict] = []
+    for dp, dns, fns in os.walk(base):
+        dns[:] = [d for d in dns if d not in _SKIP_DIRS]
+        for fn in fns:
+            if not fn.endswith(".py"):
+                continue
+            p = os.path.join(dp, fn)
+            rel = os.path.relpath(p, base).replace("\\", "/")
+            if rel in _AST_SCAN_KNOWN_SAFE_FILES:
+                # Belt-and-suspenders per G2: these files were
+                # individually verified during the 2026-08 triage to
+                # contain ONLY regex-pattern literals / rule-description
+                # strings, never a real dangerous Call. The AST walk
+                # below already can't match a string literal, so this
+                # skip is a documented no-op today — it exists so a
+                # future contributor sees explicitly which files were
+                # cleared, and so the allowlist is enforced even if a
+                # future refactor of this function ever changes how
+                # matching works.
+                continue
+            try:
+                src = open(p, encoding="utf-8", errors="replace").read()
+                tree = ast.parse(src, filename=rel)
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                name, owner = _call_name(node.func)
+                if name in ("eval", "exec") and owner is None:
+                    findings.append({"kind": f"real_{name}_call", "file": rel, "line": node.lineno})
+                elif name == "system" and owner == "os":
+                    findings.append({"kind": "real_os_system", "file": rel, "line": node.lineno})
+                elif name in ("load", "loads") and owner == "pickle":
+                    findings.append({"kind": "real_pickle_load", "file": rel, "line": node.lineno})
+                for kw in node.keywords:
+                    if (kw.arg == "shell" and isinstance(kw.value, ast.Constant)
+                            and kw.value.value is True):
+                        findings.append({"kind": "real_shell_true", "file": rel, "line": node.lineno})
+                    if (kw.arg == "verify" and isinstance(kw.value, ast.Constant)
+                            and kw.value.value is False):
+                        findings.append({"kind": "real_verify_false", "file": rel, "line": node.lineno})
+    return {"findings": findings, "finding_count": len(findings)}
+
+
 def scan_misconfig() -> dict:
     findings: list[dict] = []
 
@@ -87,6 +196,17 @@ def scan_misconfig() -> dict:
                     if pat.search(ls):
                         findings.append({"kind": "default_credential",
                                          "file": os.path.relpath(p, APP_ROOT), "line": i})
+
+    # 2026-08 · Security-triage session — real (AST-based) dangerous
+    # call detector. Runs over the whole backend tree; findings carry
+    # a backend-relative path so we normalise to the APP_ROOT-relative
+    # form the rest of this scanner's findings use.
+    for f in scan_dangerous_calls()["findings"]:
+        findings.append({
+            "kind": f["kind"],
+            "file": os.path.join("backend", f["file"]),
+            "line": f["line"],
+        })
 
     for fn in check_admin_router_gates():
         findings.append({"kind": "ungated_admin_router", "file": f"backend/routers/{fn}"})

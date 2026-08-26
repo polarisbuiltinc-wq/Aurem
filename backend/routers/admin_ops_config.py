@@ -42,6 +42,7 @@ from services.admin_analytics_cache import (
     cached_agg,
     invalidate as _cache_invalidate,
     mongo_swr_cache,
+    stats as _cache_stats,
 )
 
 logger = logging.getLogger(__name__)
