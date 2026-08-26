@@ -834,7 +834,7 @@ Not built (explicitly deferred): Council premium (still gated behind founder acc
 Deferred (unchanged from Phase-1 report): 1538 complexity refactors, 143-minus-real-bugs undefined-var false-positives + the 4 confirmed dead-code spots (cleanup only, zero runtime risk), type-hint coverage, 2 circular imports, MD5/non-security random.
 
 
-## 2026-08-27 — Admin Compact Phase 1: merge + improve, zero deletions
+## 2026-08-27 — Admin Compact Phase 1: merge + improve, zero deletions (DONE — see removals-execution below)
 
 Founder rule for this pass: MERGE pages the founder built, make them fast — do NOT delete any page/route/capability. Only allowed "removal" was redirecting a duplicate route (target preserved).
 
@@ -848,6 +848,17 @@ Founder rule for this pass: MERGE pages the founder built, make them fast — do
   1. `backend/routers/admin.py`'s `include_router` registration — 0 real endpoints (all moved to `admin_analytics.py`/etc. in a past refactor); the file+helpers stay, only the empty router mount is a candidate. Low risk, no inbound-link check needed (backend-only).
   2. `PaymentsPage()` function in `Admin.jsx` — fully unused since M2 (0 remaining references, grep-confirmed). Low risk, no inbound-link check needed (never routed to).
   3. Correction to the earlier admin-audit record: `AdminSystemHealth.jsx` (738 lines) was previously reported as "fully orphaned" — that was **wrong**. It's actually linked from `AdminOverview.jsx:375` (`data-testid="goto-system-health"`) and referenced by `AdminCockpit.jsx` and `lib/cleanErr.js`'s error message. **Not** a removals candidate.
+
+
+## 2026-08-27 — Admin Compact: founder-approved removals executed (A1 + A2)
+
+Founder ticked both M7 removals-candidates. Executed:
+- **A1**: removed `app.include_router(admin_router, prefix="/api/aurem-dev")` + its now-unused import from `backend/main.py`. `routers/admin.py` itself and ALL its helper functions (`_require_admin`, `_compute_activation_funnel`, etc.) untouched — confirmed still importable by `admin_qa.py`/`admin_analytics.py`/`admin_users.py`/`admin_ops_config.py`. App boots clean (`python3 -c "import main"` + `/api/health` 200 after restart).
+- **A2**: fresh grep confirmed `PaymentsPage` had exactly one reference (its own definition) — zero call sites anywhere in the frontend. Removed the function (104 lines) from `Admin.jsx` (now 2111 lines, down from 3746 at the start of Admin Compact).
+- **Regression proof**: `git stash` A/B on the 12 test files that import `routers.admin.router` directly — byte-identical 28 pre-existing failures both with and without my changes (stale tests referencing endpoints that moved out of `admin.py` in a past "Phase 2 split," unrelated to today's work). Zero new regressions.
+- Rail-drift confirm (B1): `RailShell.jsx`'s Ship/Insights/Settings flyouts (`SHIP_ITEMS`, `INSIGHT_ITEMS`, `SETTINGS_ITEMS`) are a **separate**, non-unified nav list — NOT sourced from `lib/adminNav.js` (which only covers the founder-only Admin flyout, M4's scope). Flagged as a deferred finding only, not audited further.
+
+**Admin Compact workstream is now DONE.** Queue held per founder instruction — next milestone is the founder's own production verification (P0 connect fix deploy, GitHub App callback URL check, real prod connect, T3 push-proof, real task confirming Brain V2), not new ORA work.
 
 
 ## 2026-08-27 — Security closeout Part 1: g4_secret_scanner.py wired into CI

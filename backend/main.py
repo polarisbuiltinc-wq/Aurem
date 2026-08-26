@@ -39,7 +39,6 @@ from routers.github_app import router as github_app_router  # 2026-02-10 · Phas
 from routers.cto_projects import router as cto_projects_router
 from routers.automations import router as automations_router
 from routers.upload import router as upload_router
-from routers.admin import router as admin_router
 from routers.migrations_admin import router as migrations_admin_router  # Feb 2026 — admin-gated migration framework endpoints (see backend/migrations/README.md)
 from routers.backups_admin import router as backups_admin_router  # 2026-02-09 — admin-gated R2 backup endpoints (item #5)
 from routers.admin_public import router as admin_public_router  # Iter 358 — public /admin/errors/report sink
@@ -3202,7 +3201,6 @@ app.include_router(github_app_router, prefix="/api/aurem-dev")  # 2026-02-10 · 
 app.include_router(cto_projects_router, prefix="/api/aurem-dev")
 app.include_router(automations_router, prefix="/api/aurem-dev")
 app.include_router(upload_router,        prefix="/api/aurem-dev")
-app.include_router(admin_router,         prefix="/api/aurem-dev")
 app.include_router(migrations_admin_router, prefix="/api/aurem-dev")  # /api/aurem-dev/admin/migrations/*
 app.include_router(backups_admin_router,    prefix="/api/aurem-dev")  # /api/aurem-dev/admin/backups/*
 app.include_router(admin_public_router,  prefix="/api/aurem-dev")  # Iter 358 — un-gated /admin/errors/report
