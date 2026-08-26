@@ -25,13 +25,20 @@
  *     parent opens the findings drawer.
  */
 import React, { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, X, ChevronRight, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, X, ChevronRight, Loader2 } from "lucide-react";
 import { api } from "../lib/api";
+import WorkCard from "./WorkCard";
 
 // Session-scoped storage key for the "just completed" state so a
 // closed tab clears it. Distinct from any localStorage keys — that's
 // the whole point of Directive Part D §3.
 const JUST_COMPLETED_KEY = "aurem_scan_just_completed";
+
+// Build Prompt v4 · Phase B (2026-08-27) — how long a DB-persisted scan
+// stays eligible to render as a "receipt" WorkCard, flag-gated path only.
+// Reuses the same 4h window the legacy sessionStorage TTL already used
+// (see markScanJustCompleted below) rather than inventing a new number.
+const _RECEIPT_WINDOW_MS = 4 * 60 * 60 * 1000;
 
 // Storage limits the strip payload we cache so a huge finding list
 // doesn't bloat sessionStorage.
@@ -104,6 +111,10 @@ export default function ScanStatusStrip({
   // don't wait for the /backlog poll to reflect the dismiss.
   const [locallyHidden, setLocallyHidden] = useState(false);
   const justCompleted = readJustCompleted();
+  // Build Prompt v4 · Phase B — DB-backed receipt, read via the
+  // ALREADY-EXISTING GET /codebase-health/last endpoint (reused, not a
+  // new endpoint). Flag-gated; null/undefined for everyone until proven.
+  const [lastScan, setLastScan] = useState(null);
 
   // Poll backlog when project changes or when scan finishes.
   const refreshBacklog = useCallback(async () => {
@@ -117,13 +128,25 @@ export default function ScanStatusStrip({
     }
   }, [projectId]);
 
+  const refreshLastScan = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const r = await api.get(`/codebase-health/last?project_id=${encodeURIComponent(projectId)}`);
+      setLastScan(r.data || null);
+    } catch (_e) {
+      setLastScan(null);
+    }
+  }, [projectId]);
+
   useEffect(() => {
     setLocallyHidden(false);
     refreshBacklog();
-  }, [refreshBacklog, scanState]);
+    refreshLastScan();
+  }, [refreshBacklog, refreshLastScan, scanState]);
 
   // ── State machine — pick which render branch is active ──────────
-  // Priority: in_progress (live) > just_completed (session) > backlog reminder.
+  // Priority: in_progress (live) > receipt (flag-on, DB-backed) >
+  // just_completed (session, flag-off legacy) > backlog reminder.
   if (!projectId || locallyHidden) return null;
 
   if (scanState === "in_progress") {
@@ -143,7 +166,49 @@ export default function ScanStatusStrip({
     );
   }
 
-  // State 2 — just-completed result (session-scoped).
+  // Build Prompt v4 · Phase B — DB-backed receipt (flag-on only). Fixes
+  // the confirmed bug: a clean scan previously deleted its own
+  // sessionStorage result (see markScanJustCompleted below) and relied
+  // on a 4s toast, leaving nothing durable. This branch reads the real
+  // persisted row instead, so clean/critical/high all render the same
+  // way and survive reload. Flag-off users fall through unchanged.
+  if (lastScan?.workcard_enabled && scanState !== "in_progress"
+      && lastScan?.score != null && lastScan?.created_at
+      && (Date.now() - Number(lastScan.created_at) * 1000) < _RECEIPT_WINDOW_MS) {
+    let critical = 0, high = 0;
+    for (const cat of Object.values(lastScan.breakdown || {})) {
+      critical += cat?.counts?.critical || 0;
+      high += cat?.counts?.high || 0;
+    }
+    const tone = critical > 0 ? "red" : high > 0 ? "amber" : "green";
+    const title = critical > 0
+      ? `${critical} critical issue${critical === 1 ? "" : "s"} found`
+      : high > 0
+        ? `${high} high issue${high === 1 ? "" : "s"} found`
+        : "Scan clean — no critical or high issues";
+    return (
+      <WorkCard
+        testId="scan-strip-receipt"
+        tone={tone}
+        badgeLabel="Scan complete"
+        icon={tone === "green" ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+        title={title}
+        body={`${lastScan.scanned_files ?? 0} files scanned${projectName ? ` — ${projectName}` : ""}`}
+        primaryAction={critical > 0 || high > 0 ? {
+          label: "Review findings",
+          testId: "scan-strip-receipt-review-btn",
+          onClick: onReviewFindings,
+        } : undefined}
+        secondaryAction={{
+          label: "Dismiss",
+          testId: "scan-strip-receipt-dismiss-btn",
+          onClick: () => setLocallyHidden(true),
+        }}
+      />
+    );
+  }
+
+  // State 2 — just-completed result (session-scoped, flag-off legacy).
   if (justCompleted && scanState !== "in_progress"
       && justCompleted.project_id === projectId
       && (justCompleted.critical > 0 || justCompleted.high > 0)) {

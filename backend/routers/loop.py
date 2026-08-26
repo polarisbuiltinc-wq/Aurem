@@ -26,7 +26,7 @@ import json
 import os
 import time
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
@@ -38,6 +38,8 @@ from cto_services.db import get_db
 from services import loop_engine as eng
 
 logger = logging.getLogger(__name__)
+from services.feature_flags import is_enabled
+
 router = APIRouter(prefix="/loop", tags=["Loop Mode"])
 
 # Release It! Governor pattern — hard wall-clock ceiling on the SSE
@@ -795,6 +797,25 @@ async def loop_status(loop_id: str,
         raise HTTPException(404, "Loop not found")
     if doc.get("user_id") != user["user_id"]:
         raise HTTPException(404, "Loop not found")
+    # Build Prompt v4 · Phase C (D4) — the ONE sanctioned additive
+    # response field. Computed HERE in routers/loop.py (not a protected
+    # file — a smaller-footprint choice than touching loop_engine.py,
+    # logged per G5) using the exact same formula
+    # sweep_expired_awaiting_confirmations() already uses for its own
+    # cutoff (updated_at + AWAITING_CONFIRM_MAX_S). Only meaningful
+    # while the loop is actually waiting on the user; omitted otherwise.
+    if doc.get("state") in (eng.LoopState.AWAITING_CONFIRMATION.value,
+                             eng.LoopState.PAUSED_FOR_USER.value):
+        updated_at = doc.get("updated_at")
+        if isinstance(updated_at, datetime):
+            if updated_at.tzinfo is None:
+                updated_at = updated_at.replace(tzinfo=timezone.utc)
+            expires_dt = updated_at + timedelta(seconds=eng.AWAITING_CONFIRM_MAX_S)
+            doc["expires_at"] = expires_dt.isoformat()
+    # Phase C rollout flag — same pattern as Phase A/B (default OFF,
+    # allowlist test_admin_001). Gates the new countdown + Expired-card
+    # UI so nothing changes for anyone else until the founder reviews.
+    doc["workcard_enabled"] = await is_enabled("workcard_loop_receipts", user_id=user["user_id"])
     return doc
 
 

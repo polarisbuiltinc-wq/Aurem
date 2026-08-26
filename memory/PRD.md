@@ -3,6 +3,29 @@
 **Live URL**: https://auremcto.com
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
+## 2026-08-27 (overnight, latest) — WorkCard/Output-Rendering Contract build (Phases A→D) complete — testing_agent verified across 3 passes, all new UI flag-gated to test_admin_001 only
+
+Fixed the "work happened, chip vanished, nothing remains" pattern across FirstScanCard,
+ScanStatusStrip (security scan), and Loop Mode. Full evidence, decision log, and the 13-item
+acceptance scorecard live in `/app/memory/night_run_report_2026-08-27.md`; implementation
+summary in `/app/memory/CHANGELOG.md`. All new behavior sits behind Mongo feature flags
+(`workcard_first_scan`, `workcard_scan_strip`, `workcard_loop_receipts`), default OFF,
+allowlisted only to `test_admin_001` — zero behavior change for any other user until the
+founder reviews and widens the rollout.
+
+**P0 remaining (founder action, not agent work):** review the 3 flags in Preview and decide
+rollout (`rollout_pct` / broaden `user_allowlist`) when ready. Flag removal itself was
+prepared conceptually but intentionally not executed.
+
+**P1 observations logged, NOT fixed (out of scope, flagging for a future session):**
+- `loop_locks` release is "best-effort" and can get stuck after a real expiry, blocking a new
+  loop start on that project until its TTL clears (`services/loop_engine.py`).
+- The "server restarted mid-loop" error class (46.25% of `loop_errors`, the single largest
+  category) was explicitly out of scope this run (D5) — still the top real bug class.
+- `test_health_score_get_shape_and_categories` (admin platform-health test, unrelated
+  subsystem) now fails because real Loop telemetry from this session's live testing exists
+  where the test assumed none would — test fragility, not a Phase A-D defect.
+
 ## 2026-08-26 (later) — Production deployment failure fixed: `/health` upstream timeouts + topup_alerts duplicate-key race
 
 Founder shared live production deploy logs showing recurring nginx

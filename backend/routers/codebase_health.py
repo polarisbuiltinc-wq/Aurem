@@ -52,8 +52,17 @@ from routers.security_scan import (
 from services.scan_cache import (
     get_cached_text_cache, put_cached_text_cache,
 )
+from services.feature_flags import is_enabled
 
 router = APIRouter(prefix="/codebase-health", tags=["Codebase Health"])
+
+# Build Prompt v4 · Phase B — persistent scan-strip rollout flag. Default
+# OFF; ON only for the allowlisted test account, same pattern as Phase A's
+# workcard_first_scan. Reused on the ALREADY-EXISTING GET /last endpoint
+# (no new endpoint) so ScanStatusStrip can rehydrate a durable, DB-backed
+# receipt — including a clean scan — instead of the flag-off legacy
+# sessionStorage-only path (which explicitly self-deletes on clean).
+_WORKCARD_STRIP_FLAG = "workcard_scan_strip"
 logger = logging.getLogger(__name__)
 
 
@@ -431,10 +440,14 @@ async def last_scan(
     # user's scan data.
     user = await current_dev(authorization)
     user_id = user["user_id"]
+    # Build Prompt v4 · Phase B — computed once, included on every branch
+    # below so the frontend always gets a consistent boolean regardless
+    # of which return path fires.
+    workcard_enabled = await is_enabled(_WORKCARD_STRIP_FLAG, user_id=user_id)
     db = get_db()
     if db is None:
         # Don't 503 — frontend silently hides the ring on errors.
-        return {"ok": True, "score": None}
+        return {"ok": True, "score": None, "workcard_enabled": workcard_enabled}
     try:
         doc = await db.codebase_health_scans.find_one(
             {"user_id": user_id, "project_id": project_id,
@@ -444,10 +457,10 @@ async def last_scan(
         )
     except Exception as e:
         logger.debug("codebase_health_scans read failed: %r", e)
-        return {"ok": True, "score": None}
+        return {"ok": True, "score": None, "workcard_enabled": workcard_enabled}
     if not doc:
         # Empty state — 200 with `score: null` instead of 404 noise.
-        return {"ok": True, "score": None}
+        return {"ok": True, "score": None, "workcard_enabled": workcard_enabled}
     # Iter 212m-147 — Defensive guard: a persisted (score=0, total=0)
     # row is logically impossible from a real scan (0 findings yields
     # score=100), so it can only come from a legacy bad write or a
@@ -456,7 +469,7 @@ async def last_scan(
     _score = doc.get("score")
     _total = doc.get("total")
     if _score == 0 and (not _total or _total == 0):
-        return {"ok": True, "score": None}
+        return {"ok": True, "score": None, "workcard_enabled": workcard_enabled}
     return {
         "ok":            True,
         "score":         doc.get("score"),
@@ -471,6 +484,7 @@ async def last_scan(
         # instead of showing "unscanned" after the user already paid.
         "breakdown":     doc.get("breakdown") or {},
         "created_at":    doc.get("created_at"),
+        "workcard_enabled": workcard_enabled,
     }
 
 

@@ -31,8 +31,9 @@
 import React, { useState } from "react";
 import {
   GitCommit, Upload, X, FileText, ChevronDown, ChevronRight,
-  ShieldCheck, ShieldAlert,
+  ShieldCheck, ShieldAlert, Clock,
 } from "lucide-react";
+import { useExpiryCountdown, formatCountdown } from "../hooks/useExpiryCountdown";
 
 // Build a fast lookup map: path -> diff row.
 function _buildDiffMap(files_diff) {
@@ -141,8 +142,9 @@ function FileDiffChip({ row }) {
   );
 }
 
-export default function ShipPendingCard({ pending, busy, onConfirm }) {
+export default function ShipPendingCard({ pending, busy, onConfirm, expiresAt }) {
   const [expanded, setExpanded] = useState(false);
+  const secondsLeft = useExpiryCountdown(expiresAt);
   if (!pending) return null;
   const {
     owner, repo, branch, files = [], file_count, commit_message,
@@ -200,6 +202,20 @@ export default function ShipPendingCard({ pending, busy, onConfirm }) {
             )}
           </div>
         </div>
+        {secondsLeft != null && (
+          <span
+            data-testid="ship-pending-countdown"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
+              fontSize: 10.5, fontWeight: 700,
+              color: secondsLeft <= 60 ? "#f87171" : "#FF6608",
+              fontFamily: "'JetBrains Mono', monospace", flexShrink: 0,
+            }}
+          >
+            <Clock size={11} />
+            {formatCountdown(secondsLeft)}
+          </span>
+        )}
       </div>
 
       {/* Iter 328 · pre-approval safety pill. Only renders when the

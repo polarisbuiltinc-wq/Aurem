@@ -11,9 +11,11 @@
  * proceed" follow-up) lives in ChatPanel.jsx.
  */
 import React from "react";
-import { Check, X, Sparkles } from "lucide-react";
+import { Check, X, Sparkles, Clock } from "lucide-react";
+import { useExpiryCountdown, formatCountdown } from "../hooks/useExpiryCountdown";
 
-export default function PlanApprovalCard({ onApprove, onCancel, disabled }) {
+export default function PlanApprovalCard({ onApprove, onCancel, disabled, expiresAt }) {
+  const secondsLeft = useExpiryCountdown(expiresAt);
   return (
     <div
       data-testid="plan-approval-card"
@@ -35,6 +37,19 @@ export default function PlanApprovalCard({ onApprove, onCancel, disabled }) {
         <strong style={{ fontSize: 12, color: "#c4b5fd", letterSpacing: 0.4 }}>
           Plan ready — your approval needed
         </strong>
+        {secondsLeft != null && (
+          <span
+            data-testid="plan-approval-countdown"
+            style={{
+              marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4,
+              fontSize: 10.5, fontWeight: 700, color: secondsLeft <= 60 ? "#fda4af" : "#a78bfa",
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
+          >
+            <Clock size={11} />
+            {formatCountdown(secondsLeft)}
+          </span>
+        )}
       </div>
       <div style={{
         fontSize: 11.5, color: "var(--text-dim, #c2c9d6)", lineHeight: 1.55,

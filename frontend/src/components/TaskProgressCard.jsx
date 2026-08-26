@@ -82,7 +82,7 @@ function FailedCard({ taskId, task, project, onOpenLivePopup }) {
   const isDeterministic = task.error_category === "internal";
 
   return (
-    <div data-testid={`ship-status-${taskId}`} style={{
+    <div data-testid={`ship-status-${taskId}`} role="status" aria-live="polite" style={{
       padding: "10px 12px",
       background: "rgba(255,107,107,0.06)",
       border: "1px solid rgba(255,107,107,0.3)",
@@ -269,7 +269,7 @@ function BlockedCard({ taskId, task }) {
   const reason = task.blocked_reason || "";
   const paths = Array.isArray(task.blocked_paths) ? task.blocked_paths : [];
   return (
-    <div data-testid={`ship-status-${taskId}`} style={{
+    <div data-testid={`ship-status-${taskId}`} role="status" aria-live="polite" style={{
       padding: "10px 12px",
       background: "rgba(255,197,96,0.08)",
       border: "1px solid rgba(255,197,96,0.35)",
@@ -293,8 +293,27 @@ function BlockedCard({ taskId, task }) {
           {paths.map((p) => `\`${p}\``).join(", ")}
         </div>
       )}
-      <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-faint)" }}>
-        Approve in Loop mode to ship it.
+      <div style={{ marginTop: 10 }}>
+        {/* Build Prompt v4 · Phase C item 11 — a real actionable route,
+            not just static copy. Reuses the SAME cross-component
+            signalling pattern activeProject.js already uses
+            (window CustomEvent) instead of drilling a callback prop
+            through MessageBubble → TaskProgressCard. ChatPanel listens
+            for this event and calls the existing handleExecModeChange. */}
+        <button
+          data-testid={`ship-route-to-loop-${taskId}`}
+          onClick={() => window.dispatchEvent(
+            new CustomEvent("aurem:route-to-loop", { detail: { taskId } })
+          )}
+          className="btn-ghost"
+          style={{
+            padding: "5px 10px", fontSize: 11,
+            borderColor: "rgba(255,197,96,0.5)",
+            color: "var(--accent-2)",
+          }}
+        >
+          Route via Loop mode
+        </button>
       </div>
     </div>
   );
@@ -310,7 +329,7 @@ export default function TaskProgressCard({ taskId, task, project, onRollback, on
     const stageIdx = STAGES.findIndex((s) => s.key === status);
     const current = stageIdx >= 0 ? STAGES[stageIdx] : { icon: "⏳", label: status };
     return (
-      <div data-testid={`ship-status-${taskId}`} style={{
+      <div data-testid={`ship-status-${taskId}`} role="status" aria-live="polite" style={{
         padding: "10px 12px",
         background: "var(--panel-2)",
         border: "1px solid var(--border)",
@@ -361,7 +380,7 @@ export default function TaskProgressCard({ taskId, task, project, onRollback, on
   const reverted = !!task.rollback_sha;
 
   return (
-    <div data-testid={`ship-status-${taskId}`} style={{
+    <div data-testid={`ship-status-${taskId}`} role="status" aria-live="polite" style={{
       padding: "12px 14px",
       background: reverted ? "var(--panel-2)" : "rgba(0, 230, 118, 0.05)",
       border: `1px solid ${reverted ? "var(--border)" : "rgba(0,230,118,0.3)"}`,

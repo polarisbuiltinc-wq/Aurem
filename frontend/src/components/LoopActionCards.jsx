@@ -20,7 +20,8 @@
  * state machine + API calls.
  */
 import React, { useState } from "react";
-import { Wrench, Play, SkipForward, X, AlertTriangle, ShieldCheck, Rocket } from "lucide-react";
+import { Wrench, Play, SkipForward, X, AlertTriangle, ShieldCheck, Rocket, Clock, RotateCcw } from "lucide-react";
+import { useExpiryCountdown, formatCountdown } from "../hooks/useExpiryCountdown";
 
 
 export function SelfHealIndicator({ visible, attempt = 1, max = 2,
@@ -104,8 +105,9 @@ export function SelfHealIndicator({ visible, attempt = 1, max = 2,
  */
 export function UserActionCard({ phase, message, errors,
                                   onAction, busy,
-                                  gateType, testsTouched }) {
+                                  gateType, testsTouched, expiresAt }) {
   const [feedback, setFeedback] = useState("");
+  const secondsLeft = useExpiryCountdown(expiresAt);
   // Iter 332 — dedicated SHIP human-review gate. Test files were
   // modified, so the engine paused for explicit approval. Generic
   // retry/skip buttons here soft-locked the engine; the ONLY valid
@@ -133,6 +135,20 @@ export function UserActionCard({ phase, message, errors,
           <strong style={{ fontSize: 12, color: "#86efac", letterSpacing: 0.4 }}>
             Human review required — test files modified
           </strong>
+          {secondsLeft != null && (
+            <span
+              data-testid="user-action-countdown"
+              style={{
+                marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4,
+                fontSize: 10.5, fontWeight: 700,
+                color: secondsLeft <= 60 ? "#fda4af" : "#86efac",
+                fontFamily: "'JetBrains Mono', monospace",
+              }}
+            >
+              <Clock size={11} />
+              {formatCountdown(secondsLeft)}
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 11.5, color: "var(--text, #e8ecf3)", lineHeight: 1.5 }}>
           {message}
@@ -193,6 +209,20 @@ export function UserActionCard({ phase, message, errors,
         <strong style={{ fontSize: 12, color: "#fda4af", letterSpacing: 0.4 }}>
           Loop paused at <code style={{ color: "#fff" }}>{phase}</code> — your input needed
         </strong>
+        {secondsLeft != null && (
+          <span
+            data-testid="user-action-countdown"
+            style={{
+              marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4,
+              fontSize: 10.5, fontWeight: 700,
+              color: secondsLeft <= 60 ? "#fda4af" : "#fb7185",
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
+          >
+            <Clock size={11} />
+            {formatCountdown(secondsLeft)}
+          </span>
+        )}
       </div>
       <div style={{
         fontSize: 11.5, color: "var(--text, #e8ecf3)", lineHeight: 1.5,
@@ -251,6 +281,65 @@ export function UserActionCard({ phase, message, errors,
           Icon={X} label="Abort loop"
           tone="danger" disabled={busy}
           onClick={() => onAction?.("abort", feedback || undefined)}
+        />
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * <LoopExpiredCard> — BUILD PROMPT v4 · Phase C · D1 (2026-08-27).
+ *
+ * D1 (founder-locked, Phase 0): a loop that timed out waiting for the
+ * user's plan/ship approval renders as a NEUTRAL/blocked-family card
+ * with an EXPLICIT "Expired" label — never red, never a spinner, and
+ * never just a chip that quietly vanishes. Distinct from LoopFailureCard
+ * (which is a real crash) — this is "nothing went wrong, time just ran
+ * out"; the copy and tone must never suggest failure.
+ *
+ * Rehydrates on reload — see ChatPanel.jsx's expired-loop localStorage
+ * marker + confirm-via-GET-/loop/{id}/status flow.
+ */
+export function LoopExpiredCard({ phase, onRestart, onDismiss }) {
+  return (
+    <div
+      data-testid="loop-expired-card"
+      data-phase={phase}
+      role="status"
+      aria-live="polite"
+      aria-label="Loop session expired — awaiting your decision"
+      style={{
+        margin: "10px 12px",
+        padding: 14,
+        background: "linear-gradient(135deg, rgba(148,163,184,0.10), rgba(148,163,184,0.04))",
+        border: "1px solid rgba(148,163,184,0.35)",
+        borderRadius: 12,
+        display: "flex", flexDirection: "column", gap: 10,
+        fontFamily: "'JetBrains Mono', monospace",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Clock size={14} color="#cbd5e1" />
+        <strong style={{ fontSize: 12, color: "#cbd5e1", letterSpacing: 0.4 }}>
+          Expired
+        </strong>
+      </div>
+      <div style={{ fontSize: 11.5, color: "var(--text-dim, #b7bfcc)", lineHeight: 1.5 }}>
+        This session expired while waiting for your approval.
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <ActionBtn
+          testid="loop-expired-restart-btn"
+          Icon={RotateCcw} label="Restart loop"
+          tone="primary"
+          onClick={onRestart}
+        />
+        <ActionBtn
+          testid="loop-expired-dismiss-btn"
+          Icon={X} label="Dismiss"
+          tone="danger"
+          onClick={onDismiss}
         />
       </div>
     </div>

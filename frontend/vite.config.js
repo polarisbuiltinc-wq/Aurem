@@ -90,6 +90,10 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       'process.env.REACT_APP_BACKEND_URL': JSON.stringify(env.REACT_APP_BACKEND_URL || ''),
+      // Overnight run (2026-08-27) — Preview-only override so FirstScanCard's
+      // 60s poll timeout can be proven live without a 60s+ real wait.
+      // Empty in production; falls back to the 60000 default there.
+      'process.env.REACT_APP_FIRST_SCAN_MAX_POLL_MS': JSON.stringify(env.REACT_APP_FIRST_SCAN_MAX_POLL_MS || ''),
       // Iter 309 · Batch-2 — frontend bundle sha, surfaced by
       // AdminSystemHealth.jsx to detect stale-bundle-vs-fresh-backend
       // deployments (Vite hash-fingerprints assets but index.html can

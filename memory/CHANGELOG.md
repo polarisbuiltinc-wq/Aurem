@@ -1,6 +1,49 @@
 # AUREM CTO — Changelog (append-only)
 
 
+- **Overnight WorkCard/Output-Rendering Contract build, Phases A→D (2026-08-27)** — fixes the
+  "work happened, chip vanished, nothing remains" pattern across FirstScanCard, ScanStatusStrip,
+  and Loop Mode. All new UI behind Mongo feature flags (`workcard_first_scan`,
+  `workcard_scan_strip`, `workcard_loop_receipts`), default OFF, allowlisted only to
+  `test_admin_001` — nothing changed for other users. Full evidence in
+  `/app/memory/night_run_report_2026-08-27.md`.
+  - **Phase A — FirstScanCard**: `GET /onboarding/first-scan/status` now returns persisted
+    `commit_sha`/`commit_url`/`files_fixed`/`fix_applied_at` (read-back fix — confirmation used
+    to live only in React state and vanish on reload). Apply endpoint made idempotent via an
+    atomic `find_one_and_update` claim (same pattern as the loop-engine ship-claim). New
+    `WorkCard.jsx` component; clean/skipped/70s-heartbeat/error states all render something
+    durable instead of blank/frozen. testing_agent: 100% pass, 0 action items.
+  - **Phase B — ScanStatusStrip**: clean security scans used to delete their own sessionStorage
+    result and show only a 4s toast — nothing durable. Reused the already-existing
+    `GET /codebase-health/last` endpoint (added one `workcard_enabled` field) to render a
+    persistent WorkCard receipt for clean/critical/high scans alike, DB-backed so it survives
+    reload. Confirmed live by testing_agent (fresh-session reload).
+  - **Phase C — Loop Mode gate cards**: `routers/loop.py::loop_status()` now computes
+    `expires_at = updated_at + AWAITING_CONFIRM_MAX_S` (the one sanctioned additive field —
+    implemented in the router, NOT the protected `loop_engine.py`, smaller footprint). New
+    shared `useExpiryCountdown` hook wired into `PlanApprovalCard`, `ShipPendingCard`, and
+    `UserActionCard` (all 3) — live-confirmed ticking (10:00→9:35 on a real plan). New
+    `LoopExpiredCard` (D1: neutral, explicit "Expired" label, never red/spinner,
+    `[Restart loop]`/`[Dismiss]`) — real bug found and fixed along the way:
+    `sweep_expired_awaiting_confirmations()` never emits an SSE event, so the existing countdown
+    poll now doubles as the live-expiry detector. Reload-rehydration via a localStorage marker
+    + confirm-through-existing-status-endpoint (no new endpoint). Real 60s-sweep-triggered
+    expiry + reload persistence proven live. A second real bug (transient 429 during the
+    reload-confirm call was wiping the marker) found and fixed. A third real bug (the generic
+    `paused_for_user` reload path never called `setUserAction`/`setShipPending` from the
+    rehydrated `context`, found by testing_agent) fixed and re-verified live with a moving
+    countdown that survives reload.
+  - **Phase D**: added `role="status" aria-live="polite"` to `TaskProgressCard`'s 4 states
+    (previously had none) and the new `LoopExpiredCard`. Added a real "Route via Loop mode"
+    button to the Prompt-mode test-file-lock `BlockedCard` (was static text before) via a
+    `window` CustomEvent, reusing the same cross-component pattern `activeProject.js` already
+    established. Flag removal prepared but not executed — awaiting founder rollout review.
+  - **Regression**: frontend `yarn vitest` 393/393 (component suite) passing after all changes.
+    One pre-existing backend test (`test_health_score_get_shape_and_categories`) now fails as a
+    side effect of real Loop telemetry generated during this session's live testing — diagnosed
+    as test fragility exposed by genuine usage, not a code defect; left untouched (out of scope).
+
+
 - **Chat UX #1-#3 + Admin Cockpit merge shipped preview-verified (2026-02-18)** — three chat-UX polish fixes + full BI merge into `/admin/cockpit`. Zero prod deploys yet; all preview-only.
   - **#1 · LongCat empty-tool-call fix**
     - Frontend: `RenderedMessage.jsx` placeholder rewritten from "internal tool call with no visible reply" (internal jargon) → `"ORA didn't have a text reply for that — mind rephrasing?"`.

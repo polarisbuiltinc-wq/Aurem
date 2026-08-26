@@ -51,7 +51,7 @@ import OperationHistory from "./OperationHistory";
 import PlanApprovalCard from "./PlanApprovalCard";
 // Iter 212m-65 — Phase D wiring: Self-heal indicator + paused-loop
 // User Action card (powered by the real /loop/* SSE stream).
-import { SelfHealIndicator, UserActionCard } from "./LoopActionCards";
+import { SelfHealIndicator, UserActionCard, LoopExpiredCard } from "./LoopActionCards";
 import ShipPendingCard from "./ShipPendingCard";
 import ShipSuccessCard from "./ShipSuccessCard";
 import LoopFailureCard from "./LoopFailureCard";
@@ -65,7 +65,7 @@ import {
 } from "../lib/shipPendingMappers.js";
 import {
   startLoop, confirmLoop, pauseResponse, cancelLoop, streamLoopEvents,
-  confirmShip,
+  confirmShip, getLoopStatus,
 } from "../lib/loopApi";
 import { getChatBgTint } from "../utils/chatBgTint";        // Iter 212m-30 PR-2
 // Iter 140 — extracted chat hooks. ChatPanel.jsx grew past 1500 lines;
@@ -119,6 +119,37 @@ const HIDE_OLDER_THRESHOLD = 10;
 // `extractSuggestions`, `extractCodeBlocks`, `estimateTokenCount`, and
 // the `<TokenBanner>` component were extracted into focused modules.
 // Their imports live at the top of this file alongside the chat hooks.
+
+// Build Prompt v4 · Phase C (D1, 2026-08-27) — reload-rehydration marker
+// for an expired loop. `/loop/active` only returns NON-terminal states
+// (see routers/loop.py) so a terminal EXPIRED session is invisible to
+// the existing rehydration poll. Rather than a new backend endpoint,
+// this stashes {loop_id, project_id, ts} locally the moment the SSE
+// stream reports state="expired"; on next mount, if the marker is
+// still recent, the ALREADY-EXISTING GET /loop/{id}/status call
+// confirms the state and re-renders the same card. 30 min window is
+// generous (matches the founder's own "reload should still show it"
+// intent) without persisting forever.
+const _EXPIRED_MARKER_KEY = "aurem_loop_expired";
+const _EXPIRED_MARKER_TTL_MS = 30 * 60 * 1000;
+function _markLoopExpired(projectId, loopId) {
+  try {
+    localStorage.setItem(_EXPIRED_MARKER_KEY, JSON.stringify({ projectId, loopId, ts: Date.now() }));
+  } catch { /* private mode / quota — silent */ }
+}
+function _readExpiredMarker(projectId) {
+  try {
+    const raw = localStorage.getItem(_EXPIRED_MARKER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.loopId || parsed.projectId !== projectId) return null;
+    if (Date.now() - (parsed.ts || 0) > _EXPIRED_MARKER_TTL_MS) return null;
+    return parsed;
+  } catch { return null; }
+}
+function _clearExpiredMarker() {
+  try { localStorage.removeItem(_EXPIRED_MARKER_KEY); } catch { /* ignore */ }
+}
 
 export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   // Iter 140 — Phase-1 hook wiring. Each hook is REAL and live:
@@ -638,6 +669,21 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   const [selfHeal, setSelfHeal] = useState({ visible: false, attempt: 1, max: 2, errorPreview: "" });
   const [userAction, setUserAction] = useState(null);
   const [userActionBusy, setUserActionBusy] = useState(false);
+  // Build Prompt v4 · Phase C (D1) — {phase} while a loop sits expired;
+  // durable until the user Restarts or Dismisses (never auto-clears —
+  // that's the exact bug this fixes).
+  const [loopExpired, setLoopExpired] = useState(null);
+  // Build Prompt v4 · Phase C (D4) — server-sourced expires_at for the
+  // 3 gate cards' live countdown. Polls the ALREADY-EXISTING
+  // GET /loop/{id}/status (no new endpoint) only while a gate that
+  // actually has a timeout is on screen.
+  const [loopExpiresAt, setLoopExpiresAt] = useState(null);
+  // Phase C rollout flag mirror — populated from the SAME status poll
+  // (workcard_enabled field). Gates the new countdown/Expired-card UI
+  // so legacy users see exactly the pre-existing behaviour until the
+  // founder reviews the flag. Ref-only (no render depends on it
+  // directly) so it can be read synchronously inside handleLoopEvent.
+  const workcardLoopOnRef = useRef(false);
   // Iter 275 — dedicated live-feed panel state. `loopFeedEvent` is
   // the LAST raw SSE event; `LoopLiveFeed` maintains its own ring
   // buffer downstream. `loopTerminal` flips true on completed/
@@ -735,7 +781,43 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         if (!projectId) return;
         const r = await api.get(`/loop/active?project_id=${encodeURIComponent(projectId)}`);
         const active = (r?.data || r)?.active;
-        if (cancelled || !active) return;
+        if (cancelled || !active) {
+          // Build Prompt v4 · Phase C (D1) — /loop/active never returns
+          // a terminal EXPIRED session (see routers/loop.py's state
+          // filter). Fall back to the local reload marker + a direct
+          // status confirm so the Expired card survives a refresh.
+          if (!cancelled) {
+            const marker = _readExpiredMarker(projectId);
+            if (marker?.loopId) {
+              try {
+                const doc = await getLoopStatus(marker.loopId);
+                if (!cancelled) {
+                  if (doc?.state === "expired" && doc?.workcard_enabled) {
+                    setLoopExpired({ phase: doc?.phase || "" });
+                  } else if (doc?.state && doc.state !== "expired") {
+                    // Genuinely confirmed NOT expired anymore (e.g. user
+                    // restarted from another tab) — safe to drop the marker.
+                    _clearExpiredMarker();
+                  }
+                  // else: ambiguous/empty response — leave the marker
+                  // alone so the next mount can retry rather than
+                  // silently losing the card to a transient hiccup.
+                }
+              } catch (_e) {
+                // Build Prompt v4 · Phase C bugfix (found live during
+                // the overnight expiry proof) — a transient network
+                // error or 429 rate-limit on this confirm call must
+                // NEVER be treated the same as "not expired". The
+                // original code cleared the marker here, which meant a
+                // single rate-limited reload permanently lost the
+                // Expired card even though the loop really was expired.
+                // Leave the marker intact; it expires on its own via
+                // the 30-min TTL if truly stale.
+              }
+            }
+          }
+          return;
+        }
         if (active.state === "paused_for_user" && active.phase === "ship"
             && active.ship_pending) {
           // ── Iter 320 · Bug 4 — mirror the Iter 316 Fix B pattern ──
@@ -789,6 +871,46 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           setLoopId(active.loop_id);
           setLoopPhase("paused_for_user");
           openLoopStream(active.loop_id);
+          // Build Prompt v4 · Phase C bugfix (found by testing_agent,
+          // item 9) — `/loop/active` only returns a curated subset
+          // (plan/ship_pending/files_changed), not `context`, and the
+          // SSE stream never re-emits the current pause on reconnect
+          // for an already-paused session. Reload of a real
+          // ship_human_review (or generic) pause showed the top
+          // "PAUSED · YOUR INPUT" banner but no actionable card at
+          // all. Fix: one follow-up call to the ALREADY-EXISTING
+          // GET /loop/{id}/status (which does return the full
+          // `context`) and mirror the exact same branching the live
+          // SSE handler uses (~line 3744) so a cold reload renders
+          // the same card a live transition would have.
+          try {
+            const doc = await getLoopStatus(active.loop_id);
+            const ctx = doc?.context || {};
+            if (ctx.kind === "awaiting_ship") {
+              setShipPending(mapShipPendingFromAwaitingShipEvent(ctx, doc));
+            } else if (ctx.kind === "human_review_required" || ctx.requires_human_review) {
+              setUserAction({
+                phase: doc?.phase,
+                gateType: "ship_human_review",
+                message: doc?.message
+                  || "Test files were modified — human review required to ship.",
+                errors: [],
+                testsTouched: Array.isArray(ctx.tests_touched) ? ctx.tests_touched : [],
+              });
+            } else {
+              const errors = Array.isArray(ctx.errors)
+                ? ctx.errors.map((e) => typeof e === "string" ? e : JSON.stringify(e))
+                : [];
+              setUserAction({
+                phase: doc?.phase,
+                message: doc?.message || "Loop paused — your input needed.",
+                errors,
+              });
+            }
+          } catch (_e) {
+            // Best-effort — SSE reconnect above still gives the user
+            // the banner even if this follow-up call fails.
+          }
         } else if (["executing", "verifying", "scanning", "shipping",
                     "self_healing"].includes(active.state)) {
           // Iter 212m-177 — P1-7: loop is MID-RUN (user refreshed while
@@ -804,6 +926,50 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     })();
     return () => { cancelled = true; };
   }, [activeProject?.project_id]);
+
+  // Build Prompt v4 · Phase C (D4) — live countdown source. Only polls
+  // while a gate that actually carries AWAITING_CONFIRM_MAX_S applies
+  // (plan approval, ship approval, generic paused-for-user) so idle/
+  // running loops never pay this extra round-trip.
+  useEffect(() => {
+    const gatePhases = ["plan_pending", "ship", "paused_for_user", "awaiting_confirmation"];
+    if (!loopId || !gatePhases.includes(loopPhase)) {
+      setLoopExpiresAt(null);
+      return undefined;
+    }
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const doc = await getLoopStatus(loopId);
+        if (stopped) return;
+        const on = !!doc?.workcard_enabled;
+        workcardLoopOnRef.current = on;
+        // Flag-gated — legacy users never see the new countdown chip.
+        setLoopExpiresAt(on ? (doc?.expires_at || null) : null);
+        // Build Prompt v4 · Phase C (D1) — REAL LIVE DETECTION GAP FOUND
+        // while building this: sweep_expired_awaiting_confirmations()
+        // (backend cron, 60s interval) flips state→expired directly in
+        // Mongo and never emits an SSE frame (it even drops the loop
+        // from the in-process engine registry). An open tab watching
+        // the SSE stream would otherwise NEVER learn the loop expired —
+        // this poll (already running for the countdown) is the one
+        // thing checking Mongo on a schedule, so it doubles as the
+        // live-expiry detector by feeding a synthetic event through
+        // the SAME handleLoopEvent path SSE would use (same pattern as
+        // the existing Iter 316 Fix A fallback-poll above).
+        if (doc?.state === "expired") {
+          handleLoopEvent({
+            loop_id: loopId, state: "expired", phase: doc?.phase || "",
+            message: "This session expired while waiting for your approval.",
+          });
+        }
+      } catch { /* best-effort — countdown just won't render */ }
+    };
+    poll();
+    const t = setInterval(poll, 5000);
+    return () => { stopped = true; clearInterval(t); };
+  }, [loopId, loopPhase]);
+
   // Iter 212m-58 — chatMode hard-pinned to Pro when loop is active
   // (Swift disabled per spec). We persist that nudge on toggle so a
   // user flipping back to Prompt mode keeps their last model pick.
@@ -3377,6 +3543,23 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     else if (state === "aborted")               setLoopPhase("aborted");
     else if (state === "expired")               setLoopPhase("expired");
 
+    // Build Prompt v4 · Phase C (D1) — expired is a distinct, calmer
+    // outcome from a crash (C2 of the constitution). Clear any other
+    // gate card so exactly one durable card shows, persist a reload
+    // marker (see _markLoopExpired above), and stop the busy/heartbeat
+    // state the same way the "failed" branch above already does.
+    // Flag-gated (workcard_loop_receipts) — legacy users keep the
+    // pre-existing (silent) behaviour until the founder reviews.
+    if (state === "expired" && workcardLoopOnRef.current) {
+      setLoopExpired({ phase });
+      setUserAction(null);
+      setShipPending(null);
+      setLoopFailure(null);
+      setBusy(false);
+      setLoopTerminal(true);
+      if (loopId) _markLoopExpired(activeProject?.project_id, ev.loop_id || loopId);
+    }
+
     // ── Iter 312 · Class 3 companion — absorb plan blob from SSE ─
     // In the async-start world, the plan no longer arrives in the
     // /loop/start HTTP response body — it arrives here, on the
@@ -3945,6 +4128,28 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     setLoopPlan(null);
     pendingPlanRef.current = null;
   }
+  // Build Prompt v4 · Phase C (D1) — the loop is already terminal
+  // server-side (sweep_expired_awaiting_confirmations already flipped
+  // it), so both actions are local-only cleanup; no confirmLoop call
+  // needed. Restart additionally refocuses the composer so the user
+  // can immediately type a fresh request.
+  function handleDismissExpired() {
+    setLoopExpired(null);
+    _clearExpiredMarker();
+  }
+  function handleRestartLoop() {
+    if (loopAbortRef.current) {
+      try { loopAbortRef.current.abort(); } catch { /* swallow */ }
+      loopAbortRef.current = null;
+    }
+    setLoopExpired(null);
+    _clearExpiredMarker();
+    setLoopPhase(null);
+    setLoopId(null);
+    setLoopPlan(null);
+    setLoopTerminal(false);
+    try { taRef.current?.focus(); } catch { /* ignore */ }
+  }
   // Toggle handler — switch exec mode and, when entering loop, force
   // chatMode away from "swift" (loop disables swift per spec).
   function handleExecModeChange(m) {
@@ -3959,6 +4164,33 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     try { saveExecMode(m); } catch { /* ignore */ }
     setExecMode(m);
   }
+
+  // Build Prompt v4 · Phase C item 11 — the "[Route via Loop mode]"
+  // button on a Prompt-mode BlockedCard (TaskProgressCard.jsx) can't
+  // reach handleExecModeChange directly (it's rendered several levels
+  // down via MessageBubble). Reuses the same window-CustomEvent
+  // pattern activeProject.js already established for this exact kind
+  // of cross-component signal instead of drilling a new prop through
+  // MessageBubble.
+  useEffect(() => {
+    function onRouteToLoop() {
+      if (isLoopUnlockedSync()) {
+        handleExecModeChange(EXEC_MODES.LOOP);
+        import("sonner").then(({ toast }) => {
+          toast.info("Switched to Loop mode — send your request again to ship it.", {
+            id: "route-to-loop-from-blocked",
+          });
+        }).catch(() => {});
+      } else {
+        import("sonner").then(({ toast }) => {
+          toast.error("Loop mode isn't available on your plan yet.");
+        }).catch(() => {});
+      }
+    }
+    window.addEventListener("aurem:route-to-loop", onRouteToLoop);
+    return () => window.removeEventListener("aurem:route-to-loop", onRouteToLoop);
+  }, [chatMode]);
+
 
   // Iter 212m-98 — Sidebar v2 Tools wiring. Lives here so it has
   // access to `handleExecModeChange` and reads latest execMode via
@@ -4750,6 +4982,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           <PlanApprovalCard
             onApprove={handleApprovePlan}
             onCancel={handleCancelPlan}
+            expiresAt={loopExpiresAt}
           />
         </div>
       )}
@@ -4783,6 +5016,14 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           testsTouched={userAction.testsTouched}
           busy={userActionBusy}
           onAction={handlePauseAction}
+          expiresAt={loopExpiresAt}
+        />
+      )}
+      {loopExpired && (
+        <LoopExpiredCard
+          phase={loopExpired.phase}
+          onRestart={handleRestartLoop}
+          onDismiss={handleDismissExpired}
         />
       )}
       {shipResult && (
@@ -4796,6 +5037,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           pending={shipPending}
           busy={shipBusy}
           onConfirm={(approved) => approved ? handleShipConfirm() : handleShipCancel()}
+          expiresAt={loopExpiresAt}
         />
       )}
       {f12ConfirmPayload && isAdminOrFounder((typeof getUser === "function" && getUser()) || null) && (

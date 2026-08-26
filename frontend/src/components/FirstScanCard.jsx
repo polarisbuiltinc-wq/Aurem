@@ -20,7 +20,11 @@ import { api } from "../lib/api";
 import WorkCard from "./WorkCard";
 
 const POLL_MS = 2000;
-const MAX_POLL_MS = 60_000;
+// Overnight run (2026-08-27) — disclosed additive change: env-overridable so
+// the >60s heartbeat/timeout branch can be proven live in Preview without a
+// 60s+ real wait, without touching any protected file. Production default
+// stays 60000 unless REACT_APP_FIRST_SCAN_MAX_POLL_MS is explicitly set.
+const MAX_POLL_MS = Number(process.env.REACT_APP_FIRST_SCAN_MAX_POLL_MS) || 60_000;
 
 // Reuses the existing "ora:prefill" event (already wired in ChatPanel.jsx)
 // instead of adding a new endpoint/bridge — Phase A guardrail: reuse before
