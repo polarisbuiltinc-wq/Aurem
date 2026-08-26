@@ -207,7 +207,13 @@ async def acquire_loop_lock(
                 {"_id": 0, "state": 1},
             )
             if sess and (sess.get("state") or "") in (
-                "aborted", "failed", "completed",
+                # 2026-08-27 · I1 fix — "expired" was missing here, so
+                # a loop that timed out via the 60s awaiting-confirm
+                # sweep wasn't recognized as terminal by THIS immediate
+                # ghost-sweep (it still self-healed after STALE_S=15min,
+                # but not promptly). Belt-and-suspenders alongside the
+                # loop_engine.py sweep fix above.
+                "aborted", "failed", "completed", "expired",
             ):
                 await db.loop_locks.delete_one(
                     {"project_id": project_id, "user_id": user_id,

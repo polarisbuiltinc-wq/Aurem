@@ -23,7 +23,22 @@ EXPECTED_CATS = {
     "code_quality", "data_handling", "performance",
     "architecture", "devops_infra",
 }
-ALWAYS_UNSCORED = {"security", "bug_density", "reliability"}
+# 2026-08-27 · I2 fix — this used to be `{"security", "bug_density",
+# "reliability"}` and hard-asserted every one of them "unscored" below.
+# Root cause of the resulting ambient red (diagnosed, not a fixture-
+# isolation bug for 2 of the 3): `score_security()` and
+# `score_reliability()` (services/health_score.py) were converted to
+# unconditional, always-live scorers by the 2026-08-24 Inventory Sweep
+# wiring (see their own "Was UNSCORED before this wiring" / "LIVE via
+# Health Registry guards" comments) — they can NEVER return "unscored"
+# against a real DB again, by design. The test's expectation was simply
+# stale, not a data-pollution problem. `bug_density` IS genuinely
+# data-conditional (unscored only while G20's incident log has zero
+# total incidents ever) — real guard-detected incidents accumulating
+# during live testing/usage legitimately flip it to "scored"; that is
+# the intended reliability signal, not pollution to isolate against.
+ALWAYS_LIVE_SCORED = {"security", "reliability"}
+DATA_CONDITIONAL = {"bug_density"}
 
 
 @pytest.fixture(scope="module")
@@ -66,10 +81,28 @@ def test_health_score_get_shape_and_categories(headers):
         for k in ("status", "score", "reason", "evidence", "live", "last_verified"):
             assert k in cat, f"{cid} missing {k}"
         assert cat["status"] in ("scored", "unscored")
-    # always-unscored trio
-    for cid in ALWAYS_UNSCORED:
-        assert data["categories"][cid]["status"] == "unscored"
-        assert data["categories"][cid]["reason"], f"{cid} unscored with no reason"
+    # security + reliability: always live-scored by design (see
+    # ALWAYS_LIVE_SCORED comment above) — never "unscored" against a
+    # real DB.
+    for cid in ALWAYS_LIVE_SCORED:
+        cat = data["categories"][cid]
+        assert cat["status"] == "scored", f"{cid} unexpectedly unscored: {cat}"
+        assert cat["live"] is True
+        assert isinstance(cat["score"], (int, float))
+    # bug_density: data-conditional — either shape is valid depending on
+    # whether G20's incident log has any real incidents yet. Assert
+    # whichever branch fired is internally consistent rather than
+    # hard-coding one, since real incidents from live testing/usage are
+    # expected to accumulate over time (2026-08-24 founder-approved
+    # recalibration), not a fixture bug to isolate against.
+    for cid in DATA_CONDITIONAL:
+        cat = data["categories"][cid]
+        if cat["status"] == "unscored":
+            assert cat["reason"], f"{cid} unscored with no reason"
+        else:
+            assert cat["live"] is True
+            assert isinstance(cat["score"], (int, float))
+            assert cat.get("caveat"), f"{cid} scored but missing partial-proxy caveat"
     # weight_scored_pct + weight_unscored_pct == 100
     assert abs(data["weight_scored_pct"] + data["weight_unscored_pct"] - 100) < 0.5
     # Latency: soft check

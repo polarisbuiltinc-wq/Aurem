@@ -138,6 +138,7 @@ export function UserActionCard({ phase, message, errors,
           {secondsLeft != null && (
             <span
               data-testid="user-action-countdown"
+              className={secondsLeft <= 60 ? "aurem-countdown-urgent" : undefined}
               style={{
                 marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4,
                 fontSize: 10.5, fontWeight: 700,
@@ -212,6 +213,7 @@ export function UserActionCard({ phase, message, errors,
         {secondsLeft != null && (
           <span
             data-testid="user-action-countdown"
+            className={secondsLeft <= 60 ? "aurem-countdown-urgent" : undefined}
             style={{
               marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4,
               fontSize: 10.5, fontWeight: 700,

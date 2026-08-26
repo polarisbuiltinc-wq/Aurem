@@ -745,7 +745,15 @@ async def me(authorization: Optional[str] = Header(None)) -> dict:
         payload.get("email", (user or {}).get("email", "")),
         is_admin=bool((user or {}).get("is_admin") or payload.get("is_admin")),
     )
-    return {"ok": True, "user": user or payload, "token": fresh_token}
+    # 2026-08-27 · Phase E — workcard_chip_v2 flag (default OFF,
+    # allowlist [test_admin_001]), same pattern as the existing
+    # workcard_* flags. /auth/me is called on every app boot + focus,
+    # so this is the one place every chip-rendering surface can read
+    # it without a new endpoint.
+    from services.feature_flags import is_enabled
+    chip_v2_enabled = await is_enabled("workcard_chip_v2", user_id=payload["user_id"])
+    return {"ok": True, "user": user or payload, "token": fresh_token,
+            "workcard_chip_v2_enabled": chip_v2_enabled}
 
 
 @router.get("/tokens")

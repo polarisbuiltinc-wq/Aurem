@@ -12,8 +12,10 @@
   color-scheme: dark;
   --ds2-bg:                 #0A0A0A;
   --ds2-fg:                 #F5F5F5;
-  --ds2-border:             #222222;
-  --ds2-primary:            #FF6608;
+  /* 2026-08-27 · Phase E E1 — audit-flagged 1.24:1 → 3.05:1 vs
+     --ds2-bg. Currently unreferenced by any component (grep-confirmed,
+     dead token) — bumped anyway per audit ask, zero risk. */
+  --ds2-border:             #5e5e5e;
   --ds2-primary-fg:         #0A0A0A;
   --ds2-secondary:          #1F1F1F;
   --ds2-secondary-fg:       #F5F5F5;
@@ -60,7 +62,8 @@
   color-scheme: light;
   --ds2-bg:                 #F7F7F5;
   --ds2-fg:                 #0F0F0F;
-  --ds2-border:             #E2E2E0;
+  /* 2026-08-27 · Phase E E1 — light-theme counterpart, 1.21:1→3.05:1. */
+  --ds2-border:             #8e8e8e;
   --ds2-primary:            #FF6608;
   --ds2-primary-fg:         #FFFFFF;
   --ds2-secondary:          #ECECEA;
@@ -128,9 +131,21 @@
   --panel-2: #161a25;
   /* Borders — Iter 66 design-spec lock:
      default 0.10 (per "Default border" spec line)
-     strong  0.22 (per "Ghost button border" spec line) */
+     strong  0.22 (per "Ghost button border" spec line)
+     2026-08-27 · Phase E E1 — --border-strong bumped 0.22→0.42 alpha
+     (1.61:1 → 3.02:1 vs --bg). E0a audit: --border-strong is used
+     predominantly on FUNCTIONAL boundaries (interactive hover states —
+     Shell.jsx/ToolButton.jsx/TabBar.jsx/ClearCacheButton.jsx, input
+     fields — Settings.jsx, avatar/card boundaries — GitHubCard.jsx),
+     below the WCAG 3:1 non-text minimum. `--border` (default, 0.10) is
+     used almost exclusively as a decorative table-row/section divider
+     (Admin.jsx/AdminFinancials.jsx/etc.) — left unchanged per the
+     founder-locked scope cut. Side-effect disclosed: 2 decorative
+     panel-divider uses of --border-strong (GraphPanel.jsx, ORASide
+     Panel.jsx) become marginally more visible as a byproduct of
+     sharing one token — same amber hue, no new color introduced. */
   --border: rgba(255, 200, 120, 0.10);
-  --border-strong: rgba(255, 200, 120, 0.22);
+  --border-strong: rgba(255, 200, 120, 0.42);
   --text: #f4ecdc;
   --text-dim: #a39d8a;
   /* WCAG AA fix (Iter 152): bumped from #6b6557 → #948c79.
@@ -162,7 +177,9 @@ html[data-theme="light"] {
   --panel:        #ffffff;
   --panel-2:      #f3efe5;
   --border:       rgba(60, 40, 15, 0.10);
-  --border-strong:rgba(60, 40, 15, 0.22);
+  /* 2026-08-27 · Phase E E1 — same --border-strong fix, light theme
+     (1.21:1 → 3.03:1 vs light --bg #faf8f2). */
+  --border-strong:rgba(60, 40, 15, 0.51);
   --text:         #1a1410;            /* warm near-black */
   --text-dim:     #5b5448;
   --text-faint:   #7a7468;
@@ -1213,3 +1230,101 @@ table { max-width: 100%; }
 .ora-md hr     { border: none; border-top: 1px solid #E5E5DF; margin: 1.4em 0; }
 .ora-md > *:first-child { margin-top: 0; }
 .ora-md > *:last-child  { margin-bottom: 0; }
+
+/* 2026-08-27 · Loop-mode gate-card countdown, <60s urgency cue (I3).
+   2s cycle = 0.5Hz, well under the WCAG 2.3.1 3-flashes/sec ceiling —
+   motion-safe. Reads the SAME server `expires_at` already wired via
+   useExpiryCountdown; no new field, no client-invented timer. */
+@keyframes aurem-countdown-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+.aurem-countdown-urgent {
+  animation: aurem-countdown-pulse 2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aurem-countdown-urgent { animation: none; }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   2026-08-27 · Phase E E1 — Chip size scale + tone tokens.
+   Single source of truth for every chip/pill/badge in the app
+   (WorkCard badge, LoopStatusChip, ShipLintBadge, LiveStepFloating
+   Card, LiveTaskPopup, TemperatureBadge, IntentTierIndicator,
+   ModeLoopPill, LoopStepBar retry pill, ShipPendingCard integrity/
+   diff chips) — routed through <Chip> (components/Chip.jsx).
+   A1 audit showed 8 distinct font-sizes (8.5-13px) and no shared
+   scale; 90%+ of sampled chips fit two heights, so exactly two
+   sizes here, no more. ──────────────────────────────────────── */
+:root {
+  --chip-height-sm:  20px;
+  --chip-height-md:  26px;
+  --chip-font-sm:    10px;
+  --chip-font-md:    11px;
+  --chip-line-sm:    14px;
+  --chip-line-md:    16px;
+  --chip-pad-x-sm:   8px;
+  --chip-pad-x-md:   10px;
+  --chip-radius:     999px;
+  --chip-gap:        4px;      /* icon-to-label gap, inside one chip */
+  --chip-row-gap:    6px;      /* between chips in a row */
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--chip-gap);
+  border-radius: var(--chip-radius);
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid transparent;
+  cursor: default;
+}
+.chip-sm {
+  height: var(--chip-height-sm);
+  padding: 0 var(--chip-pad-x-sm);
+  font-size: var(--chip-font-sm);
+  line-height: var(--chip-line-sm);
+}
+.chip-md {
+  height: var(--chip-height-md);
+  padding: 0 var(--chip-pad-x-md);
+  font-size: var(--chip-font-md);
+  line-height: var(--chip-line-md);
+}
+.chip-interactive { cursor: pointer; }
+.chip-neutral { background: rgba(148,163,184,0.10); border-color: rgba(148,163,184,0.30); color: #cbd5e1; }
+.chip-info    { background: rgba(56,189,248,0.14);  border-color: rgba(56,189,248,0.35);  color: #7dd3fc; }
+.chip-success { background: rgba(34,197,94,0.16);   border-color: rgba(34,197,94,0.35);   color: #4ade80; }
+.chip-warn    { background: rgba(245,158,11,0.14);  border-color: rgba(245,158,11,0.35);  color: #fbbf24; }
+/* 2026-08-27 · Phase E E1 — ShipLintBadge "blocked" text fix:
+   #ef4444 on this same soft bg was 4.24:1 (below AA 4.5:1 text).
+   #fca5a5 (tailwind red-300, already used as WorkCard's own "red"
+   tone fg — reused, not invented) is 8.40:1 on the same background. */
+.chip-error   { background: rgba(239,68,68,0.15);   border-color: rgba(239,68,68,0.35);   color: #fca5a5; }
+
+/* E3 — clutter-merge rules: chip rows wrap, never scroll/overflow. */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--chip-row-gap);
+  row-gap: var(--chip-row-gap);
+  column-gap: var(--chip-row-gap);
+  max-width: 100%;
+  min-width: 0;
+}
+/* Used together with `.chip` (e.g. className="chip chip-sm chip-neutral
+   chip-more") on the Chip primitive's "+N more" trigger — no separate
+   metrics, same size/tone scale as every other chip. */
+.chip-more { text-decoration: underline dotted; text-decoration-thickness: 1px; }
+.chip-uppercase { text-transform: uppercase; letter-spacing: 0.4px; }
+@media (max-width: 600px) {
+  .chip-row { max-width: 100%; }
+  .chip-row.chip-row-status { flex-basis: 100%; width: 100%; }
+}

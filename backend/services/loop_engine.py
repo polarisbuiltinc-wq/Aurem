@@ -305,9 +305,18 @@ async def sweep_expired_awaiting_confirmations(db) -> int:
             # Best-effort lock release.  If loop_safety fails to import
             # (test env), the loop_lock TTL will still clear it after
             # STALE_S — this is just to make it prompt.
+            #
+            # 2026-08-27 · I1 fix — this call was missing `loop_id`
+            # (release_loop_lock() requires 4 positional args: db,
+            # project_id, user_id, loop_id). Every call here raised
+            # TypeError, silently swallowed by the except below, so the
+            # sweep NEVER actually released the lock on a real expiry —
+            # the user was blocked from starting a new loop on the same
+            # project for up to STALE_S (15 min). `loop_id` is already
+            # in scope from the cursor doc a few lines up.
             try:
                 from services.loop_safety import release_loop_lock
-                await release_loop_lock(db, project_id, user_id)
+                await release_loop_lock(db, project_id, user_id, loop_id)
             except Exception as _e:
                 logger.debug("release_loop_lock on expired loop failed: %r", _e)
             await _log_error(

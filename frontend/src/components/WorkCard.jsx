@@ -13,6 +13,8 @@
  * security-scan strip and Loop gate/receipt cards).
  */
 import React from "react";
+import { Chip } from "./Chip";
+import { isChipV2Enabled } from "../lib/chipFlag";
 
 const TONE = {
   blue:  { soft: "rgba(56,189,248,0.14)",  fg: "#7dd3fc", border: "rgba(56,189,248,0.45)" },
@@ -21,6 +23,9 @@ const TONE = {
   red:   { soft: "rgba(239,68,68,0.14)",   fg: "#fca5a5", border: "rgba(239,68,68,0.4)" },
   grey:  { soft: "rgba(148,163,184,0.10)", fg: "#cbd5e1", border: "rgba(148,163,184,0.30)" },
 };
+// Phase E — WorkCard tone names already match <Chip>'s tone set 1:1
+// (blue→info, green→success, amber→warn, red→error, grey→neutral).
+const CHIP_TONE = { blue: "info", green: "success", amber: "warn", red: "error", grey: "neutral" };
 
 export default function WorkCard({
   testId,
@@ -62,19 +67,30 @@ export default function WorkCard({
           </span>
         )}
         {badgeLabel && (
-          <span
-            data-testid={testId ? `${testId}-badge` : undefined}
-            style={{
-              fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
-              textTransform: "uppercase",
-              padding: "2px 8px", borderRadius: 999,
-              background: c.soft, color: c.fg,
-              border: `1px solid ${c.border}`,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {badgeLabel}
-          </span>
+          isChipV2Enabled() ? (
+            <Chip
+              size="sm"
+              tone={CHIP_TONE[tone] || "neutral"}
+              testId={testId ? `${testId}-badge` : undefined}
+              className="chip-uppercase"
+            >
+              {badgeLabel}
+            </Chip>
+          ) : (
+            <span
+              data-testid={testId ? `${testId}-badge` : undefined}
+              style={{
+                fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
+                textTransform: "uppercase",
+                padding: "2px 8px", borderRadius: 999,
+                background: c.soft, color: c.fg,
+                border: `1px solid ${c.border}`,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {badgeLabel}
+            </span>
+          )
         )}
       </div>
       {body && (

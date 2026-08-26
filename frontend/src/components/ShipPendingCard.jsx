@@ -205,6 +205,7 @@ export default function ShipPendingCard({ pending, busy, onConfirm, expiresAt })
         {secondsLeft != null && (
           <span
             data-testid="ship-pending-countdown"
+            className={secondsLeft <= 60 ? "aurem-countdown-urgent" : undefined}
             style={{
               display: "inline-flex", alignItems: "center", gap: 4,
               fontSize: 10.5, fontWeight: 700,

@@ -40,6 +40,7 @@ export default function PlanApprovalCard({ onApprove, onCancel, disabled, expire
         {secondsLeft != null && (
           <span
             data-testid="plan-approval-countdown"
+            className={secondsLeft <= 60 ? "aurem-countdown-urgent" : undefined}
             style={{
               marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4,
               fontSize: 10.5, fontWeight: 700, color: secondsLeft <= 60 ? "#fda4af" : "#a78bfa",

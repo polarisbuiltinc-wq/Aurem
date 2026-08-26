@@ -26,6 +26,7 @@ import {
   Users as UsersIcon, Lightbulb, Landmark, X, Menu, LogOut,
 } from "lucide-react";
 import { api, getToken, logout as apiLogout, newSessionId } from "../../lib/api";
+import { setChipV2Enabled } from "../../lib/chipFlag";
 import { useChatSession } from "../Shell";
 
 const BG      = "rgb(7,8,13)";
@@ -203,6 +204,8 @@ export default function RailShell({
         if (dead) return;
         const me = r.data?.user || r.data || {};
         setIsFounder(me.tier === "founder" || me.is_admin === true);
+        // Phase E — mirror workcard_chip_v2 for chip-rendering components.
+        setChipV2Enabled(r.data?.workcard_chip_v2_enabled === true);
       })
       .catch(() => {});
     return () => { dead = true; };
