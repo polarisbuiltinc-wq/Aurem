@@ -29,7 +29,7 @@ class TestSerialProbes:
     async def test_serial_runs_one_at_a_time_with_gaps(self):
         active = {"now": 0, "peak": 0, "calls": 0}
 
-        async def fake_probe():
+        async def fake_probe(force: bool = False):
             active["now"] += 1
             active["peak"] = max(active["peak"], active["now"])
             active["calls"] += 1

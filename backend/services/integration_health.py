@@ -862,55 +862,94 @@ async def _probe_openrouter() -> dict:
 # Public entry points
 # ────────────────────────────────────────────────────────────────────────
 
-# 2026-08-27 — prod `/health` 110-timeout hardening, round 3. Iter
-# 331/336b already moved Stripe (8 sequential blocking calls) and e2b
-# (full sandbox boot+run+kill) onto worker threads via asyncio.to_thread
-# and serialized the probe cycle — that fixed two prior outages but
-# prod logs (2026-08-26) still showed nginx `/health` 110 timeouts
-# landing exactly inside this cron's window. Root cause: on a CPU-
-# capped pod (<1 vCPU), a busy `to_thread` worker still contends with
-# the event-loop thread for the GIL during response parsing/TLS —
-# `to_thread` frees the *event loop*, not the *CPU*. Stripe and e2b are
-# by far the heaviest probes here, so cache their real result for
-# `_HEAVY_PROBE_TTL_S` and only re-run the live network call once it
-# expires — cuts the two biggest CPU bursts to ~1 in 3 cron ticks
-# without touching probe logic or weakening detection (a real outage
-# is still caught within one TTL window).
-_HEAVY_PROBE_TTL_S = 1800.0  # 30 min == 3 ticks at the default 600s cron
+# 2026-08-27 — prod `/health` 110-timeout hardening, round 3.
+#
+# MECHANISM — re-labeled per founder review (was over-confirmed):
+#   CONFIRMED: nginx `/health` 110-timeout timestamps line up exactly
+#   with this cron's serial probe-cycle CPU bursts (Stripe's 8
+#   sequential calls, e2b's full sandbox boot+run+kill) — the probe
+#   cycle IS the trigger.
+#   LIKELY/UNCERTAIN (was previously stated as "GIL contention" —
+#   over-confirmed): Stripe/e2b are I/O-bound network calls, and the
+#   GIL releases during the network wait itself, so a specific GIL
+#   deadlock is not well-supported by the evidence. Plain CPU/load
+#   starvation on the sub-1-vCPU pod (response-parsing/TLS CPU work in
+#   the to_thread worker competing with the event-loop thread for the
+#   same fractional core) is at least as plausible as GIL contention.
+#   Treat "why exactly it starves" as an open hypothesis, not a
+#   finding — do not open a future "fix GIL contention" task off this
+#   comment alone.
+#
+# CADENCE — one precise, reconciled number (was two disagreeing ones):
+#   cron tick interval = INTEGRATION_HEALTH_INTERVAL_SEC, default 600s
+#   (confirmed: unset in backend/.env, so the 600s default is live).
+#   Healthy-steady-state cache TTL = 1800s = exactly 3 cron ticks
+#   (1800 / 600 = 3, these reconcile — they were never meant to be two
+#   different numbers, just under-explained in the prior report).
+#   Detection latency for a NEW Stripe/e2b outage while previously
+#   healthy: 0s (best case, outage starts right before the next real
+#   probe) up to 1800s / 30 min (worst case, outage starts the instant
+#   after a real probe just cached "ok"). This is the real, disclosed
+#   monitoring blind window in the healthy steady state.
+#
+# ASYMMETRIC FIX (closes the "29 minutes of blindness" gap directly,
+# instead of band-aiding it with a staleness indicator): only a
+# healthy ("ok") result gets the long 1800s TTL — that's where the CPU
+# win lives, since a healthy dependency changes rarely. A FAIL result
+# (warn/broken/missing) gets a short 2-tick (1200s) TTL instead, so a
+# genuinely down Stripe/e2b dependency is re-tested within ~20 min,
+# not held stale for the full 30 — while still not re-triggering the
+# full expensive burst on every single 10-min tick during an ongoing
+# outage (that failing case is also the slow-timeout case, i.e. the
+# worst time to re-burst every tick).
+_HEAVY_PROBE_TTL_OK_S = 1800.0   # 3 ticks @ 600s — healthy steady state
+_HEAVY_PROBE_TTL_FAIL_S = 1200.0  # 2 ticks @ 600s — re-test a real outage faster
 _PROBE_CACHE: dict[str, tuple[float, dict]] = {}
 
 
-def _cached_probe(fn: Callable[[], Awaitable[dict]], ttl_s: float = _HEAVY_PROBE_TTL_S):
-    async def _wrapped() -> dict:
+def _cached_probe(fn: Callable[[], Awaitable[dict]]):
+    async def _wrapped(force: bool = False) -> dict:
         now = time.time()
         cached = _PROBE_CACHE.get(fn.__name__)
-        if cached and (now - cached[0]) < ttl_s:
-            r = dict(cached[1])
-            r["checked_at"] = _now_iso()
-            if not r.get("summary", "").endswith("(cached)"):
-                r["summary"] = f"{r.get('summary', '')} (cached)".strip()
-            return r
+        if not force and cached:
+            cached_at, cached_result, cached_ttl = cached
+            if (now - cached_at) < cached_ttl:
+                r = dict(cached_result)
+                r["checked_at"] = _now_iso()
+                if not r.get("summary", "").endswith("(cached)"):
+                    r["summary"] = f"{r.get('summary', '')} (cached)".strip()
+                return r
         result = await fn()
-        _PROBE_CACHE[fn.__name__] = (now, result)
+        ttl = _HEAVY_PROBE_TTL_OK_S if result.get("status") == "ok" else _HEAVY_PROBE_TTL_FAIL_S
+        _PROBE_CACHE[fn.__name__] = (now, result, ttl)
         return result
+    return _wrapped
+
+
+def _passthrough(fn: Callable[[], Awaitable[dict]]):
+    """Uniform `force` kwarg on every probe entry (no-op for the 11
+    uncached ones) so `run_all_probes_serial(force=True)` can bypass
+    the cache on the two cached ones without special-casing the loop."""
+    async def _wrapped(force: bool = False) -> dict:
+        return await fn()
     return _wrapped
 
 
 # Maps id → (display name, async probe fn, fix-hint fallback)
 _PROBES: list[tuple[str, str, Callable[[], Awaitable[dict]]]] = [
     ("stripe",        "Stripe",                _cached_probe(_probe_stripe)),
-    ("github_oauth",  "GitHub OAuth",          _probe_github_oauth),
-    ("emergent_llm",  "Emergent LLM Key", _probe_emergent_llm),
-    ("openrouter",    "OpenRouter (DeepSeek)", _probe_openrouter),
+    ("github_oauth",  "GitHub OAuth",          _passthrough(_probe_github_oauth)),
+    ("emergent_llm",  "Emergent LLM Key", _passthrough(_probe_emergent_llm)),
+    ("openrouter",    "OpenRouter (DeepSeek)", _passthrough(_probe_openrouter)),
     ("e2b",           "E2B Sandbox",           _cached_probe(_probe_e2b)),
-    ("tavily",        "Tavily Search",         _probe_tavily),
-    ("firecrawl",     "Firecrawl Scrape",      _probe_firecrawl),
-    ("resend",        "Resend Email",          _probe_resend),
-    ("sentry",        "Sentry Monitoring",     _probe_sentry),
-    ("vercel",           "Vercel Deploy",               _probe_vercel),
-    ("supabase_platform","Supabase Provisioner",        _probe_supabase_platform),
-    ("vercel_platform",  "Vercel (Platform-scoped)",    _probe_vercel_platform),
-    ("mongodb",          "MongoDB",                     _probe_mongodb),
+    ("tavily",        "Tavily Search",         _passthrough(_probe_tavily)),
+    ("firecrawl",     "Firecrawl Scrape",      _passthrough(_probe_firecrawl)),
+    ("resend",        "Resend Email",          _passthrough(_probe_resend)),
+    ("sentry",        "Sentry Monitoring",     _passthrough(_probe_sentry)),
+    ("vercel",           "Vercel Deploy",               _passthrough(_probe_vercel)),
+    ("supabase_platform","Supabase Provisioner",        _passthrough(_probe_supabase_platform)),
+    ("vercel_platform",  "Vercel (Platform-scoped)",    _passthrough(_probe_vercel_platform)),
+    ("mongodb",          "MongoDB",                     _passthrough(_probe_mongodb)),
 ]
 
 
@@ -942,7 +981,7 @@ async def run_all_probes_CONCURRENT_TEST_ONLY() -> list[dict]:
     return list(results)
 
 
-async def run_all_probes_serial(gap_s: float = 3.0) -> list[dict]:
+async def run_all_probes_serial(gap_s: float = 3.0, force: bool = False) -> list[dict]:
     """Iter 336b — probes ONE at a time with a yield gap between each.
 
     The concurrent 11-probe burst (TLS ×11 + LiteLLM tokenizer init +
@@ -953,14 +992,24 @@ async def run_all_probes_serial(gap_s: float = 3.0) -> list[dict]:
     over ~30 s, keeping /health <1 s throughout. The cron (600 s
     interval) doesn't care about probe-cycle latency.
 
-    2026-08-27 — round 3: prod still showed `/health` 110 timeouts
-    landing inside this window even with gap_s=1.5, because to_thread
-    frees the event loop but not the CPU on a sub-1-vCPU pod (GIL
-    contention). Bumped 1.5 → 3.0 for more coast time between bursts,
-    paired with `_cached_probe()` above for the two heaviest probes."""
+    2026-08-27 round 3: bumped gap_s 1.5 → 3.0 (see the CADENCE/
+    MECHANISM comment above `_PROBES` for the reconciled numbers and
+    the honest CONFIRMED/LIKELY split on why), paired with the
+    asymmetric `_cached_probe()` TTL for the two heaviest probes.
+    Total serial cycle ≈ 11 probes × 3.0s gap + individual probe
+    latencies ≈ 33s + latencies (was reported as "~40s" — the gap
+    alone is 33s; actual measured total was ~40s including probe
+    latency, both consistent).
+
+    `force=True` bypasses the cache entirely (used by the founder-
+    facing "force re-probe now" admin action — grepped for every
+    caller of this function; `routers/admin_ops_config.py`'s
+    `POST /integrations/refresh` explicitly promises "each call
+    actually hits all the external APIs", which the cache would have
+    silently broken without this bypass)."""
     results = []
     for id_, name, fn in _PROBES:
-        results.append(await _run(fn(), id_, name))
+        results.append(await _run(fn(force=force), id_, name))
         await asyncio.sleep(gap_s)
     return results
 

@@ -350,9 +350,14 @@ async def integrations_refresh(
     # cold-start path above — use the serial runner, not the
     # concurrent one, so a manual refresh can never reproduce the
     # `/health` upstream-timeout deploy failure.
+    # 2026-08-27 — force=True: this endpoint's own docstring promises
+    # "each call actually hits all the external APIs". The new
+    # Stripe/e2b result cache (see integration_health.py) would have
+    # silently served a stale cached result here instead — bypass it
+    # so a founder-triggered refresh is always a real, live probe.
     from services.integration_health import (
         run_all_probes_serial, summary_counts)
-    results = await run_all_probes_serial()
+    results = await run_all_probes_serial(force=True)
     snap = {
         "results":      results,
         "summary":      summary_counts(results),
