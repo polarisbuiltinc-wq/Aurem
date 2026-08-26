@@ -25,6 +25,11 @@ class _FakeCollection:
 
     def _match(self, row, query):
         for k, v in (query or {}).items():
+            if isinstance(v, dict) and "$exists" in v:
+                present = k in row
+                if present != bool(v["$exists"]):
+                    return False
+                continue
             if row.get(k) != v:
                 return False
         return True
@@ -42,11 +47,31 @@ class _FakeCollection:
         for r in self.rows:
             if self._match(r, query):
                 r.update(update.get("$set") or {})
+                for k in (update.get("$unset") or {}):
+                    r.pop(k, None)
                 return
         if upsert:
             new_row = dict(query or {})
             new_row.update(update.get("$set") or {})
             self.rows.append(new_row)
+
+    async def find_one_and_update(self, query, update, upsert=False):
+        # Phase A idempotency claim needs the pre-image + atomic single-
+        # threaded semantics — fine for this synchronous fake collection.
+        for r in self.rows:
+            if self._match(r, query):
+                before = dict(r)
+                r.update(update.get("$set") or {})
+                for k in (update.get("$unset") or {}):
+                    r.pop(k, None)
+                return before
+        if upsert:
+            new_row = dict({k: v for k, v in (query or {}).items()
+                             if not isinstance(v, dict)})
+            new_row.update(update.get("$set") or {})
+            self.rows.append(new_row)
+            return None
+        return None
 
 
 class _FakeDB:
@@ -192,6 +217,13 @@ async def test_tb2_apply_endpoint_real_commit_flow(fake_db, monkeypatch):
     })
     app, _ = _app(fake_db)
     c = TestClient(app)
+
+    # Phase A idempotency claim (BUILD PROMPT v4 §4) requires the
+    # first_scan_results row to already exist — real users can only ever
+    # click "Fix" once a scan has produced a `ready` card, so run the real
+    # scan trigger first, exactly like T-B1.
+    from services.onboarding_first_scan import trigger_first_scan
+    await trigger_first_scan(db=fake_db, user_id=USER_ID, project_id=PROJECT_ID)
 
     r = c.post("/api/aurem-dev/onboarding/first-scan/apply",
               json={"project_id": PROJECT_ID},

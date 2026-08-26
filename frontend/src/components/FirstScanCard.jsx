@@ -1,5 +1,8 @@
 /**
  * components/FirstScanCard.jsx — Onboarding Step 4 · S-B (2026-08-26).
+ * BUILD PROMPT v4 · Phase A (2026-08-26) — read-back fix + idempotency +
+ * WorkCard render, flag-gated via `workcard_first_scan` (default OFF,
+ * allowlisted test account only until proven stable — D2/D3).
  *
  * The first-scan aha: "Connected — scanning your site..." -> plain-
  * language findings card -> "Fix all N for me" -> real commit.
@@ -12,18 +15,34 @@
  * FounderOfferCard's placement/styling conventions.
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { CheckCircle2, Search, AlertTriangle, Loader2 } from "lucide-react";
 import { api } from "../lib/api";
+import WorkCard from "./WorkCard";
 
 const POLL_MS = 2000;
 const MAX_POLL_MS = 60_000;
+
+// Reuses the existing "ora:prefill" event (already wired in ChatPanel.jsx)
+// instead of adding a new endpoint/bridge — Phase A guardrail: reuse before
+// build.
+function promptChat(message) {
+  try {
+    window.dispatchEvent(new CustomEvent("ora:prefill", { detail: { message } }));
+  } catch { /* ignore */ }
+}
 
 export default function FirstScanCard({ projectId }) {
   const [state, setState] = useState(null);   // full /status response
   const [applying, setApplying] = useState(false);
   const [applyResult, setApplyResult] = useState(null); // {commit_sha, commit_url, files_fixed}
   const [dismissed, setDismissed] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
+  const [lastPolledAt, setLastPolledAt] = useState(null);
+  const [, setTick] = useState(0); // re-renders the heartbeat clock every 1s
   const viewedSentRef = useRef(false);
   const pollStartRef = useRef(null);
+  const statusRef = useRef(null);
+  const applyingRef = useRef(false); // synchronous double-click guard (ahead of React's async setState)
 
   const poll = useCallback(async () => {
     if (!projectId || projectId === "home") return;
@@ -32,21 +51,30 @@ export default function FirstScanCard({ projectId }) {
         params: { project_id: projectId },
       });
       setState(r.data);
+      statusRef.current = r.data?.status;
+      setLastPolledAt(Date.now());
     } catch (_e) {
       // best-effort — never raise to the UI
     }
   }, [projectId]);
 
+  const startPollLoop = useCallback(() => {
+    pollStartRef.current = Date.now();
+    setTimedOut(false);
+    poll();
+  }, [poll]);
+
   useEffect(() => {
     if (!projectId || projectId === "home") return;
-    pollStartRef.current = Date.now();
+    startPollLoop();
     let stopped = false;
-    poll();
     const t = setInterval(() => {
       if (stopped) return;
-      const st = state?.status;
-      if (st === "ready" || st === "clean" || st === "skipped" || st === "error" ||
-          Date.now() - pollStartRef.current > MAX_POLL_MS) {
+      const st = statusRef.current;
+      const active = st === "scanning" || st === "still_scanning" || st == null;
+      if (!active) { clearInterval(t); return; }
+      if (Date.now() - pollStartRef.current > MAX_POLL_MS) {
+        setTimedOut(true);
         clearInterval(t);
         return;
       }
@@ -56,6 +84,15 @@ export default function FirstScanCard({ projectId }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
+  // Heartbeat clock — ticks every second only while actively scanning or
+  // timed-out, so "last checked Ns ago" stays live instead of frozen.
+  useEffect(() => {
+    const st = state?.status;
+    if (st !== "scanning" && st !== "still_scanning" && !timedOut) return undefined;
+    const h = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(h);
+  }, [state?.status, timedOut]);
+
   useEffect(() => {
     if (state?.status === "ready" && !viewedSentRef.current) {
       viewedSentRef.current = true;
@@ -64,6 +101,8 @@ export default function FirstScanCard({ projectId }) {
   }, [state, projectId]);
 
   const handleFix = useCallback(async () => {
+    if (applyingRef.current) return;
+    applyingRef.current = true;
     setApplying(true);
     try {
       const r = await api.post("/onboarding/first-scan/apply", { project_id: projectId });
@@ -72,12 +111,187 @@ export default function FirstScanCard({ projectId }) {
       setApplyResult({ ok: false, error: e?.response?.data?.detail || "Couldn't apply the fix." });
     } finally {
       setApplying(false);
+      applyingRef.current = false;
     }
   }, [projectId]);
 
-  if (!projectId || projectId === "home" || dismissed) return null;
-  if (!state || state.status === "skipped") return null;
+  const handleRefresh = useCallback(() => { startPollLoop(); }, [startPollLoop]);
 
+  if (!projectId || projectId === "home" || dismissed) return null;
+  if (!state) return null;
+
+  const workcardOn = !!state.workcard_enabled;
+
+  if (!workcardOn) {
+    if (state.status === "skipped") return null;
+    return (
+      <LegacyFirstScanCard
+        state={state}
+        applying={applying}
+        applyResult={applyResult}
+        handleFix={handleFix}
+        onDismiss={() => setDismissed(true)}
+      />
+    );
+  }
+
+  // ── Phase A WorkCard render (flag ON) ──────────────────────────────
+  if (state.status === "skipped") {
+    return (
+      <WorkCard
+        testId="first-scan-card"
+        tone="grey"
+        badgeLabel="Skipped"
+        title="Free first-scan already used"
+        body="You've already used your free first-scan on another repo — but I'm happy to check this one too."
+        primaryAction={{
+          label: "Scan this repo",
+          testId: "first-scan-request-scan-btn",
+          onClick: () => promptChat("Can you check this repo for SEO issues like missing meta tags, titles, or alt text?"),
+        }}
+      />
+    );
+  }
+
+  if (state.status === "scanning" || state.status === "still_scanning") {
+    if (timedOut) {
+      const secsAgo = lastPolledAt ? Math.max(0, Math.round((Date.now() - lastPolledAt) / 1000)) : null;
+      return (
+        <WorkCard
+          testId="first-scan-card"
+          tone="amber"
+          badgeLabel="Still working"
+          icon={<Loader2 size={14} />}
+          title="Still working on your scan"
+          body={secsAgo != null
+            ? `Last checked ${secsAgo}s ago — this can take longer on larger repos.`
+            : "This can take longer on larger repos."}
+          primaryAction={{ label: "Refresh", testId: "first-scan-refresh-btn", onClick: handleRefresh }}
+        />
+      );
+    }
+    return (
+      <WorkCard
+        testId="first-scan-card"
+        tone="blue"
+        badgeLabel="Scanning"
+        icon={<Loader2 size={14} className="animate-spin" />}
+        title={state.status === "still_scanning"
+          ? (state.message || "Still scanning — you can start chatting in the meantime.")
+          : "Connected — scanning your site…"}
+      />
+    );
+  }
+
+  if (state.status === "error") {
+    return (
+      <WorkCard
+        testId="first-scan-card"
+        tone="red"
+        badgeLabel="Scan failed"
+        icon={<AlertTriangle size={14} />}
+        title="I couldn't scan your repo"
+        body={state.message || "Something went wrong on my end."}
+        primaryAction={{ label: "Retry scan", testId: "first-scan-retry-btn", onClick: handleRefresh }}
+        secondaryAction={{ label: "Just chat instead", testId: "first-scan-chat-instead-btn", onClick: () => setDismissed(true) }}
+      />
+    );
+  }
+
+  if (state.status === "clean") {
+    return (
+      <WorkCard
+        testId="first-scan-card"
+        tone="green"
+        badgeLabel="Clean"
+        icon={<CheckCircle2 size={18} />}
+        title="Your site looks in good shape!"
+        body="No SEO issues found on your homepage — titles, meta description, and alt text all check out."
+        primaryAction={{
+          label: "Start a task",
+          testId: "first-scan-start-task-btn",
+          onClick: () => promptChat("What should we build or improve next?"),
+        }}
+      />
+    );
+  }
+
+  // status === "ready" — read-back fix: prefer a fresh apply result from
+  // this session, else fall back to a fix already saved server-side so a
+  // reload shows "already fixed" instead of the unfixed findings again.
+  const fixed = applyResult?.commit_sha ? applyResult
+    : (state.commit_sha ? state : null);
+
+  if (fixed) {
+    return (
+      <WorkCard
+        testId="first-scan-card"
+        tone="green"
+        badgeLabel="Fixed"
+        icon={<CheckCircle2 size={16} />}
+        title="Fixed and shipped"
+        body={
+          <span data-testid="first-scan-fixed">
+            Fixed {fixed.files_fixed ?? 0} file(s) — committed as{" "}
+            {fixed.commit_url ? (
+              <a href={fixed.commit_url} target="_blank" rel="noreferrer"
+                 data-testid="first-scan-commit-link" style={{ color: "#7dd3fc" }}>
+                {String(fixed.commit_sha).slice(0, 7)}
+              </a>
+            ) : (
+              <code>{String(fixed.commit_sha).slice(0, 7)}</code>
+            )}
+          </span>
+        }
+      />
+    );
+  }
+
+  const cards = state.cards || [];
+  const primary = cards[0];
+  const restCount = (cards.length - 1) + (state.more_count || 0);
+
+  return (
+    <WorkCard
+      testId="first-scan-card"
+      tone="blue"
+      badgeLabel="Findings"
+      icon={<Search size={14} />}
+      title="I looked at your site. Here's what I found:"
+      body={
+        <>
+          {primary && (
+            <ul data-testid="first-scan-primary-finding" style={{ margin: 0, paddingLeft: 18 }}>
+              {primary.bullets.map((b, i) => <li key={i}>{b}</li>)}
+            </ul>
+          )}
+          {restCount > 0 && (
+            <div data-testid="first-scan-more-count" style={{ marginTop: 4, color: "var(--text-dim, #777)" }}>
+              {restCount} more improvement{restCount === 1 ? "" : "s"}. I can fix them too.
+            </div>
+          )}
+          {applyResult?.error && (
+            <div data-testid="first-scan-apply-error" style={{ marginTop: 4, color: "#fca5a5" }}>
+              {applyResult.error}
+            </div>
+          )}
+        </>
+      }
+      primaryAction={{
+        label: applying ? "Working…" : `Fix all ${state.findings_count || cards.length} for me`,
+        testId: "first-scan-fix-all-btn",
+        disabled: applying,
+        onClick: handleFix,
+      }}
+      secondaryAction={{ label: "Not now", testId: "first-scan-dismiss-btn", disabled: applying, onClick: () => setDismissed(true) }}
+    />
+  );
+}
+
+// ── Legacy render (flag OFF) — unchanged from pre-Phase-A behaviour. ────
+// Kept verbatim as the rollback target: if the WorkCard path regresses,
+// flipping the flag off restores exactly this.
+function LegacyFirstScanCard({ state, applying, applyResult, handleFix, onDismiss }) {
   const cardStyle = {
     margin: "0 clamp(16px, 17.25%, 240px)",
     padding: "10px 16px",
@@ -148,7 +362,6 @@ export default function FirstScanCard({ projectId }) {
     );
   }
 
-  // status === "ready"
   const cards = state.cards || [];
   const primary = cards[0];
   const restCount = (cards.length - 1) + (state.more_count || 0);
@@ -185,7 +398,7 @@ export default function FirstScanCard({ projectId }) {
           type="button"
           data-testid="first-scan-dismiss-btn"
           disabled={applying}
-          onClick={() => setDismissed(true)}
+          onClick={onDismiss}
           className="btn-ghost"
           style={{ padding: "6px 14px", fontSize: 12 }}
         >
