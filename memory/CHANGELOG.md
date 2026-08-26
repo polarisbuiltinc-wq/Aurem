@@ -850,3 +850,8 @@ Founder rule for this pass: MERGE pages the founder built, make them fast — do
   3. Correction to the earlier admin-audit record: `AdminSystemHealth.jsx` (738 lines) was previously reported as "fully orphaned" — that was **wrong**. It's actually linked from `AdminOverview.jsx:375` (`data-testid="goto-system-health"`) and referenced by `AdminCockpit.jsx` and `lib/cleanErr.js`'s error message. **Not** a removals candidate.
 
 
+## 2026-08-27 — Security closeout Part 1: g4_secret_scanner.py wired into CI
+
+Founder-flagged gap from the security triage: `g4_secret_scanner.py` existed but ran nowhere. Now wired as a "Guard 4" step in `.github/workflows/ci.yml`'s `frontend-build` job, right after `yarn build`: boots the actual production bundle via `yarn preview` (same mechanism `quality-gate.yml`'s Lighthouse job already uses — reused, not invented), then runs `python3 scripts/g4_secret_scanner.py --base-url http://localhost:3000` against it. Scans the build that's about to ship on THIS push, not stale production. Zero new dependencies (stdlib-only script). Verified both directions against real HTTP fixtures (`tests/test_iter362_g4_secret_scanner_ci_wire.py`, 3 tests, all pass): a real rendered Stripe live key + GitHub PAT → flagged (`stripe_live`, `github_pat`); placeholder/docstring examples (`sk-aurem-XXXX`, `ghp_your_token`, `sk_test_XXXX`) → not flagged. Also ran the ACTUAL current `yarn build` output through the real scanner on an isolated port (4173) — zero false positives, exit 0, so no S3 report-don't-disable situation arose. Security now has all 3 layers running on every push: AST dangerous-code gate (g21) + rendered-page secret scanner (g4) + git-history secret scanner (trufflehog).
+
+

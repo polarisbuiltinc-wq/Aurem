@@ -66,6 +66,32 @@ jobs:
           path: /tmp/build_output.txt
           retention-days: 7
 
+      # 2026-08-27 · Guard 4 — rendered-page secret scan (Iter 362).
+      # Scans the ACTUAL build that's about to ship (via `yarn preview`,
+      # the same production-bundle server Lighthouse CI already boots
+      # for Core Web Vitals — see quality-gate.yml), not stale
+      # production. Blocks only on a VERIFIED real-secret-shaped match
+      # (see PATTERNS/ALLOWLIST_SUBSTRS in the script) — same bar as
+      # trufflehog, no heuristic/false-positive blocking. stdlib-only,
+      # no new dependency.
+      - name: Guard 4 — rendered-page secret scan
+        working-directory: frontend
+        run: |
+          yarn preview > /tmp/preview.log 2>&1 &
+          PREVIEW_PID=$!
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/ >/dev/null 2>&1 && break
+            sleep 1
+          done
+          cd ../backend
+          python3 scripts/g4_secret_scanner.py --base-url http://localhost:3000
+          EXIT=$?
+          kill "$PREVIEW_PID" 2>/dev/null || true
+          if [ "$EXIT" -ne 0 ]; then
+            echo "::error::Guard 4 found a real secret in rendered output — see log above"
+          fi
+          exit $EXIT
+
 
   backend-tests:
     name: Backend — pytest
