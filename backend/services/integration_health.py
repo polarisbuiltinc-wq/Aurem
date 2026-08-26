@@ -862,13 +862,47 @@ async def _probe_openrouter() -> dict:
 # Public entry points
 # ────────────────────────────────────────────────────────────────────────
 
+# 2026-08-27 — prod `/health` 110-timeout hardening, round 3. Iter
+# 331/336b already moved Stripe (8 sequential blocking calls) and e2b
+# (full sandbox boot+run+kill) onto worker threads via asyncio.to_thread
+# and serialized the probe cycle — that fixed two prior outages but
+# prod logs (2026-08-26) still showed nginx `/health` 110 timeouts
+# landing exactly inside this cron's window. Root cause: on a CPU-
+# capped pod (<1 vCPU), a busy `to_thread` worker still contends with
+# the event-loop thread for the GIL during response parsing/TLS —
+# `to_thread` frees the *event loop*, not the *CPU*. Stripe and e2b are
+# by far the heaviest probes here, so cache their real result for
+# `_HEAVY_PROBE_TTL_S` and only re-run the live network call once it
+# expires — cuts the two biggest CPU bursts to ~1 in 3 cron ticks
+# without touching probe logic or weakening detection (a real outage
+# is still caught within one TTL window).
+_HEAVY_PROBE_TTL_S = 1800.0  # 30 min == 3 ticks at the default 600s cron
+_PROBE_CACHE: dict[str, tuple[float, dict]] = {}
+
+
+def _cached_probe(fn: Callable[[], Awaitable[dict]], ttl_s: float = _HEAVY_PROBE_TTL_S):
+    async def _wrapped() -> dict:
+        now = time.time()
+        cached = _PROBE_CACHE.get(fn.__name__)
+        if cached and (now - cached[0]) < ttl_s:
+            r = dict(cached[1])
+            r["checked_at"] = _now_iso()
+            if not r.get("summary", "").endswith("(cached)"):
+                r["summary"] = f"{r.get('summary', '')} (cached)".strip()
+            return r
+        result = await fn()
+        _PROBE_CACHE[fn.__name__] = (now, result)
+        return result
+    return _wrapped
+
+
 # Maps id → (display name, async probe fn, fix-hint fallback)
 _PROBES: list[tuple[str, str, Callable[[], Awaitable[dict]]]] = [
-    ("stripe",        "Stripe",                _probe_stripe),
+    ("stripe",        "Stripe",                _cached_probe(_probe_stripe)),
     ("github_oauth",  "GitHub OAuth",          _probe_github_oauth),
     ("emergent_llm",  "Emergent LLM Key", _probe_emergent_llm),
     ("openrouter",    "OpenRouter (DeepSeek)", _probe_openrouter),
-    ("e2b",           "E2B Sandbox",           _probe_e2b),
+    ("e2b",           "E2B Sandbox",           _cached_probe(_probe_e2b)),
     ("tavily",        "Tavily Search",         _probe_tavily),
     ("firecrawl",     "Firecrawl Scrape",      _probe_firecrawl),
     ("resend",        "Resend Email",          _probe_resend),
@@ -908,7 +942,7 @@ async def run_all_probes_CONCURRENT_TEST_ONLY() -> list[dict]:
     return list(results)
 
 
-async def run_all_probes_serial(gap_s: float = 1.5) -> list[dict]:
+async def run_all_probes_serial(gap_s: float = 3.0) -> list[dict]:
     """Iter 336b — probes ONE at a time with a yield gap between each.
 
     The concurrent 11-probe burst (TLS ×11 + LiteLLM tokenizer init +
@@ -917,7 +951,13 @@ async def run_all_probes_serial(gap_s: float = 1.5) -> list[dict]:
     (10 min) flapped readiness, and the post-deploy health check hit
     that window and failed the deployment. Serializing spreads the CPU
     over ~30 s, keeping /health <1 s throughout. The cron (600 s
-    interval) doesn't care about probe-cycle latency."""
+    interval) doesn't care about probe-cycle latency.
+
+    2026-08-27 — round 3: prod still showed `/health` 110 timeouts
+    landing inside this window even with gap_s=1.5, because to_thread
+    frees the event loop but not the CPU on a sub-1-vCPU pod (GIL
+    contention). Bumped 1.5 → 3.0 for more coast time between bursts,
+    paired with `_cached_probe()` above for the two heaviest probes."""
     results = []
     for id_, name, fn in _PROBES:
         results.append(await _run(fn(), id_, name))
