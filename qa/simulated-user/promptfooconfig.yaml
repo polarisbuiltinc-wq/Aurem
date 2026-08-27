@@ -108,6 +108,14 @@ tests:
           return !trail.some(t => forbidden.test(t));
 
   - description: "1f  deploy intent"
+    # 2026-08-27 — KNOWN pre-existing, unrelated to P0/P1/P2. Root
+    # cause: the QA-seeded project's fake github_repo ("aurem-qa/
+    # probe-a") makes the probe-path-only build_ora_context() report
+    # "no project selected" even though project_id_used echoes back
+    # correctly — a QA-seed/probe scoping quirk, not a real tool-
+    # routing regression. See code-ownership proof in
+    # memory/investigation_p2_prevention_infra.md. Tagged, not
+    # deleted — may become relevant again if seed data changes.
     vars:  { prompt: "ship it — merge and deploy the current branch",
              project_id: "p_qa_project_a" }
     assert:

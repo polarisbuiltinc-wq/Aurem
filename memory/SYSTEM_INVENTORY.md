@@ -853,3 +853,15 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `GH_PUSH_PROOF_BRANCH` — auto-detected in backend/scripts/one_time_real_push_proof.py (verify) (default: unset) [Iter 0, 2026-08-25T15:04:38.131729Z] <!-- inv:envvar:GH_PUSH_PROOF_BRANCH -->
 | `routers/onboarding_first_scan.py` | `/onboarding/first-scan` | 3 | auto-detected new router (verify) (Iter 0, 2026-08-25T17:16:59.023172Z) | <!-- inv:router:routers/onboarding_first_scan.py -->
 - `services/onboarding_first_scan.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-25T17:16:59.023203Z] <!-- inv:service:services/onboarding_first_scan.py -->
+
+### Iter 0 · 2026-08-27
+
+- `services/leak_alert_cron.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-27T05:09:30.759950Z] <!-- inv:service:services/leak_alert_cron.py -->
+- `LEAK_ALERT_INTERVAL_SEC` — auto-detected in backend/services/leak_alert_cron.py (verify) (default: unset) [Iter 0, 2026-08-27T05:09:30.759989Z] <!-- inv:envvar:LEAK_ALERT_INTERVAL_SEC -->
+- `LEAK_ALERT_THRESHOLD` — auto-detected in backend/services/leak_alert_cron.py (verify) (default: unset) [Iter 0, 2026-08-27T05:09:30.760006Z] <!-- inv:envvar:LEAK_ALERT_THRESHOLD -->
+- `ENABLE_LEAK_ALERT_CRON` — auto-detected in backend/services/leak_alert_cron.py (verify) (default: unset) [Iter 0, 2026-08-27T05:09:30.760022Z] <!-- inv:envvar:ENABLE_LEAK_ALERT_CRON -->
+- `loop_run_log kind='internal_fault_not_user'` — auto-detected in backend/services/leak_alert_cron.py (verify) [Iter 0, 2026-08-27T05:09:30.760037Z] <!-- inv:loop_run_log_kind:internal_fault_not_user -->
+- `services/output_guard.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-27T05:09:30.760055Z] <!-- inv:service:services/output_guard.py -->
+- `AUREM_DRILL_REPO_OWNER` — auto-detected in backend/tests/test_iter2026_08_27_ship_e2e_real_push.py (verify) (default: unset) [Iter 0, 2026-08-27T05:09:30.760074Z] <!-- inv:envvar:AUREM_DRILL_REPO_OWNER -->
+- `AUREM_DRILL_REPO_NAME` — auto-detected in backend/tests/test_iter2026_08_27_ship_e2e_real_push.py (verify) (default: unset) [Iter 0, 2026-08-27T05:09:30.760093Z] <!-- inv:envvar:AUREM_DRILL_REPO_NAME -->
+- `AUREM_DRILL_USER_ID` — auto-detected in backend/tests/test_iter2026_08_27_ship_e2e_real_push.py (verify) (default: unset) [Iter 0, 2026-08-27T05:09:30.760110Z] <!-- inv:envvar:AUREM_DRILL_USER_ID -->

@@ -2631,6 +2631,13 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
               llmProvenance: d.llm_provenance && typeof d.llm_provenance === "object"
                 ? d.llm_provenance
                 : null,
+              // 2026-08-27 — P3a "ORA remembers this" (D5). Rides the
+              // SAME explain_plain_english_v1 flag as the plain-
+              // English contract (documented choice — no sibling
+              // flag: this chip is part of that same explain-branch
+              // surface, so it should turn on/off with the identical
+              // gate rather than drift out of sync via a second flag).
+              plainEnglishContractActive: !!d.plain_english_contract_active,
             };
           }
           return copy;
@@ -4666,11 +4673,43 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
             : [];
           return (
             <React.Fragment key={i}>
+              {/* 2026-08-27 — P3a "ORA remembers this" (D5, "Show the
+                  Outcome, Never the Engine"). On the explain-branch
+                  surface (plainEnglishContractActive), the recall
+                  signal is shown as a TRUST outcome, not an engine
+                  detail — no count, no "council"/"RAG"/"few-shot"
+                  wording. Off that surface, the original detailed
+                  Iter 212m-78 caption is unchanged. */}
+              {m.role === "assistant"
+                && (m.councilRecalled || 0) > 0
+                && m.plainEnglishContractActive && (
+                <div
+                  data-testid={`ora-remembers-chip-${i}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    margin: "4px 0 2px 4px",
+                    padding: "3px 9px",
+                    fontSize: 11,
+                    color: "rgba(245,158,11,0.95)",
+                    background: "rgba(245,158,11,0.06)",
+                    border: "1px solid rgba(245,158,11,0.25)",
+                    borderRadius: 999,
+                    letterSpacing: 0.2,
+                  }}
+                  title="ORA remembers this"
+                >
+                  ORA remembers this
+                </div>
+              )}
               {/* Iter 212m-78 — Council recall caption.  Renders only
                   when the backend RAG retriever surfaced past
-                  examples for this turn (council_recalled > 0). */}
+                  examples for this turn (council_recalled > 0), and
+                  the P3a plain chip above did NOT already cover it. */}
               {m.role === "assistant"
-                && (m.councilRecalled || 0) > 0 && (
+                && (m.councilRecalled || 0) > 0
+                && !m.plainEnglishContractActive && (
                 <div
                   data-testid={`council-recall-caption-${i}`}
                   style={{

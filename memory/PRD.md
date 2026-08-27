@@ -6955,3 +6955,14 @@ Founder approved P2 with 5 locked decisions (Q1-Q5, see `memory/investigation_p2
 
 **STOPPED per governing rule — P3 ("ORA remembers this" indicator) NOT started, awaiting founder review of P2.**
 
+
+## 2026-08-27 — "Show the Outcome, Never the Engine" P3 (final phase) — DONE, testing_agent-verified
+
+P3a ("ORA remembers this" plain-trust chip), P3b (weekly Quiet Leak Digest), P3c (rollout-prep docs, not executed) all shipped. Report: `/app/test_reports/iteration_p3_show_outcome_2026_08_27.json`, detail in `memory/investigation_p3_show_outcome.md`. 10/10 new tests pass, 0 new regressions.
+
+- P3a: plain chip in `ChatPanel.jsx`, rides `explain_plain_english_v1` flag, gated on `plainEnglishContractActive && councilRecalled>0`. Live curl proof confirmed both flags fire together. Live UI screenshot blocked by the same pre-existing `app_installation_missing` gap as P2 item 3 (env issue, not a P3 bug).
+- P3b: `services/leak_digest.py` (new), weekly email reusing `daily_digest.py` + existing audit-spine collections.
+- P3c: documented flag-removal diff + widening-precondition checklist in `memory/investigation_p3_rollout_prep.md`. NOT executed — founder owns the rollout.
+
+**"Show the Outcome, Never the Engine" (P0→P3) is now fully complete.** Remaining founder actions: finish GitHub App install on drill repo (unblocks P2 item 3 + P3a screenshot); decide on rollout widening timing.
+

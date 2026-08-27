@@ -109,6 +109,7 @@ from services.integration_health_cron import schedule_integration_health_cron
 from services.slo_alert_cron import schedule_slo_alert_cron
 from services.cost_revenue_alert_cron import schedule_cost_revenue_alert_cron
 from services.leak_alert_cron import schedule_leak_alert_cron
+from services.leak_digest import schedule_leak_digest_cron
 # Session F — supervised background-task wrapper. Long-lived crons
 # use `supervise(coro, name=..., db_getter=..., long_lived=True)`
 # instead of `_asyncio.create_task(...)` so silent death opens a
@@ -381,6 +382,15 @@ async def lifespan(app: FastAPI):
     app.state.leak_alert_cron_task = _supervise(
         schedule_leak_alert_cron(),
         name="leak_alert_cron",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
+    )
+    # 2026-08-27 — P3b Quiet Leak Digest. Weekly (not daily) plain-
+    # English roll-up of the same audit-spine counters leak_alert_cron
+    # watches, reusing daily_digest.py's Resend send helper.
+    app.state.leak_digest_cron_task = _supervise(
+        schedule_leak_digest_cron(),
+        name="leak_digest_cron",
         db_getter=lambda: app.state.db,
         long_lived=True,
     )

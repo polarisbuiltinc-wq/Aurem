@@ -1,0 +1,39 @@
+{
+  "summary": "P3 (Show the Outcome, Never the Engine — final phase) independently verified. All 10 tests in test_iter2026_08_27_p3_show_outcome.py PASS. P1/P2 backend regressions (5 suites, 26 pass + 1 skip) still green — no regression from ChatPanel.jsx caption edit or main.py leak_digest_cron wiring. ChatPanel.jsx structural claims confirmed via grep + view: NEW plain chip (data-testid `ora-remembers-chip-{i}`, literal 'ORA remembers this', no engine words) gated on BOTH m.plainEnglishContractActive && (m.councilRecalled||0)>0 at lines 4683-4705; PRE-EXISTING detailed caption (data-testid `council-recall-caption-{i}`, '📚 ORA recalled N similar past answers') now gated on !m.plainEnglishContractActive at 4710-4735 so they never double-render. onDone wiring `plainEnglishContractActive: !!d.plain_english_contract_active` present at line 2640. main.py imports schedule_leak_digest_cron (line 112) and supervises it alongside leak_alert_cron (lines 382/391). Backend booted clean under supervisor with 'leak digest sleeping 97h until 2026-08-31T07:00:00+00:00' log line and no leak_alert_cron errors. LIVE BACKEND PROOF (independently re-verified): POST /api/aurem-dev/chat/send with test_admin_001 JWT, {\"prompt\":\"hi\",\"session_id\":\"p3-verify-1787808366-7236\"}, NO project_id → response returned `council_recalled=2` AND `plain_english_contract_active=true` simultaneously in the same JSON body (content='Hey there! 👋 What'\"'\"'s up?'). Broader regression sweep pytest -k 'chat_router or loop_engine or ora_chat or chatpanel' → 383 pass, 4 fail, 2 skip; the 4 failures match EXACTLY the pre-existing set listed in the request signature-for-signature (test_ora_chat::test_default_house_rules_content_matches_spec, test_phase2c_chat_router::test_happy_path_home_no_project, test_phase2c_chat_router_wave3::test_response_confidence_gate_crash_is_swallowed, test_regression_iter295_frontend_layer1_batch1::test_chatpanel_uses_agent_status_bar_component_not_inline_jsx) — no new failures introduced by P3. Promptfoo YAML re-parsed clean (yaml.safe_load OK) and the '1f deploy intent' KNOWN pre-existing tag comment is present at line 111. investigation_p3_rollout_prep.md exists in /app/memory/.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Live browser screenshot of P3a 'ORA remembers this' chip", "issue": "Not obtainable in preview env — every test_admin_001 project lacks a working GitHub App installation (project-scoped chat/send returns empty content + null council_recalled/plain_english_contract_active). Same pre-existing app_installation_missing root cause documented in memory/investigation_show_outcome_not_engine.md and memory/investigation_p2_prevention_infra.md. UI forces project scope (Home tab removed per founder request in TabBar.jsx). This is an ENVIRONMENT gap, NOT a P3a code bug — code path is proven correct via the project-less curl above where both flags fire together, and via the 10 structural tests on the actual ChatPanel.jsx source. Founder-owned action: install GitHub App on polarisbuiltinc-wq/aurem-rollback-testbed (in progress per main-agent note).", "affected_selectors": ["[data-testid^=\"ora-remembers-chip-\"]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter2026_08_27_p3_show_outcome.py",
+    "/app/backend/tests/test_iter2026_08_27_p2_audit_spine.py",
+    "/app/backend/tests/test_iter2026_08_27_ci_leak_linter.py",
+    "/app/backend/tests/test_iter2026_08_27_ship_e2e_real_push.py",
+    "/app/backend/tests/test_iter2026_08_27_plain_english_contract.py",
+    "/app/backend/tests/test_iter2026_08_27_p1_egress_net.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ChatPanel.jsx is 5950 lines — well over the 700-line guideline. Extract MessageList / RecallChips subcomponents in a future refactor pass (not P3 scope).",
+    "The two chip blocks (P3a plain + legacy detailed) share ~15 lines of inline style; consider extracting a shared `<RecallChip variant='plain'|'detailed'>` component to eliminate DRY violation.",
+    "Nothing blocking for this pass."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (on P3 + P1/P2 regression suites; 4 pre-existing failures on broader sweep are pre-P3 and match request signature)", "frontend": "structural 100% (10/10 unit tests on ChatPanel.jsx source pass); live browser screenshot blocked by unrelated env gap"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md) — used successfully to obtain JWT and hit /api/aurem-dev/chat/send.",
+  "seed_data_creation": "None. Live proof used session_id p3-verify-1787808366-7236 (new unique id, no project_id) to trigger recall against existing 900+ historical rows.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "P3 is fully verified at code + backend + backend-proof levels. Only remaining unverified surface is a live BROWSER screenshot of the plain chip — blocked by pre-existing env-level app_installation_missing on all test_admin_001 projects (NOT a P3 bug). Once founder completes GH App install on polarisbuiltinc-wq/aurem-rollback-testbed, a live UI screenshot pass will become possible; until then the curl proof + 10 structural unit tests fully cover the P3a wiring claim. Do NOT modify qa/simulated-user/promptfooconfig.yaml. Do NOT flip the explain_plain_english_v1 rollout flag (founder-executed).",
+  "live_proof_evidence": {
+    "endpoint": "POST /api/aurem-dev/chat/send",
+    "request_body": {"prompt": "hi", "session_id": "p3-verify-1787808366-7236"},
+    "auth": "test_admin_001 JWT (from /api/aurem-dev/auth/login)",
+    "response_fields": {"council_recalled": 2, "plain_english_contract_active": true, "content": "Hey there! 👋 What's up?", "provider": "intent-gateway-casual"}
+  }
+}
