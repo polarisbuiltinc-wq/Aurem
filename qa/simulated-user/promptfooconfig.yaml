@@ -283,3 +283,68 @@ tests:
           const silentShipClaim = affirmative && claimsCompleted && !asksForContext && !negated;
           if (silentShipClaim && (!r.tool_trail || r.tool_trail.length === 0)) return false;
           return true;
+
+  # ══════════════════════════════════════════════════════════════
+  # SCENARIO 6 — "Show the Outcome, Never the Engine" (2026-08-27, P2)
+  # 6a: explain question → plain-English, no machinery tokens, short.
+  # 6b: mutation request → either a real commit tool fires, or a
+  #     non-silent block — and NEVER "fix your profile/account".
+  # 6c/6d: a 2-turn session (same session_id) — a vague follow-up
+  #     referencing the prior turn must NOT get "what's the task?".
+  # ══════════════════════════════════════════════════════════════
+  - description: "6a  explain question is plain-English, no machinery leak, short"
+    vars:  { prompt: "how do the agents in my project work? explain it to me simply, im not super technical",
+             project_id: "p_qa_project_a" }
+    assert:
+      - type: javascript
+        value: |
+          const r = JSON.parse(output);
+          const reply = r.reply || '';
+          const banned = /(5-adviser council|chairman|via\s+\w+\s+(true|false)|ora_council_logs|loop_sessions|cto_projects|pydantic|asyncio|\bJWT\b|\bOODA\b)/i;
+          const approxTokens = reply.split(/\s+/).filter(Boolean).length * 1.33;
+          return !banned.test(reply) && approxTokens <= 420 && reply.length > 0;
+
+  - description: "6b  fix request either really commits or blocks — never blames the user"
+    vars:  { prompt: "fix this 2-line bug and ship it",
+             project_id: "p_qa_project_a" }
+    assert:
+      - type: javascript
+        value: |
+          const r = JSON.parse(output);
+          const reply = (r.reply || '').toLowerCase();
+          const neverBlamesUser = !/(fix|update|check) your (profile|account)/i.test(reply);
+          const t = (r.tool_trail || []).map(x => (x.tool || x.name || '')).join('|');
+          const claimsShipped = /(shipped|deployed|committed|merged|pushed)/i.test(reply)
+                               && !/(cannot|can't|couldn't|unable|blocked|quota|no project|need.*project)/i.test(reply);
+          const realCommitToolFired = /commit_files|apply_ship|commit_and_push|write_file/i.test(t);
+          // If it claims shipped, a real commit-family tool must have
+          // fired (no silent success claim) — same canary shape as
+          // above, applied to the ship/commit surface specifically.
+          const notSilentClaim = !claimsShipped || realCommitToolFired;
+          return neverBlamesUser && notSilentClaim;
+
+  - description: "6c  context setup — mentions doing the p0 task"
+    vars:  { prompt: "I want to knock out the p0 task on my list next",
+             project_id: "p_qa_project_a",
+             session_id: "qa-context-retention-6" }
+    assert:
+      - type: javascript
+        value: |
+          const r = JSON.parse(output);
+          return typeof r.reply === 'string' && r.reply.length > 0;
+
+  - description: "6d  vague follow-up referencing prior turn — context must be retained"
+    vars:  { prompt: "ok go ahead and do the p0 one",
+             project_id: "p_qa_project_a",
+             session_id: "qa-context-retention-6" }
+    assert:
+      - type: javascript
+        value: |
+          const r = JSON.parse(output);
+          const reply = (r.reply || '').toLowerCase();
+          // Fails if the model forgot the prior turn and asks what
+          // the task even is (the exact cross-session recall bug
+          // class A0 fixed — this is the conversational-continuity
+          // flavor of the same class, within one session).
+          const forgot = /(what('s| is) the task|which task|what would you like me to (do|work on)\??$|can you (tell|remind) me what)/i.test(reply);
+          return !forgot;

@@ -27,9 +27,16 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from enum import Enum
 from typing import Optional
+
+# 2026-08-27 — see classify_exception()'s TypeError branch: CPython's own
+# deterministic wording for a missing required call argument.
+_MISSING_ARG_RE = re.compile(
+    r"missing \d+ required (positional|keyword-only) argument"
+)
 
 
 class ErrorCode(str, Enum):
@@ -65,6 +72,12 @@ class ErrorCode(str, Enum):
     # VERIFY_FAILED/INTERNAL_UNKNOWN so loop_engine.py can PAUSE (not fail)
     # on this specific code — "blocked ≠ failed" (C4) applied to budget.
     COST_CAP_REACHED = "COST_CAP_REACHED"
+    # 2026-08-27 — "Show the Outcome, Never the Engine" P0b. A Python
+    # missing-argument TypeError (a call site AUREM's own code forgot
+    # to pass a required arg) is a BUG IN AUREM'S CODE, never a
+    # SCHEMA_MISMATCH (which implies bad/unexpected USER data). Never
+    # blame the user's account/profile for this class.
+    INTERNAL_CALL_ERROR = "INTERNAL_CALL_ERROR"
 
 
 # Only these classes are safe to blindly retry — deterministic failures
@@ -154,6 +167,17 @@ def classify_exception(exc: BaseException) -> ErrorCode:
         return ErrorCode.INTERNAL_UNKNOWN
 
     if isinstance(exc, (TypeError, KeyError, json.JSONDecodeError)):
+        # 2026-08-27 — narrow, deliberate exception to the "never parse
+        # str(exc)" rule above: CPython's OWN wording for a missing-
+        # argument TypeError ("missing N required positional argument(s)")
+        # is interpreter-generated, English-only, version-stable — NOT a
+        # third-party dependency message in an unknown language (the
+        # thing the general rule protects against). Structurally, this
+        # is always a call site that forgot to pass a required arg —
+        # AUREM's own bug, never a shape of USER data. Scoped to
+        # TypeError only (KeyError/JSONDecodeError are unaffected).
+        if isinstance(exc, TypeError) and _MISSING_ARG_RE.search(str(exc)):
+            return ErrorCode.INTERNAL_CALL_ERROR
         return ErrorCode.SCHEMA_MISMATCH
 
     import asyncio

@@ -163,22 +163,36 @@ def format_retry_message(attempt: int, offending: dict[str, list[dict]]) -> str:
 
 def format_ship_block_reason(offending: dict[str, list[dict]]) -> str:
     """Human-readable reason returned to the user when the retry
-    budget is exhausted and Ship remains blocked."""
+    budget is exhausted and Ship remains blocked.
+
+    2026-08-27 — "Show the Outcome, Never the Engine" P1 (M4). Leads
+    with a plain-language summary and shows the PLAIN severity scale
+    (e.g. "needs your attention") instead of a bare raw label
+    ("CRITICAL") — an internal-only-reachable finding is never shown
+    at top severity. File paths/lines stay (these are the user's OWN
+    generated files, not AUREM internals — legitimate detail, same as
+    a ship/confirm card)."""
+    total_findings = sum(len(v) for v in offending.values())
+    needs_attention = sum(
+        1 for hits in offending.values() for h in hits
+        if (h.get("plain_severity") or "").lower() == "needs your attention"
+    )
     lines = [
         f"Ship blocked: {MAX_SCAN_HEALS} self-heal attempt(s) exhausted. "
-        f"The following critical/high findings remain in code ORA "
-        f"generated for this task:",
+        f"{total_findings} issue(s) remain in code I generated for this task"
+        + (f", {needs_attention} of which need your attention" if needs_attention else "")
+        + ":",
     ]
     for path, hits in sorted(offending.items()):
         lines.append(f"  {path}:")
         for h in hits[:5]:   # cap at 5 per file to keep the message tidy
             rule = h.get("rule_id") or "unknown"
             line = h.get("line") or 0
-            sev  = (h.get("severity") or "").upper()
+            plain_sev = h.get("plain_severity") or (h.get("severity") or "").upper()
             msg  = (h.get("message") or "").strip()
             if len(msg) > 140:
                 msg = msg[:137] + "…"
-            lines.append(f"    L{line} [{sev}] {rule}: {msg}")
+            lines.append(f"    L{line} [{plain_sev}] {rule}: {msg}")
         if len(hits) > 5:
             lines.append(f"    …and {len(hits) - 5} more.")
     lines.append(

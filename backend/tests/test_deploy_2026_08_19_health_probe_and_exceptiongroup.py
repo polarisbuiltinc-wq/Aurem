@@ -67,10 +67,25 @@ class TestRootHealthPathsSkipped:
 class TestExceptionGroupCaught:
     def test_source_widened_to_baseexceptiongroup(self):
         src = open("/app/backend/main.py").read()
-        assert src.count("except (Exception, BaseExceptionGroup) as _e:") == 2, (
-            "Both call_next() try/excepts inside _global_rate_limit_guard "
-            "must catch BaseExceptionGroup, not just Exception."
+        # 2026-08-27 deploy-log fix — widened from 2 to 4. The original
+        # 2 guard `_global_rate_limit_guard`'s two call_next() sites;
+        # 2 MORE now guard `_health_latency_sampler_mw` (registered
+        # after — i.e. OUTER to — `_global_rate_limit_guard`), which
+        # was found calling call_next() on both its branches with NO
+        # exception handling at all, the same unguarded pattern this
+        # test originally caught. See that function's own comment for
+        # the full incident trace.
+        assert src.count("except (Exception, BaseExceptionGroup) as _e:") == 4, (
+            "Expected 4: both call_next() try/excepts inside "
+            "_global_rate_limit_guard, PLUS both inside "
+            "_health_latency_sampler_mw, must all catch BaseExceptionGroup."
         )
+        guard_start = src.index("async def _global_rate_limit_guard")
+        sampler_start = src.index("async def _health_latency_sampler_mw")
+        guard_region = src[guard_start:sampler_start]
+        sampler_region = src[sampler_start:sampler_start + 2500]
+        assert guard_region.count("except (Exception, BaseExceptionGroup) as _e:") == 2
+        assert sampler_region.count("except (Exception, BaseExceptionGroup) as _e:") == 2
 
     def test_skip_path_catches_exceptiongroup_directly(self):
         """Round-2 (2026-08-19) superseded this contract for the three
@@ -148,5 +163,71 @@ class TestExceptionGroupCaught:
             resp = await _main._global_rate_limit_guard(req, _call_next)
             assert isinstance(resp, JSONResponse)
             assert resp.status_code == 500
+
+        asyncio.run(_run())
+
+
+
+class TestHealthLatencySamplerHardened:
+    """2026-08-27 — the actual bug that caused the raw, un-prefixed
+    "RuntimeError: No response returned" in the fresh deploy logs
+    (distinct from the already-caught-and-logged
+    `rate_limit_guard: downstream raised...` occurrences). This
+    middleware is registered AFTER (= more outer than)
+    `_global_rate_limit_guard`, so its own unprotected call_next()
+    calls could crash regardless of the inner guard's hardening."""
+
+    def test_skip_branch_catches_exceptiongroup(self):
+        import asyncio
+        from starlette.responses import JSONResponse
+        import main as _main
+
+        async def _run():
+            req = _mock_request("/health")  # skip=True (doesn't start with /api/)
+
+            async def _call_next(_req):
+                raise BaseExceptionGroup(
+                    "simulated anyio unwind", [asyncio.CancelledError()]
+                )
+
+            resp = await _main._health_latency_sampler_mw(req, _call_next)
+            assert isinstance(resp, JSONResponse)
+            assert resp.status_code == 500
+
+        asyncio.run(_run())
+
+    def test_measured_branch_catches_exceptiongroup(self):
+        import asyncio
+        from starlette.responses import JSONResponse
+        import main as _main
+
+        async def _run():
+            req = _mock_request("/api/aurem-dev/admin/status/all")  # skip=False
+
+            async def _call_next(_req):
+                raise BaseExceptionGroup(
+                    "simulated anyio unwind", [asyncio.CancelledError()]
+                )
+
+            resp = await _main._health_latency_sampler_mw(req, _call_next)
+            assert isinstance(resp, JSONResponse)
+            assert resp.status_code == 500
+
+        asyncio.run(_run())
+
+    def test_normal_response_still_passes_through_unaffected(self):
+        import asyncio
+        from starlette.responses import JSONResponse
+        import main as _main
+
+        async def _run():
+            req = _mock_request("/api/aurem-dev/some-route")
+
+            async def _call_next(_req):
+                return JSONResponse({"ok": True})
+
+            resp = await _main._health_latency_sampler_mw(req, _call_next)
+            assert isinstance(resp, JSONResponse)
+            assert resp.status_code == 200
 
         asyncio.run(_run())

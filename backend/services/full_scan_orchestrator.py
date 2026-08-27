@@ -58,6 +58,57 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# ──────────────────────────────────────────────────────────────────────
+# 2026-08-27 — "Show the Outcome, Never the Engine" P1 (M4 severity
+# calibration). A raw scanner severity ("CRITICAL"/"HIGH") is a
+# technical-detection-confidence label, not an actual RISK-TO-THE-USER
+# label — a pattern that only ever fires on internally-generated code
+# with no user-controlled input path is not "needs your attention"-
+# urgent the way a hardcoded secret or a user-input-driven injection
+# is. This is a CODE-assigned (not LLM-guessed) plain-language scale +
+# a code-assigned exploitability tag, so a scan summary reads like a
+# risk assessment instead of an alarm bell. `severity` (the raw field
+# used by the self-heal ship-block gate) is UNCHANGED — this is purely
+# an additive display field.
+PLAIN_SEVERITY_SCALE = {
+    "critical": "needs your attention",
+    "high":     "worth fixing",
+    "medium":   "minor",
+    "low":      "looks fine",
+    "info":     "looks fine",
+}
+
+# Rule IDs (from vanguard_scanner.py's catalog) that fire on a pattern
+# with NO direct external/user-controlled input path — a real thing to
+# clean up, but not an active, exploitable risk today. Secrets and
+# genuine injection-from-request-data rules are deliberately excluded
+# (those stay top-severity regardless of reachability).
+_INTERNAL_ONLY_RULE_IDS = frozenset({
+    "lpdos_no_body_limit_deep",     # missing safeguard, not itself an exploit
+    "replay_jwt_no_jti_deep",       # signing hygiene, not user-triggerable
+    "clipboard_external_paste_deep",
+})
+
+_SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+_RANK_TO_SEVERITY = {v: k for k, v in _SEVERITY_RANK.items()}
+
+
+def plain_severity_and_exploitability(rule_id: str, severity: str) -> tuple[str, str]:
+    """Returns (plain_scale_label, exploitability) for a finding.
+
+    `exploitability` is "external" (user/request-reachable, or a
+    hardcoded secret — dangerous regardless of who can trigger it) or
+    "internal" (fires on code shape alone, no user-input path found).
+    An internal-only finding is displayed one severity tier lower on
+    the PLAIN scale than its raw detection severity — never the other
+    way, and never above its raw severity.
+    """
+    sev = severity if severity in _SEVERITY_RANK else "medium"
+    if rule_id in _INTERNAL_ONLY_RULE_IDS:
+        downgraded_rank = min(_SEVERITY_RANK[sev] + 1, max(_RANK_TO_SEVERITY))
+        return PLAIN_SEVERITY_SCALE[_RANK_TO_SEVERITY[downgraded_rank]], "internal"
+    return PLAIN_SEVERITY_SCALE[sev], "external"
+
 
 # ──────────────────────────────────────────────────────────────────────
 # Finding-shape normaliser
@@ -69,11 +120,15 @@ def _normalise(finding: dict, scanner: str) -> dict:
     sev = (finding.get("severity") or "medium").lower()
     if sev not in ("critical", "high", "medium", "low", "info"):
         sev = "medium"
+    rule_id = (finding.get("rule_id") or finding.get("id")
+               or finding.get("name") or finding.get("rule") or "unknown")
+    plain_sev, exploitability = plain_severity_and_exploitability(rule_id, sev)
     return {
-        "scanner":  scanner,
-        "rule_id":  finding.get("rule_id") or finding.get("id")
-                    or finding.get("name") or finding.get("rule") or "unknown",
-        "severity": sev,
+        "scanner":        scanner,
+        "rule_id":        rule_id,
+        "severity":       sev,
+        "plain_severity": plain_sev,
+        "exploitability": exploitability,
         "file":     finding.get("file") or finding.get("filepath") or "",
         "line":     int(finding.get("line") or 0),
         "title":    finding.get("title") or finding.get("name") or "",

@@ -108,6 +108,7 @@ from services.integration_health_cron import schedule_integration_health_cron
 # Stage-1 follow-up, reuses services/slo_metrics.py + founder_alerts.py)
 from services.slo_alert_cron import schedule_slo_alert_cron
 from services.cost_revenue_alert_cron import schedule_cost_revenue_alert_cron
+from services.leak_alert_cron import schedule_leak_alert_cron
 # Session F — supervised background-task wrapper. Long-lived crons
 # use `supervise(coro, name=..., db_getter=..., long_lived=True)`
 # instead of `_asyncio.create_task(...)` so silent death opens a
@@ -370,6 +371,16 @@ async def lifespan(app: FastAPI):
     app.state.cost_revenue_alert_cron_task = _supervise(
         schedule_cost_revenue_alert_cron(),
         name="cost_revenue_alert_cron",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
+    )
+    # 2026-08-27 — P2 audit-spine alert ("Show the Outcome, Never the
+    # Engine"). Alerts the founder when the leak-strip safety net
+    # fires more than LEAK_ALERT_THRESHOLD times in 24h — reuses the
+    # existing ora_audit collection + G10 founder-alert channel.
+    app.state.leak_alert_cron_task = _supervise(
+        schedule_leak_alert_cron(),
+        name="leak_alert_cron",
         db_getter=lambda: app.state.db,
         long_lived=True,
     )
@@ -2440,10 +2451,46 @@ async def _health_latency_sampler_mw(request, call_next):
         or path.endswith("/events")
         or any(path.startswith(p) for p in _HEALTH_LATENCY_SKIP_PREFIXES)
     )
+    # 2026-08-27 deploy-log fix — this middleware is registered AFTER
+    # `_global_rate_limit_guard`, which makes it the OUTER wrapper
+    # around it (Starlette runs later-registered `@app.middleware`
+    # calls first/outermost). It was calling `call_next()` on BOTH
+    # branches below with no exception handling at all — the exact
+    # same BaseHTTPMiddleware + Python 3.11 anyio ExceptionGroup race
+    # documented and fixed in `_global_rate_limit_guard` above (a
+    # probe/client disconnect mid-response can raise `anyio.EndOfStream`
+    # wrapped in a `BaseExceptionGroup`, which propagated unhandled
+    # from here as the raw, un-prefixed "RuntimeError: No response
+    # returned" seen in deploy logs — distinct from the ones already
+    # caught-and-logged by `rate_limit_guard: downstream raised...`).
+    # Since this middleware wraps EVERY request (including `/health`,
+    # which is `skip=True`), an unprotected call_next() here can crash
+    # the health-probe response regardless of the inner middleware's
+    # own hardening.
     if skip:
-        return await call_next(request)
+        try:
+            return await call_next(request)
+        except (Exception, BaseExceptionGroup) as _e:                # noqa: BLE001
+            logger.error(
+                "health_latency_sampler: downstream raised on skip path "
+                "%s %s — %r", request.method, path, _e, exc_info=True,
+            )
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "Internal server error"},
+            )
     t0 = time.monotonic()
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except (Exception, BaseExceptionGroup) as _e:                     # noqa: BLE001
+        logger.error(
+            "health_latency_sampler: downstream raised on %s %s — %r",
+            request.method, path, _e, exc_info=True,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+        )
     elapsed_ms = (time.monotonic() - t0) * 1000
     try:
         db = getattr(app.state, "db", None)

@@ -1026,7 +1026,7 @@ export default function MessageBubble({
               borderRadius: 999,
               opacity: 0.85,
             }}>
-              · 5-adviser council · chairman verdict
+              · double-checked by a second reviewer
             </div>
           )}
           {/* Iter 212m-171 — Scope Badge.  Shows the user which repo /

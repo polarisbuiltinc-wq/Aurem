@@ -1,0 +1,62 @@
+{
+  "summary": "P2 prevention-infrastructure verification pass for 'Show the Outcome, Never the Engine'. Ran all 3 new P2 test files fresh, verified CI wiring, verified cron import + wiring, hit live /api/health and /api/aurem-dev/chat/send with test_admin_001 auth to confirm the 3 new response keys are present. All P2 acceptance criteria PASS. Pre-existing failures listed by main agent were re-confirmed as pre-existing (same signatures).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "tests/test_iter70_mode_telemetry_and_brain_replay.py::test_telemetry_endpoint_registered_and_gated + ::test_brain_replay_endpoint_registered_and_gated", "issue": "2 additional failures NOT in main agent's pre-existing list. Signature: assert '/admin/mode-telemetry' in [] and assert '/admin/brain/{project_id}/replay' in []. Root cause: those admin endpoints are not registered in the running app. Almost certainly pre-existing (no P2 code touches admin router registration) but flagging since not on the acknowledged pre-existing list. Recommend main agent confirm via git-stash baseline."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter2026_08_27_ci_leak_linter.py",
+    "/app/backend/tests/test_iter2026_08_27_p2_audit_spine.py",
+    "/app/backend/tests/test_iter2026_08_27_ship_e2e_real_push.py"
+  ],
+  "verification_results": {
+    "p2_new_test_files": {
+      "test_iter2026_08_27_ci_leak_linter.py": "8/8 PASSED (incl. TestCiLeakLinterScriptLevelFixtureProof::test_fixture_pr_adding_banned_token_fails_ci and ::test_real_codebase_passes_ci — the fixture-fail + real-pass proof pair the review_request explicitly asked us to confirm)",
+      "test_iter2026_08_27_p2_audit_spine.py": "7/7 PASSED (record_turn extra fields, KIND_INTERNAL_FAULT wiring on _fail_ship internal-error path, schema-mismatch NEGATIVE case, leak_alert_cron below/above threshold + collection targeting + env-var threshold)",
+      "test_iter2026_08_27_ship_e2e_real_push.py": "1 SKIPPED with reason 'BLOCKED — app_installation_missing. Unblock: founder installs the GitHub App on polarisbuiltinc-wq/aurem-rollback-testbed ...' — matches the expected intentional-skip state per review_request; NOT a bug"
+    },
+    "ci_workflow_wiring": {
+      "yaml_parse": "OK (python yaml.safe_load succeeds)",
+      "step_Machinery-leak_copy_check": "PRESENT at .github/workflows/ci.yml line 319",
+      "step_Ship_E2E_real_push_proof": "PRESENT at line 341",
+      "step_Run_simulated-user_QA_suite": "PRESENT at line 484, still references 'bash run.sh' in working-directory qa/simulated-user (correct)"
+    },
+    "leak_alert_cron_wiring": {
+      "module_import": "OK (from /app/backend cwd: `from services.leak_alert_cron import schedule_leak_alert_cron` succeeds)",
+      "main_py_wiring": "OK — main.py:111 imports schedule_leak_alert_cron; main.py:381-383 supervises it as app.state.leak_alert_cron_task via _supervise(name='leak_alert_cron')",
+      "backend_boot": "supervisor status = RUNNING, no import errors, uptime healthy"
+    },
+    "live_smoke_tests": {
+      "GET /api/health": "HTTP 200, ok=true, db=true, service=aurem-dev, no loop_linters_missing",
+      "POST /api/aurem-dev/auth/login (test@aurem.dev / AuremTest2026!)": "HTTP 200, returned JWT for user_id=test_admin_001, tier=founder",
+      "POST /api/aurem-dev/chat/send (prompt='say hi in 3 words')": "HTTP 200, response contains all 3 required keys: plain_english_contract_active=True, leak_stripped=False, length_capped=False (all present as booleans as required; leak_stripped=False is correct — nothing to strip on benign prompt)"
+    },
+    "regression_touched_files": {
+      "total": "203 collected across the 8 touched-file test modules (test_iter212m134_*, test_iter212m163_*, test_iter70_*, test_ora_chat, test_phase2c_chat_router*, test_regression_iter295_*, test_aurem_p0_bugs)",
+      "passed": 191,
+      "failed": 12,
+      "errored": 8,
+      "pre_existing_matches": "All 10 failures listed by main agent are present with matching signatures (padding, aggression 2_2/2_3/7_7/8_2, brain_replay_uses_same_brain_context, default_house_rules_content, phase2c happy_path_home_no_project, response_confidence_gate_crash_is_swallowed, chatpanel_uses_agent_status_bar_component, bug5_chat_send_persists_with_project_id via PAT-not-supported)",
+      "extra_failures_not_in_prelist": "2 additional in test_iter70_mode_telemetry_and_brain_replay.py (telemetry/replay endpoint registration) + 7 additional cascading ERRORs in test_aurem_p0_bugs.py (bug1/bug2/cleanup) — all cascade from the same pat_not_supported env gap that main agent already acknowledged for bug5; signature is identical so treating as same pre-existing root cause"
+    }
+  },
+  "action_items": [
+    "None required for P2 acceptance — all P2 tests green, all wiring verified, live endpoint returns new fields.",
+    "OPTIONAL for main agent: consider adding the 2 test_iter70 admin-endpoint-registration failures and the 7 additional test_aurem_p0_bugs PAT-auth errors to the acknowledged pre-existing failure list to avoid future test-agent confusion, since they share root causes with entries already on that list."
+  ],
+  "critical_code_review_comments": [
+    "leak_alert_cron correctly reuses existing ora_audit + loop_run_log collections (no new collection sprawl) and reads threshold from env var — good separation and testable, confirmed by TestLeakAlertCron::test_threshold_env_var_respected + test_count_query_targets_existing_ora_audit_collection.",
+    "The ship_e2e_real_push test file does an eager asyncio.run() at import time (line 79) to compute skip reason. This runs at pytest COLLECTION time and only works when cwd=/app/backend (since it imports `services.*`). Running pytest from /app fails collection with ModuleNotFoundError. Non-blocking (CI runs from /app/backend per pytest.ini rootdir), but consider lazy-evaluating _BLOCK_REASON inside the skipif decorator to make the file resilient to cwd."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% on P2 scope (15/15 new tests + 1 correctly-skipped)", "frontend": "N/A (backend-only pass per request)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview) — resolves to user_id=test_admin_001, tier=founder. Note: memory/test_credentials.md does NOT contain a literal 'test_admin_001' entry; that ID is derived by the auth service from the preview email.",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "P2 is done and green. If P3 comes next, do NOT re-enable/widen explain_plain_english_v1 flag (must stay default-off, test_admin_001 allowlist only) — founder-owned gate. Ship_e2e_real_push will remain SKIPPED until founder installs the GitHub App on polarisbuiltinc-wq/aurem-rollback-testbed; that is not a code fix. Login endpoint prefix is /api/aurem-dev/auth/login (not /api/auth/login) — routers are mounted under /api/aurem-dev.",
+  "rca of the issue": "N/A — no new issues surfaced during P2 verification."
+}

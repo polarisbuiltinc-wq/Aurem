@@ -316,6 +316,41 @@ jobs:
           fi
           python backend/scripts/ci_check_raw_exception_leak.py $OVERRIDE
 
+      - name: Machinery-leak copy check (P2, "Show the Outcome, Never the Engine")
+        # 2026-08-27 — output-side twin of Guard 22 above: that guard
+        # stops a raw EXCEPTION from reaching a user-facing sink; this
+        # one stops a hardcoded internal machinery codename/jargon
+        # term from being written into user-facing copy in the first
+        # place (the bug class behind the "5-adviser council ·
+        # chairman verdict" badge found and fixed in this same pass).
+        # NOTE: "Vanguard" is deliberately NOT banned — it's the
+        # product's own public, marketed feature name.
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -e
+          OVERRIDE=""
+          if [ "$EVENT" = "pull_request" ] && printf '%s' "$PR_LABELS" | grep -q '"machinery-copy-approved"'; then
+            OVERRIDE="--override"
+          elif git log -1 --format=%B HEAD | grep -q '\[machinery-copy-approved\]'; then
+            OVERRIDE="--override"
+          fi
+          python backend/scripts/ci_check_machinery_leak_copy.py $OVERRIDE
+
+      - name: Ship E2E real push proof (P2 item 3, "Show the Outcome, Never the Engine")
+        # 2026-08-27 — permanent, standing proof that a real commit
+        # lands with the real resolved author identity (not the old
+        # generic bot identity). Uses the real GitHub App installation
+        # token path against the founder's disposable drill repo
+        # (polarisbuiltinc-wq/aurem-rollback-testbed). SKIPS (not
+        # fails) with an explicit `app_installation_missing` reason
+        # until the founder installs the GitHub App on that repo — at
+        # which point it flips to a real green push with zero further
+        # code changes. See backend/tests/test_iter2026_08_27_ship_e2e_real_push.py.
+        working-directory: backend
+        run: python -m pytest tests/test_iter2026_08_27_ship_e2e_real_push.py -v -rs
+
       - name: Guard — Source-of-truth trip-wires (must never be silently red)
         # W3 · 2026-08 governance ruling — a founder-directed behavior
         # contract test (`@pytest.mark.source_of_truth`) must be its

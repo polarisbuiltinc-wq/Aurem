@@ -39,6 +39,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -63,6 +64,36 @@ from core.boundaries import coerce
 from core.errors import ContractError
 
 _PID = os.getpid()
+
+# 2026-08-27 — "Show the Outcome, Never the Engine" P0c. `_narrate()`'s
+# own design invariant #4 says live-feed text must be plain-language,
+# but never enforced it — this is that enforcement, a defense-in-depth
+# backstop on top of fixing known call sites directly (e.g. _do_scan).
+# Deliberately narrow: only known internal codenames/jargon, never a
+# broad path-stripping regex (a narration legitimately says "Committing
+# N file(s) to {owner}/{repo}" — the user's OWN repo name, not leaked
+# engine machinery).
+# 2026-08-27 — "Show the Outcome, Never the Engine" P0c. `_narrate()`'s
+# own design invariant #4 says live-feed text must be plain-language,
+# but never enforced it — this is that enforcement, a defense-in-depth
+# backstop on top of fixing known call sites directly (e.g. _do_scan).
+# Deliberately narrow: only known internal codenames/jargon, never a
+# broad path-stripping regex (a narration legitimately says "Committing
+# N file(s) to {owner}/{repo}" — the user's OWN repo name, not leaked
+# engine machinery). "Vanguard" is DELIBERATELY EXCLUDED from this
+# list — see ci_check_machinery_leak_copy.py's investigation: it is
+# the product's own public, marketed feature name (landing page,
+# security-scan UI all show it openly), not an internal codename.
+_ENGINE_LEAK_PATTERNS = [
+    (re.compile(r"\be2b\b", re.IGNORECASE), "sandbox"),
+    (re.compile(r"\bdisabled by admin\b", re.IGNORECASE), "unavailable right now"),
+]
+
+
+def _strip_engine_leak_tokens(text: str) -> str:
+    for pattern, replacement in _ENGINE_LEAK_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text
 
 logger = logging.getLogger(__name__)
 
@@ -2337,7 +2368,7 @@ class LoopEngine:
             correlation_id="verify:final",
         )
 
-    # ── Phase 4 — Scan (Phase C: real Vanguard via direct internals) ──
+    # ── Phase 4 — Scan (Phase C: real security-scan engine, direct internals) ──
     async def _do_scan(self) -> None:
         self.state = LoopState.SCANNING
         self.phase = "scan"
@@ -2346,6 +2377,14 @@ class LoopEngine:
                          message="Running Vanguard security scan…")
         # Iter 309 · Narration — pending scan-start.
         # correlation_id = "scan:vanguard" pairs with scan-result below.
+        # 2026-08-27 — CORRECTED (see ci_check_machinery_leak_copy.py
+        # investigation): "Vanguard" is NOT an internal codename to
+        # hide — it's the product's own public, marketed feature name
+        # (landing page: "Vanguard Security", "Vanguard 2.0"; the chat
+        # UI itself shows "Vanguard active" / "Waiting for Vanguard
+        # scan…"). A prior pass in this same session mistakenly
+        # stripped it from here, which made this ONE line inconsistent
+        # with every other surface. Reverted.
         await self._narrate(
             step="scan", tone="pending",
             text="Running Vanguard security scan",
@@ -3456,7 +3495,7 @@ class LoopEngine:
         except Exception as e:  # network / 401 / 422 / etc.
             logger.exception("[loop %s] SHIP commit_files failed", self.loop_id)
             await _log_error(self.db, self.loop_id, "ship", repr(e))
-            await self._fail_ship(f"GitHub push failed: {e}")
+            await self._fail_ship(f"GitHub push failed: {e}", exc=e)
             return
 
         full_sha = res.get("full_sha") or res.get("sha") or ""
@@ -3640,16 +3679,55 @@ class LoopEngine:
                              "scan_results":   self.context.get("scan_results"),
                          })
 
-    async def _fail_ship(self, reason: str) -> None:
-        """Helper: persist + emit a clean ship-phase failure event."""
+    async def _fail_ship(self, reason: str, exc: Exception = None) -> None:
+        """Helper: persist + emit a clean ship-phase failure event.
+
+        2026-08-27 — "Show the Outcome, Never the Engine" P0b. When
+        `exc` is the real exception that caused the failure (as
+        opposed to a static, already-human-written `reason` string),
+        route it through `core/errors.py`'s classify+translate layer
+        instead of showing the raw exception text to the user. This
+        also fixes the wrong-blame class at its root: a missing-
+        argument TypeError now classifies as INTERNAL_CALL_ERROR
+        (AUREM's bug), never SCHEMA_MISMATCH (implies bad user data).
+        Callers that already pass a clean static `reason` (the other
+        5 call sites) are unaffected — `exc` defaults to None.
+        """
+        ref_id = None
+        error_code = None
+        if exc is not None:
+            from core.errors import build_error_envelope, ErrorCode
+            envelope = build_error_envelope(exc)
+            reason = envelope["what_happened"]
+            ref_id = envelope["ref_id"]
+            error_code = envelope["error_code"]
+            logger.error("[loop %s] ship failed (ref=%s, code=%s): %r",
+                         self.loop_id, ref_id, error_code, exc)
+            # 2026-08-27 — P2 audit-spine: log a not-user's-fault event
+            # into the existing loop_run_log sink (loop_audit_log.py)
+            # whenever the classifier says this was AUREM's own bug,
+            # not bad user input. Best-effort, never blocks the fail path.
+            if error_code == ErrorCode.INTERNAL_CALL_ERROR.value:
+                try:
+                    from services import loop_audit_log as _lal
+                    await _lal.log(
+                        self.db, loop_id=self.loop_id, phase="ship",
+                        kind=_lal.KIND_INTERNAL_FAULT,
+                        verdict=_lal.VERDICT_FAIL,
+                        detail={"ref_id": ref_id, "error_code": error_code},
+                    )
+                except Exception as _lal_err:                # noqa: BLE001
+                    logger.debug("internal-fault audit log skipped: %r", _lal_err)
         self.state = LoopState.FAILED
-        self.context["commit"] = {"error": reason}
+        self.context["commit"] = {"error": reason, "ref_id": ref_id}
         await _persist_session(self.db, self._doc())
         await self._emit(LoopState.FAILED, "ship",
                          step=5, total_steps=5,
                          message=reason,
                          data={"requires_user_action": True,
-                               "error": reason})
+                               "error": reason,
+                               "ref_id": ref_id,
+                               "error_code": error_code})
         # Iter 309 · Narration — DANGER resolves the ship pending line
         # red. Last narration for ship step → ECG flatlines red.
         await self._narrate(
@@ -3922,6 +4000,12 @@ class LoopEngine:
         extra: Optional[dict] = None,
     ) -> None:
         import time as _time
+        # 2026-08-27 — "Show the Outcome, Never the Engine" P0c. The
+        # design invariant above (#4) says callers must obey the
+        # plain-language rule but the helper never enforced it — this
+        # is the enforcement, applied once here so every current and
+        # future caller is covered (no per-caller filtering needed).
+        text = _strip_engine_leak_tokens(text)
         data: dict = {
             "type":           "narration",
             "tone":           tone,

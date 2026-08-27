@@ -73,5 +73,10 @@
     "title": "Monthly budget reached",
     "what_happened": "You've used up your tasks for this month. Your work is safe.",
     "what_to_try": ["Upgrade your plan for more tasks this month.", "Or come back next billing cycle — nothing was lost."]
+  },
+  "INTERNAL_CALL_ERROR": {
+    "title": "This one's on us",
+    "what_happened": "AUREM's own code hit a bug — this has nothing to do with your account, your profile, or anything you did. I've flagged it internally.",
+    "what_to_try": ["Try again — most of these are already being tracked and fixed.", "If it keeps happening, contact support with the reference ID below so we can find it fast."]
   }
 }

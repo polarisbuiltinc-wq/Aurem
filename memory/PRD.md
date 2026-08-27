@@ -6942,3 +6942,16 @@ closing in a future round.
 - **Founder-owned follow-up:** the Google consent screen currently shows the raw preview/production domain, not "AUREM" branding — that's controlled by the OAuth consent screen app name/logo config in Google Cloud Console, outside this codebase.
 - Self-tested (curl + pytest + screenshot), not sent to `testing_agent` — small, well-scoped auth-flip + deletion, verified directly.
 
+
+## 2026-08-27 — "Show the Outcome, Never the Engine" P2 (prevention infrastructure) — DONE, testing_agent-verified
+
+Founder approved P2 with 5 locked decisions (Q1-Q5, see `memory/investigation_p2_prevention_infra.md` for full detail). All 4 items + 1 copy fix shipped, tested, no new regressions (git-stash baseline + independent testing_agent both confirm). Report: `/app/test_reports/iteration_p2_prevention_infra_2026_08_27.json`.
+
+1. **CI machinery-leak-copy linter** — fixture-fail + real-pass proof added at the `main()` entrypoint level (`backend/tests/test_iter2026_08_27_ci_leak_linter.py`, 8/8 pass). Wired into `.github/workflows/ci.yml`.
+2. **Promptfoo** — 3 new scenarios (6a/6b/6c-d) added and ACTUALLY RUN: 18/19 passed. The 1 failure ("1f deploy intent") is pre-existing/unrelated (QA-seed probe-path quirk, not P0/P1/P2 code).
+3. **Ship-E2E real push** — `backend/tests/test_iter2026_08_27_ship_e2e_real_push.py` built + CI-wired, intentionally SKIPS with `app_installation_missing` (drill repo `polarisbuiltinc-wq/aurem-rollback-testbed`). Founder must install the GitHub App on that repo to flip it green — zero further code work needed.
+4. **Audit spine + 24h alert** — reused `ora_audit` (`services/audit_log.py`) + `loop_run_log` (`services/loop_audit_log.py`, new `KIND_INTERNAL_FAULT`) + G10 founder-alerts channel. New `services/leak_alert_cron.py` alerts if leak-stripped turns > 5/24h (env-configurable). No new collection, no new endpoint. 7/7 tests pass.
+5. **MessageBubble.jsx copy** — "5-adviser council · chairman verdict" → "double-checked by a second reviewer". Verified via grep + linter + regression test.
+
+**STOPPED per governing rule — P3 ("ORA remembers this" indicator) NOT started, awaiting founder review of P2.**
+

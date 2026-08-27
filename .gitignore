@@ -132,3 +132,4 @@ qa/simulated-user/node_modules/@anthropic-ai/claude-agent-sdk-linux-arm64/claude
 # scripts/git_hooks/post-commit for full rationale (2026-02-12
 # SHA-ambiguity incident).
 backend/BUILD_INFO.txt
+qa/simulated-user/node_modules/@anthropic-ai/claude-agent-sdk-linux-arm64-musl/claude

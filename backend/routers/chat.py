@@ -641,6 +641,25 @@ async def chat_send(
     except Exception as _rce:
         logger.debug("response_confidence gate skipped (chat_send): %r", _rce)
 
+    # 2026-08-27 · Output Guard (Phase 1 net, "Show the Outcome, Never
+    # the Engine"). Runs AFTER the mismatch/retry/fallback resolution
+    # above (nets whatever text is actually about to be returned),
+    # ONLY when the plain-English contract is active. Never touches
+    # ship/confirm content.
+    _leak_stripped = False
+    _length_capped = False
+    _output_guard_ref_id = None
+    if _plain_english_active and content:
+        try:
+            from services.output_guard import apply_output_guard
+            _guard_result = await apply_output_guard(content)
+            content = _guard_result["text"]
+            _leak_stripped = _guard_result["leak_stripped"]
+            _length_capped = _guard_result["length_capped"]
+            _output_guard_ref_id = _guard_result["ref_id"]
+        except Exception as _og_exc:
+            logger.debug("output_guard skipped (chat/send): %r", _og_exc)
+
     # Maxx mode: watchdog review (only if we have non-empty content)
     # Iter 161 — same legacy-only gating as the streaming path: skip
     # when the new mode="maxx" pill is set because Claude already wrote
@@ -761,6 +780,11 @@ async def chat_send(
         # 2026-08-27 — true when the founder plain-English explanation
         # contract was injected this turn (flag-gated, explain-only).
         "plain_english_contract_active": _plain_english_active,
+        # 2026-08-27 — Output Guard net results (Phase 1). See
+        # services/output_guard.py.
+        "leak_stripped": _leak_stripped,
+        "length_capped": _length_capped,
+        "output_guard_ref_id": _output_guard_ref_id,
         # Iter 212m-164 — surface the council letter + task_type that
         # drove this turn's LLM pick so callers can verify V2 routing
         # without scraping Mongo / Langfuse.
@@ -2981,6 +3005,24 @@ async def chat_stream(
         except Exception as _rce:
             logger.debug("response_confidence gate skipped (chat_stream): %r", _rce)
 
+        # 2026-08-27 · Output Guard (Phase 1 net) — runs AFTER the
+        # mismatch/fallback resolution above (so it nets whatever text
+        # is actually about to stream to the user), BEFORE the token-
+        # streaming loop below. Never touches ship/confirm content.
+        _leak_stripped = False
+        _length_capped = False
+        _output_guard_ref_id = None
+        if _plain_english_active and content:
+            try:
+                from services.output_guard import apply_output_guard
+                _guard_result = await apply_output_guard(content)
+                content = _guard_result["text"]
+                _leak_stripped = _guard_result["leak_stripped"]
+                _length_capped = _guard_result["length_capped"]
+                _output_guard_ref_id = _guard_result["ref_id"]
+            except Exception as _og_exc:
+                logger.debug("output_guard skipped (chat/stream): %r", _og_exc)
+
         meta = {"meta": True, "session_id": body.session_id,
                 "provider": provider, "mode": mode, "temperature": temperature,
                 "thinking_s": round(_t.monotonic() - t_start, 1),
@@ -3257,6 +3299,19 @@ async def chat_stream(
                 llm_model=provider or "",
                 response_tokens=len((content or "").split()),
                 was_retry=guard_triggered,
+                # 2026-08-27 — P2 audit-spine: leak-stripped + recall-
+                # candidate events, reusing this existing `ora_audit`
+                # row (no new collection). `_leak_stripped` only fires
+                # when the output_guard net actually removed a
+                # machinery token this turn; `recall_candidate` mirrors
+                # the A0 council-recall counter so an admin can query
+                # "how many turns pulled in past-answer recall".
+                extra={
+                    "leak_stripped": bool(_leak_stripped),
+                    "length_capped": bool(_length_capped),
+                    "recall_candidate": bool(_council_recalled),
+                    "council_recalled_count": int(_council_recalled or 0),
+                },
             ))
         except Exception as _aud_err:
             logger.warning("audit_log skipped: %r", _aud_err)
@@ -3302,6 +3357,10 @@ async def chat_stream(
             # 2026-08-27 — mirrors chat/send's field; true when the
             # explain-only plain-English contract was injected.
             "plain_english_contract_active": bool(_plain_english_active),
+            # 2026-08-27 — Output Guard net results (Phase 1).
+            "leak_stripped": bool(_leak_stripped),
+            "length_capped": bool(_length_capped),
+            "output_guard_ref_id": _output_guard_ref_id,
             # 2026-08-23 — findings-to-fix bridge. Critical/high
             # `save_finding` calls made this turn — lets the frontend
             # show a reliable "N issues found" teaser instead of

@@ -35,6 +35,13 @@ KIND_SILENT_CATCH      = "silent_exception_swallowed"
 KIND_SHIP_GATE         = "ship_gate"
 KIND_HUMAN_REVIEW_HOLD = "human_review_hold"
 KIND_RETRY             = "retry"
+# 2026-08-27 — P2 audit-spine wiring ("Show the Outcome, Never the
+# Engine"). Fired from `loop_engine.py::_fail_ship()` whenever the
+# real exception behind a ship failure classifies as
+# `core.errors.ErrorCode.INTERNAL_CALL_ERROR` — i.e. AUREM's own bug,
+# never the user's data/account. Lets an admin query "how many times
+# did we fail and it was OUR fault" without a new collection.
+KIND_INTERNAL_FAULT    = "internal_fault_not_user"
 
 VERDICT_PASS = "pass"
 VERDICT_FAIL = "fail"
