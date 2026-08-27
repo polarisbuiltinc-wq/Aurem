@@ -47,8 +47,9 @@ export default function OraChat() {
           ORA Chat
         </h1>
         <p style={{ fontSize: 13, color: "#a39d8a", marginBottom: 24 }}>
-          AUREM&apos;s context-aware assistant. Slash-commands for deterministic DB
-          reads. Everything else routes to cheap OpenRouter models.
+          AUREM&apos;s admin-only advisor — grounded in live build, funnel, and
+          GitHub data, with a bounded read/propose action catalog. Every
+          action needs your explicit approve before it runs.
         </p>
         <div style={{
           fontSize: 12, color: "#7a7466", lineHeight: 1.6,

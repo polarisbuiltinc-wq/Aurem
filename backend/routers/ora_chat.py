@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+import time
 import uuid
 from typing import Optional
 
@@ -33,20 +34,14 @@ from cto_services.auth import require_admin, create_token
 from services.rate_limiter import check_rate_limit_async, client_ip_from_request
 from services.ora_chat import cost_tracker, session as ora_session
 from services.ora_chat import house_rules as ora_house_rules
-from services.ora_chat import deep_research as ora_deep
 from services.ora_chat import codebase_index as ora_codebase
 from services.ora_chat import grounding_check as ora_grounding
-from services.ora_chat import prompt_snapshot as ora_snapshot
-from services.ora_chat import adversarial_review as ora_review
 from services.ora_chat import hallucination_classifier as ora_halluc
-from services.ora_chat.router import (
-    classify_intent, resolve, fallback_route, route_config_snapshot,
-)
-from services.ora_chat.providers import stream_call, one_shot
+from services.ora_chat.router import resolve, route_config_snapshot
+from services.ora_chat.providers import one_shot
 from services.ora_chat.safety import (
     assemble_system_prompt, KNOWN_COMMANDS, parse_slash_command,
-    DEFAULT_HOUSE_RULES, house_rules_soft_warning,
-    CORE_SAFETY_RULES, AUREM_CONTEXT,
+    DEFAULT_HOUSE_RULES,
 )
 from services.ora_chat import slash_commands as slash_dispatch
 from services.ora_chat import intent_router as ora_intent
@@ -273,436 +268,69 @@ async def run_slash(body: SlashBody,
     }
 
 
-# ── Streaming message endpoint ──────────────────────────────────────
+# ── Streaming message endpoint (Admin ORA Chat rebuild — 2026-08-27) ──
+# P1: legacy generic-advice pipeline (intent classify → route → deep
+# research / regular chat → adversarial review → grounding) removed.
+# Replaced with the ora_chat_v2 engine: state-grounded, catalog-only
+# actions, bounded tool loop, rate/token capped. Admin guard, session
+# persistence (ora_chat_sessions/ora_session.*), and sidebar/bell entry
+# are unchanged — old messages in a session remain fully readable.
 class MessageBody(BaseModel):
     session_id: str
-    # Iter 388e (2026-02-12) — was max_length=4000 (5x tighter than
-    # /chat/send's 20k cap on the same LLM tier, no comment explaining
-    # the asymmetry). Bumped to match user-facing chat; still well
-    # inside Claude/GPT/DeepSeek's 128k-200k token input windows.
     content: str = Field(..., min_length=1, max_length=20000)
+    think_mode: bool = False
+    advise_only: bool = False
+    page_inspection: Optional[dict] = None
 
 
 @router.post("/message")
 async def send_message(body: MessageBody,
                         request: Request,
-                        authorization: Optional[str] = Header(None),
-                        x_client_tz: Optional[str] = Header(None)):
+                        authorization: Optional[str] = Header(None)):
     user = await require_admin(authorization)
-    user_tz = _valid_tz(x_client_tz)
 
-    # Rate + budget gates.
+    # Defensive burst backstop (kept from the legacy handler) — the
+    # real beta cap (ORA_CHAT_RATE_LIMIT_PER_HOUR) lives in the v2
+    # engine and returns a proper 429-style SSE `error` event instead
+    # of silently dropping the turn.
     ip = client_ip_from_request(request)
     if not await check_rate_limit_async(f"ora_chat:min:{user['user_id']}:{ip}", _BURST_PER_MIN):
         raise HTTPException(429, "Burst limit — slow down for a minute")
-    b_status = await cost_tracker.budget_status()
-    if b_status["mode"] == "spike_hard_stop":
-        # HTTP 402 → frontend renders a clear inline block, not a toast.
-        raise HTTPException(402, {
-            "error":    "spike_hard_stop",
-            "message":  (f"Daily spend spike detected "
-                          f"(${b_status['day_spent_usd']} > "
-                          f"${b_status['spike_cap_usd']}). Chat is paused "
-                          "until you override or the day rolls over."),
-            "budget":   b_status,
-        })
 
-    # Session ownership check.
     sess = await ora_session.get_session(body.session_id, user["user_id"])
     if not sess:
         raise HTTPException(404, "Session not found")
 
-    # If the message is a slash-command, we short-circuit to /slash
-    # semantics but keep the same streaming envelope so the frontend
-    # only needs one path.
-    parsed = parse_slash_command(body.content.strip())
-    if parsed:
-        return await _stream_slash_result(user, sess, body.content.strip(), parsed, b_status, user_tz)
-
-    # ── Phase 3 · Feb 2026 — Two-layer intent classification.
-    # Compute ONCE here so both the deep-research and regular-chat
-    # SSE paths can emit the same verdict.  Regex layer is
-    # deterministic + near-zero cost; LLM layer only fires when the
-    # regex says UNKNOWN.  Never allowed to raise — falls back to
-    # UNKNOWN so downstream code never sees a broken verdict.
-    try:
-        _intent_verdict = await ora_intent.classify_intent(
-            body.content, one_shot_fn=one_shot,
-        )
-    except Exception as _intent_err:   # noqa: BLE001
-        logger.warning("intent classify failed: %r", _intent_err)
-        _intent_verdict = {"intent": "UNKNOWN", "source": "empty",
-                            "matches": [], "meta": {}}
-
-    # Iter 212m-245 — Auto Deep-Research pre-check.
-    # Run the multi-label classifier BEFORE the single-route regex.
-    # Only fire the multi-source path if >=2 substantive labels match
-    # (or NEEDS_DEEP is explicit). Otherwise fall through to the
-    # existing single-route flow — keeps single-topic queries cheap.
-    # Skip entirely in `economy` mode (budget-degraded, single-source
-    # only) and when the Claude tool_orchestration flag is on (the
-    # follow-up will route to Anthropic direct instead — stub returns
-    # False today so this branch is inert).
-    labels: list = []
-    if b_status["mode"] != "economy" and not ora_deep.use_claude_tools():
-        try:
-            labels = await ora_deep.classify_labels(body.content)
-        except Exception as e:
-            logger.warning("deep-research classifier failed: %s", e)
-            labels = []
-        if labels and await ora_deep.should_go_deep(labels):
-            return await _stream_deep_research(
-                user, sess, body.content, labels, b_status, user_tz,
-                intent_verdict=_intent_verdict,
-            )
-        # Iter 267 GAP 1 — a pasted non-GitHub URL always routes deep
-        # (the URL-fetch tool lives in the orchestrator), even when the
-        # classifier found no other labels.
-        if ora_deep.has_fetchable_url(body.content):
-            return await _stream_deep_research(
-                user, sess, body.content, labels, b_status, user_tz,
-                intent_verdict=_intent_verdict,
-            )
-
-    # Regular chat — pick route via keyword rules.
-    route_name = classify_intent(body.content)
-    # Iter 212m-239 — Economy mode forces GLM-5.2 fallback for all
-    # non-slash chat so the assistant NEVER stops working. Full model
-    # routing resumes at the next daily rollover.
-    if b_status["mode"] == "economy":
-        route_name = fallback_route()
-    cfg = resolve(route_name)
-
-    # Persist the user turn IMMEDIATELY so the transcript stays honest
-    # even if the stream dies mid-response.
     await ora_session.append_message(
-        body.session_id, user["user_id"],
-        role="user", content=body.content,
+        body.session_id, user["user_id"], role="user", content=body.content,
     )
-
-    # Refresh rolling summary if the window overflowed with the new turn.
-    await ora_session.maybe_update_summary(body.session_id, user["user_id"])
-
-    # Rebuild the LLM message list (system + summary + last 6 turns).
     sess = await ora_session.get_session(body.session_id, user["user_id"])
-    llm_messages = await ora_session.build_llm_messages(sess or {})
-    # System prompt with layered house rules — safety layer FIRST.
-    hr_text = await ora_house_rules.get_effective_text(user["user_id"])
-    # Iter 212m-246 — inject compact codebase tree so ORA has
-    # baseline awareness of what modules exist without needing a
-    # slash-command per question.
-    # Iter 212m-249 — ALSO inject the curated system-highlights block
-    # so meta-questions ("kya best build hai", "what does AUREM do")
-    # get answered from ground truth, not from noisy BM25 hits.
-    # Iter 264 Fix B — conditional injection: highlights ALWAYS, the
-    # compact FILENAME INDEX only when the turn needs codebase
-    # awareness (NEEDS_CODEBASE label / inline slash mention).
-    cb_block, cb_highlights, cb_tree_only = \
-        await _codebase_context(body.content, labels)
-    system_prompt = assemble_system_prompt(hr_text, user_tz=user_tz,
-                                            codebase_tree=cb_block)
-    # 2026-08 — Fabrication-caution injection (learning loop). Same
-    # pattern as customer chat (services/orchestrator.py): if this
-    # exact route hit 3+ real fabrication incidents in the trailing
-    # 30 days, inject a compact caution. Silent, fail-open.
-    try:
-        from services.ora_fix_learning import recall_fabrication_caution
-        from cto_services.db import get_db as _get_db_fab_inj
-        _db_fab_inj = _get_db_fab_inj()
-        if _db_fab_inj is not None:
-            _fab_caution = await recall_fabrication_caution(
-                _db_fab_inj, source="admin_ora_chat",
-                project_id="admin", route=cfg["route"],
-            )
-            if _fab_caution:
-                system_prompt = system_prompt + "\n\n" + _fab_caution
-    except Exception as _fabinj_err:
-        logger.debug("fabrication caution inject skipped: %r", _fabinj_err)
-    llm_messages = [{"role": "system", "content": system_prompt}] + llm_messages
+
+    from cto_services.db import get_db as _get_db_v2
+    from services.ora_chat_v2 import llm_client as _v2_llm
+    from services.ora_chat_v2.engine import run_turn as _v2_run_turn
 
     async def event_stream():
-        buf: list[str] = []
-        usage: dict = {}
-        errored: Optional[str] = None
-        fallback_used = False
-        # Iter 264 Fix A5 — feature-flagged regen-on-fabrication.
-        # When ON, deltas are buffered until the grounding check
-        # passes (one silent corrective retry on FABRICATED).
-        regen_mode = os.getenv("ORA_REGEN_ON_FABRICATION", "0") == "1"
-        # Iter 268 — HIGH_STAKES turns are BUFFERED: draft → hostile
-        # review (GLM-5.2) → possible single regen → then stream.
-        # Correctness > perceived speed on these ~10-20% of turns.
-        high_stakes = "HIGH_STAKES" in (labels or [])
-        buffered = regen_mode or high_stakes
-
-        async def _try_stream(model_cfg: dict):
-            nonlocal errored, usage
-            errored = None
-            async for evt in stream_call(
-                model=model_cfg["model"],
-                messages=llm_messages,
-                temperature=model_cfg["temperature"],
-                top_p=model_cfg["top_p"],
-                presence_penalty=model_cfg["presence_penalty"],
-                max_tokens=model_cfg["max_tokens"],
-            ):
-                if evt["type"] == "delta":
-                    buf.append(evt["content"])
-                    yield evt
-                elif evt["type"] == "usage":
-                    usage = {k: evt[k] for k in
-                              ("input_tokens", "output_tokens") if k in evt}
-                elif evt["type"] == "error":
-                    errored = evt.get("error", "unknown")
-                    yield evt
-                elif evt["type"] == "done":
-                    yield evt
-
-        # Announce chosen model up front so the UI can badge it.
-        yield {"type": "route", "route": cfg["route"],
-                "model": cfg["model"], "temperature": cfg["temperature"],
-                "budget_mode": b_status["mode"]}
-        # Phase 3 · Feb 2026 — emit the pre-computed intent verdict
-        # from send_message() so both deep and regular paths hand the
-        # frontend the same event shape.
-        if _intent_verdict:
-            yield {"type": "intent", **_intent_verdict}
-        async for evt in _try_stream(cfg):
-            if regen_mode and evt["type"] == "delta":
-                continue
+        db = _get_db_v2()
+        final_evt: dict = {}
+        async for evt in _v2_run_turn(
+                db, admin_id=user["user_id"], session=sess or {},
+                user_message=body.content, think_mode=body.think_mode,
+                advise_only=body.advise_only,
+                page_inspection=body.page_inspection):
+            if evt.get("type") == "final":
+                final_evt = evt
             yield evt
 
-        # Fallback path — only if primary produced ZERO content.
-        if errored and not buf:
-            fb_cfg = resolve(fallback_route())
-            fallback_used = True
-            yield {"type": "route", "route": fb_cfg["route"],
-                    "model": fb_cfg["model"], "temperature": fb_cfg["temperature"],
-                    "reason": "primary_failed"}
-            async for evt in _try_stream(fb_cfg):
-                if buffered and evt["type"] == "delta":
-                    continue
-                yield evt
-
-        # Persist assistant turn + log usage — even if empty/errored,
-        # so the transcript reflects reality.
-        final_text = "".join(buf)
-        chosen = resolve(fallback_route()) if fallback_used else cfg
-
-        # Iter 264 Fix A — deterministic post-response grounding check
-        # (string lookups vs canonical index — milliseconds).
-        grounding = await ora_grounding.run_post_response_check(
-            user_id=user["user_id"], session_id=body.session_id,
-            query=body.content, reply=final_text, route=chosen["route"],
-            codebase_tree=cb_tree_only or None,
-            system_highlights=cb_highlights or None,
-        )
-
-        # Iter 268 — Adversarial review pass. Draft (V3) → hostile
-        # reviewer (GLM-5.2, flag-only). Triggers: HIGH_STAKES label
-        # (buffered → can regen) OR grounding UNVERIFIED escalation
-        # (post-hoc → caveat only). ONE regen max, never chained.
-        review = None
-        review_caveats: list[str] = []
-        review_regen_fired = review_regen_cleared = False
-        review_reason = ora_review.trigger_reason(labels, grounding)
-        if review_reason:
-            review = await ora_review.run_review(
-                user_id=user["user_id"], session_id=body.session_id,
-                query=body.content, draft=final_text,
-                context="\n\n".join(
-                    x for x in (cb_highlights, cb_tree_only) if x),
-                reason=review_reason,
+        if final_evt:
+            await ora_session.append_message(
+                body.session_id, user["user_id"],
+                role="assistant", content=final_evt.get("content", ""),
+                model=_v2_llm.model_name(),
+                input_tokens=final_evt.get("tokens_in", 0),
+                output_tokens=final_evt.get("tokens_out", 0),
+                message_id=uuid.uuid4().hex,
             )
-            if not review.get("skipped"):
-                if review["hard"] and buffered:
-                    review_regen_fired = True
-                    text2, usage2, err2 = await one_shot(
-                        model=chosen["model"],
-                        messages=llm_messages
-                        + [{"role": "assistant", "content": final_text},
-                           {"role": "user",
-                            "content": ora_review.corrective_prompt(
-                                review["hard"])}],
-                        temperature=chosen["temperature"],
-                        top_p=chosen["top_p"],
-                        presence_penalty=chosen["presence_penalty"],
-                        max_tokens=chosen["max_tokens"],
-                    )
-                    if text2 and not err2:
-                        final_text = text2
-                        for k in ("input_tokens", "output_tokens"):
-                            usage[k] = (usage.get(k, 0)
-                                        + (usage2 or {}).get(k, 0))
-                        grounding = await ora_grounding.run_post_response_check(
-                            user_id=user["user_id"],
-                            session_id=body.session_id,
-                            query=body.content, reply=final_text,
-                            route=chosen["route"],
-                            codebase_tree=cb_tree_only or None,
-                            system_highlights=cb_highlights or None,
-                        )
-                        review_regen_cleared = not grounding["fabricated"]
-                review_caveats = [f["quote"] for f in review["soft"]]
-                if review["hard"] and not (review_regen_fired
-                                            and review_regen_cleared):
-                    review_caveats = ([f["quote"] for f in review["hard"]]
-                                      + review_caveats)
-            await ora_review.log_metrics(
-                user_id=user["user_id"], session_id=body.session_id,
-                route=chosen["route"], reason=review_reason, review=review,
-                regen_fired=review_regen_fired,
-                regen_cleared=review_regen_cleared)
-        else:
-            logger.info("ora review skipped: no trigger (routine turn)")
-
-        # Iter 264 Fix A5 — ORA_REGEN_ON_FABRICATION=1 (default OFF):
-        # ONE silent corrective retry before streaming the buffered text.
-        if regen_mode and grounding["fabricated"] and not review_regen_fired:
-            corrective = (
-                "Your draft cited non-existent files: "
-                + ", ".join(grounding["fabricated"])
-                + ". Remove them or mark them explicitly as "
-                "unverified. Rewrite the full answer."
-            )
-            text2, usage2, err2 = await one_shot(
-                model=chosen["model"],
-                messages=llm_messages
-                + [{"role": "assistant", "content": final_text},
-                   {"role": "user", "content": corrective}],
-                temperature=chosen["temperature"],
-                top_p=chosen["top_p"],
-                presence_penalty=chosen["presence_penalty"],
-                max_tokens=chosen["max_tokens"],
-            )
-            if text2 and not err2:
-                final_text = text2
-                for k in ("input_tokens", "output_tokens"):
-                    usage[k] = usage.get(k, 0) + (usage2 or {}).get(k, 0)
-                grounding = await ora_grounding.run_post_response_check(
-                    user_id=user["user_id"], session_id=body.session_id,
-                    query=body.content, reply=final_text,
-                    route=chosen["route"],
-                    codebase_tree=cb_tree_only or None,
-                    system_highlights=cb_highlights or None,
-                )
-        # Iter 388-ah (2026-02-14) — proactive-caveat enforcement,
-        # applies to BOTH buffered and streaming paths.
-        #
-        # If the post-response grounding check surfaced unverified
-        # filename mentions that weren't self-caveated by the model,
-        # we append a compact caveat block:
-        #   (a) to `final_text` so the persisted assistant message
-        #       carries the disclaimer (audit trail + canary),
-        #   (b) as an additional streamed `delta` frame so the
-        #       founder sees the caveat visually even when the reply
-        #       already flushed to the client (buffered=False path).
-        #
-        # This closes the "meta_gaps" canary regression where 2/3 runs
-        # named specific files (`_loop.py`,
-        # `backend/services/security_gate.py`) confidently without any
-        # caveat marker.
-        _uncaveated = (grounding or {}).get("unverified_without_caveat") or []
-        _caveat_tail = ora_grounding.caveat_block_for(_uncaveated) if _uncaveated else ""
-        if _caveat_tail:
-            final_text = final_text + _caveat_tail
-
-        # 2026-08 — Fabrication learning loop. Log every real
-        # grounding-fabrication event (fire-and-forget) so recurring
-        # per-route patterns can surface a caution on future turns.
-        if (grounding or {}).get("fabricated"):
-            try:
-                from services.ora_fix_learning import record_fabrication_incident
-                from cto_services.db import get_db as _get_db_fab_rec
-                _db_fab_rec = _get_db_fab_rec()
-                asyncio.create_task(record_fabrication_incident(
-                    _db_fab_rec, source="admin_ora_chat",
-                    project_id="admin", route=chosen["route"],
-                    user_prompt=body.content,
-                    unverified_paths=grounding["fabricated"],
-                    corrected=bool(review_regen_cleared),
-                    user_id=user["user_id"],
-                ))
-            except Exception as _fabrec_err:
-                logger.warning("fabrication incident record skipped: %r", _fabrec_err)
-
-        if buffered:
-            for i in range(0, len(final_text), _DELTA_CHUNK_LEN):
-                yield {"type": "delta",
-                        "content": final_text[i:i+_DELTA_CHUNK_LEN]}
-                await asyncio.sleep(0)
-        elif _caveat_tail:
-            # Non-buffered path: original reply already streamed — just
-            # append the caveat as one extra delta so the founder sees
-            # it inline at the tail of the reply.
-            yield {"type": "delta", "content": _caveat_tail}
-            await asyncio.sleep(0)
-
-        cost = 0.0
-        if usage:
-            cost = await cost_tracker.log_call(
-                user_id=user["user_id"],
-                session_id=body.session_id,
-                route=chosen["route"],
-                model=chosen["model"],
-                temperature=chosen["temperature"],
-                input_tokens=usage.get("input_tokens", 0),
-                output_tokens=usage.get("output_tokens", 0),
-                error=errored,
-            )
-
-        # Iter 264 Fix C — persist the exact assembled system prompt.
-        msg_id = uuid.uuid4().hex
-        snap = await ora_snapshot.save_snapshot(
-            message_id=msg_id, session_id=body.session_id,
-            full_prompt=system_prompt,
-            component_sizes={
-                "core":        len(CORE_SAFETY_RULES),
-                "aurem_ctx":   len(AUREM_CONTEXT),
-                "highlights":  len(cb_highlights or ""),
-                "tree":        len(cb_tree_only or ""),
-                "house_rules": len(hr_text or ""),
-                "retrieved":   0,
-            })
-
-        await ora_session.append_message(
-            body.session_id, user["user_id"],
-            role="assistant", content=final_text,
-            route=chosen["route"], model=chosen["model"],
-            temperature=chosen["temperature"],
-            input_tokens=usage.get("input_tokens", 0),
-            output_tokens=usage.get("output_tokens", 0),
-            cost_usd=cost,
-            message_id=msg_id,
-            ungrounded=grounding["fabricated"] or None,
-            prompt_sha256=snap["sha256"],
-            component_sizes=snap["component_sizes"],
-            review=({"reason": review_reason,
-                      "skipped": review.get("skipped"),
-                      "flags": len(review.get("flags") or []),
-                      "types": sorted({f["type"] for f in
-                                        review.get("flags") or []}),
-                      "regen_fired": review_regen_fired,
-                      "regen_cleared": review_regen_cleared,
-                      "caveats": review_caveats[:6]}
-                     if review is not None else None),
-        )
-
-        # Iter 264 Fix A4 — user-facing warning ONLY for FABRICATED
-        # (UNVERIFIED = real path, soft log-only — no chip).
-        if grounding["fabricated"]:
-            yield {"type": "grounding_warning",
-                    "ungrounded": grounding["fabricated"]}
-        # Iter 268 — review caveats (soft flags / uncleared hard flags).
-        if review_caveats:
-            yield {"type": "review_caveat", "quotes": review_caveats[:6]}
-
-        yield {"type": "final", "cost_usd": cost,
-                "input_tokens":  usage.get("input_tokens", 0),
-                "output_tokens": usage.get("output_tokens", 0),
-                "ungrounded":    grounding["fabricated"],
-                "review_caveats": review_caveats[:6],
-                "errored": errored}
 
     async def sse_events():
         async for evt in event_stream():
@@ -711,364 +339,81 @@ async def send_message(body: MessageBody,
     return EventSourceResponse(sse_events())
 
 
-async def _stream_slash_result(user: dict, sess: dict,
-                                raw_text: str, parsed: tuple[str, str],
-                                b_status: dict,
-                                user_tz: Optional[str] = None):
-    """Wrap the deterministic slash path in the same SSE envelope so
-    the frontend has one code path for messages."""
-    cmd, args = parsed
-
-    async def event_stream():
-        yield {"type": "route", "route": "slash", "model": "deterministic",
-                "temperature": 0.0, "budget_mode": b_status["mode"]}
-        try:
-            result = await slash_dispatch.run_slash_command(cmd, args, ctx=user)
-        except KeyError:
-            yield {"type": "error", "error": "unknown_command"}
-            return
-        # Serialize the DB result deterministically first so the UI
-        # can render structured data even if the LLM explain fails.
-        yield {"type": "slash_result", "command": cmd, "result": result}
-
-        # Optional low-temp explain sentence (skipped in economy/spike).
-        explain_text = ""
-        summary_usage: dict = {}
-        chosen = resolve("slash_explain")
-        if b_status["mode"] not in ("economy", "spike_hard_stop") and result.get("ok"):
-            hr_text = await ora_house_rules.get_effective_text(user["user_id"])
-            system_prompt = assemble_system_prompt(hr_text, user_tz=user_tz)
-            msg = (
-                f"A slash-command just ran. Explain this result in ONE "
-                f"crisp sentence. Do NOT invent numbers.\n\n"
-                f"COMMAND: /{cmd}\nRESULT: {json.dumps(result.get('value'))}\n"
-                f"METRIC LABEL: {result.get('metric', '')}"
-            )
-            text, usage, err = await one_shot(
-                model=chosen["model"],
-                messages=[{"role": "system", "content": system_prompt},
-                          {"role": "user",   "content": msg}],
-                temperature=chosen["temperature"],
-                top_p=chosen["top_p"],
-                presence_penalty=chosen["presence_penalty"],
-                max_tokens=chosen["max_tokens"],
-            )
-            explain_text = text or ""
-            if not err and usage:
-                summary_usage = usage
-                yield {"type": "delta", "content": explain_text}
-
-        # Iter 264 Fix A — grounding hook on the slash-explain sentence.
-        grounding = {"fabricated": [], "unverified": []}
-        if explain_text:
-            g = await ora_grounding.run_post_response_check(
-                user_id=user["user_id"], session_id=sess["session_id"],
-                query=raw_text, reply=explain_text, route="slash",
-                retrieved_context=json.dumps(result.get("value")),
-            )
-            grounding = {"fabricated": g["fabricated"],
-                          "unverified": g["unverified"]}
-
-        # Persist both turns.
-        await ora_session.append_message(
-            sess["session_id"], user["user_id"],
-            role="user", content=raw_text,
-        )
-        cost = 0.0
-        if summary_usage:
-            cost = await cost_tracker.log_call(
-                user_id=user["user_id"],
-                session_id=sess["session_id"],
-                route=chosen["route"], model=chosen["model"],
-                temperature=chosen["temperature"],
-                input_tokens=summary_usage.get("input_tokens", 0),
-                output_tokens=summary_usage.get("output_tokens", 0),
-            )
-        await ora_session.append_message(
-            sess["session_id"], user["user_id"],
-            role="assistant",
-            content=explain_text or json.dumps(result.get("value")),
-            route=chosen["route"], model=chosen["model"],
-            temperature=chosen["temperature"],
-            input_tokens=summary_usage.get("input_tokens", 0),
-            output_tokens=summary_usage.get("output_tokens", 0),
-            cost_usd=cost,
-            message_id=uuid.uuid4().hex,
-            ungrounded=grounding["fabricated"] or None,
-        )
-        if grounding["fabricated"]:
-            yield {"type": "grounding_warning",
-                    "ungrounded": grounding["fabricated"]}
-        yield {"type": "final", "cost_usd": cost,
-                "ungrounded": grounding["fabricated"],
-                **{k: summary_usage.get(k, 0) for k in
-                    ("input_tokens", "output_tokens")}}
-
-    async def sse_events():
-        async for evt in event_stream():
-            yield {"event": evt["type"], "data": json.dumps(evt)}
-            await asyncio.sleep(0)
-
-    return EventSourceResponse(sse_events())
+# ── Action catalog — propose/approve/reject (P4) ────────────────────
+class ApproveActionBody(BaseModel):
+    proposal_id: str
 
 
-# ── Deep Research streaming envelope (Iter 212m-245) ───────────────
-_DELTA_CHUNK_LEN = 48  # chars per synthetic delta so the UI streams smoothly
+class RejectActionBody(BaseModel):
+    proposal_id: str
 
 
-def _labels_to_source_tag(fired: list[str]) -> str:
-    """Turn `['github', 'web']` into `github+web` for the route badge."""
-    order = ["url", "github", "social", "news", "web"]
-    seen: list[str] = []
-    for tag in order:
-        if tag in fired and tag not in seen:
-            seen.append(tag)
-    for tag in fired:
-        if tag not in seen:
-            seen.append(tag)
-    return "+".join(seen) if seen else "none"
+@router.post("/action/approve")
+async def approve_action(body: ApproveActionBody,
+                          authorization: Optional[str] = Header(None)):
+    # Re-checks the founder's bearer token on every approval — the
+    # only "signed" gate this single-admin system has; there's no
+    # separate step-up auth mechanism to layer on top of it.
+    user = await require_admin(authorization)
+    from cto_services.db import get_db as _get_db_v2
+    from services.ora_chat_v2 import audit as _v2_audit, catalog as _v2_catalog
+    db = _get_db_v2()
+
+    proposal = await _v2_audit.get_proposal(db, body.proposal_id)
+    if not proposal or proposal.get("admin_id") != user["user_id"]:
+        raise HTTPException(404, "proposal not found")
+    if proposal.get("event_type") != "proposed":
+        return {"ok": False, "error": f"already_{proposal.get('event_type')}"}
+
+    await _v2_audit.log_event(
+        db, admin_id=user["user_id"], action_id=proposal["action_id"],
+        params=proposal["params"], proposed_by=proposal["proposed_by"],
+        event_type="approved", proposal_id=body.proposal_id,
+        approved_ts=time.time())
+
+    result = await _v2_catalog.execute_action(
+        db, proposal["action_id"], proposal["params"])
+    await _v2_audit.log_event(
+        db, admin_id=user["user_id"], action_id=proposal["action_id"],
+        params=proposal["params"], proposed_by=proposal["proposed_by"],
+        event_type="executed" if result.get("ok") else "failed",
+        proposal_id=body.proposal_id,
+        result=result if result.get("ok") else None,
+        error=None if result.get("ok") else str(result.get("error")))
+    return {"ok": result.get("ok"), "result": result}
 
 
-async def _stream_deep_research(user: dict, sess: dict,
-                                 raw_text: str, labels: list[str],
-                                 b_status: dict,
-                                 user_tz: Optional[str] = None,
-                                 intent_verdict: Optional[dict] = None):
-    """SSE envelope for the multi-source deep-research path.
+@router.post("/action/reject")
+async def reject_action(body: RejectActionBody,
+                         authorization: Optional[str] = Header(None)):
+    user = await require_admin(authorization)
+    from cto_services.db import get_db as _get_db_v2
+    from services.ora_chat_v2 import audit as _v2_audit
+    db = _get_db_v2()
 
-    Semantics:
-      - Persist the user turn immediately.
-      - Emit a `route` event with `route="deep"` + `sources` string.
-      - Call `orchestrate()` which fires up to 4 tools in parallel then
-        does ONE DeepSeek V3 synthesis pass.
-      - Chunk the synthesized text into ~48-char deltas so the UI
-        renders progressively (orchestrate itself returns full text —
-        it's a one-shot call, not a stream).
-      - Log cost via `cost_tracker.log_call` so daily budget accrues.
-      - Emit a `final` event with `sources_fired`, `downgraded`,
-        `tool_cost_usd` so the frontend badge can show what actually ran.
-    """
-    session_id = sess["session_id"]
+    proposal = await _v2_audit.get_proposal(db, body.proposal_id)
+    if not proposal or proposal.get("admin_id") != user["user_id"]:
+        raise HTTPException(404, "proposal not found")
+    if proposal.get("event_type") != "proposed":
+        return {"ok": False, "error": f"already_{proposal.get('event_type')}"}
 
-    # Persist user turn before we start — transcript stays honest if
-    # any tool fails mid-flight.
-    await ora_session.append_message(
-        session_id, user["user_id"],
-        role="user", content=raw_text,
-    )
+    await _v2_audit.log_event(
+        db, admin_id=user["user_id"], action_id=proposal["action_id"],
+        params=proposal["params"], proposed_by=proposal["proposed_by"],
+        event_type="rejected", proposal_id=body.proposal_id)
+    return {"ok": True}
 
-    hr_text = await ora_house_rules.get_effective_text(user["user_id"])
-    # Iter 264 Fix B — conditional tree injection on the deep path too.
-    cb_block, cb_highlights, cb_tree_only = \
-        await _codebase_context(raw_text, labels)
 
-    async def event_stream():
-        # Announce the route up front — sources list will be
-        # patched in the `final` event since we don't yet know which
-        # tools succeeded until orchestrate returns.
-        cfg = resolve("deep")
-        yield {"type": "route", "route": "deep",
-                "model": cfg["model"], "temperature": cfg["temperature"],
-                "labels": labels,
-                "budget_mode": b_status["mode"]}
-        # Phase 3 · Feb 2026 — surface the intent verdict on the deep
-        # path too so the founder sees the same badge/CTA regardless
-        # of which route ORA chose.
-        if intent_verdict:
-            yield {"type": "intent", **intent_verdict}
-        if "HIGH_STAKES" in (labels or []):
-            yield {"type": "review_status", "state": "verifying",
-                    "reason": "high_stakes"}
+@router.get("/actions/recent")
+async def list_recent_actions(authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    from cto_services.db import get_db as _get_db_v2
+    from services.ora_chat_v2 import audit as _v2_audit
+    db = _get_db_v2()
+    rows = await _v2_audit.recent_actions(db, limit=20)
+    return {"ok": True, "actions": rows}
 
-        try:
-            out = await ora_deep.orchestrate(
-                query=raw_text, labels=labels,
-                house_rules_text=hr_text, user_tz=user_tz,
-                codebase_tree=cb_block,
-            )
-        except Exception as e:
-            logger.exception("deep-research orchestrator crashed")
-            yield {"type": "error", "error": f"deep_research_failed: {type(e).__name__}"}
-            out = {"ok": False, "text": "", "sources_fired": [],
-                    "errors": [str(e)], "tool_cost_usd": 0.0,
-                    "downgraded": False}
 
-        text = out.get("text") or ""
-        sources_fired = out.get("sources_fired") or []
-        sources_tag = _labels_to_source_tag(sources_fired)
-
-        # Emit an updated `route` event now that we know which tools
-        # fired — frontend uses this to render `deep · github+web`.
-        yield {"type": "route", "route": "deep",
-                "model": cfg["model"], "temperature": cfg["temperature"],
-                "sources": sources_tag,
-                "sources_fired": sources_fired,
-                "downgraded": bool(out.get("downgraded")),
-                "budget_mode": b_status["mode"]}
-
-        # Book the synthesis LLM call against the daily budget.
-        synth_usage = out.get("synthesis_usage") or {}
-        cost = 0.0
-        if synth_usage:
-            cost = await cost_tracker.log_call(
-                user_id=user["user_id"],
-                session_id=session_id,
-                route="deep",
-                model=out.get("synthesis_model") or cfg["model"],
-                temperature=cfg["temperature"],
-                input_tokens=synth_usage.get("input_tokens", 0),
-                output_tokens=synth_usage.get("output_tokens", 0),
-            )
-
-        if not text and not out.get("ok"):
-            text = ("Sources didn't respond in time. Try again "
-                     "in a moment, or narrow the question.")
-
-        # Iter 264 Fix A — deterministic grounding vs the ACTUAL
-        # retrieved excerpts (not just source names) + canonical index.
-        # Runs BEFORE streaming (iter 268) — deep text is fully
-        # assembled here, so review/regen can happen pre-delivery.
-        grounding = await ora_grounding.run_post_response_check(
-            user_id=user["user_id"], session_id=session_id,
-            query=raw_text, reply=text, route="deep",
-            sources_fired=out.get("sources_fired") or [],
-            retrieved_context=out.get("retrieved_context") or "",
-            codebase_tree=cb_tree_only or None,
-            system_highlights=cb_highlights or None,
-        )
-
-        # Iter 268 — Adversarial review on the deep path. Deep text is
-        # pre-assembled → regen is always possible here (buffered-free).
-        review = None
-        review_caveats: list[str] = []
-        review_regen_fired = review_regen_cleared = False
-        review_reason = ora_review.trigger_reason(labels, grounding)
-        if review_reason and out.get("ok"):
-            review = await ora_review.run_review(
-                user_id=user["user_id"], session_id=session_id,
-                query=raw_text, draft=text,
-                context=(out.get("retrieved_context") or "")
-                        + "\n\n" + (cb_highlights or ""),
-                reason=review_reason,
-            )
-            if not review.get("skipped"):
-                if review["hard"]:
-                    review_regen_fired = True
-                    text2, usage2, err2 = await one_shot(
-                        model=out.get("synthesis_model") or cfg["model"],
-                        messages=[
-                            {"role": "system",
-                             "content": out.get("system_prompt") or ""},
-                            {"role": "user",
-                             "content": out.get("synth_prompt") or raw_text},
-                            {"role": "assistant", "content": text},
-                            {"role": "user",
-                             "content": ora_review.corrective_prompt(
-                                 review["hard"])},
-                        ],
-                        temperature=cfg["temperature"],
-                        top_p=cfg["top_p"],
-                        presence_penalty=cfg["presence_penalty"],
-                        max_tokens=cfg["max_tokens"],
-                    )
-                    if text2 and not err2:
-                        text = text2
-                        for k in ("input_tokens", "output_tokens"):
-                            synth_usage[k] = (synth_usage.get(k, 0)
-                                              + (usage2 or {}).get(k, 0))
-                        grounding = await ora_grounding.run_post_response_check(
-                            user_id=user["user_id"], session_id=session_id,
-                            query=raw_text, reply=text, route="deep",
-                            sources_fired=out.get("sources_fired") or [],
-                            retrieved_context=out.get("retrieved_context") or "",
-                            codebase_tree=cb_tree_only or None,
-                            system_highlights=cb_highlights or None,
-                        )
-                        review_regen_cleared = not grounding["fabricated"]
-                review_caveats = [f["quote"] for f in review["soft"]]
-                if review["hard"] and not (review_regen_fired
-                                            and review_regen_cleared):
-                    review_caveats = ([f["quote"] for f in review["hard"]]
-                                      + review_caveats)
-            await ora_review.log_metrics(
-                user_id=user["user_id"], session_id=session_id,
-                route="deep", reason=review_reason, review=review,
-                regen_fired=review_regen_fired,
-                regen_cleared=review_regen_cleared)
-
-        # Chunk the (now reviewed) response into synthetic deltas so
-        # the UI paints progressively.
-        if text:
-            for i in range(0, len(text), _DELTA_CHUNK_LEN):
-                yield {"type": "delta", "content": text[i:i+_DELTA_CHUNK_LEN]}
-                await asyncio.sleep(0)
-
-        # Iter 264 Fix C — persist the exact assembled prompt.
-        msg_id = uuid.uuid4().hex
-        full_prompt = ((out.get("system_prompt") or "") + "\n\n" +
-                        (out.get("synth_prompt") or "")).strip()
-        snap = await ora_snapshot.save_snapshot(
-            message_id=msg_id, session_id=session_id,
-            full_prompt=full_prompt,
-            component_sizes={
-                "core":        len(CORE_SAFETY_RULES),
-                "aurem_ctx":   len(AUREM_CONTEXT),
-                "highlights":  len(cb_highlights or ""),
-                "tree":        len(cb_tree_only or ""),
-                "house_rules": len(hr_text or ""),
-                "retrieved":   len(out.get("retrieved_context") or ""),
-            })
-
-        await ora_session.append_message(
-            session_id, user["user_id"],
-            role="assistant", content=text,
-            route="deep",
-            model=out.get("synthesis_model") or cfg["model"],
-            temperature=cfg["temperature"],
-            input_tokens=synth_usage.get("input_tokens", 0),
-            output_tokens=synth_usage.get("output_tokens", 0),
-            cost_usd=cost,
-            message_id=msg_id,
-            ungrounded=grounding["fabricated"] or None,
-            prompt_sha256=snap["sha256"],
-            component_sizes=snap["component_sizes"],
-            review=({"reason": review_reason,
-                      "skipped": review.get("skipped"),
-                      "flags": len(review.get("flags") or []),
-                      "types": sorted({f["type"] for f in
-                                        review.get("flags") or []}),
-                      "regen_fired": review_regen_fired,
-                      "regen_cleared": review_regen_cleared,
-                      "caveats": review_caveats[:6]}
-                     if review is not None else None),
-        )
-
-        # Iter 264 Fix A4 — user-facing warning ONLY for FABRICATED.
-        if grounding["fabricated"]:
-            yield {"type": "grounding_warning",
-                    "ungrounded": grounding["fabricated"]}
-        # Iter 268 — review caveats.
-        if review_caveats:
-            yield {"type": "review_caveat", "quotes": review_caveats[:6]}
-
-        yield {"type": "final",
-                "cost_usd":       cost,
-                "tool_cost_usd":  round(float(out.get("tool_cost_usd") or 0.0), 6),
-                "sources":        sources_tag,
-                "sources_fired":  sources_fired,
-                "downgraded":     bool(out.get("downgraded")),
-                "errors":         out.get("errors") or [],
-                "ungrounded":     grounding["fabricated"],
-                "review_caveats": review_caveats[:6],
-                "input_tokens":   synth_usage.get("input_tokens", 0),
-                "output_tokens":  synth_usage.get("output_tokens", 0)}
-
-    async def sse_events():
-        async for evt in event_stream():
-            yield {"event": evt["type"], "data": json.dumps(evt)}
-            await asyncio.sleep(0)
-
-    return EventSourceResponse(sse_events())
 @router.get("/usage")
 async def usage(authorization: Optional[str] = Header(None)):
     await require_admin(authorization)
@@ -1248,9 +593,9 @@ async def pin_login(body: PinLoginBody,
 #
 # The loop is human-in-the-loop by design:
 #   1. Every ORA response is auto-checked for ungrounded specific
-#      claims (services/ora_chat/grounding_check.py — fires in the
-#      SSE `_stream_deep_research` handler above). Positives → Mongo
-#      `ora_hallucination_log`.
+#      claims (services/ora_chat/grounding_check.py — fired from the
+#      legacy /message pipeline; retained for the /slash + preview-scan
+#      paths below). Positives → Mongo `ora_hallucination_log`.
 #   2. Batch classifier reads unreviewed rows, asks DeepSeek V3 for
 #      recurring patterns (>=3 cases). Candidates land in
 #      `ora_hallucination_patterns` with `status: "pending"`.

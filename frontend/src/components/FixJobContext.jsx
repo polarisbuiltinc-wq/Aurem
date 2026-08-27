@@ -334,6 +334,14 @@ export function FixJobProvider({ children }) {
         setCanRestart(data.can_restart === true);
         try { es.close(); } catch { /* ignore */ }
         esRef.current = null;
+        // 2026-08-27 — founder-reported: bar reappeared on refresh/login
+        // minutes after a fix already completed. Root cause: this
+        // "hydrated" terminal branch (SSE reconnect landed on a job that
+        // already finished on the backend) never cleared LS_JOB_KEY, so
+        // every future app mount re-attached to the same job_id and
+        // replayed this exact terminal state. `done`/`gone` below already
+        // clear it — this branch was the one gap.
+        try { localStorage.removeItem(LS_JOB_KEY); } catch { /* ignore */ }
       }
       if (ph === "gone") {
         setError(data.message || "Job not found (may have expired)");

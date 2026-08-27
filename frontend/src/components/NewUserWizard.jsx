@@ -76,6 +76,12 @@ export default function NewUserWizard({ onComplete }) {
   } = useGitHubConnectStatus();
   const appInstalls = ghConnectStatus.installations;
   const appPickerActive = ghConnectStatus.installation_active;
+  // 2026-08-27 — founder-confirmed workaround: some accounts get stuck
+  // with an orphaned/already-installed App that never links (retrying
+  // the same install popup replays the same stuck state). After the
+  // first failed attempt, surface the manual reset path the founder
+  // proved works: revoke the App on GitHub, then reinstall fresh.
+  const [connectAttempts, setConnectAttempts] = useState(0);
 
   // Initial OAuth status check.
   useEffect(() => {
@@ -162,12 +168,18 @@ export default function NewUserWizard({ onComplete }) {
   // the old fetchAppInstallations/openAppInstallPopup/count-poll with
   // the shared hook's startAppConnect(). See useGitHubConnectStatus.js.
   function openAppInstallPopup() {
+    setConnectAttempts((n) => n + 1);
     const r = startAppConnect();
     if (!r.ok) {
       setErr(r.reason === "popup_blocked"
         ? "Popup blocked — please allow popups for this site and try again."
         : "Session expired — please log in again.");
     }
+  }
+
+  function handleRetryAppConnect() {
+    setConnectAttempts((n) => n + 1);
+    retryAppConnect();
   }
 
   // postMessage is now just a fast-path nudge inside the hook itself;
@@ -569,34 +581,52 @@ export default function NewUserWizard({ onComplete }) {
                             </div>
                           ) : appTimedOut || appDenied ? (
                             <div data-testid="wizard-app-timeout" style={{
-                              display: "flex", alignItems: "center", gap: 10,
+                              display: "flex", flexDirection: "column", gap: 8,
                             }}>
-                              {/* 2026-08-27 — founder-reported: a real
-                                  GitHub install whose popup closed before
-                                  our poll caught "connected" (the common,
-                                  fast-install case — `denied`, not the 60s
-                                  `appTimedOut`) used to silently revert to
-                                  the plain install CTA below with NO
-                                  feedback at all. Same retry copy either
-                                  way; the fix is "try again" regardless of
-                                  which of the two the poll landed on. */}
-                              <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                                Connection didn't finish — please try again.
-                              </span>
-                              <button
-                                type="button"
-                                data-testid="wizard-app-retry-btn"
-                                onClick={retryAppConnect}
-                                style={{
-                                  display: "inline-flex", alignItems: "center", gap: 6,
-                                  padding: "6px 12px",
-                                  background: "var(--accent, #ff6608)",
-                                  color: "#fff", border: "none",
-                                  borderRadius: 5, fontSize: 11.5, fontWeight: 600,
-                                  cursor: "pointer",
-                                }}>
-                                <RefreshCw size={11} /> Try again
-                              </button>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                {/* 2026-08-27 — founder-reported: a real
+                                    GitHub install whose popup closed before
+                                    our poll caught "connected" (the common,
+                                    fast-install case — `denied`, not the 60s
+                                    `appTimedOut`) used to silently revert to
+                                    the plain install CTA below with NO
+                                    feedback at all. Same retry copy either
+                                    way; the fix is "try again" regardless of
+                                    which of the two the poll landed on. */}
+                                <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                                  Connection didn't finish — please try again.
+                                </span>
+                                <button
+                                  type="button"
+                                  data-testid="wizard-app-retry-btn"
+                                  onClick={handleRetryAppConnect}
+                                  style={{
+                                    display: "inline-flex", alignItems: "center", gap: 6,
+                                    padding: "6px 12px",
+                                    background: "var(--accent, #ff6608)",
+                                    color: "#fff", border: "none",
+                                    borderRadius: 5, fontSize: 11.5, fontWeight: 600,
+                                    cursor: "pointer",
+                                  }}>
+                                  <RefreshCw size={11} /> Try again
+                                </button>
+                              </div>
+                              {connectAttempts >= 2 && (
+                                <div style={{ fontSize: 11, color: "var(--text-faint)", lineHeight: 1.4 }}>
+                                  Still stuck?{" "}
+                                  <a
+                                    data-testid="wizard-app-reset-link"
+                                    href="https://github.com/settings/installations"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{ color: "#ff9d5c", textDecoration: "underline" }}
+                                  >
+                                    Remove AUREM CTO on GitHub
+                                  </a>{" "}
+                                  then click Try again — this clears a stuck
+                                  install that sometimes can't self-heal.
+                                </div>
+                              )}
                             </div>
                           ) : (
                           <>

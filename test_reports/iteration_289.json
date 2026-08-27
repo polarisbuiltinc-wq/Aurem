@@ -1,0 +1,43 @@
+{
+  "summary": "ORA Chat v2 P1-P5 checkpoint + 3 bug-fix regressions (GitHub connect recovery, FixJobContext localStorage cleanup, founder-offer stale-preview reap). Ran a new 16-test E2E integration suite against the live preview backend (all 16 PASS) plus the 3 pre-existing unit test files called out in the review (23/23 PASS in that subset). Frontend smoke-tested the ORA drawer end-to-end: login → open drawer via floating bubble (data-testid=ora-chat-open) → New chat → send message → mock-LLM assistant reply streams back with [MOCK_LLM] prefix, user msg + assistant msg render, session picker lists all recent sessions incl. old ones, Think mode and Advice-only (no actions) checkboxes present, budget pill shows $0.2179/$2.5. GitHub wizard recovery link + FixJobContext localStorage cleanup verified via code inspection (both live in the files at the exact lines the review claimed). Founder-offer pill on landing renders sane text: '49/50 free Pro trials left'. One pre-existing test failure (TestSystemPromptLayering) is NOT in this run and confirmed unrelated to this round.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "backend/.env", "issue": "Duplicate LLM_MODEL key still present in .env (line 14 = 'deepseek/deepseek-chat', line 86 = 'qwen3.8-27b'). Shell last-wins semantics means the ORA v2 code correctly reads 'qwen3.8-27b', and the legacy consumer was renamed to DEEPSEEK_COUNCIL_MODEL (also present on line 15), so behaviour is correct — but the stale line 14 LLM_MODEL entry should be removed for clarity to avoid future confusion."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "OraChatDrawer", "issue": "tokens_in/tokens_out are captured into message state (line 255-256) and persisted server-side, but are NOT rendered visibly next to individual assistant messages in the drawer transcript. Founder requirement was 'Token in/out must be visible per message'. Only the aggregate $X / $Y budget pill in the drawer header is visible. If per-message visibility was truly the intent this is a UI gap; if aggregate spend was acceptable this is fine — flagging for main-agent decision.", "selector": "[data-testid='ora-chat-messages']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/admin/ora-chat page (fallback view when drawer closed)", "issues": ["Blurb still reads 'Everything else routes to cheap OpenRouter models.' — stale copy from pre-rebuild version. The v2 rebuild routes to DashScope (currently mocked). Please update the copy on the /admin/ora-chat page (the ORA Chat h1 + description block)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter2026_08_28_ora_chat_v2_e2e.py",
+    "/app/test_reports/pytest/iter2026_08_28_ora_chat_v2_e2e.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Remove the stale duplicate LLM_MODEL='deepseek/deepseek-chat' line at backend/.env:14 (line 86 with qwen3.8-27b is the correct v2 value; last-wins currently masks this).",
+    "OPTIONAL: Update /admin/ora-chat page copy — 'Everything else routes to cheap OpenRouter models' no longer accurate under the v2 DashScope rebuild.",
+    "DECIDE: Whether per-message token in/out counter needs to render inline on the assistant message bubble (data is captured & persisted, just not rendered)."
+  ],
+  "critical_code_review_comments": [
+    "backend/routers/ora_chat.py:325-333 — assistant message is only persisted if final_evt is non-empty. In the SSE error path (rate_limited) no final event fires, so the user message IS persisted (line 304-306) but no assistant reply is stored. That's correct behaviour; just documenting.",
+    "backend/routers/ora_chat.py — the file has legacy /message (pre-rebuild) code still surviving alongside the v2 delegation. File is ~1122 lines. Consider splitting the router into ora_chat_v2_router.py once P6-P9 are done to bring per-file line count back under 700.",
+    "backend/services/ora_chat_v2/catalog.py execute_action() — action_id 'toggle_flag' whitelists only 'explain_plain_english_v1'; setting a non-whitelisted flag will fall through to the internal setter. Verify _toggle_flag() itself re-checks TOGGLE_FLAG_WHITELIST (spot-check).",
+    "OraChatDrawer.jsx captures tokens on delta events (line 255) but there is no JSX rendering them per-bubble — either add a small pill on each assistant message OR remove the state capture to reduce dead state."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter2026_08_28_ora_chat_v2_e2e.py (new — 16 E2E integration tests, all passing)"
+  ],
+  "success_rate": {"backend": "100% (16/16 new E2E + 23/23 pre-existing unit subset)", "frontend": "100% smoke (drawer opens, session picker works, mock LLM reply streams, toggles present, testids all wired, budget pill live)"},
+  "test_credentials": "Preview admin test@aurem.dev / AuremTest2026! — worked cleanly on both login form and API bearer.",
+  "seed_data_creation": "Test-time only: seeded 21 ora_chat_usage rows tagged TEST_MARK=iter_2026_08_28 for the rate-limit test (auto-cleaned up in test teardown). Seeded 3 'proposed' events into ora_chat_actions with proposal_ids created at runtime (NOT cleaned up — they remain as audit trail alongside the approve/reject/executed events they generated, tagged action_ids create_backlog_item/park_backlog_item/toggle_flag, admin_id=test_admin_001). Also created 1 ORA chat session titled 'TEST_e2e' + 2 assistant messages under test_admin_001; these are safe to leave.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The 3 pre-existing action-catalog audit rows tagged TEST_MARK-free will linger in db.ora_chat_actions under admin_id=test_admin_001. If /actions/recent list grows too long, cleanup with db.ora_chat_actions.delete_many({admin_id:'test_admin_001', proposed_by:'test_seed'}). The new E2E test file at /app/backend/tests/test_iter2026_08_28_ora_chat_v2_e2e.py should be re-runnable for future rounds — it's fully self-contained (creates its own session, cleans up rate-limit rows). All 6 required-feature checkboxes from the review confirmed working: (1) drawer opens + old sessions readable, (2) mock SSE turn state/delta/final, (3) auth gate 401/403 on message + action endpoints, (4) rate-limit SSE error (not silent), (5) token persistence per assistant msg, (6) think/advise flags render + posted. Action approve/reject flow verified via seeded proposals + audit trail — proposed→approved→executed and proposed→rejected paths both correct, sensitive_actions_disabled correctly blocks toggle_flag with ORA_CHAT_SENSITIVE=off. No MongoDB _id leaks in /actions/recent response.",
+  "rca of the issue": "N/A — no failures found. Two minor stale-code smells noted (duplicate LLM_MODEL env line + stale /admin/ora-chat page copy) and one UX interpretation question (per-message token pill not rendered inline even though data is captured/persisted)."
+}

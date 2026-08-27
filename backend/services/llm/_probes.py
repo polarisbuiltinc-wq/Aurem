@@ -65,8 +65,13 @@ def set_longcat_live(value: bool) -> None:
 # ═══ Env-derived model slug lookup ═════════════════════════════
 def _deepseek_model() -> str:
     """Council B / C primary. Env override so prod can bump the
-    slug without a redeploy (used during OpenRouter model migrations)."""
-    return os.getenv("LLM_MODEL", "deepseek/deepseek-chat")
+    slug without a redeploy (used during OpenRouter model migrations).
+    2026-08-27 — renamed off the generic `LLM_MODEL` name: the ORA
+    Chat v2 rebuild claims that name for its own vendor-swappable
+    client (services/ora_chat_v2/llm_client.py), and .env now defines
+    BOTH keys — `LLM_MODEL` would silently resolve to ORA's DashScope
+    slug here otherwise, breaking Council B/C model selection."""
+    return os.getenv("DEEPSEEK_COUNCIL_MODEL", "deepseek/deepseek-chat")
 
 
 # ═══ Constants used by the probes ═══════════════════════════════

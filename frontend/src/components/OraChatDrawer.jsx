@@ -33,10 +33,16 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [budget, setBudget] = useState(null);
-  const [stream, setStream] = useState({ route: null, model: null, buf: "", err: null });
+  const [stream, setStream] = useState({ route: null, model: null, buf: "", err: null, stateAsOf: null });
   const [showRules, setShowRules] = useState(false);
   const [recentSessions, setRecentSessions] = useState([]);
   const [showPicker, setShowPicker] = useState(false);
+  // ORA Chat v2 (2026-08-27) — think mode reasons harder (higher-latency
+  // model call); advise-only disables the action catalog for the turn
+  // so the founder can ask "what should I do" without risking a proposal.
+  const [thinkMode, setThinkMode] = useState(false);
+  const [adviseOnly, setAdviseOnly] = useState(false);
+  const [actionBusy, setActionBusy] = useState(null);
   const listRef = useRef(null);
   const abortRef = useRef(null);
 
@@ -77,6 +83,7 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
       const msgs = (s.messages || []).map(m => ({
         role: m.role, content: m.content,
         route: m.route, model: m.model, temperature: m.temperature,
+        tokens_in: m.input_tokens, tokens_out: m.output_tokens,
       }));
       setMessages(msgs);
       setSessionId(sid);
@@ -102,7 +109,7 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
     if (!text || !sessionId || sending) return;
     setInput("");
     setMessages(m => [...m, { role: "user", content: text }]);
-    setStream({ route: null, model: null, buf: "", err: null });
+    setStream({ route: null, model: null, buf: "", err: null, stateAsOf: null });
     setSending(true);
 
     try {
@@ -123,7 +130,10 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
           "Accept":        "text/event-stream",
           ...(clientTz ? { "X-Client-TZ": clientTz } : {}),
         },
-        body: JSON.stringify({ session_id: sessionId, content: text }),
+        body: JSON.stringify({
+          session_id: sessionId, content: text,
+          think_mode: thinkMode, advise_only: adviseOnly,
+        }),
         signal: ctrl.signal,
       });
 
@@ -212,10 +222,29 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
           } else if (evtType === "grounding_warning" || obj.type === "grounding_warning") {
             // Iter 264 Fix A4 — fabricated citations flagged.
             routeMeta = { ...routeMeta, ungrounded: obj.ungrounded || [] };
+          } else if (evtType === "state" || obj.type === "state") {
+            // ORA v2 — the grounding state block was assembled for this
+            // turn (data-only, never instructions). Surface as a small
+            // chip so the founder can see the model saw fresh data.
+            setStream(s => ({ ...s, stateAsOf: obj.state_as_of || true }));
+          } else if (evtType === "tool_call" || obj.type === "tool_call") {
+            setStream(s => ({ ...s, lastTool: obj.name }));
+          } else if (evtType === "tool_result" || obj.type === "tool_result") {
+            setStream(s => ({ ...s, lastTool: null }));
+          } else if (evtType === "action_proposal" || obj.type === "action_proposal") {
+            setMessages(m => [...m, {
+              role: "assistant", content: assistantBuf || "",
+              actionProposal: {
+                proposal_id: obj.proposal_id, action_id: obj.action_id,
+                params: obj.params, risk: obj.risk, summary: obj.summary,
+              },
+            }]);
+            assistantBuf = "";
+            setStream(s => ({ ...s, buf: "" }));
           } else if (evtType === "final" || obj.type === "final") {
             // Persist message to state; clear streaming buffer.
             setMessages(m => [...m, {
-              role: "assistant", content: assistantBuf,
+              role: "assistant", content: obj.content ?? assistantBuf,
               route: routeMeta.route, model: routeMeta.model,
               temperature: routeMeta.temperature,
               sources: routeMeta.sources || obj.sources,
@@ -223,11 +252,12 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
               downgraded: routeMeta.downgraded || obj.downgraded,
               ungrounded: routeMeta.ungrounded || obj.ungrounded,
               review_caveats: routeMeta.review_caveats || obj.review_caveats,
-              cost_usd: obj.cost_usd, tokens_in: obj.input_tokens,
-              tokens_out: obj.output_tokens,
+              cost_usd: obj.cost_usd,
+              tokens_out: obj.tokens_out ?? obj.output_tokens,
+              tokens_in: obj.tokens_in ?? obj.input_tokens,
               interrupted: !!errored,
             }]);
-            setStream({ route: null, model: null, buf: "", err: null });
+            setStream({ route: null, model: null, buf: "", err: null, stateAsOf: null });
           }
         }
       }
@@ -252,6 +282,32 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
   const overBudget = budget?.mode === "spike_hard_stop";
   const economyMode = budget?.mode === "economy";
   const warningMode = budget?.mode === "warning";
+
+  // ORA Chat v2 — resolve an in-line action proposal card. Re-checks
+  // admin auth server-side on every call (require_admin on the route).
+  const resolveAction = async (msgIdx, proposalId, decision) => {
+    setActionBusy(proposalId);
+    try {
+      const r = await api.post(`/ora-chat/action/${decision}`, { proposal_id: proposalId });
+      setMessages(m => m.map((msg, i) => i !== msgIdx ? msg : {
+        ...msg,
+        actionProposal: {
+          ...msg.actionProposal,
+          resolved: decision,
+          resolvedOk: r?.data?.ok !== false,
+          resolvedError: r?.data?.result?.error || r?.data?.error,
+        },
+      }));
+    } catch (e) {
+      setMessages(m => m.map((msg, i) => i !== msgIdx ? msg : {
+        ...msg,
+        actionProposal: { ...msg.actionProposal, resolved: decision, resolvedOk: false,
+                           resolvedError: e?.message || "request_failed" },
+      }));
+    } finally {
+      setActionBusy(null);
+    }
+  };
 
   return (
     <>
@@ -395,9 +451,10 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
               </div>
             )}
             {messages.map((m, i) => (
-              <MessageBubble key={i} msg={m} />
+              <MessageBubble key={i} msg={m} onResolveAction={(pid, decision) => resolveAction(i, pid, decision)}
+                             actionBusy={actionBusy} />
             ))}
-            {sending && !stream.buf && !stream.err && <DrawerThinkingDots />}
+            {sending && !stream.buf && !stream.err && <DrawerThinkingDots label={stream.lastTool ? `using ${stream.lastTool}…` : "thinking…"} />}
             {stream.buf && (
               <MessageBubble
                 msg={{ role: "assistant", content: stream.buf,
@@ -442,9 +499,34 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
               style={{
                 borderTop: "1px solid rgba(255,255,255,0.06)",
                 padding: "12px",
-                display: "flex", gap: 8, alignItems: "flex-end",
+                display: "flex", flexDirection: "column", gap: 8,
               }}
             >
+              {/* ORA v2 controls — think mode (slower, deeper reasoning)
+                  and advise-only (no action proposals this turn). */}
+              <div style={{ display: "flex", gap: 14, fontSize: 11, color: "#a39d8a" }}>
+                <label data-testid="ora-chat-think-toggle"
+                       style={{ display: "flex", gap: 5, alignItems: "center", cursor: "pointer" }}>
+                  <input type="checkbox" checked={thinkMode}
+                         onChange={(e) => setThinkMode(e.target.checked)} />
+                  Think mode
+                </label>
+                <label data-testid="ora-chat-advise-only-toggle"
+                       style={{ display: "flex", gap: 5, alignItems: "center", cursor: "pointer" }}>
+                  <input type="checkbox" checked={adviseOnly}
+                         onChange={(e) => setAdviseOnly(e.target.checked)} />
+                  Advice only (no actions)
+                </label>
+                {stream.stateAsOf && (
+                  <span data-testid="ora-chat-state-chip"
+                        title="Live AUREM state was included in this turn"
+                        style={{ marginLeft: "auto", padding: "1px 7px", borderRadius: 999,
+                                  background: "rgba(129,178,154,0.14)", color: "#81B29A" }}>
+                    state ✓
+                  </span>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
               <textarea
                 data-testid="ora-chat-input"
                 value={input}
@@ -499,6 +581,7 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
                   <Send size={14} />
                 </button>
               )}
+              </div>
             </form>
           )}
         </div>
@@ -577,7 +660,7 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
   );
 }
 
-function MessageBubble({ msg }) {
+function MessageBubble({ msg, onResolveAction, actionBusy }) {
   const isUser = msg.role === "user";
   return (
     <div
@@ -606,10 +689,15 @@ function MessageBubble({ msg }) {
           <img onerror="..."> event handlers stripped). */}
       {isUser ? (
         <span style={{ whiteSpace: "pre-wrap" }}>{msg.content}</span>
-      ) : (
+      ) : msg.content ? (
         <div className="ora-md" data-testid="ora-chat-md">
           <Streamdown>{msg.content || ""}</Streamdown>
         </div>
+      ) : null}
+      {!isUser && msg.actionProposal && (
+        <ActionProposalCard proposal={msg.actionProposal}
+                             busy={actionBusy === msg.actionProposal.proposal_id}
+                             onResolve={(decision) => onResolveAction?.(msg.actionProposal.proposal_id, decision)} />
       )}
       {!isUser && Array.isArray(msg.ungrounded) && msg.ungrounded.length > 0 && (
         <div data-testid="ora-grounding-warning"
@@ -630,7 +718,7 @@ function MessageBubble({ msg }) {
           ⚠︎ Review-flagged as unverified: {msg.review_caveats.join(" · ")}
         </div>
       )}
-      {(msg.route || msg.streaming || msg.interrupted) && (
+      {(msg.route || msg.streaming || msg.interrupted || (!isUser && (msg.tokens_in || msg.tokens_out))) && (
         <div style={{
           marginTop: 6, fontSize: 10,
           color: msg.interrupted ? "#f88" : "#7a7466",
@@ -649,6 +737,15 @@ function MessageBubble({ msg }) {
               {msg.temperature !== undefined && ` · t=${msg.temperature}`}
             </span>
           )}
+          {!isUser && (msg.tokens_in || msg.tokens_out) && (
+            <span data-testid="ora-chat-msg-tokens" style={{
+              padding: "1px 6px", borderRadius: 4,
+              background: "rgba(255,255,255,0.04)",
+              fontFamily: "ui-monospace, monospace",
+            }}>
+              {msg.tokens_in ?? 0} in / {msg.tokens_out ?? 0} out
+            </span>
+          )}
           {msg.streaming && <span>streaming…</span>}
           {msg.interrupted && (
             <span data-testid="ora-chat-interrupted">
@@ -662,10 +759,58 @@ function MessageBubble({ msg }) {
 }
 
 
+// ORA Chat v2 (P4) — one action proposal per turn, always requires an
+// explicit approve/reject. Never auto-executes.
+function ActionProposalCard({ proposal, busy, onResolve }) {
+  const resolved = proposal.resolved;
+  return (
+    <div data-testid="ora-action-proposal-card"
+         style={{ marginTop: 8, padding: "10px 12px", borderRadius: 8,
+                    background: "rgba(228,194,107,0.08)",
+                    border: "1px solid rgba(228,194,107,0.35)" }}>
+      <div style={{ fontSize: 11, color: "#E4C26B", fontWeight: 600, marginBottom: 4 }}>
+        Proposed action · <span style={{ fontFamily: "ui-monospace, monospace" }}>{proposal.action_id}</span>
+        {proposal.risk && <span style={{ opacity: 0.7 }}> · {proposal.risk}</span>}
+      </div>
+      <div style={{ fontSize: 12, color: "#cfc9b4", marginBottom: 8 }}>
+        {proposal.summary || "No further details provided."}
+      </div>
+      {!resolved ? (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" data-testid="ora-action-approve-btn" disabled={busy}
+                  onClick={() => onResolve("approve")}
+                  style={{ padding: "5px 10px", borderRadius: 6, border: "none",
+                            background: "#81B29A", color: "#0a0a0a", fontSize: 11,
+                            fontWeight: 600, cursor: busy ? "default" : "pointer",
+                            opacity: busy ? 0.6 : 1 }}>
+            {busy ? "Working…" : "Approve"}
+          </button>
+          <button type="button" data-testid="ora-action-reject-btn" disabled={busy}
+                  onClick={() => onResolve("reject")}
+                  style={{ padding: "5px 10px", borderRadius: 6,
+                            border: "1px solid rgba(255,255,255,0.12)",
+                            background: "transparent", color: "#a39d8a", fontSize: 11,
+                            cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>
+            Reject
+          </button>
+        </div>
+      ) : (
+        <div data-testid="ora-action-resolved" style={{ fontSize: 11,
+              color: resolved === "approve" ? (proposal.resolvedOk ? "#81B29A" : "#f88") : "#a39d8a" }}>
+          {resolved === "reject" ? "Rejected." :
+            proposal.resolvedOk ? "Approved and executed." :
+            `Approved but failed: ${proposal.resolvedError || "unknown error"}`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 // Iter 212m-246 — colored 3-dot pulse for the "thinking" state in the
 // dark drawer. Each dot uses a different accent color and staggers its
 // bounce so the row reads as a purposeful "thinking" cue, not a spinner.
-function DrawerThinkingDots() {
+function DrawerThinkingDots({ label = "thinking…" }) {
   return (
     <div data-testid="ora-drawer-thinking-dots"
          style={{ alignSelf: "flex-start",
@@ -691,7 +836,7 @@ function DrawerThinkingDots() {
                          animation: `ora-drawer-pulse 1.2s ease-in-out ${dot.d} infinite` }} />
       ))}
       <span style={{ fontSize: 10, color: "#7a7466", marginLeft: 4,
-                       fontStyle: "italic" }}>thinking…</span>
+                       fontStyle: "italic" }}>{label}</span>
     </div>
   );
 }

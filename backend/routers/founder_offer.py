@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException
@@ -42,6 +42,38 @@ router = APIRouter(prefix="/founder-offer", tags=["Founder Offer"])
 TOTAL_SPOTS         = 500
 MAX_CLAIMS_PER_USER = 3
 SINGLETON_ID        = "global"
+
+# 2026-08-27 — founder-reported: "spots remaining" counter must track
+# real usage, not abandoned previews. `/claim` decrements a spot
+# immediately (dry-run preview), but a user who previews and then just
+# navigates away (never confirms, never explicitly cancels) permanently
+# holds that spot forever with nothing actually fixed. Reap previews
+# older than this window back into the pool so the counter reflects
+# confirmed/active claims, not drive-by abandons.
+_PREVIEW_EXPIRY_MINUTES = 30
+
+
+async def _reap_stale_previews(db) -> None:
+    """Best-effort: expire abandoned `preview` claims and restore their
+    spot. Never raises — this runs inline on hot read paths."""
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=_PREVIEW_EXPIRY_MINUTES)
+        stale = await db.user_seo_claims.find(
+            {"fix_status": "preview", "created_at": {"$lt": cutoff}},
+        ).to_list(length=200)
+        for c in stale:
+            res = await db.user_seo_claims.find_one_and_update(
+                {"claim_id": c["claim_id"], "fix_status": "preview"},
+                {"$set": {"fix_status": "expired",
+                          "updated_at": datetime.now(timezone.utc)}},
+            )
+            if res:
+                await db.founder_offer.update_one(
+                    {"_id": SINGLETON_ID, "spots_claimed": {"$gt": 0}},
+                    {"$inc": {"spots_claimed": -1}},
+                )
+    except Exception as e:                                        # noqa: BLE001
+        logger.warning("founder_offer: stale-preview reap failed: %r", e)
 
 # 2026-08-26 — homepage promo fix. `_ensure_singleton` is called on
 # EVERY public `/founder-offer/status` read (the homepage widget) just
@@ -91,9 +123,11 @@ async def _ensure_singleton(db) -> dict:
 
 
 async def _user_claims(db, user_id: str) -> list[dict]:
-    """All non-cancelled claims for `user_id`, newest first."""
+    """All non-cancelled, non-expired claims for `user_id`, newest first.
+    Expired (abandoned preview) claims don't count against the
+    per-user cap or `claimed_repo_ids` — the user can retry that repo."""
     cur = db.user_seo_claims.find(
-        {"user_id": user_id, "fix_status": {"$ne": "cancelled"}},
+        {"user_id": user_id, "fix_status": {"$nin": ["cancelled", "expired"]}},
     ).sort("created_at", -1)
     return await cur.to_list(length=50)
 
@@ -136,6 +170,7 @@ async def offer_status() -> dict:
     db = get_db()
     if db is None:
         return {"remaining": 0, "total": TOTAL_SPOTS, "is_active": False}
+    await _reap_stale_previews(db)
     doc = await _ensure_singleton(db)
     remaining = max(0, int(doc.get("total_spots", TOTAL_SPOTS)) -
                        int(doc.get("spots_claimed", 0)))
@@ -227,6 +262,9 @@ async def claim_offer(
         }
 
     # ── Atomic spot decrement ────────────────────────────────────
+    # Reap abandoned previews first so a genuinely stale claim isn't
+    # holding the last spot hostage right when a real user needs it.
+    await _reap_stale_previews(db)
     # find_one_and_update guarantees we never hand out the same spot twice
     # under concurrent requests — Mongo's storage engine serialises the
     # update on the singleton document.

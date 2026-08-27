@@ -75,6 +75,12 @@ export default function AddProjectWizard({ onClose, onAdded }) {
   // not a local postMessage/count-poll guess.
   const { status, connecting, timedOut, denied, startConnect, retry } = useGitHubConnectStatus();
   const justConnectedRef = useRef(false);
+  // 2026-08-27 — founder-confirmed workaround: some accounts get stuck
+  // with an orphaned/already-installed App that never links (retrying
+  // the same install popup replays the same stuck state). After the
+  // first failed attempt, surface the manual reset path the founder
+  // proved works: revoke the App on GitHub, then reinstall fresh.
+  const [connectAttempts, setConnectAttempts] = useState(0);
 
   // The specific installation (if any) that covers the current `repo`.
   // Non-null → App-install branch is available for this repo; the
@@ -92,6 +98,7 @@ export default function AddProjectWizard({ onClose, onAdded }) {
 
   function openAppInstallPopup() {
     justConnectedRef.current = true;
+    setConnectAttempts((n) => n + 1);
     const r = startConnect();
     if (!r.ok) {
       toast({
@@ -385,37 +392,55 @@ export default function AddProjectWizard({ onClose, onAdded }) {
               <div
                 data-testid="add-wizard-app-timeout"
                 style={{
-                  display: "flex", alignItems: "center", gap: 10,
+                  display: "flex", flexDirection: "column", gap: 8,
                   padding: 14, marginBottom: 14,
                   background: "rgba(239,68,68,0.08)",
                   border: "1px solid rgba(239,68,68,0.32)",
                   borderRadius: 8,
                 }}>
-                <div style={{ fontSize: 13, lineHeight: 1.4, flex: 1 }}>
-                  {/* 2026-08-27 — founder-reported: a real GitHub install
-                      that closed the popup before our status poll caught
-                      "connected" used to revert to the plain CTA below
-                      with ZERO feedback — this branch used to only catch
-                      the 60s client timeout, never the "popup closed
-                      early" case (`denied`), which is what a normal-speed
-                      install actually hits. Same copy either way — the
-                      user's fix is identical (retry). */}
-                  Connection didn't finish — please try again.
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ fontSize: 13, lineHeight: 1.4, flex: 1 }}>
+                    {/* 2026-08-27 — founder-reported: a real GitHub install
+                        that closed the popup before our status poll caught
+                        "connected" used to revert to the plain CTA below
+                        with ZERO feedback — this branch used to only catch
+                        the 60s client timeout, never the "popup closed
+                        early" case (`denied`), which is what a normal-speed
+                        install actually hits. Same copy either way — the
+                        user's fix is identical (retry). */}
+                    Connection didn't finish — please try again.
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="add-wizard-app-retry-btn"
+                    onClick={openAppInstallPopup}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                      padding: "7px 12px",
+                      background: "var(--accent-2, #FF8A2A)",
+                      color: "#fff", border: "none",
+                      borderRadius: 6, fontSize: 12, fontWeight: 600,
+                      cursor: "pointer", whiteSpace: "nowrap",
+                    }}>
+                    <RefreshCw size={12} /> Try again
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  data-testid="add-wizard-app-retry-btn"
-                  onClick={openAppInstallPopup}
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: 6,
-                    padding: "7px 12px",
-                    background: "var(--accent-2, #FF8A2A)",
-                    color: "#fff", border: "none",
-                    borderRadius: 6, fontSize: 12, fontWeight: 600,
-                    cursor: "pointer", whiteSpace: "nowrap",
-                  }}>
-                  <RefreshCw size={12} /> Try again
-                </button>
+                {connectAttempts >= 2 && (
+                  <div style={{ fontSize: 11.5, color: "var(--text-faint)", lineHeight: 1.4 }}>
+                    Still stuck?{" "}
+                    <a
+                      data-testid="add-wizard-app-reset-link"
+                      href="https://github.com/settings/installations"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: "#FF8A2A", textDecoration: "underline" }}
+                    >
+                      Remove AUREM CTO on GitHub
+                    </a>{" "}
+                    then click Try again — this clears a stuck install
+                    that sometimes can't self-heal.
+                  </div>
+                )}
               </div>
             ) : (
               <div
