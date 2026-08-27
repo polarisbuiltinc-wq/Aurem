@@ -98,10 +98,13 @@ async def _daily_cap_ok(db, admin_id: str) -> bool:
 
 
 async def _log_usage(db, admin_id: str, session_id: str,
-                      tokens_in: int, tokens_out: int) -> None:
+                      tokens_in: int, tokens_out: int,
+                      model: Optional[str] = None,
+                      config_label: Optional[str] = None) -> None:
     await db.ora_chat_usage.insert_one({
         "ts": time.time(), "admin_id": admin_id, "session_id": session_id,
         "tokens_in": tokens_in, "tokens_out": tokens_out,
+        "model": model, "config_label": config_label,
     })
 
 
@@ -158,14 +161,18 @@ async def run_turn(db, *, admin_id: str, session: dict, user_message: str,
     proposed_action = None
     total_in = total_out = 0
     final_text_parts: list[str] = []
+    resolved_model = resolved_label = None
 
     for round_idx in range(MAX_TOOL_ROUNDS):
         is_final_round_attempt = round_idx == MAX_TOOL_ROUNDS - 1
         round_text = ""
         tool_calls = None
         async for evt in llm_client.stream_chat(
-                messages=messages, tools=tools, reasoning=think_mode):
-            if evt["type"] == "delta":
+                messages=messages, tools=tools, reasoning=think_mode, db=db):
+            if evt["type"] == "resolved":
+                resolved_model = evt.get("model")
+                resolved_label = evt.get("label")
+            elif evt["type"] == "delta":
                 round_text += evt["content"]
             elif evt["type"] == "tool_calls":
                 tool_calls = evt["calls"]
@@ -208,7 +215,7 @@ async def run_turn(db, *, admin_id: str, session: dict, user_message: str,
             async for evt in llm_client.stream_chat(
                     messages=messages + [{"role": "user",
                         "content": "Summarize what you found in plain English now."}],
-                    tools=None, reasoning=False):
+                    tools=None, reasoning=False, db=db):
                 if evt["type"] == "delta":
                     yield evt
                     final_text_parts.append(evt["content"])
@@ -234,10 +241,12 @@ async def run_turn(db, *, admin_id: str, session: dict, user_message: str,
                    "description": spec["description"], "params": params,
                    "requires_approval": spec["risk"] != "read"}
 
-    await _log_usage(db, admin_id, session.get("session_id", ""), total_in, total_out)
+    await _log_usage(db, admin_id, session.get("session_id", ""), total_in, total_out,
+                      model=resolved_model, config_label=resolved_label)
 
     yield {"type": "final", "content": full_reply, "tokens_in": total_in,
-           "tokens_out": total_out, "proposal_id": proposal_id}
+           "tokens_out": total_out, "proposal_id": proposal_id,
+           "model": resolved_model, "config_label": resolved_label}
 
 
 def _render_page_inspection(payload: dict) -> str:

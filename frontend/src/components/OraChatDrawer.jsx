@@ -611,6 +611,15 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
               </div>
             </form>
           )}
+          <div style={{ padding: "0 12px 8px", fontSize: 10, color: "#6b6558",
+                          display: "flex", justifyContent: "flex-end" }}>
+            <a href="/admin/settings" data-testid="ora-chat-model-settings-link"
+               style={{ color: "#6b6558", textDecoration: "none" }}
+               onMouseEnter={(e) => e.currentTarget.style.color = "#a39d8a"}
+               onMouseLeave={(e) => e.currentTarget.style.color = "#6b6558"}>
+              Model settings ↗
+            </a>
+          </div>
         </div>
       )}
 

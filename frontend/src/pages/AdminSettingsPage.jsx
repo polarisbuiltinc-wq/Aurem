@@ -10,7 +10,7 @@
  * unchanged; only the module boundary moved.
  */
 import React, { useState, useEffect } from "react";
-import { Brain } from "lucide-react";
+import { Brain, Cpu } from "lucide-react";
 import { api } from "../lib/api";
 import { toast } from "../components/Toast";
 import AuremAdminPanel from "../components/AuremAdminPanel";
@@ -175,6 +175,13 @@ export default function AdminSettingsPage() {
       <StripeApiKeyCard />
       <StripePriceIdsCard />
       <GitHubAppConfigCard />
+
+      {/* 2026-08-27 — Admin self-serve LLM provider settings. Any
+          model/vendor (Qwen, Qwen-VL, Gemini, OpenAI...) becomes a
+          data entry here — zero code, zero deploy, zero restart.
+          Feeds ORA Chat's chat/vision roles; falls back to env
+          (LLM_BASE_URL/LLM_API_KEY/LLM_MODEL) when nothing's active. */}
+      <LlmSettingsCard />
 
       {/* Iter 158 — thinking-hint manager (tier-aware upsell pills
           shown next to the chat spinner). Full CRUD + global toggle
@@ -638,6 +645,282 @@ function StripePriceIdsCard() {
 // live probe pill, edit modal with 4 paste fields, validates against
 // GitHub before persisting. Used to bootstrap the Phase 1.1 service and
 // wizard integration that come next.
+function LlmSettingsCard() {
+  const emptyForm = { label: "", role: "chat", base_url: "", model: "", api_key: "", params: "" };
+  const [configs, setConfigs] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [testResults, setTestResults] = useState({});   // config_id -> {ok, latency_ms, error}
+  const [testingId, setTestingId] = useState(null);
+
+  async function refresh() {
+    try {
+      const r = await api.get("/admin/llm/configs");
+      setConfigs(r.data.configs || []);
+    } catch (e) {
+      setConfigs([]);
+      toast({ message: e?.response?.data?.detail || "Could not load LLM configs", kind: "error" });
+    }
+  }
+  useEffect(() => { refresh(); }, []);
+
+  function startAdd() {
+    setForm(emptyForm);
+    setEditingId(null);
+    setAdding(true);
+  }
+  function startEdit(cfg) {
+    setForm({
+      label: cfg.label, role: cfg.role, base_url: cfg.base_url, model: cfg.model,
+      api_key: "", // never pre-filled — blank = keep current key
+      params: cfg.params && Object.keys(cfg.params).length ? JSON.stringify(cfg.params) : "",
+    });
+    setEditingId(cfg.config_id);
+    setAdding(true);
+  }
+  function cancelForm() {
+    setAdding(false);
+    setEditingId(null);
+    setForm(emptyForm);
+  }
+
+  function validate() {
+    if (!form.label.trim()) return "Label is required.";
+    if (!form.base_url.trim() || !/^https?:\/\//.test(form.base_url.trim())) {
+      return "Base URL must be a valid http(s) URL.";
+    }
+    if (!form.model.trim()) return "Model is required.";
+    if (!editingId && !form.api_key.trim()) return "API key is required for a new config.";
+    if (form.params.trim()) {
+      try { JSON.parse(form.params); } catch { return "Params must be valid JSON (or left blank)."; }
+    }
+    return null;
+  }
+
+  async function save() {
+    const err = validate();
+    if (err) { toast({ message: err, kind: "warning" }); return; }
+    setSaving(true);
+    try {
+      const payload = {
+        label: form.label.trim(), role: form.role, base_url: form.base_url.trim(),
+        model: form.model.trim(),
+        params: form.params.trim() ? JSON.parse(form.params) : undefined,
+      };
+      if (editingId) {
+        if (form.api_key.trim()) payload.api_key = form.api_key.trim();
+        await api.put(`/admin/llm/configs/${editingId}`, payload);
+        toast({ message: "Config updated", kind: "success" });
+      } else {
+        payload.api_key = form.api_key.trim();
+        await api.post("/admin/llm/configs", payload);
+        toast({ message: "Config added", kind: "success" });
+      }
+      cancelForm();
+      await refresh();
+    } catch (e) {
+      toast({ message: e?.response?.data?.detail || "Save failed", kind: "error" });
+    } finally { setSaving(false); }
+  }
+
+  async function remove(cfg) {
+    if (!window.confirm(`Delete "${cfg.label}"? This can't be undone.`)) return;
+    try {
+      await api.delete(`/admin/llm/configs/${cfg.config_id}`);
+      toast({ message: "Config deleted", kind: "success" });
+      await refresh();
+    } catch (e) {
+      toast({ message: e?.response?.data?.detail || "Delete failed", kind: "error" });
+    }
+  }
+
+  async function setActive(cfg) {
+    try {
+      await api.post(`/admin/llm/configs/${cfg.config_id}/set-active`, { role: cfg.role });
+      toast({ message: `${cfg.label} is now active for "${cfg.role}"`, kind: "success" });
+      await refresh();
+    } catch (e) {
+      toast({ message: e?.response?.data?.detail || "Could not set active", kind: "error" });
+    }
+  }
+
+  async function testConfig(cfg) {
+    setTestingId(cfg.config_id);
+    try {
+      const r = await api.post(`/admin/llm/configs/${cfg.config_id}/test`);
+      setTestResults((m) => ({ ...m, [cfg.config_id]: r.data }));
+      toast({
+        message: r.data.ok ? `OK · ${r.data.latency_ms}ms` : `Failed: ${r.data.error}`,
+        kind: r.data.ok ? "success" : "error",
+      });
+    } catch (e) {
+      const detail = e?.response?.data?.detail || "Test failed";
+      setTestResults((m) => ({ ...m, [cfg.config_id]: { ok: false, error: detail } }));
+      toast({ message: detail, kind: "error" });
+    } finally { setTestingId(null); }
+  }
+
+  return (
+    <div data-testid="admin-llm-settings-card">
+    <Card style={{ padding: 18, marginTop: 16 }}>
+      <div style={{ display: "flex", alignItems: "center",
+                    justifyContent: "space-between", marginBottom: 12, gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Cpu size={14} style={{ color: "var(--accent, #ff8a2a)" }} />
+          <h3 style={{ fontSize: 13, margin: 0 }}>Models &amp; LLM</h3>
+          <Badge color="var(--text-faint)">{(configs || []).length} configured</Badge>
+        </div>
+        {!adding && (
+          <button data-testid="admin-llm-add-btn" className="btn-secondary"
+                  style={{ fontSize: 12, padding: "6px 14px" }} onClick={startAdd}>
+            Add provider
+          </button>
+        )}
+      </div>
+
+      <div style={{ padding: "8px 12px", marginBottom: 10,
+                    background: "rgba(255,138,42,0.06)",
+                    border: "1px solid rgba(255,138,42,0.18)",
+                    borderRadius: 8, fontSize: 11,
+                    color: "var(--text-faint)", lineHeight: 1.5 }}>
+        Powers ORA Chat's <strong>chat</strong> and <strong>vision</strong> roles.
+        A config marked active for a role wins over the LLM_BASE_URL /
+        LLM_API_KEY env vars — no code change, no restart. Keys are
+        encrypted at rest and never shown again after saving.
+      </div>
+
+      {configs === null && (
+        <div style={{ color: "var(--text-faint)", fontSize: 12 }}>Loading…</div>
+      )}
+      {configs !== null && configs.length === 0 && !adding && (
+        <div style={{ color: "var(--text-faint)", fontSize: 12 }}>
+          No providers configured — ORA Chat is running on env vars (or mock mode).
+        </div>
+      )}
+
+      {(configs || []).map((cfg) => {
+        const test = testResults[cfg.config_id];
+        return (
+          <div key={cfg.config_id} data-testid={`admin-llm-row-${cfg.config_id}`}
+               style={{ display: "flex", alignItems: "center", gap: 10,
+                         padding: "10px 0", borderTop: "1px solid var(--line, rgba(255,255,255,0.06))",
+                         flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>
+                {cfg.label}
+                {cfg.is_active_per_role.length > 0 && (
+                  <span style={{ marginLeft: 8 }}>
+                    {cfg.is_active_per_role.map((r) => (
+                      <Badge key={r} color="var(--ok)">active · {r}</Badge>
+                    ))}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 10.5, color: "var(--text-faint)",
+                              fontFamily: "'JetBrains Mono', monospace", marginTop: 2 }}>
+                {cfg.model} · {cfg.role} · key {cfg.key_hint}
+              </div>
+              {test && (
+                <div data-testid={`admin-llm-test-result-${cfg.config_id}`}
+                     style={{ fontSize: 10.5, marginTop: 3,
+                               color: test.ok ? "#86efac" : "#fca5a5" }}>
+                  {test.ok ? `● OK · ${test.latency_ms}ms` : `● ${test.error}`}
+                </div>
+              )}
+            </div>
+            <button data-testid={`admin-llm-test-btn-${cfg.config_id}`}
+                    className="btn-secondary" style={{ fontSize: 11, padding: "5px 10px" }}
+                    disabled={testingId === cfg.config_id}
+                    onClick={() => testConfig(cfg)}>
+              {testingId === cfg.config_id ? "Testing…" : "Test"}
+            </button>
+            {!cfg.is_active_per_role.includes(cfg.role) && (
+              <button data-testid={`admin-llm-activate-btn-${cfg.config_id}`}
+                      className="btn-secondary" style={{ fontSize: 11, padding: "5px 10px" }}
+                      onClick={() => setActive(cfg)}>
+                Set active
+              </button>
+            )}
+            <button data-testid={`admin-llm-edit-btn-${cfg.config_id}`}
+                    className="btn-secondary" style={{ fontSize: 11, padding: "5px 10px" }}
+                    onClick={() => startEdit(cfg)}>
+              Edit
+            </button>
+            <button data-testid={`admin-llm-delete-btn-${cfg.config_id}`}
+                    className="btn-secondary" style={{ fontSize: 11, padding: "5px 10px", color: "#fca5a5" }}
+                    onClick={() => remove(cfg)}>
+              Delete
+            </button>
+          </div>
+        );
+      })}
+
+      {adding && (
+        <div data-testid="admin-llm-form" style={{ marginTop: 14, padding: 14,
+                    background: "rgba(255,255,255,0.03)", borderRadius: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <label style={{ fontSize: 11, color: "var(--text-faint)" }}>
+              Label
+              <input data-testid="admin-llm-form-label" value={form.label}
+                     onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
+                     placeholder="Qwen main" className="input" style={{ width: "100%", marginTop: 4 }} />
+            </label>
+            <label style={{ fontSize: 11, color: "var(--text-faint)" }}>
+              Role
+              <select data-testid="admin-llm-form-role" value={form.role}
+                      onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+                      className="input" style={{ width: "100%", marginTop: 4 }}>
+                <option value="chat">chat</option>
+                <option value="vision">vision</option>
+                <option value="any">any (both)</option>
+              </select>
+            </label>
+            <label style={{ fontSize: 11, color: "var(--text-faint)", gridColumn: "1 / -1" }}>
+              Base URL
+              <input data-testid="admin-llm-form-base-url" value={form.base_url}
+                     onChange={(e) => setForm((f) => ({ ...f, base_url: e.target.value }))}
+                     placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"
+                     className="input" style={{ width: "100%", marginTop: 4 }} />
+            </label>
+            <label style={{ fontSize: 11, color: "var(--text-faint)" }}>
+              Model
+              <input data-testid="admin-llm-form-model" value={form.model}
+                     onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
+                     placeholder="qwen3.8-27b" className="input" style={{ width: "100%", marginTop: 4 }} />
+            </label>
+            <label style={{ fontSize: 11, color: "var(--text-faint)" }}>
+              API key {editingId && <em>(blank = keep current)</em>}
+              <input data-testid="admin-llm-form-api-key" type="password" value={form.api_key}
+                     onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
+                     placeholder={editingId ? "•••• (keep current)" : "sk-..."}
+                     className="input" style={{ width: "100%", marginTop: 4 }} />
+            </label>
+            <label style={{ fontSize: 11, color: "var(--text-faint)", gridColumn: "1 / -1" }}>
+              Params (optional JSON — temperature, max_tokens, top_p...)
+              <input data-testid="admin-llm-form-params" value={form.params}
+                     onChange={(e) => setForm((f) => ({ ...f, params: e.target.value }))}
+                     placeholder='{"temperature": 0.7}' className="input" style={{ width: "100%", marginTop: 4 }} />
+            </label>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button data-testid="admin-llm-form-save" className="btn-primary"
+                    style={{ fontSize: 12, padding: "6px 14px" }} disabled={saving} onClick={save}>
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button data-testid="admin-llm-form-cancel" className="btn-secondary"
+                    style={{ fontSize: 12, padding: "6px 14px" }} onClick={cancelForm}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </Card>
+    </div>
+  );
+}
+
 function GitHubAppConfigCard() {
   const [data, setData] = useState(null);
   const [editing, setEditing] = useState(false);

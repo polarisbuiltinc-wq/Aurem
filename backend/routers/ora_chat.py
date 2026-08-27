@@ -307,7 +307,6 @@ async def send_message(body: MessageBody,
     sess = await ora_session.get_session(body.session_id, user["user_id"])
 
     from cto_services.db import get_db as _get_db_v2
-    from services.ora_chat_v2 import llm_client as _v2_llm
     from services.ora_chat_v2.engine import run_turn as _v2_run_turn
 
     async def event_stream():
@@ -326,7 +325,7 @@ async def send_message(body: MessageBody,
             await ora_session.append_message(
                 body.session_id, user["user_id"],
                 role="assistant", content=final_evt.get("content", ""),
-                model=_v2_llm.model_name(),
+                model=final_evt.get("model") or "",
                 input_tokens=final_evt.get("tokens_in", 0),
                 output_tokens=final_evt.get("tokens_out", 0),
                 message_id=uuid.uuid4().hex,
