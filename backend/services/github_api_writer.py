@@ -176,6 +176,21 @@ async def commit_files(
             "use services.git_identity.resolve_git_identity() to fetch them"
         )
 
+    # Guardrail #2 (2026-08 audit remediation, Wave 1) — checked HERE,
+    # inside the single vetted writer choke point, so every current and
+    # future caller of commit_files() inherits the protected-path guard
+    # with zero changes on their end. Self-contained db fetch (never a
+    # required param) so no caller signature needs to change.
+    try:
+        from cto_services.db import get_db as _get_guard_db
+        _guard_db = _get_guard_db()
+    except Exception:                                       # noqa: BLE001
+        _guard_db = None
+    from services.write_guard import check_write_paths as _check_write_paths
+    await _check_write_paths(
+        _guard_db, list(files.keys()), owner=owner, repo=repo, branch=branch,
+    )
+
     async def _p(step: str, status: str = "info"):
         if progress is not None:
             await progress(step, status)

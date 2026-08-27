@@ -806,6 +806,23 @@ async def write_repo_file(ctx: dict, args: dict) -> dict:
             ),
         }
 
+    # Guardrail #2 (2026-08 audit remediation, Wave 1) — fast, friendly
+    # pre-check before spending cycles on Vanguard/syntax gates below.
+    # commit_files() re-checks this too (it's the authoritative choke
+    # point) so this early check is purely a nicer error, not the only
+    # enforcement. Best-effort: any failure to even reach the check
+    # (e.g. db unavailable) is swallowed here, same as the identity
+    # lookup below — commit_files()'s own guard call still applies.
+    try:
+        from core.errors import WriteGuardBlockedError
+        from services.write_guard import check_write_paths as _check_write_paths
+        from cto_services.db import get_db as _get_guard_db
+        await _check_write_paths(_get_guard_db(), [path], owner=owner, repo=repo, branch=branch)
+    except WriteGuardBlockedError as _wg_err:
+        return {"ok": False, "error": str(_wg_err), "gate": "write_guard", "path": path}
+    except Exception:                                       # noqa: BLE001
+        pass
+
     # Iter 212m-6 — pre-commit vanguard regex pass. CRITICAL+HIGH
     # secrets block; everything else passes through. LLM/E2B layers
     # are off this hot path (chat latency budget); the task-queue

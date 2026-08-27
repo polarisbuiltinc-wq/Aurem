@@ -286,6 +286,39 @@ jobs:
         run: |
           if [[ -f /tmp/backend.pid ]]; then kill "$(cat /tmp/backend.pid)" || true; fi
 
+  guardrails:
+    # 2026-08 audit remediation (C2) — permanent regression suite, one
+    # module per audit rule (tests/guardrails/). No Mongo service
+    # needed (fake in-memory db per test, same pattern as the writer/
+    # LLM-config suites) — keeps this job fast (<5 min per C2's own
+    # requirement). Runs on every push/PR, not gated to pull_request
+    # only, so it catches regressions on Emergent's direct-push save
+    # path too (same reasoning as new-bloat-guard above).
+    name: Guardrail regression suite (audit rules)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend deps
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          for attempt in 1 2 3; do
+            pip install -r requirements.txt \
+              --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/ \
+              && break
+            echo "::warning::pip install attempt $attempt failed — retrying in $((attempt * 5))s"
+            [ "$attempt" -eq 3 ] && exit 1
+            sleep $((attempt * 5))
+          done
+      - name: Run guardrail suite
+        working-directory: backend
+        run: python -m pytest tests/guardrails/ -v --tb=short
+
   test-style-guard:
     # Iter 291 — block PRs that add new test files whose STATIC_GREP
     # ratio > 60%. The founder-agreed rule (iter290 real-measurement

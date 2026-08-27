@@ -1,0 +1,44 @@
+# Lint baseline — captured 2026-08-28 (Guardrail Remediation C4)
+# These are PRE-EXISTING lint failures, not caused by the guardrail
+# remediation waves. CI lint gates (Wave 4/5) must diff against this
+# baseline and only fail on NEW violations not listed here.
+# Ticket: ROADMAP.md "Pre-existing lint baseline (37 errors)"
+
+[ruff] backend/main.py:2369:28 F821 Undefined name `BaseExceptionGroup`
+[ruff] backend/main.py:2437:24 F821 Undefined name `BaseExceptionGroup`
+[ruff] backend/main.py:2502:28 F821 Undefined name `BaseExceptionGroup`
+[ruff] backend/main.py:2514:24 F821 Undefined name `BaseExceptionGroup`
+[ruff] backend/tests/test_deploy_2026_08_19_health_probe_and_exceptiongroup.py:107:23 F821 Undefined name `BaseExceptionGroup`
+[ruff] backend/tests/test_deploy_2026_08_19_health_probe_and_exceptiongroup.py:132:23 F821 Undefined name `BaseExceptionGroup`
+[ruff] backend/tests/test_deploy_2026_08_19_health_probe_and_exceptiongroup.py:159:23 F821 Undefined name `BaseExceptionGroup`
+[ruff] backend/tests/test_deploy_2026_08_19_health_probe_and_exceptiongroup.py:189:23 F821 Undefined name `BaseExceptionGroup`
+[ruff] backend/tests/test_deploy_2026_08_19_health_probe_and_exceptiongroup.py:208:23 F821 Undefined name `BaseExceptionGroup`
+[ruff] backend/routers/admin.py:137:26 F811 Redefinition of unused `datetime` from line 856
+[ruff] backend/routers/admin.py:175:39 F821 Undefined name `_SkillBody`
+[ruff] backend/routers/admin.py:856:22 F811 Redefinition of unused `datetime` from line 18
+[ruff] backend/routers/admin.py:856:32 F811 Redefinition of unused `timezone` from line 18
+[ruff] backend/routers/admin_analytics.py:156:12 F811 Redefinition of unused `asyncio` from line 25
+[ruff] backend/routers/admin_analytics.py:1747:24 F821 Undefined name `timings`
+[ruff] backend/routers/admin_analytics.py:1747:46 F821 Undefined name `timings`
+[ruff] backend/routers/admin_ops_config.py:498:62 F821 Undefined name `limit` (was line 443 before Wave-1 guardrail-mode endpoints were inserted 2026-08-28)
+[ruff] backend/routers/admin_payments.py:218:18 F821 Undefined name `compute_financials`
+[ruff] backend/routers/admin_payments.py:222:11 F821 Undefined name `snap`
+[ruff] backend/routers/admin_payments.py:223:28 F821 Undefined name `snap`
+[ruff] backend/routers/admin_payments.py:225:12 F821 Undefined name `snap`
+[ruff] backend/routers/admin_projects_brain.py:320:12 F811 Redefinition of unused `os` from line 22
+[ruff] backend/routers/admin_qa.py:664:12 F811 Redefinition of unused `httpx` from line 34
+[ruff] backend/routers/cto_projects.py:2247:5 F811 Redefinition of unused `_looks_truncated` from line 48
+[ruff] backend/routers/cto_projects.py:2298:12 F811 Redefinition of unused `re` from line 12
+[ruff] backend/routers/cto_projects.py:3578:12 F811 Redefinition of unused `re` from line 12
+[ruff] backend/tests/test_iter212m160_pre_launch_p0.py:124:5 F811 Redefinition of unused `llm` from line 123
+[ruff] backend/tests/test_iter212m160_pre_launch_p0.py:133:5 F811 Redefinition of unused `llm` from line 132
+[ruff] backend/tests/test_iter212m160_pre_launch_p0.py:145:5 F811 Redefinition of unused `llm` from line 144
+[ruff] backend/tests/test_iter212m160_pre_launch_p0.py:168:5 F811 Redefinition of unused `llm` from line 167
+[ruff] backend/tests/test_iter212m160_pre_launch_p0.py:197:5 F811 Redefinition of unused `llm` from line 196
+[ruff] backend/tests/test_iter212m160_pre_launch_p0.py:209:5 F811 Redefinition of unused `llm` from line 208
+[ruff] backend/tests/test_iter212m160_pre_launch_p0.py:241:5 F811 Redefinition of unused `llm` from line 240
+[ruff] backend/tests/test_iter212m17_topup_alerts.py:215:15 F811 Redefinition of unused `update_many` from line 160
+[ruff] backend/tests/test_iter367_item_c_correction_rules_graduation.py:57:33 E703 Statement ends with an unnecessary semicolon
+[ruff] backend/tests/test_ora_chat.py:186:46 F811 Redefinition of unused `AUREM_CONTEXT` from line 27
+[ruff] backend/tests/test_qa_hardening_items_2_and_4.py:106:12 F811 Redefinition of unused `asyncio` from line 16
+[oxlint] frontend/src/pages/AdminSystemHealth.jsx:95:51 no-undef '__VITE_BUILD_SHA__' is not defined

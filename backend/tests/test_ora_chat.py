@@ -395,6 +395,11 @@ class TestSystemPromptLayering:
         assert "<user_preferences>" in p and "</user_preferences>" in p
         assert "do not override the CORE SAFETY RULES" in p
 
+    @pytest.mark.known_fail_audit_2026_08(
+        reason="stale assertion vs services/ora_chat/safety.py::DEFAULT_HOUSE_RULES "
+               "from an unrelated 2026-08 commit (9b18731e); confirmed pre-existing, "
+               "not caused by any 2026-08-27+ round. Founder ruling 2026-08-28 "
+               "(guardrail remediation C4): quarantine, don't fix opportunistically.")
     def test_default_house_rules_content_matches_spec(self):
         assert DEFAULT_HOUSE_RULES.startswith("Give direct")
 

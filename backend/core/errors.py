@@ -116,6 +116,24 @@ class UnsupportedEncodingError(ValueError):
         super().__init__(f"non-UTF-8 text encoding: {path}")
 
 
+class WriteGuardBlockedError(PermissionError):
+    """Raised by services/write_guard.py when a commit attempt touches
+    a protected path (guardrail #2, Wave 1 of the 2026-08 audit
+    remediation) and the guard is in `block` mode. Carries `paths`
+    (the specific offending paths) so callers can log detail, but the
+    user-facing message never echoes the full deny-list — only that
+    the specific path is protected."""
+
+    def __init__(self, paths: list[str]):
+        self.paths = paths
+        shown = paths[0] if paths else "this file"
+        super().__init__(
+            f"This path is protected by AUREM and can't be written "
+            f"automatically: {shown}. Edit it yourself in GitHub if it "
+            f"needs to change."
+        )
+
+
 class PushFailedError(RuntimeError):
     """Raised by services/github_api_writer.py::commit_files() when
     the branch-ref-update step (the actual "push") is rejected AFTER

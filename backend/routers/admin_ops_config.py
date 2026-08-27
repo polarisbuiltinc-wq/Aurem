@@ -184,6 +184,61 @@ async def create_feature_flag(
     return {"ok": True, "flag": flag}
 
 
+# ── Guardrail remediation (2026-08 audit) — mode flip, C1/C6 ─────────
+# One doc per rule in `guard_config`: {_id: rule, mode: warn|block}.
+# Missing doc = "warn" (write_guard.get_mode's safe default). This is
+# the operable side of "flip to BLOCK via config flag, not code" — the
+# founder reviews GW_WARN_* events, then flips a rule here.
+_KNOWN_GUARD_RULES = ("path_guard",)
+
+
+@router.get("/guardrails")
+async def list_guardrail_modes(
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """Current mode + last-48h WARN/BLOCK event counts per guardrail
+    rule — what the founder reviews before flipping warn -> block."""
+    await _require_admin(authorization)
+    db = require_db()
+    since = datetime.now(timezone.utc) - timedelta(hours=48)
+    out = []
+    for rule in _KNOWN_GUARD_RULES:
+        doc = await db.guard_config.find_one({"_id": rule}, {"_id": 0})
+        mode = (doc or {}).get("mode", "warn")
+        warn_count = await db.guardrail_events.count_documents(
+            {"rule": rule, "event": {"$regex": "^GW_WARN_"}, "ts": {"$gte": since}})
+        block_count = await db.guardrail_events.count_documents(
+            {"rule": rule, "event": {"$regex": "^GW_BLOCK_"}, "ts": {"$gte": since}})
+        out.append({
+            "rule": rule, "mode": mode,
+            "warn_events_48h": warn_count, "block_events_48h": block_count,
+        })
+    return {"ok": True, "rules": out}
+
+
+@router.post("/guardrails/{rule}/mode")
+async def set_guardrail_mode(
+    rule: str, body: dict,
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """Flip one guardrail rule's mode. `mode` must be 'warn' or
+    'block' — no other value is accepted (fail closed on typos)."""
+    await _require_admin(authorization)
+    if rule not in _KNOWN_GUARD_RULES:
+        raise HTTPException(404, f"unknown guardrail rule '{rule}'")
+    mode = (body or {}).get("mode")
+    if mode not in ("warn", "block"):
+        raise HTTPException(400, "mode must be 'warn' or 'block'")
+    db = require_db()
+    await db.guard_config.update_one(
+        {"_id": rule},
+        {"$set": {"mode": mode, "updated_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return {"ok": True, "rule": rule, "mode": mode}
+
+
+
 @router.post("/sentry/test")
 async def sentry_test(authorization: Optional[str] = Header(None)):
     await _require_admin(authorization)
