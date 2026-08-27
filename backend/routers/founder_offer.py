@@ -220,7 +220,6 @@ class _ClaimBody(BaseModel):
     site_url: Optional[str] = ""
 
 
-@router.post("/claim")
 def _find_existing_claim(existing: list[dict], repo_id: str) -> Optional[dict]:
     """Same user re-claiming the same (non-cancelled) repo_id."""
     for c in existing:
@@ -229,6 +228,7 @@ def _find_existing_claim(existing: list[dict], repo_id: str) -> Optional[dict]:
     return None
 
 
+@router.post("/claim")
 async def claim_offer(
     body: _ClaimBody,
     authorization: Optional[str] = Header(None),

@@ -881,3 +881,5 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `loop_run_log kind='execute_partial_generation'` — auto-detected in backend/services/loop_engine.py (verify) [Iter 0, 2026-08-27T19:37:43.635350Z] <!-- inv:loop_run_log_kind:execute_partial_generation -->
 - `loop_run_log kind='partial_generation'` — auto-detected in backend/services/loop_engine.py (verify) [Iter 0, 2026-08-27T19:37:43.635370Z] <!-- inv:loop_run_log_kind:partial_generation -->
 - `services/plan_scan_contract.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-27T19:37:43.635390Z] <!-- inv:service:services/plan_scan_contract.py -->
+| `routers/admin_llm_config.py` | `/admin/llm/configs` | 6 | auto-detected new router (verify) (Iter 0, 2026-08-27T23:05:43.687048Z) | <!-- inv:router:routers/admin_llm_config.py -->
+- `services/llm_config_store.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-27T23:05:43.687185Z] <!-- inv:service:services/llm_config_store.py -->

@@ -18,6 +18,20 @@ import { toast } from "./Toast";
 
 const POLL_MS = 30_000;
 
+// Backend error payloads aren't always a plain string (e.g. FastAPI 422
+// validation errors return `detail` as an array of objects) — React
+// throws if you render that directly as a child. Always coerce to a
+// safe, human string before it ever reaches `setError`.
+function safeErrorText(detail, fallback) {
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail) && detail.length) {
+    const first = detail[0];
+    if (typeof first === "string") return first;
+    if (first && typeof first.msg === "string") return first.msg;
+  }
+  return fallback;
+}
+
 export default function FounderOfferCard({ projectId }) {
   const [status, setStatus] = useState(null);          // { remaining, total, is_active }
   const [userStatus, setUserStatus] = useState(null);  // { has_fully_claimed, days_since_signup, repos_claimed, claimed_repo_ids }
@@ -123,7 +137,7 @@ export default function FounderOfferCard({ projectId }) {
       setStage("preview");
       await refresh();
     } catch (e) {
-      setError(e?.response?.data?.detail || "Failed to start the fix.");
+      setError(safeErrorText(e?.response?.data?.detail, "Failed to start the fix."));
       setStage("error");
     } finally {
       setLoading(false);
@@ -159,7 +173,7 @@ export default function FounderOfferCard({ projectId }) {
       // entirely from this project window.
       setTimeout(() => setStage("idle"), 5000);
     } catch (e) {
-      setError(e?.response?.data?.detail || "Failed to confirm.");
+      setError(safeErrorText(e?.response?.data?.detail, "Failed to confirm."));
       setStage("error");
     } finally {
       setLoading(false);
