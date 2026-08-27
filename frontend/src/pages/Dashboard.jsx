@@ -40,7 +40,7 @@ import {
   useActiveProject,
   setActiveProjectId as setActiveProjectIdGlobal,
 } from "../components/TabBar";
-import NewUserWizard, { isWizardDismissed } from "../components/NewUserWizard";
+import NewUserWizard from "../components/NewUserWizard";
 import ConnectRepoBanner from "../components/ConnectRepoBanner";
 import RepoCleanupBanner from "../components/RepoCleanupBanner";
 import FinishSetupBanner from "../components/tour/FinishSetupBanner"; // Iter 212m-200
@@ -248,7 +248,13 @@ function DashboardV2Body() {
         setProjectCount(list.length);
         try { localStorage.setItem(PROJECTS_CACHE_KEY, JSON.stringify(list)); }
         catch { /* quota / private mode — ignore */ }
-        if (list.length === 0 && !isWizardDismissed()) setShowWizard(true);
+        // 2026-08-27 · Journey Watch Phase 1 fix (signup drop-off F1):
+        // this used to auto-open the wizard at ZERO clicks, burying
+        // ConnectRepoBanner's value line ("unlock your free SEO fix")
+        // behind a permission-ask modal before the user ever saw it.
+        // Value now comes before the ask: the banner renders first,
+        // the wizard only opens when the user actually clicks its CTA
+        // (see openWizardFromBanner below).
       })
       .catch(() => { /* silent — cached list keeps the UI populated */ });
   }, []);

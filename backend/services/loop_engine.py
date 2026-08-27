@@ -4237,6 +4237,24 @@ async def _generate_plan(user_id: str, project_id: Optional[str],
                                 _time.monotonic() - _t_gr0, 3,
                             )
                             _profile["graph_refreshed"] = True
+                        else:
+                            # 2026-08-27 · Journey Watch investigation Finding 2
+                            # (secondary): this branch used to be a true silent
+                            # no-op — no log, no signal, indistinguishable from
+                            # "graph was already fresh". This is the confirmed
+                            # gate that (combined with the admin display bug,
+                            # fixed separately) explained the 0%-graph figure.
+                            logger.warning(
+                                "[plan] graph build skipped for project=%s user=%s: "
+                                "no usable GitHub token (%s)",
+                                project_id, user_id, _g_err or "unknown",
+                            )
+                    elif proj is not None:
+                        logger.warning(
+                            "[plan] graph build skipped for project=%s user=%s: "
+                            "project missing github_owner/github_repo",
+                            project_id, user_id,
+                        )
             except Exception as e:                          # noqa: BLE001
                 logger.debug("[plan] silent graph refresh skipped: %r", e)
         _t_rm0 = _time.monotonic()

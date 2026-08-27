@@ -21,10 +21,20 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { api } from "../lib/api";
+import { trackFunnel } from "../lib/githubFunnel";
 
 const COLLAPSE_KEY = "aurem_connect_banner_collapsed";
 
 export default function ConnectRepoBanner({ onConnect }) {
+  // 2026-08-27 · Journey Watch Phase 0 — this CTA was the #1 dark
+  // click identified in the signup drop-off investigation: `onConnect`
+  // only ever flipped local React state, so a click here was
+  // indistinguishable from never clicking at all. Fire connect_repo_click
+  // FIRST (fire-and-forget, never blocks the actual UI action).
+  const handleConnectClick = useCallback(() => {
+    trackFunnel("connect_repo_click", "banner");
+    onConnect?.();
+  }, [onConnect]);
   const [status, setStatus] = useState(null);
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(COLLAPSE_KEY) === "1"; }
@@ -115,7 +125,7 @@ export default function ConnectRepoBanner({ onConnect }) {
           <button
             type="button"
             data-testid="connect-repo-banner-cta"
-            onClick={onConnect}
+            onClick={handleConnectClick}
             className="btn-primary"
             style={{
               padding: "8px 16px",

@@ -1,0 +1,33 @@
+{
+  "summary": "Verified Journey Watch Phase 3 build round (funnel instrumentation + signup UI fix + graph coverage fix + Journey Watch watchdog). Backend: 5/5 pytest cases passing against real preview API — graph-status now returns has_graph=true with numeric graph_node_count for all 8 seeded project_graphs docs (previously read from unwritten cto_projects fields, hence 0% coverage bug); notifications endpoint keeps the standard {available, notifications, unread_count} shape so Journey Watch rows will surface through the existing cockpit bell with zero frontend change. Backend logs show clean startup of the new supervised tasks: '[journey-watch] starting · interval=300s lookback=24h' and no unhandled tracebacks referencing services/journey_watch.py. Frontend: verified with a fresh 0-project signup (funnel-test-0827@aurem.dev) — NewUserWizard does NOT auto-open on /dashboard landing (Phase 1 fix), ConnectRepoBanner renders first with the value headline 'Connect a repo to unlock your free SEO fix' before any permission-ask modal, clicking data-testid=connect-repo-banner-cta opens the wizard (existing behavior preserved). In the ghStatus='choosing' && !appPickerActive state exactly ONE primary CTA (data-testid=wizard-app-install-btn, text 'Continue with GitHub App') is present and the Footer renders only the wizard-skip-link ('Skip for now') — the duplicate Continue-with-GitHub-App button is confirmed gone. 0 visible 'Continue' Footer primary buttons in the choosing state. No console errors from NotificationBell (bell is admin-only, not rendered for the non-admin test user, which is expected). GitHub OAuth completion path is blocked by sandbox (known dependency), not retested end-to-end.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_journey_watch_phase3.py",
+    "/app/test_reports/pytest/journey_watch_phase3.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/main.py wires journey_watch_loop() and schedule_funnel_digest_cron() via existing _supervise pattern — clean, no new endpoints/collections as constrained.",
+    "services/journey_watch.py reuses health_notifications + health_check_state collections (correct — cockpit bell already polls /admin/status/notifications every ~12s). No schema drift risk.",
+    "admin_analytics.py /admin/graph-status now correctly joins project_graphs collection — previously read unwritten cto_projects.graph_built_at/graph_node_count fields which is why coverage showed 0%.",
+    "NewUserWizard.jsx footer duplicate-CTA fix is narrowly scoped to (ghStatus==='choosing' && !appPickerActive) branch — 'connected'/'manual'/appPickerActive branches still render the standard Footer with primary 'Continue' — no regression to existing states."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_journey_watch_phase3.py"
+  ],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% (all wizard/banner/dashboard assertions passed)"},
+  "test_credentials": "Preview admin: test@aurem.dev / AuremTest2026!. Created NEW throwaway 0-project user during this run: funnel-test-0827@aurem.dev / FunnelTest2026! (used for wizard/banner UI verification since fresh-funnel-0824@aurem.dev no longer exists in current pod's local Mongo).",
+  "seed_data_creation": "Created 1 fresh test signup user: funnel-test-0827@aurem.dev (0 projects) via POST /api/aurem-dev/auth/signup — used only for wizard-auto-open + banner-visibility UI checks. No production data touched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Journey Watch Phase 3 build round accepted end-to-end. If retesting, use funnel-test-0827@aurem.dev / FunnelTest2026! (or a fresh signup — preview pod's local Mongo is ephemeral). Backend test file lives at /app/backend/tests/test_journey_watch_phase3.py — run from /app/backend dir (root conftest.py has a hard `from services...` import that only resolves when CWD is /app/backend). Do NOT expect a /journey-watch endpoint — it's a background cron by explicit design; verify via /admin/status/notifications shape only. The 8 real project_graphs docs (p_68dfb110b1, p_0fdafaa365, p_afc2a4bd37, p_42f2b46491, p_218f8a9195, p_3ae60acd13, p_6d0be78cdd, p_demo_a) should all continue returning has_graph=true.",
+  "rca of the issue": "N/A — all 4 phases (funnel instrumentation, signup UI fix, graph coverage fix, Journey Watch) verified working. Prior 0%-graph-coverage RCA (already fixed by main agent): admin_analytics.py /admin/graph-status was reading graph_built_at/graph_node_count directly off cto_projects docs, but the actual graph builder only writes into the separate project_graphs collection — those cto_projects fields were never populated. Fix joins project_graphs and reports has_graph + graph_node_count from there."
+}

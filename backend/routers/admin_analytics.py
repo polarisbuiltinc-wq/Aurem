@@ -1586,22 +1586,47 @@ async def admin_graph_status(
     authorization: Optional[str] = Header(None),
     limit: int = 60,
 ):
-    """Which projects have a Knowledge Graph built (and how recently)."""
+    """Which projects have a Knowledge Graph built (and how recently).
+
+    2026-08-27 · FIX (Journey Watch investigation, Finding 2): this
+    endpoint used to read `graph_built_at` / `graph_node_count` off
+    `cto_projects` — fields NO code path ever writes. The real graph
+    builder (`services/graph_builder.py::build_graph`) only ever
+    writes to `db.project_graphs` (keyed by `project_id`+`user_id`,
+    with `built_at` epoch float + `file_count`). That mismatch is why
+    Admin showed "Graph: no" on 100% of projects even though real,
+    fully-built graphs existed in `project_graphs` the whole time.
+    """
     await _require_admin(authorization)
     db = require_db()
     rows: list[dict] = []
     try:
+        graph_by_key: dict[tuple, dict] = {}
+        async for g in db.project_graphs.find(
+            {}, {"_id": 0, "project_id": 1, "user_id": 1, "built_at": 1, "file_count": 1},
+        ):
+            graph_by_key[(g.get("project_id"), g.get("user_id"))] = g
+
         cursor = db.cto_projects.find(
             {},
             {"_id": 0, "project_id": 1, "name": 1, "user_id": 1,
-             "graph_built_at": 1, "graph_node_count": 1,
-             "github_owner": 1, "github_repo": 1},
-            sort=[("graph_built_at", -1), ("created_at", -1)],
-            limit=max(1, min(int(limit or 60), 200)),
+             "github_owner": 1, "github_repo": 1, "created_at": 1},
         )
         async for r in cursor:
-            r["has_graph"] = bool(r.get("graph_built_at"))
+            g = graph_by_key.get((r.get("project_id"), r.get("user_id")))
+            r["graph_built_at"] = g.get("built_at") if g else None
+            r["graph_node_count"] = g.get("file_count") if g else None
+            r["has_graph"] = bool(g)
             rows.append(r)
+
+        def _sort_key(r):
+            g_ts = r.get("graph_built_at") or 0
+            c = r.get("created_at")
+            c_ts = c.timestamp() if hasattr(c, "timestamp") else (c or 0)
+            return (g_ts, c_ts)
+
+        rows.sort(key=_sort_key, reverse=True)
+        rows = rows[:max(1, min(int(limit or 60), 200))]
     except Exception as e:
         logger.warning("admin/graph-status: %r", e)
     return {"rows": rows, "count": len(rows)}

@@ -43,10 +43,37 @@ export function getFunnelSessionId() {
   }
 }
 
+/** Best-effort JWT payload peek — telemetry tagging only, never used
+ * for auth/security decisions. Returns null on any parse failure. */
+function _currentUserId() {
+  try {
+    const tok = localStorage.getItem("aurem_token");
+    if (!tok) return null;
+    const payload = JSON.parse(atob(tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload?.user_id || null;
+  } catch {
+    return null;
+  }
+}
+
+/** First-touch ad attribution captured by App.jsx into localStorage
+ * (`aurem_ad_attr`) — gclid/fbclid/utm_*. Reused here so every funnel
+ * event this module fires is tagged with paid-vs-organic origin, even
+ * deep in the dashboard where the ?utm_source= query param is long
+ * gone from the URL. 2026-08-27 — Journey Watch Phase 0 requirement. */
+function _adAttribution() {
+  try {
+    const raw = localStorage.getItem("aurem_ad_attr");
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Fire a funnel event. Best-effort, never throws.
- * @param {string} stage   — one of the 5 canonical stages
- * @param {string} source  — "login" / "signup" / "settings_card" / "wizard" / "projects"
+ * @param {string} stage   — one of the canonical stages (see routers/github_funnel.py)
+ * @param {string} source  — "login" / "signup" / "settings_card" / "wizard" / "projects" / "banner"
  * @param {object} [meta]  — extra small dict (source-specific)
  */
 export async function trackFunnel(stage, source, meta) {
@@ -58,7 +85,8 @@ export async function trackFunnel(stage, source, meta) {
       stage,
       source: source || "unknown",
       session_id,
-      meta: meta || {},
+      user_id: _currentUserId(),
+      meta: { ..._adAttribution(), ...(meta || {}) },
     });
     await fetch(`${API_BASE}/funnel/github/event`, {
       method:  "POST",

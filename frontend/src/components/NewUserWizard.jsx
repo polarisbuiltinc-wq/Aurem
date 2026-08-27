@@ -813,23 +813,32 @@ export default function NewUserWizard({ onComplete }) {
                       (hidden on pure "choosing" landing) */}
 
                   {err && <div data-testid="wizard-error" style={errStyle}>{err}</div>}
-                  {/* 2026-08-24 — ROOT FIX for the repo-pick dead end: on
-                      the "choosing" landing (no App installed yet) the
-                      repo URL/branch inputs are hidden, so the old
-                      generic "Continue" submitted an empty form and
-                      threw "Use a real GitHub repo URL" — a wall every
-                      OAuth-linked user hit. Continue now drives the one
-                      action that can actually progress: the App install. */}
-                  <Footer
-                    busy={busy}
-                    primary={(ghStatus === "choosing" && !appPickerActive)
-                      ? "Continue with GitHub App"
-                      : "Continue"}
-                    onPrimary={(ghStatus === "choosing" && !appPickerActive)
-                      ? openAppInstallPopup
-                      : submitRepo}
-                    onSkip={close}
-                  />
+                  {/* 2026-08-27 · Journey Watch Phase 1 — ROOT FIX for the
+                      duplicate-CTA bug: on the pure "choosing" landing (no
+                      App installed yet) this Footer used to render a
+                      SECOND "Continue with GitHub App" button — identical
+                      action to `wizard-app-install-btn` in the block
+                      above. Two buttons doing the exact same thing broke
+                      the "one primary CTA" rule and confused users about
+                      which one to press. Skip-only footer here — the one
+                      true CTA already lives in the app-cta-block above. */}
+                  {(ghStatus === "choosing" && !appPickerActive) ? (
+                    <div style={{ display: "flex", justifyContent: "flex-end", padding: "16px 0 4px" }}>
+                      <button data-testid="wizard-skip-link" type="button" onClick={close}
+                              style={{ background: "transparent", border: "none",
+                                       color: "var(--text-faint)", fontSize: 11,
+                                       padding: "6px 4px", cursor: "pointer" }}>
+                        Skip for now
+                      </button>
+                    </div>
+                  ) : (
+                    <Footer
+                      busy={busy}
+                      primary="Continue"
+                      onPrimary={submitRepo}
+                      onSkip={close}
+                    />
+                  )}
                 </>
               )}
               </>)}

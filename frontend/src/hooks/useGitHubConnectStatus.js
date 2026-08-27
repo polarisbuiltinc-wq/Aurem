@@ -15,6 +15,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, API_BASE, getToken } from "../lib/api";
+import { trackFunnel } from "../lib/githubFunnel";
 
 const POLL_INTERVAL_MS = 2500;
 const MAX_WAIT_MS = 60_000;
@@ -32,6 +33,7 @@ export default function useGitHubConnectStatus() {
   const [status, setStatus] = useState(IDLE_STATUS);
   const [connecting, setConnecting] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
+  const [denied, setDenied] = useState(false);
   const popupRef = useRef(null);
   const pollRef = useRef(null);
   const startRef = useRef(0);
@@ -68,9 +70,24 @@ export default function useGitHubConnectStatus() {
       url, "aurem_github_app_install",
       `width=${w},height=${h},left=${left},top=${top}`,
     );
+    // 2026-08-27 · Journey Watch Phase 0 — this is the #2 dark click
+    // from the signup drop-off investigation: this button previously
+    // fired ZERO client-side tracking. Fire connect_repo_click here,
+    // AFTER attempting window.open, so `popup_blocked` is captured as
+    // real evidence instead of looking identical to "never clicked".
+    trackFunnel("connect_repo_click", "wizard", {
+      popup_blocked: !popupRef.current,
+    });
     if (!popupRef.current) return { ok: false, reason: "popup_blocked" };
 
+    // 2026-08-27 · Journey Watch Phase 0 — popup actually opened, so
+    // GitHub's own auth/install screen is showing. Distinct from
+    // connect_repo_click (fired above even on popup_blocked) so
+    // Journey Watch can tell "clicked" apart from "reached GitHub".
+    trackFunnel("github_auth_started", "wizard");
+
     setTimedOut(false);
+    setDenied(false);
     setConnecting(true);
     startRef.current = Date.now();
     stopPolling();
@@ -80,12 +97,24 @@ export default function useGitHubConnectStatus() {
         stopPolling();
         setConnecting(false);
         try { popupRef.current?.close?.(); } catch { /* cross-origin */ }
+        trackFunnel("app_install_granted", "wizard");
+        return;
+      }
+      // GitHub Apps have no real "deny" callback (unlike OAuth Apps) —
+      // the popup just closing without ever reaching "connected" is
+      // the only observable signal that the user backed out.
+      if (popupRef.current?.closed) {
+        stopPolling();
+        setConnecting(false);
+        setDenied(true);
+        trackFunnel("app_install_denied", "wizard", { reason: "popup_closed" });
         return;
       }
       if (Date.now() - startRef.current > MAX_WAIT_MS) {
         stopPolling();
         setConnecting(false);
         setTimedOut(true);
+        trackFunnel("app_install_denied", "wizard", { reason: "client_timeout" });
       }
     }, POLL_INTERVAL_MS);
     return { ok: true };
@@ -106,5 +135,5 @@ export default function useGitHubConnectStatus() {
     return () => window.removeEventListener("message", onMessage);
   }, [fetchStatus]);
 
-  return { status, connecting, timedOut, startConnect, retry, refresh: fetchStatus };
+  return { status, connecting, timedOut, denied, startConnect, retry, refresh: fetchStatus };
 }

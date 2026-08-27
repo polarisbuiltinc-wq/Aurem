@@ -422,6 +422,20 @@ async def build_graph(
             )
         except Exception as e:
             logger.warning("graph save failed: %r", e)
+        else:
+            # 2026-08-27 · Journey Watch Phase 0 — `graph_built` was
+            # entirely missing from the funnel schema, so Admin's
+            # "0% coverage" figure had no way to distinguish "never
+            # tried" from "silently failed". Best-effort, never blocks
+            # the actual graph write above (already committed by now).
+            try:
+                from services.signup_guards import emit_funnel_event
+                await emit_funnel_event(
+                    db, user_id=user_id, event_type="graph_built",
+                    metadata={"project_id": project_id, "node_count": len(nodes)},
+                )
+            except Exception as e:
+                logger.warning("graph_built funnel emit failed: %r", e)
 
     logger.info(
         "graph built: project=%s user=%s | %d files | %d described "

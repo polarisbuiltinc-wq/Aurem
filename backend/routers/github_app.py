@@ -373,6 +373,15 @@ async def install_callback(
             "repo_count":            len(repos_slim) if repos_slim else 0,
         },
     )
+    # 2026-08-27 · Journey Watch Phase 0 — server-truth mirror of
+    # `app_install_granted`. The client also fires this on its own
+    # status poll, but that poll dies if the user closes the tab right
+    # after granting — this server-side callback fire never misses it.
+    await _funnel_track(
+        "app_install_granted", source="wizard",
+        session_id=funnel_session, user_id=user_id_to_link,
+        meta={"installation_id": installation_id},
+    )
 
     return RedirectResponse(
         url=_dashboard_url(

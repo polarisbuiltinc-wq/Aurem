@@ -467,6 +467,24 @@ async def lifespan(app: FastAPI):
         long_lived=True,
     )
 
+    # 2026-08-27 · Journey Watch (Phase 3) — 5-minute signup-funnel
+    # stall watchdog. Writes to the SAME health_notifications/
+    # health_check_state collections as health_notifier above, so the
+    # existing cockpit bell renders it with no frontend change.
+    from services.journey_watch import journey_watch_loop, schedule_funnel_digest_cron
+    app.state.journey_watch_task = _supervise(
+        journey_watch_loop(),
+        name="journey_watch",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
+    )
+    app.state.funnel_digest_task = _supervise(
+        schedule_funnel_digest_cron(),
+        name="funnel_digest_cron",
+        db_getter=lambda: app.state.db,
+        long_lived=True,
+    )
+
     # 2026-08-19 · G7 guards-audit fix — `run_reconciliation()` existed
     # since it was written but was never actually scheduled anywhere,
     # so the Stripe-vs-local payment guard sat gray forever. Wired in

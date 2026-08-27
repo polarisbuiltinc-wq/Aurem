@@ -3,7 +3,28 @@
 **Live URL**: https://auremcto.com
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
-## 2026-08-27 (latest) — A0 (ORA Council recall mode-taxonomy bug FIX) + Plain-English Output Contract (Phase 0-2) — testing_agent verified, 100% pass
+## 2026-08-27 (latest) — Journey Watch build round: Funnel instrumentation + Signup UI fix + Graph Coverage fix + Journey Watch 5-min watchdog — testing_agent verified, 100% pass
+See `/app/memory/CHANGELOG.md` (same date, top entry) for full detail. Summary:
+Phase 0 standardized the funnel-event schema (added `github_auth_started`,
+`app_install_granted`, `project_connected` stages, wired client+server);
+Phase 1 stopped the New User Wizard auto-opening for 0-project users (banner
+value shown first) and removed a duplicate "Continue with GitHub App" CTA in
+the wizard footer; Phase 2 fixed `/admin/graph-status` to read from the real
+`project_graphs` collection (was reading unwritten `cto_projects` fields,
+causing a false 0% coverage figure) and added an explicit skip-log to
+`loop_engine.py`'s graph-refresh trigger; Phase 3 added
+`backend/services/journey_watch.py`, a 5-minute watchdog reusing the
+EXISTING `health_notifications`/`health_check_state` collections and bell
+UI (no new collections/endpoints) to detect funnel stalls per SLO, escalate
+at 2x SLO, auto-resolve on progress, and immediately alert on GitHub-install
+hard-breaks. Verified via a standalone script exercising the internal logic
+against real Mongo (stall/escalate/resolve/hard-break/dedup all passed) plus
+testing_agent (5/5 backend, all frontend wizard/banner assertions passed).
+Real GitHub OAuth/App-install completion remains blocked in this sandbox
+(`app_installation_missing`) — not a regression, a known pre-existing
+environment limitation.
+
+## 2026-08-27 — A0 (ORA Council recall mode-taxonomy bug FIX) + Plain-English Output Contract (Phase 0-2) — testing_agent verified, 100% pass
 
 **A0 — real bug, fixed, live-verified.** `backend/routers/chat.py`'s `/chat/send`
 and `/chat/stream` council-recall calls passed `_detect_mode()` ('code'/'chat')

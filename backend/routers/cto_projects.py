@@ -1034,6 +1034,16 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
                   "auth_method": auth_method},
     )
 
+    # 2026-08-27 · Journey Watch Phase 0 — canonical `project_connected`
+    # event (user_id-keyed, same collection as chat_opened/graph_built/
+    # first_loop_started) so Journey Watch's stall classifier has one
+    # consistent source for every stage past the GitHub-connect flow.
+    await emit_funnel_event(
+        db, user_id=me["user_id"], event_type="project_connected",
+        metadata={"project_id": proj_id, "owner": owner, "repo": repo,
+                  "auth_method": auth_method},
+    )
+
     # 2026-08-24 — GitHub Connect funnel: `repo_selected` was a declared
     # stage that NO code ever emitted (root cause of the perpetual
     # "Repo picked: 0"). Fire it server-side at the moment of truth — a

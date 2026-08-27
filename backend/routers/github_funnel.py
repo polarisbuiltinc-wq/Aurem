@@ -45,6 +45,31 @@ STAGES = (
     "app_install_redirect",  # server: /github/app/install → GitHub
     "app_installed",         # server: /github/app/callback success
     "app_repo_selected",     # client: user picks a repo from installation
+    # 2026-08-27 · Journey Watch Phase 0 — closes the F1 dark-click gap.
+    # `connect_repo_click` fires from BOTH untracked CTAs identified in
+    # the signup drop-off investigation: ConnectRepoBanner's "Connect
+    # repo →" and NewUserWizard's "Continue with GitHub App". Fired
+    # BEFORE the popup-open attempt, so — unlike app_install_redirect —
+    # it lands even when the popup is blocked.
+    "connect_repo_click",
+    # Client-inferred: the install popup closed WITHOUT the connect
+    # status ever reaching "connected" (GitHub Apps don't send a real
+    # deny callback the way OAuth Apps do — closing the tab is the
+    # only observable signal). meta.reason is "popup_closed" or
+    # "client_timeout". Journey Watch treats this as a hard-break.
+    "app_install_denied",
+    # 2026-08-27 · Journey Watch Phase 0 — canonical funnel schema.
+    # `github_auth_started` fires the instant the install/OAuth popup
+    # actually opens (as opposed to `connect_repo_click`, which fires
+    # even on `popup_blocked`) — lets Journey Watch tell "clicked" apart
+    # from "actually reached GitHub". `app_install_granted` fires when
+    # the App install is confirmed (client poll AND server callback
+    # both emit it, so a closed tab doesn't hide a real grant).
+    # `project_connected` fires server-side the moment a project row is
+    # actually created — the funnel's ground truth for "repo connected".
+    "github_auth_started",
+    "app_install_granted",
+    "project_connected",
 )
 
 # Sources where the CTA lives — used to segment drop-off by entry point.
@@ -54,6 +79,7 @@ SOURCES = (
     "settings_card",   # GitHubCard on /settings
     "wizard",          # NewUserWizard step
     "projects",        # Projects page inline connect
+    "banner",          # 2026-08-27 · ConnectRepoBanner "Connect repo →"
     "unknown",         # fallback
 )
 
