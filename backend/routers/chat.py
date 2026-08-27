@@ -215,6 +215,42 @@ ORA_PANEL_TONE = (
 )
 
 
+# 2026-08-27 · Plain-English Output Contract for EXPLANATION/ADVISORY
+# answers (Phase 1, flag-gated: `explain_plain_english_v1`, default OFF,
+# allowlist `test_admin_001`). Injected ONLY when the turn classifies as
+# council mode "A" (conversational/explain — see classify_intent()) so
+# it NEVER touches mutation-shaped requests (B/C/D/E/F) or the separate
+# ship/confirm handoff-brief data path. Modeled on the same audience-
+# framing + strict-format pattern already proven in
+# services/error_translator.py's LLM-rewrite system prompt.
+PLAIN_ENGLISH_EXPLAIN_CONTRACT = (
+    "── FOUNDER-FACING EXPLANATION CONTRACT (this turn is a read-only "
+    "explanation/advisory question, not a code-change request) ──\n"
+    "You may read real code to ground your answer — keep doing that, "
+    "it's what makes the answer true. But the ANSWER YOU WRITE must be "
+    "in plain English for a non-technical founder. Rules:\n"
+    "  - NO file paths (e.g. backend/services/x.py) — describe the "
+    "part of the system by what it DOES, not where it lives.\n"
+    "  - NO code blocks, function signatures, database collection "
+    "names, or API/router endpoint paths.\n"
+    "  - Internal component/agent names are fine ONLY with a plain-"
+    "English role attached (\"the part that finds new customers\", "
+    "not \"ScoutAgent\" alone).\n"
+    "  - NO framework/technical jargon (pydantic, asyncio, JWT, "
+    "OODA, background workers). If a concept is needed, use a real-"
+    "world analogy instead.\n"
+    "  - Lead with the answer to their actual question — what it "
+    "does, why it matters, what they can control. Not a tour of "
+    "every file involved.\n"
+    "  - Keep it short: the 5-10 things a founder can act on, "
+    "roughly 300-500 words. End with exactly one line: 'Want the "
+    "technical detail (file-level)?' — only go deeper if they say yes.\n"
+    "This contract applies ONLY to this explanation. It never applies "
+    "to a ```aurem-handoff brief or any real code-change/ship step — "
+    "those always keep full file:line detail."
+)
+
+
 class ChatBody(BaseModel):
     # Iter 44 — bounded length to prevent prompt-bomb DoS + match
     # downstream cap_for() context windows.
@@ -371,14 +407,23 @@ async def chat_send(
     # the FE can render "📚 ORA recalled N similar past answers".
     _council_recalled = 0
     _council_block = ""
+    _recall_mode_send = None
     try:
         from cto_services.db import get_db as _get_db
         from services.ora_council_retriever import get_council_few_shot
         _db_ref = _get_db()
         if _db_ref is not None:
+            # 2026-08-27 · mode-taxonomy fix — get_council_few_shot's
+            # candidate index is keyed by the real council modes
+            # ("A"/"B"/"D"/"E", from classify_intent()); _detect_mode()
+            # only ever returns "code"/"chat", which is NEVER a key in
+            # that index — so this call was returning 0 candidates on
+            # every real request, unconditionally. classify_intent()
+            # is a cheap heuristic (no LLM call), safe here.
+            _recall_mode_send = classify_intent(body.prompt or "", body.f12_payload)
             _council_block, _council_recalled = await get_council_few_shot(
                 _db_ref, body.prompt or "",
-                mode=_detect_mode(body.prompt or ""),
+                mode=_recall_mode_send,
                 user_id=user.get("user_id"),
                 project_id=body.project_id,
                 k=2,
@@ -388,6 +433,23 @@ async def chat_send(
                              + ("\n\n" + extra_sys if extra_sys else ""))
     except Exception as _cre:
         logger.debug("council retrieval skipped (chat/send): %r", _cre)
+
+    # 2026-08-27 · Plain-English Output Contract (Phase 1, flag-gated).
+    # Only for explain/advisory turns (council mode "A") on the main
+    # chat surface (never Ask Advisor, never a mutation-shaped B/C/D/E/F
+    # turn) — see PLAIN_ENGLISH_EXPLAIN_CONTRACT for the full rule set.
+    _plain_english_active = False
+    try:
+        if not body.ora_panel and _recall_mode_send == "A":
+            from services.feature_flags import is_enabled as _pee_enabled
+            if await _pee_enabled(
+                "explain_plain_english_v1",
+                user_id=user.get("user_id"), tier=user.get("tier"),
+            ):
+                extra_sys = (extra_sys + "\n\n" + PLAIN_ENGLISH_EXPLAIN_CONTRACT).strip()
+                _plain_english_active = True
+    except Exception as _pee_exc:
+        logger.debug("plain_english_contract skipped (chat/send): %r", _pee_exc)
     # Iter 212m-24 — Admin House Rules (HIGHEST PRIORITY).
     # If the admin has enabled house rules for `chat` + the requested
     # mode, prepend the rules block at the very top of extra_sys so it
@@ -696,6 +758,9 @@ async def chat_send(
         # "📚 ORA recalled N similar past answers" above the bubble
         # when this is > 0.
         "council_recalled": _council_recalled,
+        # 2026-08-27 — true when the founder plain-English explanation
+        # contract was injected this turn (flag-gated, explain-only).
+        "plain_english_contract_active": _plain_english_active,
         # Iter 212m-164 — surface the council letter + task_type that
         # drove this turn's LLM pick so callers can verify V2 routing
         # without scraping Mongo / Langfuse.
@@ -1278,6 +1343,7 @@ async def chat_stream(
     # BEFORE token streaming begins so the FE can render the caption.
     _council_recalled = 0
     _council_block = ""
+    _recall_mode = None
     if not body.ora_panel:
         try:
             from cto_services.db import get_db as _get_db
@@ -1287,10 +1353,16 @@ async def chat_stream(
                 # Iter 212m-177 P1-6 — hard cap: the retriever's lazy
                 # _rebuild_index() can walk a large ora_council_logs
                 # collection; unbounded it stalls the whole stream.
+                # 2026-08-27 · mode-taxonomy fix — same as chat/send:
+                # the recall index is keyed "A"/"B"/"D"/"E" (classify_
+                # intent's taxonomy), not "code"/"chat" (_detect_mode's).
+                # Computed once here and reused below at the existing
+                # A/B/C/D/E broadcast so we don't classify twice.
+                _recall_mode = classify_intent(body.prompt or "", body.f12_payload)
                 _council_block, _council_recalled = await asyncio.wait_for(
                     get_council_few_shot(
                         _db_ref, body.prompt or "",
-                        mode=_detect_mode(body.prompt or ""),
+                        mode=_recall_mode,
                         user_id=user.get("user_id"),
                         project_id=body.project_id,
                         k=2,
@@ -1300,6 +1372,22 @@ async def chat_stream(
                                  + ("\n\n" + extra_sys if extra_sys else ""))
         except Exception as _cre:
             logger.debug("council retrieval skipped (chat/stream): %r", _cre)
+
+    # 2026-08-27 · Plain-English Output Contract (Phase 1, flag-gated).
+    # Reuses `_recall_mode` computed above (None when ora_panel=True,
+    # so this block naturally never fires for Ask Advisor).
+    _plain_english_active = False
+    try:
+        if _recall_mode == "A":
+            from services.feature_flags import is_enabled as _pee_enabled
+            if await _pee_enabled(
+                "explain_plain_english_v1",
+                user_id=user.get("user_id"), tier=user.get("tier"),
+            ):
+                extra_sys = (extra_sys + "\n\n" + PLAIN_ENGLISH_EXPLAIN_CONTRACT).strip()
+                _plain_english_active = True
+    except Exception as _pee_exc:
+        logger.debug("plain_english_contract skipped (chat/stream): %r", _pee_exc)
 
     # Iter 212m-24 — Admin House Rules (HIGHEST PRIORITY).
     # For SSE chat (non-Advisor), scope is "chat" + the requested mode.
@@ -1530,7 +1618,11 @@ async def chat_stream(
 
                 # Decide A/B/C/D/E/F once and broadcast to frontend so the UI
                 # can show the live pill before tokens stream.
-                _mode = classify_intent(body.prompt or "", body.f12_payload)
+                # 2026-08-27 · reuse the mode already computed for the
+                # council-recall call above (`_recall_mode`) instead of
+                # classifying the same prompt twice; recompute only if
+                # that block was skipped (ora_panel=true) or didn't run.
+                _mode = _recall_mode if _recall_mode is not None else classify_intent(body.prompt or "", body.f12_payload)
                 # Confidence scoring — surfaces a `mode_confirm` event when
                 # the message is ambiguous so the UI can ask the user
                 # before burning an LLM call on the wrong mode. Honoured
@@ -3207,6 +3299,9 @@ async def chat_stream(
             # still surface the caption even if the client missed the
             # early `council` frame.
             "council_recalled":        int(_council_recalled or 0),
+            # 2026-08-27 — mirrors chat/send's field; true when the
+            # explain-only plain-English contract was injected.
+            "plain_english_contract_active": bool(_plain_english_active),
             # 2026-08-23 — findings-to-fix bridge. Critical/high
             # `save_finding` calls made this turn — lets the frontend
             # show a reliable "N issues found" teaser instead of

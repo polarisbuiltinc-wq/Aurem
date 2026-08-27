@@ -1,0 +1,22 @@
+{
+  "summary": "Backend-only verification for two shipped fixes (A0 council recall mode-taxonomy fix + Plain-English Output Contract). All 5 targeted tests PASSED against live preview backend as test_admin_001.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter2026_08_27_backend_verification.py",
+    "/app/test_reports/pytest/iter2026_08_27_verify.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Note: pytest must be run from /app/backend cwd (not /app) because conftest.py does `from services.rate_limiter import ...` (unqualified). Non-blocking but a common footgun for new tests.",
+    "backend/tests/ directory is very large (100+ legacy test files, some quarantined). Consider periodic archival to keep test suite navigable."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter2026_08_27_backend_verification.py"],
+  "success_rate": {"backend": "100%", "frontend": "n/a (skipped per request)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (user_id=test_admin_001, tier=founder, is_admin=true) - verified via /auth/me",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Two fixes verified live against preview:\n(1) A0 council-recall mode-taxonomy: POST /api/aurem-dev/chat/send prompt='hi' project_id='home' as test_admin_001 -> HTTP 200 with council_recalled=int>=1 (was 0 pre-fix). Confirmed via test_council_recall_taxonomy_fix.\n(2) Plain-English Contract: explain-style prompt on connected repo (project_id='p_2d30ef16d1') -> plain_english_contract_active=true, content in plain-english (no code fences, has opt-in for technical detail), mutation-shaped prompt -> plain_english_contract_active=false. Flag is scoped to user_allowlist=['test_admin_001'] only.\nTest file lives at /app/backend/tests/test_iter2026_08_27_backend_verification.py. Run via: cd /app/backend && pytest tests/test_iter2026_08_27_backend_verification.py -v.",
+  "rca of the issue": "N/A - verification pass only, no issues found. Both fixes behave exactly as described in the review_request."
+}

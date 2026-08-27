@@ -3,6 +3,58 @@
 **Live URL**: https://auremcto.com
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
+## 2026-08-27 (latest) — A0 (ORA Council recall mode-taxonomy bug FIX) + Plain-English Output Contract (Phase 0-2) — testing_agent verified, 100% pass
+
+**A0 — real bug, fixed, live-verified.** `backend/routers/chat.py`'s `/chat/send`
+and `/chat/stream` council-recall calls passed `_detect_mode()` ('code'/'chat')
+into `get_council_few_shot(mode=...)`, but the retriever's index is keyed by
+the real taxonomy ('A'-'F' from `classify_intent()`) — recall was
+unconditionally 0 on every real request since this taxonomy split existed.
+Fixed both call sites to pass `classify_intent(prompt, f12_payload)` instead.
+Live proof: real `/chat/send` call with prompt "hi" (test_admin_001) now
+returns `council_recalled=2`; re-running the old `_detect_mode('hi')` value
+against the same corpus confirmed 0. New tests:
+`backend/tests/test_iter2026_08_27_council_mode_taxonomy_fix.py` (2, pass).
+**A1** (natural false-positive re-scan on the real live-fixed path, 22 real
+queries from `test_admin_001`'s own history): 0 genuine false positives found
+— corroborates Phase 0's full-corpus scan. Full writeup:
+`/app/memory/investigation_rerank.md`.
+
+**Plain-English Output Contract** — non-technical founders were getting
+whitepaper-style technical answers (file paths, jargon) for read-only explain
+questions ("how do the agents in my project work?"). Root cause: the main
+persona (`AUREM_CTO_PERSONA` in `services/orchestrator.py`) explicitly
+instructs EXECUTE-mode answers to "quote actual line numbers, function names"
+— fires even for pure explanations naming a repo feature. Fix: new
+`PLAIN_ENGLISH_EXPLAIN_CONTRACT` block injected into `extra_sys` in both
+`chat_send`/`chat_stream`, gated on (a) not Ask Advisor, (b)
+`classify_intent()==  "A"` (conversational/explain, never mutation-shaped
+B-F), (c) feature flag `explain_plain_english_v1` (Mongo `feature_flags`,
+`enabled=True, rollout_pct=0, user_allowlist=["test_admin_001"]` — same shape
+as existing `workcard_*` flags, OFF for everyone else). Both endpoints now
+return `plain_english_contract_active: bool`. Real before/after on the same
+live question: before = 656 tokens naming real files (`grounding.py`,
+`review.py`); after = 565 tokens naming zero real files, ends with the
+required "want the technical detail?" opt-in line. New tests:
+`backend/tests/test_iter2026_08_27_plain_english_contract.py` (4: explain-
+injects / mutation-does-not-inject / flag-off-byte-identical /
+ask-advisor-never-gets-it — all pass). Full writeup:
+`/app/memory/investigation_plain_english_contract.md`.
+
+Known accepted edge case (documented, not silently ignored): a mutation-
+shaped message with no explicit "to/in/for my/the file" phrasing (e.g.
+"refactor the auth module") can still classify as mode "A" and get the plain-
+English framing. Not a data-leak risk (ship/confirm cards render from a
+separate structured data path, untouched by this change) — worst case is an
+overly-conversational answer to an ambiguous message. Flag is allowlist-only
+to `test_admin_001` regardless.
+
+`testing_agent` verification: 5/5 targeted backend tests passed live against
+Preview (council_recalled proof, plain-english-active proof, mutation-does-
+not-activate proof, flag-scoping spot-check, general chat regression smoke).
+0 issues found, `retest_needed: false`. Report:
+`/app/test_reports/iteration_iter2026_08_27_backend_verify.json`.
+
 ## 2026-08-27 (later) — Preview-only 5-item follow-up batch closed: restart-loop honesty fix, chip sizing uniformity, dense-row reconciliation, 3-viewport overflow proof, non-allowlisted flag proof — testing_agent verified (2 passes)
 
 Closed the founder's 5-item Preview acceptance list from the WorkCard/Phase-E work:
