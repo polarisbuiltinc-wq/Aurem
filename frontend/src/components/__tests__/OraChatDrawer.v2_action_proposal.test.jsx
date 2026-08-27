@@ -123,4 +123,25 @@ describe("OraChatDrawer — ORA Chat v2 action proposal card", () => {
     expect(screen.getByTestId("ora-chat-msg-tokens").textContent).toContain("100 in");
     expect(screen.getByTestId("ora-chat-msg-tokens").textContent).toContain("20 out");
   });
+
+  it("opens the Recent ORA actions audit panel and renders rows with risk + status", async () => {
+    api.get.mockImplementation((path) => {
+      if (path === "/ora-chat/sessions") return Promise.resolve({ data: { sessions: [] } });
+      if (path === "/ora-chat/usage") return Promise.resolve({ data: { budget: null } });
+      if (path === "/ora-chat/actions/recent") return Promise.resolve({ data: { actions: [
+        { proposal_id: "p1", action_id: "create_backlog_item", action_name: "Create a backlog item",
+          risk: "reversible", description: "Add a new item to the internal backlog.",
+          event_type: "executed", ts: 1787866803 },
+      ] } });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<OraChatDrawer forceOpen />);
+    await waitFor(() => expect(screen.getByTestId("ora-chat-actions-btn")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("ora-chat-actions-btn"));
+
+    await waitFor(() => expect(screen.getByTestId("ora-action-audit-row-p1")).toBeInTheDocument());
+    expect(screen.getByTestId("ora-action-audit-row-p1").textContent).toContain("Create a backlog item");
+    expect(screen.getByTestId("ora-action-audit-row-p1").textContent).toContain("executed");
+  });
 });

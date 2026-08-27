@@ -408,9 +408,14 @@ async def reject_action(body: RejectActionBody,
 async def list_recent_actions(authorization: Optional[str] = Header(None)):
     await require_admin(authorization)
     from cto_services.db import get_db as _get_db_v2
-    from services.ora_chat_v2 import audit as _v2_audit
+    from services.ora_chat_v2 import audit as _v2_audit, catalog as _v2_catalog
     db = _get_db_v2()
-    rows = await _v2_audit.recent_actions(db, limit=20)
+    rows = await _v2_audit.recent_proposals(db, limit=20)
+    for r in rows:
+        spec = _v2_catalog.ACTION_CATALOG.get(r.get("action_id"), {})
+        r["action_name"] = spec.get("name", r.get("action_id"))
+        r["risk"] = r.get("risk") or spec.get("risk")
+        r["description"] = spec.get("description")
     return {"ok": True, "actions": rows}
 
 

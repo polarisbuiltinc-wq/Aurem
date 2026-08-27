@@ -245,3 +245,35 @@ def test_missing_state_param_entirely_still_fails_closed_unchanged():
     # falls through with user_id_to_link=None, same as before this fix.
     assert r.status_code in (302, 307)
     assert fake_db.github_installations.rows[0].get("user_id") is None
+
+
+def test_orphaned_install_logs_account_and_repos_for_grep(caplog):
+    """2026-08-27 (round 2) — founder asked: if the truly-orphaned case
+    (no recoverable user_id) is only fixable via manual revoke+reinstall
+    for now, at minimum log installation_id + account + repo so the
+    next incident can be grepped instead of guessed at. This is the
+    ONLY path left where `/callback` can't self-heal (malformed/forged
+    state, or state genuinely absent from a direct-callback hit) —
+    every other failure mode recovers via the embedded-string fallback
+    above."""
+    fake_db = _FakeDB()
+    client, ga_mod = _make_client(fake_db)
+    with patch.object(ga_mod, "_fetch_installation_meta", AsyncMock(return_value=FAKE_META)), \
+         patch.object(ga_mod._ga, "list_installation_repos", AsyncMock(return_value=[
+             {"id": 1, "full_name": "SomeOrg/orphaned-repo"},
+         ])):
+        import logging
+        with caplog.at_level(logging.ERROR, logger="routers.github_app"):
+            r = client.get(
+                "/api/aurem-dev/github/app/callback",
+                params={"installation_id": 560, "state": "not-our-format"},
+                follow_redirects=False,
+            )
+    assert r.status_code in (302, 307)
+    assert "err=invalid_state" in r.headers["location"]
+    assert fake_db.github_installations.rows == []  # still unlinked — no auto-link for forged state
+    orphan_logs = [rec.message for rec in caplog.records if "GH_CONNECT_ORPHANED_INSTALL" in rec.message]
+    assert len(orphan_logs) == 1
+    assert "560" in orphan_logs[0]
+    assert "drilltest" in orphan_logs[0]
+    assert "SomeOrg/orphaned-repo" in orphan_logs[0]

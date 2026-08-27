@@ -325,6 +325,30 @@ async def install_callback(
             installation_id, state[:8], _recovered_user_id,
         )
         if _recovered_user_id is None:
+            # Truly orphaned — no user_id, no DB row, no recoverable
+            # state string. Enrich the log with account/repo context
+            # (best-effort; installation_id alone isn't enough to grep
+            # an incident against a specific founder report) before
+            # giving up. This is the ONLY case that stays unlinked —
+            # every other state failure self-heals via the recovery
+            # above.
+            try:
+                _orphan_meta = await _fetch_installation_meta(installation_id)
+                _orphan_login = (_orphan_meta.get("account") or {}).get("login")
+            except Exception:                                     # noqa: BLE001
+                _orphan_login = None
+            try:
+                _orphan_repos = await _ga.list_installation_repos(int(installation_id))
+                _orphan_repo_names = [r.get("full_name") for r in _orphan_repos][:10]
+            except Exception:                                      # noqa: BLE001
+                _orphan_repo_names = None
+            logger.error(
+                "GH_CONNECT_ORPHANED_INSTALL installation_id=%s account=%s "
+                "repos=%s state_prefix=%s — no user_id could be recovered; "
+                "install landed unlinked, needs manual DB correlation "
+                "(db.github_installations updateOne by installation_id + user_id)",
+                installation_id, _orphan_login, _orphan_repo_names, state[:8] if state else None,
+            )
             return RedirectResponse(
                 url=_dashboard_url(request, _DEEP_LINK_ERR_STATE),
                 status_code=302,

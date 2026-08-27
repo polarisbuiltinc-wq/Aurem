@@ -39,6 +39,22 @@ async def recent_actions(db, limit: int = 20) -> list:
     return [row async for row in cur]
 
 
+async def recent_proposals(db, limit: int = 20) -> list:
+    """One row per proposal_id — the LATEST event's status/result/error,
+    sorted by that latest event's ts desc. Feeds the "Recent ORA
+    actions" list (drawer panel + /admin/ora-chat), so the founder sees
+    one line per decision instead of every propose/approve/execute row."""
+    cur = db.ora_chat_actions.find({}, {"_id": 0}).sort("ts", 1)
+    by_id: dict[str, dict] = {}
+    async for row in cur:
+        pid = row.get("proposal_id")
+        if not pid:
+            continue
+        by_id.setdefault(pid, {}).update(row)
+    rows = sorted(by_id.values(), key=lambda r: r.get("ts", 0), reverse=True)
+    return rows[:limit]
+
+
 async def get_proposal(db, proposal_id: str) -> dict | None:
     """Latest event for a proposal_id (used to fetch the pending
     action_id/params when approving/rejecting)."""

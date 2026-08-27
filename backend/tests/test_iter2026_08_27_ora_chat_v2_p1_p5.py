@@ -225,6 +225,37 @@ async def test_reversible_action_executes_and_audits(db):
 
 
 @pytest.mark.asyncio
+async def test_recent_proposals_groups_by_id_keeping_latest_status(db):
+    """Action Audit View (2026-08-27 round 2): one row per proposal,
+    not one row per event — the founder wants a clean decision list,
+    not a raw event log."""
+    p1 = await audit.log_event(
+        db, admin_id="admin1", action_id="create_backlog_item",
+        params={"title": "A"}, proposed_by="turn:1", event_type="proposed")
+    await audit.log_event(
+        db, admin_id="admin1", action_id="create_backlog_item",
+        params={"title": "A"}, proposed_by="turn:1",
+        event_type="executed", proposal_id=p1, result={"ok": True})
+
+    p2 = await audit.log_event(
+        db, admin_id="admin1", action_id="toggle_flag",
+        params={"flag_name": "explain_plain_english_v1"},
+        proposed_by="turn:2", event_type="proposed")
+    await audit.log_event(
+        db, admin_id="admin1", action_id="toggle_flag",
+        params={"flag_name": "explain_plain_english_v1"},
+        proposed_by="turn:2", event_type="rejected", proposal_id=p2)
+
+    rows = await audit.recent_proposals(db, limit=10)
+    assert len(rows) == 2  # not 4 — grouped, not raw events
+    by_pid = {r["proposal_id"]: r for r in rows}
+    assert by_pid[p1]["event_type"] == "executed"
+    assert by_pid[p2]["event_type"] == "rejected"
+    # newest-decided proposal (p2, rejected last) sorts first
+    assert rows[0]["proposal_id"] == p2
+
+
+@pytest.mark.asyncio
 async def test_sensitive_action_disabled_by_default(db, monkeypatch):
     monkeypatch.delenv("ORA_CHAT_SENSITIVE", raising=False)
     result = await catalog.execute_action(

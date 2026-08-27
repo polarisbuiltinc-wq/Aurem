@@ -13,7 +13,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { MessageSquare, X, Send, RefreshCw, Zap, AlertTriangle,
-          Settings, Clock, Plus, Square } from "lucide-react";
+          Settings, Clock, Plus, Square, ListChecks } from "lucide-react";
 import { api } from "../lib/api";
 import { getToken } from "../lib/api";
 import OraChatHouseRulesPanel from "./OraChatHouseRulesPanel";
@@ -43,6 +43,8 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
   const [thinkMode, setThinkMode] = useState(false);
   const [adviseOnly, setAdviseOnly] = useState(false);
   const [actionBusy, setActionBusy] = useState(null);
+  const [showActionAudit, setShowActionAudit] = useState(false);
+  const [recentActions, setRecentActions] = useState([]);
   const listRef = useRef(null);
   const abortRef = useRef(null);
 
@@ -306,8 +308,21 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
       }));
     } finally {
       setActionBusy(null);
+      fetchRecentActions();
     }
   };
+
+  // ORA Chat v2 (P4) — "Recent ORA actions" panel: closes the trust
+  // loop by listing every proposed/approved/rejected/executed/failed
+  // action with its risk tier + what-will-change preview, not just
+  // the raw approve/reject buttons in the moment they appeared.
+  const fetchRecentActions = useCallback(async () => {
+    try {
+      const r = await api.get("/ora-chat/actions/recent");
+      setRecentActions(r.data.actions || []);
+    } catch { /* ignore */ }
+  }, []);
+  useEffect(() => { if (open && showActionAudit) fetchRecentActions(); }, [open, showActionAudit, fetchRecentActions]);
 
   return (
     <>
@@ -387,6 +402,18 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
               }}
             >
               <Clock size={15} />
+            </button>
+            <button
+              type="button"
+              data-testid="ora-chat-actions-btn"
+              onClick={() => setShowActionAudit(true)}
+              title="Recent ORA actions"
+              style={{
+                background: "transparent", border: "none",
+                color: "#a39d8a", cursor: "pointer", padding: 6,
+              }}
+            >
+              <ListChecks size={15} />
             </button>
             <button
               type="button"
@@ -655,6 +682,85 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
       {/* House rules panel */}
       {open && showRules && (
         <OraChatHouseRulesPanel onClose={() => setShowRules(false)} />
+      )}
+
+      {/* Recent ORA actions — audit trail (P4) */}
+      {open && showActionAudit && (
+        <div
+          data-testid="ora-action-audit-panel"
+          style={{
+            position: "fixed", inset: 0, zIndex: 102,
+            background: "rgba(0,0,0,0.55)",
+            display: "flex", alignItems: "center", justifyContent: "flex-end",
+          }}
+          onClick={() => setShowActionAudit(false)}
+        >
+          <div onClick={(e) => e.stopPropagation()}
+               style={{
+                 width: "min(440px, 96vw)",
+                 marginRight: "min(440px, 96vw)",
+                 maxHeight: "80vh", overflow: "auto",
+                 background: "#0f1113",
+                 border: "1px solid rgba(255,255,255,0.06)",
+                 borderRadius: 12, padding: 18,
+                 color: "#e8e3d3",
+                 fontFamily: "-apple-system, BlinkMacSystemFont, 'Inter', sans-serif",
+               }}>
+            <div style={{ display: "flex", justifyContent: "space-between",
+                            alignItems: "center", marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Recent ORA actions</div>
+              <button data-testid="ora-action-audit-close"
+                      onClick={() => setShowActionAudit(false)}
+                      style={{ background: "transparent", border: "none",
+                                color: "#a39d8a", cursor: "pointer" }}>
+                <X size={15} />
+              </button>
+            </div>
+            {recentActions.length === 0 && (
+              <div style={{ fontSize: 12, color: "#7a7466" }}>
+                No actions proposed yet. ORA can only pick from a fixed
+                catalog — nothing runs without your approval.
+              </div>
+            )}
+            {recentActions.map(a => (
+              <div key={a.proposal_id} data-testid={`ora-action-audit-row-${a.proposal_id}`}
+                   style={{
+                     padding: "10px 12px", marginBottom: 8,
+                     background: "rgba(255,255,255,0.03)",
+                     border: "1px solid rgba(255,255,255,0.06)",
+                     borderRadius: 8,
+                   }}>
+                <div style={{ display: "flex", justifyContent: "space-between",
+                                alignItems: "baseline", gap: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>
+                    {a.action_name || a.action_id}
+                  </span>
+                  <span style={{
+                    fontSize: 10, padding: "1px 7px", borderRadius: 999,
+                    background: a.event_type === "executed" ? "rgba(129,178,154,0.16)"
+                              : a.event_type === "failed" ? "rgba(220,80,80,0.16)"
+                              : a.event_type === "rejected" ? "rgba(255,255,255,0.06)"
+                              : "rgba(228,194,107,0.16)",
+                    color: a.event_type === "executed" ? "#81B29A"
+                         : a.event_type === "failed" ? "#f88"
+                         : a.event_type === "rejected" ? "#a39d8a" : "#E4C26B",
+                  }}>
+                    {a.event_type}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: "#a39d8a", marginTop: 4 }}>
+                  {a.description || "No description available."}
+                </div>
+                {a.risk && (
+                  <div style={{ fontSize: 10, color: "#7a7466", marginTop: 4,
+                                  fontFamily: "ui-monospace, monospace" }}>
+                    {a.risk} · {new Date((a.ts || 0) * 1000).toLocaleString()}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </>
   );
