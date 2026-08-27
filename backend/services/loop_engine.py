@@ -379,12 +379,21 @@ class LoopEngine:
 
     def __init__(self, db, loop_id: str, user_id: str,
                  project_id: Optional[str], user_message: str,
-                 bin_ctx=None, session_id: Optional[str] = None):
+                 bin_ctx=None, session_id: Optional[str] = None,
+                 source_findings: Optional[list] = None):
         self.db = db
         self.loop_id = loop_id
         self.user_id = user_id
         self.project_id = project_id
         self.user_message = user_message
+        # 2026-08-27 · P2 — Plan↔Scan Consistency Contract. When this
+        # loop was started by resolving a confirmatory reply ("yes")
+        # against a prior scan's findings (see services/
+        # intent_grounding.py), those EXACT findings ride along here so
+        # `_do_plan` can block a plan that drifts onto files the scan
+        # never flagged, instead of trusting the planner LLM's re-
+        # derivation from prose.
+        self.source_findings = source_findings
         # Iter 339d — chat session this loop belongs to. At terminal we
         # persist a compact user+assistant turn pair into
         # db.chat_sessions so loop runs survive a page reload.
@@ -653,6 +662,44 @@ class LoopEngine:
                 "[loop %s] plan-grounding check skipped: %r",
                 self.loop_id, e,
             )
+
+        # ── 2026-08-27 · P2 — Plan↔Scan Consistency Contract ─────────
+        # When this loop was started from a resolved scan confirmation
+        # (self.source_findings set by services/intent_grounding.py),
+        # enforce IN CODE — not by prompt alone — that every planned
+        # file cites a real finding from that scan. A planned file with
+        # no citable finding BLOCKS the plan here, before the user ever
+        # sees an "awaiting approval" card for the wrong files. This is
+        # the direct fix for the transcript bug: a plan that silently
+        # targeted 4 files the scan never flagged and dropped 6 of 9
+        # findings with no visible trace.
+        if self.source_findings and isinstance(plan, dict):
+            from services.plan_scan_contract import (
+                check_plan_scan_consistency, render_mismatch_message,
+            )
+            coverage = check_plan_scan_consistency(plan, self.source_findings)
+            plan["scan_coverage"] = coverage
+            if coverage["mismatched_files"]:
+                finding_files = sorted({
+                    f.get("filepath") for f in self.source_findings
+                    if f.get("filepath")
+                })
+                try:
+                    from services import loop_audit_log as _lal
+                    await _lal.log(
+                        self.db, loop_id=self.loop_id, phase="plan",
+                        kind="plan_scan_mismatch",
+                        verdict=_lal.VERDICT_FAIL,
+                        detail={"mismatched_files": coverage["mismatched_files"],
+                                "finding_files": finding_files},
+                    )
+                except Exception:
+                    pass
+                await self._fail(
+                    "plan",
+                    render_mismatch_message(coverage["mismatched_files"], finding_files),
+                )
+                return
 
         self.context["plan"] = plan
         await _save_plan(self.db, self.loop_id, plan)
@@ -1794,12 +1841,43 @@ class LoopEngine:
                         )
                         return None
 
-                _tasks = [_gen_via_parliament(p) for p in paths]
+                # ── 2026-08-27 · P3 — per-artifact bounded retry ──────
+                # Root cause fixed here: a SINGLE empty/manual-review
+                # generation for one file used to end that file's
+                # chances permanently on the first pass. If it was the
+                # ONLY file requested, the whole loop failed with an
+                # opaque message; if it was one of several, it silently
+                # vanished from `submitted_files` with no trace. Two
+                # tries per artifact before we give up on it — cheap
+                # (no LLM cost for the deterministic binary/huge-file
+                # skips, which fail identically both times) and it's
+                # exactly the class of failure ("LLM produced no
+                # usable content") most likely to succeed on a retry.
+                _MAX_ARTIFACT_ATTEMPTS = 2
+
+                async def _gen_with_bounded_retry(path):
+                    last_result = None
+                    for attempt in range(1, _MAX_ARTIFACT_ATTEMPTS + 1):
+                        last_result = await _gen_via_parliament(path)
+                        if last_result:
+                            return last_result
+                        if attempt < _MAX_ARTIFACT_ATTEMPTS:
+                            await self._narrate(
+                                step="execute", tone="warn",
+                                text=f"Retrying {path} "
+                                     f"(attempt {attempt + 1}/{_MAX_ARTIFACT_ATTEMPTS})",
+                                correlation_id=f"execute:{path}",
+                            )
+                    return None
+
+                _tasks = [_gen_with_bounded_retry(p) for p in paths]
                 _results = await asyncio.gather(*_tasks, return_exceptions=False)
                 generated = [r for r in _results if r]
+                failed_paths = [p for p, r in zip(paths, _results) if not r]
                 logger.info(
-                    "[parliament] EXECUTE generated %d/%d files",
-                    len(generated), len(paths),
+                    "[parliament] EXECUTE generated %d/%d files "
+                    "(after up to %d attempts each)",
+                    len(generated), len(paths), _MAX_ARTIFACT_ATTEMPTS,
                 )
         except _CostCapPaused as e:
             # 2026-08 hardening (F2) — additive: budget PAUSE, not FAILED.
@@ -1811,16 +1889,12 @@ class LoopEngine:
             return
 
         if not generated:
-            # Iter 288 (j007 diagnostic) — the previous message
-            # ("LLM produced no usable file content") gave the user
-            # zero signal about why every per-file attempt returned
-            # None. We now capture the per-file result tuples (status
-            # + reasoning tail + output-length + finish_reason when
-            # the provider surfaces one) and log them to loop_run_log
-            # so the NEXT occurrence is diagnosable from the DB
-            # instead of the ephemeral console. This is exactly what
-            # loop_1f8 / loop_bff needed — the raw evidence didn't
-            # persist because we never wrote it.
+            # 2026-08-27 · P3 — honest, actionable zero-residue failure.
+            # Nothing was generated → nothing will be committed (SHIP
+            # never runs on a failed EXECUTE) — this loop is a true
+            # zero-residue failure, and the message now says so
+            # explicitly instead of the old opaque one-liner that gave
+            # the user no path forward.
             per_file_diag: list[dict] = []
             for p, res in zip(paths, _results):
                 if res is None:
@@ -1854,9 +1928,75 @@ class LoopEngine:
                     "[loop %s] execute_empty_output audit write "
                     "failed (non-fatal): %r", self.loop_id, e,
                 )
-            await self._fail("execute",
-                             "LLM produced no usable file content. Try refining the plan.")
+            _n = len(paths)
+            await self._fail(
+                "execute",
+                (f"Couldn't generate usable content for "
+                 f"{'the' if _n == 1 else 'any of the ' + str(_n)} planned "
+                 f"file{'s' if _n != 1 else ''} after {_MAX_ARTIFACT_ATTEMPTS} "
+                 f"attempt{'s' if _MAX_ARTIFACT_ATTEMPTS != 1 else ''} each. "
+                 f"Nothing was written or committed — this run made zero "
+                 f"changes to your repo. This usually means a file is too "
+                 f"large for a single-pass rewrite, or the request is "
+                 f"unclear to the model.\n\nOptions: retry this step, ask "
+                 f"me to show exactly what failed per file, or ask me to "
+                 f"re-plan with a narrower scope."),
+                data={
+                    "zero_residue": True,
+                    "per_file_diag": per_file_diag,
+                    "options": ["retry_step", "show_details", "replan"],
+                },
+            )
             return
+
+        if failed_paths:
+            # 2026-08-27 · P3 — honest PARTIAL-failure state. Previously
+            # this case was completely silent: N-of-M files generated,
+            # the rest just vanished from `submitted_files` with zero
+            # trace in the UI (transcript bug: "wrote 3 of 4 files then
+            # failed" with no statement of what happened to the 3).
+            # Three good writes must not be burned by one empty
+            # generation — we KEEP the successful files and continue,
+            # but the user is told exactly what was kept vs what needs
+            # review, by name, before the pipeline moves on.
+            self.context["generation_failures"] = [
+                {"path": p, "reason": "no usable content after "
+                 f"{_MAX_ARTIFACT_ATTEMPTS} attempts"} for p in failed_paths
+            ]
+            _kept_msg = (
+                f"Kept {len(generated)} of {len(paths)} planned file(s) — "
+                f"{len(failed_paths)} need review: "
+                f"{', '.join(failed_paths)} (no usable content after "
+                f"{_MAX_ARTIFACT_ATTEMPTS} attempts each). Continuing with "
+                f"the {len(generated)} good write(s)."
+            )
+            logger.warning("[loop %s] EXECUTE — partial generation: %s",
+                           self.loop_id, _kept_msg)
+            try:
+                await self.db.loop_run_log.insert_one({
+                    "loop_id":     self.loop_id,
+                    "user_id":     self.user_id,
+                    "project_id":  self.project_id,
+                    "kind":        "execute_partial_generation",
+                    "kept":        [f["path"] for f in generated],
+                    "failed":      failed_paths,
+                    "ts":          _iso(),
+                    "created_at":  _now(),
+                })
+            except Exception:
+                pass
+            await self._emit(
+                LoopState.EXECUTING, "execute",
+                step=2, total_steps=5,
+                message=_kept_msg,
+                data={"kind": "partial_generation",
+                      "kept": [f["path"] for f in generated],
+                      "failed": failed_paths},
+            )
+            await self._narrate(
+                step="execute", tone="warn", text=_kept_msg,
+                correlation_id="execute:partial_generation",
+            )
 
         # Persist + emit per-file events so the frontend can show
         # real progress.

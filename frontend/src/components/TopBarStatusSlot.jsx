@@ -22,9 +22,21 @@ import { useEffect, useState } from "react";
 import { useF12Errors, F12Badge, ModePill } from "./ChatPanelF12";
 import { getUser, isAdminOrFounder } from "../lib/api";
 
+// 2026-08-27 · P5 (Journey/Intent-Grounding build round) — the F12
+// error-count badge was already founder/admin-gated (2026-08-21), but
+// that still means the founder's OWN production hostname shows it
+// (e.g. during a customer screen-share). Reusing the same hostname
+// convention lib/sentry.js already uses to gate it to dev/preview
+// only, never the real production domain.
+function _isDevEnv() {
+  const host = (typeof window !== "undefined" && window.location?.hostname) || "";
+  return host !== "auremcto.com" && host !== "www.auremcto.com";
+}
+
 export default function TopBarStatusSlot() {
   const f12 = useF12Errors();
   const isFounder = isAdminOrFounder(getUser());
+  const showF12Badge = isFounder && _isDevEnv();
   const [detectedMode, setDetectedMode] = useState(null);
   const [serverMode,   setServerMode]   = useState(null);
 
@@ -55,7 +67,7 @@ export default function TopBarStatusSlot() {
   // 2026-08-21 — founder request: F12 chip is founder/admin-only.
   // Regular users never see it (background capture still runs for
   // everyone; only the UI trigger is gated).
-  if (!modeProp && !(isFounder && f12.hasErrors)) return null;
+  if (!modeProp && !(showF12Badge && f12.hasErrors)) return null;
 
   return (
     <div
@@ -68,7 +80,7 @@ export default function TopBarStatusSlot() {
       }}
     >
       <ModePill mode={modeProp} />
-      {isFounder && (
+      {showF12Badge && (
         <F12Badge
           errorCount={f12.errorCount}
           hasErrors={f12.hasErrors}

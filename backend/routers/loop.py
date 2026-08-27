@@ -178,6 +178,38 @@ async def start_loop(body: StartBody,
                 "reason":           _intent_reason,
             }
 
+    # 2026-08-27 · P1 — Intent grounding (Journey/Intent-Grounding build
+    # round). A bare "yes"/"ship it" replying to ORA's OWN concrete
+    # proposal (a scan report) is FULLY SCOPED by that proposal — it must
+    # NOT be judged word-count-ambiguous by the gate below. Resolve it
+    # against the session's `pending_scan` (written by chat.py's Mode E
+    # block) BEFORE the ambiguity gate ever sees the raw "yes".
+    source_findings: Optional[list] = None
+    effective_message = body.user_message
+    from services.intent_grounding import resolve_confirmatory_scope, NO_PENDING_PROPOSAL_MESSAGE
+    try:
+        _grounding = await resolve_confirmatory_scope(
+            db, user["user_id"], body.session_id, body.user_message,
+        )
+    except Exception as _ge:
+        logger.warning("[loop intent-grounding] resolve failed, falling back "
+                       "to raw message: %r", _ge)
+        _grounding = {"grounded": False}
+    if _grounding.get("grounded"):
+        if _grounding.get("no_pending"):
+            # A real confirmatory reply, but nothing pending to confirm —
+            # ask ONCE for the missing scope. This is NOT the same as
+            # "too broad" (that implies a broad, un-scoped ASK; this is
+            # simply a confirmation with no proposal behind it).
+            return {
+                "loop_id":             None,
+                "needs_clarification": True,
+                "reason":              "no_pending_proposal",
+                "message":             NO_PENDING_PROPOSAL_MESSAGE,
+            }
+        effective_message = _grounding["task_text"]
+        source_findings = _grounding["source_findings"]
+
     # 2026-08-26 — Ambiguity gate (Blueprint Phase 1.3, formalized).
     # Loop Mode was unlocked for all Pro/Team users (2026-08-21) but
     # never got the same "too vague to act on safely" protection the
@@ -187,8 +219,11 @@ async def start_loop(body: StartBody,
     # session/LLM work so a vague message costs nothing. Mirrors the
     # `redirect_to_chat` short-circuit shape above so the frontend can
     # handle both the same way (no loop_id created, no engine spun up).
+    # Skipped entirely when P1 grounding above already resolved a
+    # concrete scope — that message inherits the proposal's scope and
+    # must never be re-judged as ambiguous.
     from services.ambiguity_gate import is_ambiguous_task, CLARIFICATION_MESSAGE
-    if is_ambiguous_task(body.user_message):
+    if source_findings is None and is_ambiguous_task(effective_message):
         logging.getLogger("aurem.loop").info(
             "[loop ambiguity-gate] vague task redirected to clarification "
             "(user=%s): %.120s", user["user_id"], body.user_message,
@@ -284,9 +319,10 @@ async def start_loop(body: StartBody,
         db=db, loop_id=loop_id,
         user_id=user["user_id"],
         project_id=body.project_id,
-        user_message=body.user_message,
+        user_message=effective_message,
         bin_ctx=_bin_ctx_loop,
         session_id=body.session_id,
+        source_findings=source_findings,
     )
     eng.register(engine)
     # Iter 365 · Phase 3 — funnel event: first_loop_started.

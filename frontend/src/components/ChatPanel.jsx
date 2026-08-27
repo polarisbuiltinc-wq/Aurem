@@ -3383,6 +3383,17 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     const filesNew    = Array.isArray(plan.files) ? plan.files : [];
 
     let out = `### ${title}${eta}\n\n`;
+    // 2026-08-27 · P2 — Plan↔Scan Consistency Contract. When this plan
+    // was generated from a resolved scan confirmation, the engine
+    // attaches `scan_coverage` (see services/plan_scan_contract.py).
+    // Surface it as a coverage header + explicit deferred list so a
+    // partial plan is never silent (transcript bug: 6 of 9 findings
+    // vanished with no trace).
+    const coverage = plan.scan_coverage;
+    if (coverage && typeof coverage === "object" && coverage.total_findings > 0) {
+      out += `_Fixing ${coverage.covered_count} of ${coverage.total_findings} `
+           + `findings from the scan · ${coverage.deferred_count} deferred_\n\n`;
+    }
     if (description) {
       out += `${description}\n\n`;
     }
@@ -3408,6 +3419,13 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           const reason = f.reason ? ` — ${f.reason}` : "";
           out += `- \`${path}\`${action}${reason}\n`;
         }
+      });
+    }
+    if (coverage && Array.isArray(coverage.deferred) && coverage.deferred.length) {
+      out += `\n**Not in this plan** (${coverage.deferred.length}):\n`;
+      coverage.deferred.forEach((f) => {
+        const loc = f.line ? `${f.filepath}:${f.line}` : f.filepath;
+        out += `- \`${loc}\` — ${f.description || "not covered by this plan"}\n`;
       });
     }
     return out.trim() || "_Empty plan_";
@@ -3853,12 +3871,26 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
 
   // Maintain a single trailing assistant bubble that grows with the
   // engine's live commentary. Each phase header becomes a new section.
+  //
+  // 2026-08-27 · P4 (Journey/Intent-Grounding build round) — root fix
+  // for "Failed" rendering ABOVE "Plan ready — awaiting your approval"
+  // in the same bubble. The backward scan used to reuse ANY prior
+  // loopLive bubble regardless of which loop_id it belonged to — a
+  // brand-new loop run's FIRST event (e.g. its plan-ready line) could
+  // land appended onto an OLDER, already-terminal run's bubble that
+  // still had a "**Failed**" line sitting in it, producing exactly the
+  // scrambled ordering reported. A loop run's events must render as
+  // ONE ordered timeline, on its OWN bubble — never mixed with a
+  // different loop_id's history.
   function appendLoopBubble(ev) {
     setMessages((m) => {
       const out = m.slice();
       let idx = -1;
       for (let i = out.length - 1; i >= 0; i--) {
-        if (out[i].role === "assistant" && out[i].loopLive) { idx = i; break; }
+        if (out[i].role === "assistant" && out[i].loopLive) {
+          idx = (out[i].loopId === ev.loop_id) ? i : -1;
+          break;
+        }
         // Stop scanning before any plan/user bubble.
         if (out[i].role === "user") break;
       }
@@ -3871,13 +3903,35 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           streaming: !terminal,
           content: line,
           loopLive: true,
+          loopId: ev.loop_id,
         });
       } else {
-        out[idx] = {
-          ...out[idx],
-          content: out[idx].content + "\n" + line,
-          streaming: !terminal,
-        };
+        // 2026-08-27 · P4 — dedupe consecutive identical lines into a
+        // single "…  ×N" row instead of letting the SAME failure/
+        // narration text repeat 3-4x down the transcript (founder
+        // screenshot: 4 identical "Task failed — nothing was
+        // committed" rows). Only collapses back-to-back duplicates —
+        // a real NEW line always still gets its own row.
+        const prevContent = out[idx].content;
+        const prevLines = prevContent.split("\n");
+        const lastLine = prevLines[prevLines.length - 1] || "";
+        const bareLastLine = lastLine.replace(/\s+×\d+$/, "");
+        if (bareLastLine === line) {
+          const m = lastLine.match(/×(\d+)$/);
+          const count = m ? parseInt(m[1], 10) + 1 : 2;
+          prevLines[prevLines.length - 1] = `${line}  ×${count}`;
+          out[idx] = {
+            ...out[idx],
+            content: prevLines.join("\n"),
+            streaming: !terminal,
+          };
+        } else {
+          out[idx] = {
+            ...out[idx],
+            content: prevContent + "\n" + line,
+            streaming: !terminal,
+          };
+        }
       }
       return out;
     });
@@ -3896,6 +3950,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     if (st === "completed") return `**Step 5 / 5 — Ship**  ${ms}`;
     if (st === "failed")    return `**Failed**  ${ms}`;
     if (st === "aborted")   return `**Aborted**  ${ms}`;
+    if (st === "awaiting_confirmation") return `**Step 1 / 5 — Plan**  ${ms}`;
     if (ph === "EXECUTE")   return `**Step 2 / 5 — Execute**  ${ms}`;
     if (ph === "VERIFY")    return `**Step 3 / 5 — Verify**  ${ms}`;
     if (ph === "SCAN")      return `**Step 4 / 5 — Security**  ${ms}`;

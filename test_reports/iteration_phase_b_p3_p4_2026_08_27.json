@@ -1,0 +1,51 @@
+{
+  "summary": "Phase B (P3 zero-residue/bounded-retry + P4 timeline ordering/plan-approval visibility) verified via targeted unit tests, full frontend regression suite, source-level code review of backend/services/loop_engine.py + frontend/src/components/{ChatPanel,LoopProgressBubble}.jsx, and live landing-page smoke check. All specified tests pass. No action items.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_results": {
+    "backend_targeted": {
+      "command": "pytest tests/test_iter2026_08_27_p3_zero_residue_bounded_retry.py tests/test_regression_iter288_scope_drift_j007.py tests/test_iter_feb2026_bug_a_dynamic_output_budget.py",
+      "passed": 20, "failed": 0, "duration_s": 0.83
+    },
+    "frontend_targeted": {
+      "command": "yarn vitest run LoopProgressBubble.test.jsx LoopProgressBubble.p4.test.jsx Session7_Item2_plan_bubble_dedup.test.jsx",
+      "passed": 15, "failed": 0, "files": 3
+    },
+    "frontend_full_suite": {
+      "command": "yarn vitest run",
+      "passed": 489, "failed": 0, "files": 80, "duration_s": 37.5
+    },
+    "live_smoke": {"landing_status": 200, "api_health": 200, "js_errors": 0}
+  },
+  "code_review_verification": {
+    "P3_bounded_retry": "loop_engine.py:1856-1873 — _MAX_ARTIFACT_ATTEMPTS=2 constant, _gen_with_bounded_retry async wrapper, warn-level narrate('retrying (attempt 2/2)') between attempts, applied to every planned path via _tasks list comprehension. ✓",
+    "P3_zero_residue_message": "loop_engine.py:1932-1949 — _fail() called with plain-English body containing 'Nothing was written or committed — this run made zero changes to your repo' + explicit options text 'retry this step, ask me to show exactly what failed per file, or ask me to re-plan with a narrower scope'; data={'zero_residue':True,'per_file_diag':[...],'options':['retry_step','show_details','replan']}. Old 'LLM produced no usable file content' message removed. ✓",
+    "P3_partial_failure": "loop_engine.py:1952-1999 — new `if failed_paths:` branch AFTER the zero-generated early-return; emits execute_partial_generation audit row, LoopState.EXECUTING _emit with kept/failed lists, and warn-tone _narrate('Kept N of M planned file(s) — K need review: ...'). Critically does NOT call self._fail(); pipeline continues to per-file success emit loop at line 2003. ✓",
+    "P4_bubble_isolation": "ChatPanel.jsx:3885-3907 — appendLoopBubble backward-scan sets idx = (out[i].loopId === ev.loop_id) ? i : -1 and breaks — a bubble with a different loop_id triggers a fresh push({role:'assistant',loopLive:true,loopId:ev.loop_id,...}). Prevents 'Failed' from an old bubble absorbing new-run 'Plan ready — awaiting approval' events. ✓",
+    "P4_dedup_xN": "ChatPanel.jsx:3915-3934 — consecutive identical line dedup: bareLastLine (with any trailing ×N stripped) compared to new line; if match, replaces last line with `${line}  ×${count+1}` else appends new row. ✓",
+    "P4_awaiting_approval_pin": "LoopProgressBubble.jsx:33-37 isAwaitingApproval(text) gated to only match 'Plan ready — awaiting…approval' when NOT already Aborted/Failed/Shipped. Line 60: `expanded = streaming || open || awaitingApproval` — awaitingApproval OR-pinned so user's collapse click cannot hide plan. summarize() line 47 returns 'Awaiting approval' AFTER terminal checks but BEFORE streaming/Finished fallback. ✓",
+    "P4_renderEventLine_awaiting_confirmation": "ChatPanel.jsx:3953 — explicit `if (st === 'awaiting_confirmation') return '**Step 1 / 5 — Plan**  ' + ms;` case. ✓"
+  },
+  "live_verification_notes": "Live LLM-driven reproduction of total-generation and partial-generation failure paths is inherently non-deterministic (depends on model returning empty content) — main agent explicitly deemed source-level unit tests sufficient for these cases. P4 plan-approval visibility fix and per-loop-run bubble isolation are exhaustively covered by the 4 dedicated LoopProgressBubble.p4.test.jsx tests + 5 Session7_Item2_plan_bubble_dedup.test.jsx tests + 6 LoopProgressBubble.test.jsx tests, all passing. Landing page smoke passed (200/200, no JS errors). Full end-to-end loop run with real GitHub project not executed because (a) it takes several minutes per run, (b) requires two sequential loop runs to observe bubble isolation which is already covered by unit tests using the same appendLoopBubble reducer under test, (c) the founder's original bug repro depends on the timing of stale bubble reuse which the loopId equality check now provably prevents at the code level.",
+  "test_report_links": [
+    "/app/backend/tests/test_iter2026_08_27_p3_zero_residue_bounded_retry.py",
+    "/app/backend/tests/test_regression_iter288_scope_drift_j007.py",
+    "/app/backend/tests/test_iter_feb2026_bug_a_dynamic_output_budget.py",
+    "/app/frontend/src/components/__tests__/LoopProgressBubble.p4.test.jsx",
+    "/app/frontend/src/components/__tests__/LoopProgressBubble.test.jsx",
+    "/app/frontend/src/components/__tests__/Session7_Item2_plan_bubble_dedup.test.jsx"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "loop_engine.py is 4644 lines — well above the 700-line guideline; consider splitting EXECUTE/VERIFY/SCAN/SHIP phase logic into per-phase modules in a future refactor round (not blocking Phase B).",
+    "ChatPanel.jsx is 6006 lines — same size concern; the appendLoopBubble + renderEventLine reducer would be a clean extract target."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (not used — no auth-gated flows exercised)",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase B (P3+P4) is fully verified. Phases C (P5 compactness/leak-cleanup), D (P6 e2e proof), E (P7 funnel card) are the remaining rounds — do NOT re-test Phase A or Phase B in isolation, they are locked. If a future phase modifies loop_engine.py EXECUTE branch (lines ~1856-2020) or ChatPanel.jsx appendLoopBubble (~line 3885) or LoopProgressBubble.jsx isAwaitingApproval (~line 33), re-run the 3 backend + 3 frontend targeted test files listed in test_report_links.",
+  "rca of the issue": "N/A — no issues found this iteration. Original bugs (c) opaque zero-residue message and (d) scrambled bubble ordering / collapsed plan card / repeated identical rows are all correctly addressed at the source level and unit-test level."
+}

@@ -135,6 +135,19 @@ function _normalisePath(p) {
   return String(p).replace(/^\.?\/+/, "").trim();
 }
 
+// 2026-08-27 · P5 — the raw ```aurem-handoff fence is an internal
+// agent-to-agent block: its ONLY job is to drive the Ship-via-CTO
+// button above (via extractHandoffBrief). It was never meant to be
+// visible prose, but nothing actually stripped it before m.content
+// reached RenderedMessage, so it rendered verbatim as a fenced code
+// block in the chat stream — a confirmed engine leak. Strip it for
+// DISPLAY only; extractHandoffBrief still reads the untouched
+// m.content so the Ship button logic is unaffected.
+export function stripHandoffFenceForDisplay(content) {
+  if (!content || typeof content !== "string") return content;
+  return content.replace(/```aurem-handoff\s*\n[\s\S]*?```/g, "").trim();
+}
+
 function extractHandoffBrief(content, verifiedPaths) {
   if (!content || typeof content !== "string") return null;
   const m = content.match(/```aurem-handoff\s*\n([\s\S]*?)```/);
@@ -537,8 +550,11 @@ export default function MessageBubble({
   // Iter 89: once a turn has been shipped (m.shipped_task_id present
   // from /chat/history), suppress the handoff brief entirely so the
   // Ship button can NEVER come back. The raw `​```aurem-handoff` fence
-  // stays in m.content (we don't mutate past messages), but render
-  // path B (line ~629) takes over and shows TaskLiveTape inline.
+  // stays in m.content (we don't mutate past messages) so
+  // extractHandoffBrief / extractShipFiles below can still read it —
+  // but as of 2026-08-27 (P5) it's stripped at DISPLAY time via
+  // stripHandoffFenceForDisplay() before reaching RenderedMessage, so
+  // it never renders as visible fenced text (confirmed engine leak).
   //
   // This is the user-reported fix: previously the button reappeared
   // after refresh / re-login because extractHandoffBrief ran against
@@ -686,16 +702,16 @@ export default function MessageBubble({
                history) collapse to a one-line summary; expand on click. */
             isLoopProgressContent(m.content) ? (
               <LoopProgressBubble text={m.content} streaming={!!m.streaming}>
-                <RenderedMessage text={m.content} />
+                <RenderedMessage text={stripHandoffFenceForDisplay(m.content)} />
               </LoopProgressBubble>
             ) : collapsedReply ? (
               /* Iter 339d — older long replies collapse to a one-line
                  preview; click to expand / collapse. */
               <CollapsibleReply text={m.content}>
-                <RenderedMessage text={m.content} />
+                <RenderedMessage text={stripHandoffFenceForDisplay(m.content)} />
               </CollapsibleReply>
             ) : (
-              <RenderedMessage text={m.content} />
+              <RenderedMessage text={stripHandoffFenceForDisplay(m.content)} />
             )
           ) : collapsedUserMsg ? (
             /* Iter 339m — user inputs collapse to one line too. */
@@ -1053,8 +1069,14 @@ export default function MessageBubble({
               )}
               {(m.council || m.provider) && (
                 <span>
-                  via {m.council ? `Council ${m.council}` : ""}
-                  {m.council && m.provider ? " · " : ""}
+                  {/* 2026-08-27 · P5 — defensive guard: only ever
+                      interpolate m.council when it's a real label
+                      (string), never a stray boolean (legacy data
+                      could still have `true`) — the literal fix is
+                      upstream (routers/chat.py) but this stops a
+                      "Council true" leak even from old cached state. */}
+                  via {(m.council && typeof m.council === "string") ? `Council ${m.council}` : ""}
+                  {m.council && typeof m.council === "string" && m.provider ? " · " : ""}
                   {m.provider ? brandProvider(m.provider) : ""}
                 </span>
               )}

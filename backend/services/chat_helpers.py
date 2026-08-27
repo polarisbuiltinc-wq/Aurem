@@ -529,7 +529,7 @@ def _build_failed_followup(
                     + ", ".join(f"`{f}`" for f in files[:6]) + "\n")
     bits.append(
         "Want me to retry with a smaller scope? Or paste the exact "
-        "error / steps to reproduce and I'll diagnose it in Mode D first."
+        "error / steps to reproduce and I'll dig into it first."
     )
     return "".join(bits)
 

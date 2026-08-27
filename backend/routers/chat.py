@@ -643,20 +643,28 @@ async def chat_send(
 
     # 2026-08-27 · Output Guard (Phase 1 net, "Show the Outcome, Never
     # the Engine"). Runs AFTER the mismatch/retry/fallback resolution
-    # above (nets whatever text is actually about to be returned),
-    # ONLY when the plain-English contract is active. Never touches
-    # ship/confirm content.
+    # above (nets whatever text is actually about to be returned).
+    # Never touches ship/confirm content.
+    #
+    # P5 (Journey/Intent-Grounding build round) — leak-STRIPPING now
+    # runs for EVERY user, not just the plain_english_contract_active
+    # allowlist (founder call: these are real bugs — raw booleans,
+    # internal jargon like "Iter 286"/"Mode D" — not part of the
+    # explain-mode verbosity/tone enhancement). Length-CAPPING (the
+    # re-summarize-if-too-long net) stays flag-gated — that's a real
+    # behavior/tone change, not a leak fix.
     _leak_stripped = False
     _length_capped = False
     _output_guard_ref_id = None
-    if _plain_english_active and content:
+    if content and "aurem-handoff" not in content:
         try:
-            from services.output_guard import apply_output_guard
-            _guard_result = await apply_output_guard(content)
-            content = _guard_result["text"]
-            _leak_stripped = _guard_result["leak_stripped"]
-            _length_capped = _guard_result["length_capped"]
-            _output_guard_ref_id = _guard_result["ref_id"]
+            from services.output_guard import strip_machinery_leak, enforce_length_cap
+            from core.errors import new_ref_id
+            content, _leak_stripped = strip_machinery_leak(content)
+            if _plain_english_active:
+                content, _length_capped = await enforce_length_cap(content)
+            if _leak_stripped or _length_capped:
+                _output_guard_ref_id = new_ref_id()
         except Exception as _og_exc:
             logger.debug("output_guard skipped (chat/send): %r", _og_exc)
 
@@ -1843,6 +1851,36 @@ async def chat_stream(
                         e_result = {"report": f"Couldn't audit: {_ee}",
                                     "critical_count": 0, "high_count": 0,
                                     "fixable_tasks": []}
+                    # 2026-08-27 · P1/P2 (Journey/Intent-Grounding build
+                    # round) — persist this scan's concrete findings onto
+                    # the chat session so a later bare "yes"/"ship it"
+                    # reply can be resolved to THIS proposal's exact scope
+                    # instead of being judged ambiguous on its own words,
+                    # and so the plan the loop generates from it can be
+                    # validated against real file+line citations instead
+                    # of a re-derivation from prose. See
+                    # services/intent_grounding.py + plan_scan_contract.py.
+                    if db_h is not None and body.session_id:
+                        _findings = [
+                            {"filepath": i.get("filepath"), "line": i.get("line"),
+                             "description": i.get("description") or i.get("message", ""),
+                             "severity": i.get("severity", "low"),
+                             "fix": i.get("fix", "")}
+                            for i in (e_result.get("all_issues") or [])
+                            if i.get("filepath")
+                        ]
+                        if _findings:
+                            try:
+                                await db_h.chat_sessions.update_one(
+                                    {"session_id": body.session_id, "user_id": user_id},
+                                    {"$set": {"pending_scan": {
+                                        "findings":   _findings,
+                                        "project_id": body.project_id,
+                                        "created_at": time.time(),
+                                    }}},
+                                )
+                            except Exception:
+                                pass
                     result = {
                         "ok": True,
                         "content":  e_result.get("report", ""),
@@ -1885,7 +1923,13 @@ async def chat_stream(
                             "fallback_chain": ["mode_b_council"],
                             "iterations": 1, "tool_calls_run": 0,
                             "tool_invocations": [], "mode": "B",
-                            "council": True,
+                            # 2026-08-27 · P5 — was `True` (a bare
+                            # boolean), which MessageBubble.jsx's scope
+                            # badge interpolates directly into visible
+                            # copy (`Council ${m.council}`), rendering
+                            # the literal text "via Council true". A
+                            # real label fixes it at the source.
+                            "council": "B",
                         }
                         await q.put({"type": "result", "result": result})
                         return
@@ -3009,17 +3053,20 @@ async def chat_stream(
         # mismatch/fallback resolution above (so it nets whatever text
         # is actually about to stream to the user), BEFORE the token-
         # streaming loop below. Never touches ship/confirm content.
+        # P5 — leak-stripping runs for EVERY user; length-capping stays
+        # flag-gated (see chat/send's identical comment above).
         _leak_stripped = False
         _length_capped = False
         _output_guard_ref_id = None
-        if _plain_english_active and content:
+        if content and "aurem-handoff" not in content:
             try:
-                from services.output_guard import apply_output_guard
-                _guard_result = await apply_output_guard(content)
-                content = _guard_result["text"]
-                _leak_stripped = _guard_result["leak_stripped"]
-                _length_capped = _guard_result["length_capped"]
-                _output_guard_ref_id = _guard_result["ref_id"]
+                from services.output_guard import strip_machinery_leak, enforce_length_cap
+                from core.errors import new_ref_id
+                content, _leak_stripped = strip_machinery_leak(content)
+                if _plain_english_active:
+                    content, _length_capped = await enforce_length_cap(content)
+                if _leak_stripped or _length_capped:
+                    _output_guard_ref_id = new_ref_id()
             except Exception as _og_exc:
                 logger.debug("output_guard skipped (chat/stream): %r", _og_exc)
 
@@ -3321,7 +3368,12 @@ async def chat_stream(
             "provider": provider,
             "session_id": body.session_id,
             "tokens_remaining": tokens_remaining,
-            "council": bool(result.get("council")),
+            # 2026-08-27 · P5 — was `bool(result.get("council"))`,
+            # which coerced a real council label (e.g. "B") into a
+            # bare boolean the frontend then rendered verbatim as
+            # "via Council true". Pass the real value (letter/label
+            # or None) through unchanged.
+            "council": result.get("council"),
             "low_confidence": _low_confidence,
             "ship_suppressed": _ship_suppressed,
             # Iter 212m-171 — Scope Badge echo (see /chat/send).

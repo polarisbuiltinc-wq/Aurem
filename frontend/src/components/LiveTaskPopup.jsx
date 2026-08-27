@@ -46,6 +46,10 @@ const C = {
 export default function LiveTaskPopup({ taskId, onClose, onDone }) {
   const [task, setTask] = useState(null);
   const [err,  setErr]  = useState("");
+  // 2026-08-27 · P5 — default view = active step + total count;
+  // full chip sequence only on hover/click (progressive disclosure)
+  // instead of always showing every distinct phase at once.
+  const [chipsExpanded, setChipsExpanded] = useState(false);
   const dismissTimerRef = useRef(null);
   const pollTimerRef    = useRef(null);
   // Iter 388g — fire `onDone(task)` ONCE when the poll first sees a
@@ -125,24 +129,36 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
   const tokens  = task?.tokens_used;
   const elapsed = task?.time_taken_seconds;
 
-  // Iter 168 — derive phase chip history from steps[].
-  // Each step persists a `kind` ∈ PHASES when the worker tagged it
-  // (or our heuristic classifier in _log inferred one). We collapse
-  // consecutive same-kind steps and cap the chip strip at 5 entries.
-  const phaseHistory = [];
+  // 2026-08-27 · P5 (Journey/Intent-Grounding build round) — was:
+  // "collapse consecutive same-kind steps" — a small task that
+  // bounced Reading→Thinking→Reading→Writing→Security-check rendered
+  // 5 separate chips (2 of them "Reading repo") because the OLDER
+  // "Reading repo" wasn't consecutive with the newer one. Now EVERY
+  // occurrence of the same kind aggregates into ONE chip with a ×N
+  // counter, regardless of position.
+  const _kindCounts = new Map();
+  const _kindOrder = [];
   for (const s of steps) {
     const k = s.kind;
     if (!k || !PHASES[k]) continue;
-    if (phaseHistory[phaseHistory.length - 1]?.kind === k) continue;
-    phaseHistory.push({ kind: k, step: s.step, ts: s.ts });
+    if (!_kindCounts.has(k)) {
+      _kindCounts.set(k, { count: 0, step: s.step, ts: s.ts });
+      _kindOrder.push(k);
+    }
+    const entry = _kindCounts.get(k);
+    entry.count += 1;
+    entry.step = s.step;
+    entry.ts = s.ts;
   }
-  if (status === "done" && phaseHistory[phaseHistory.length - 1]?.kind !== "done") {
-    phaseHistory.push({ kind: "done", step: "Done", ts: Date.now() / 1000 });
+  if (status === "done" && !_kindCounts.has("done")) {
+    _kindCounts.set("done", { count: 1, step: "Done", ts: Date.now() / 1000 });
+    _kindOrder.push("done");
   }
-  const trimmedHistory = phaseHistory.slice(-5);
+  const phaseHistory = _kindOrder.map((k) => ({ kind: k, ...(_kindCounts.get(k)) }));
+  const trimmedHistory = phaseHistory.slice(-4); // cap default chips at 4
   const activePhase = status === "done" || status === "failed"
     ? null
-    : trimmedHistory[trimmedHistory.length - 1] || null;
+    : phaseHistory[phaseHistory.length - 1] || null;
 
   // Extract the file currently being written (for the highlight line).
   let writingFile = null;
@@ -242,20 +258,29 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
         >✕</button>
       </div>
 
-      {/* Iter 168 — Phase chip strip */}
+      {/* Iter 168 — Phase chip strip. 2026-08-27 · P5 — collapsed by
+          default to the active step + a total-count pill; hover or
+          click reveals the full (deduped, ×N-counted) sequence. */}
       {trimmedHistory.length > 0 && (
         <div
           data-testid="ltp-phase-strip"
+          onMouseEnter={() => setChipsExpanded(true)}
+          onMouseLeave={() => setChipsExpanded(false)}
+          onClick={() => setChipsExpanded((v) => !v)}
+          title={chipsExpanded ? "" : "Click or hover to see all steps"}
           style={{
             padding: "10px 12px",
             borderBottom: "1px solid rgba(255,255,255,0.06)",
             display: "flex", flexWrap: "wrap", gap: 4,
+            cursor: trimmedHistory.length > 1 ? "pointer" : "default",
           }}
         >
-          {trimmedHistory.map((p, i) => {
+          {(chipsExpanded ? trimmedHistory
+                          : (activePhase ? [activePhase] : trimmedHistory.slice(-1))
+           ).map((p, i, arr) => {
             const cfg = PHASES[p.kind] || {};
             const isActive = activePhase?.kind === p.kind &&
-                             i === trimmedHistory.length - 1;
+                             i === arr.length - 1;
             return (
               <div
                 key={`${p.kind}-${i}`}
@@ -275,6 +300,7 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
                 <span>{cfg.icon}</span>
                 <span style={{ fontWeight: isActive ? 600 : 400 }}>
                   {cfg.label}
+                  {p.count > 1 ? ` ×${p.count}` : ""}
                   {isActive && writingFile && p.kind === "phase_write"
                     ? `: ${writingFile}`
                     : ""}
@@ -293,6 +319,18 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
               </div>
             );
           })}
+          {!chipsExpanded && trimmedHistory.length > 1 && (
+            <div
+              data-testid="ltp-phase-strip-more"
+              className="chip chip-sm"
+              style={{
+                background: "transparent", color: "#475569",
+                border: "1px dashed rgba(255,255,255,0.12)",
+              }}
+            >
+              +{trimmedHistory.length - 1} more
+            </div>
+          )}
         </div>
       )}
 
@@ -386,7 +424,7 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
       {/* §3 Vanguard */}
       <section data-testid="ltp-vanguard" style={sec()}>
         {findings.length === 0 ? (
-          <Row icon="🛡" text="Vanguard — clean (25 patterns checked)" color={C.green}/>
+          <Row icon="🛡" text="Vanguard — no security issues found" color={C.green}/>
         ) : (
           <>
             <Row icon="🛡" text={`Vanguard blocked ${findings.length} issue${findings.length !== 1 ? "s" : ""}:`} color={C.red}/>

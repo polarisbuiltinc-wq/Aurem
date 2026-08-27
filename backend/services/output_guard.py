@@ -24,11 +24,24 @@ LENGTH_CAP_TOKENS = 500
 # Deliberately narrow, named tokens — not a broad heuristic that could
 # eat legitimate prose. Each pattern targets one specific machinery
 # leak class the founder identified.
+#
+# 2026-08-27 · P5 split this into TWO tiers (Journey/Intent-Grounding
+# build round). The ORIGINAL list below (adviser-council jargon, DB
+# collection names, framework names, bare file paths) is INTENTIONALLY
+# still explain-mode-only (`plain_english_contract_active`) — for a
+# developer-facing reply, "backend/services/orchestrator.py" is
+# exactly the useful information, not a leak. Redacting it universally
+# was tried mid-round and immediately regressed real chat replies
+# (e.g. "let me fetch the full `a project file`" instead of a real
+# path) — caught via live E2E testing, not a unit test, which is why
+# it's called out here explicitly. `_UNIVERSAL_LEAK_PATTERNS` below is
+# the genuinely-always-a-bug tier (raw iteration counters, mode
+# letters, raw tracebacks, raw booleans-as-status) that applies to
+# EVERY user regardless of the explain-mode flag.
 _MACHINERY_LEAK_PATTERNS = [
     # internal review-process jargon
     (re.compile(r"\b\d+[- ]adviser council\b", re.IGNORECASE), "internal review process"),
     (re.compile(r"\bchairman\b", re.IGNORECASE), "lead reviewer"),
-    (re.compile(r"\bvia\s+[\w.\-]+\s+(?:true|false)\b", re.IGNORECASE), ""),
     (re.compile(r"\btool[_ ]calls?\b|\bfunction[_ ]call\b", re.IGNORECASE), ""),
     # known DB collection names
     (re.compile(r"\b(?:ora_council_logs|loop_sessions|loop_locks|"
@@ -44,11 +57,39 @@ _MACHINERY_LEAK_PATTERNS = [
                 r"|\b[\w\-]+\.(?:py|jsx?|tsx?)\b(?::\d+)?"), "a project file"),
 ]
 
+# 2026-08-27 · P5 — genuinely-always-a-bug leaks, confirmed from a live
+# transcript, that apply to EVERY user (not gated behind
+# plain_english_contract_active). The aurem-handoff fence itself is
+# deliberately NOT included here — this guard never even runs on
+# ship/mutation content at all (see the `"aurem-handoff" not in
+# content` gate in routers/chat.py); that specific leak is fixed at
+# DISPLAY time instead (MessageBubble.jsx's stripHandoffFenceForDisplay),
+# since the raw fence must survive server-side for the Ship button.
+_UNIVERSAL_LEAK_PATTERNS = [
+    (re.compile(r"\bvia\s+[\w.\-]+\s+(?:true|false)\b", re.IGNORECASE), ""),
+    (re.compile(r"\bIter\s*\d+[a-z]?\b", re.IGNORECASE), "internally"),
+    (re.compile(r"\bMode\s+[A-Z]\b(?!\w)"), "that flow"),
+    (re.compile(r"\bverify-agent\b", re.IGNORECASE), "the review step"),
+    (re.compile(r"\be2b\b", re.IGNORECASE), "the sandbox"),
+    (re.compile(r"\bTraceback \(most recent call last\)[\s\S]*", re.IGNORECASE), ""),
+    (re.compile(r"\b[A-Z][a-zA-Z0-9]*(?:Error|Exception)\b:\s*.*"), "an internal error"),
+]
 
-def strip_machinery_leak(text: str) -> tuple[str, bool]:
-    """Returns (clean_text, was_stripped)."""
+
+def strip_machinery_leak(text: str, *, universal_only: bool = False) -> tuple[str, bool]:
+    """Returns (clean_text, was_stripped).
+
+    `universal_only=True` (routers/chat.py's default, all-users path)
+    applies ONLY `_UNIVERSAL_LEAK_PATTERNS` — the always-a-bug tier.
+    `universal_only=False` (explain-mode path) applies BOTH tiers —
+    the original "hide internal machinery from a non-technical
+    explain-mode reply" behavior, unchanged.
+    """
     original = text
-    for pattern, replacement in _MACHINERY_LEAK_PATTERNS:
+    patterns = _UNIVERSAL_LEAK_PATTERNS if universal_only else (
+        _MACHINERY_LEAK_PATTERNS + _UNIVERSAL_LEAK_PATTERNS
+    )
+    for pattern, replacement in patterns:
         text = pattern.sub(replacement, text)
     text = re.sub(r"[ \t]{2,}", " ", text)
     return text, (text != original)

@@ -339,12 +339,22 @@ def test_regression_iter288_scope_drift_emits_requires_user_action():
 def test_regression_iter288_empty_output_writes_diag_row():
     """When Execute exits with 0 usable files, a diagnostic row must
     land in `loop_run_log` with kind='execute_empty_output' + the
-    per-file outcomes. This is what loop_1f8 needed and lacked."""
+    per-file outcomes. This is what loop_1f8 needed and lacked.
+
+    2026-08-27 · P3 (Journey/Intent-Grounding build round) — the exact
+    failure MESSAGE text changed ("LLM produced no usable file
+    content. Try refining the plan." → a plain-English reason + real
+    options, per founder-reported opaque-failure feedback). This test
+    now anchors on the new message's marker instead of the retired
+    string; the diagnostic-row assertions are unchanged."""
     src = open("/app/backend/services/loop_engine.py").read()
     # rfind → the LAST occurrence (the actual _fail call, not a comment
     # referencing it above).
-    idx = src.rfind('"LLM produced no usable file content')
-    assert idx > -1
+    idx = src.rfind('"Couldn\'t generate usable content for')
+    assert idx > -1, (
+        "expected the P3 plain-English zero-residue failure message "
+        "in the empty-output _fail() call"
+    )
     head = src[max(0, idx - 4000): idx]
     assert "execute_empty_output" in head, (
         "empty-output path must persist an execute_empty_output row"
@@ -354,4 +364,13 @@ def test_regression_iter288_empty_output_writes_diag_row():
         "the diag row must include per-file outcomes so the "
         "raw truncation vs parse-failure question is answerable "
         "next time"
+    )
+    tail = src[idx: idx + 2000]
+    assert "zero_residue" in tail, (
+        "the new failure message must carry the zero_residue guarantee "
+        "as structured data for the frontend"
+    )
+    assert "options" in tail, (
+        "the new failure message must offer real options "
+        "(retry_step / show_details / replan), not a dead-end"
     )

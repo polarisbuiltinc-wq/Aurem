@@ -18,7 +18,22 @@ import { ChevronRight, ChevronDown } from "lucide-react";
 export function isLoopProgressContent(text) {
   if (!text) return false;
   return /\*\*Step \d \/ 5 —/.test(text)
-      || /^Plan ready — awaiting approval/m.test(text);
+      || /Plan ready — awaiting.*approval/i.test(text);
+}
+
+// 2026-08-27 · P4 (Journey/Intent-Grounding build round) — a plan
+// awaiting the user's approval is NOT a terminal/historical state; it
+// must stay expanded until the user acts. Previously `expanded =
+// streaming || open` collapsed the SECOND the SSE stream paused for
+// approval (which happens the instant the plan is ready), hiding the
+// plan behind a one-line "Finished" summary right as the approval
+// control needed it visible. Deliberately checked AFTER the terminal
+// markers below (Aborted/Failed/Shipped) — a real terminal event that
+// happened after the plan supersedes "awaiting approval".
+function isAwaitingApproval(text) {
+  return /Plan ready — awaiting.*approval/i.test(text || "")
+      && !/\*\*(Aborted|Failed)\*\*/.test(text || "")
+      && !/ship complete|shipped/i.test(text || "");
 }
 
 function summarize(text, streaming) {
@@ -29,6 +44,8 @@ function summarize(text, streaming) {
     return { stepCount, status: "Failed", color: "var(--danger, #ef4444)" };
   if (/ship complete|shipped/i.test(text))
     return { stepCount, status: "Shipped", color: "var(--ok, #22c55e)" };
+  if (isAwaitingApproval(text))
+    return { stepCount, status: "Awaiting approval", color: "var(--accent-2, #e8a020)" };
   if (streaming)
     return { stepCount, status: "Running…", color: "var(--accent-2, #e8a020)" };
   return { stepCount, status: "Finished", color: "var(--text-dim)" };
@@ -36,7 +53,11 @@ function summarize(text, streaming) {
 
 export default function LoopProgressBubble({ text, streaming, children }) {
   const [open, setOpen] = useState(false);
-  const expanded = streaming || open;
+  const awaitingApproval = isAwaitingApproval(text || "");
+  // OR'd in deliberately — even if the user clicks to "collapse" while
+  // a plan is awaiting their decision, it stays pinned visible; there
+  // is no code path where an approval control's subject is hidden.
+  const expanded = streaming || open || awaitingApproval;
   const { stepCount, status, color } = summarize(text || "", streaming);
   // Feb 2026 — Founder repro: expanding a completed loop's collapsed
   // "Loop run · N step events [Aborted/Finished]" bubble silently

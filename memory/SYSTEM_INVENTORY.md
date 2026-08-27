@@ -865,3 +865,15 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `AUREM_DRILL_REPO_OWNER` — auto-detected in backend/tests/test_iter2026_08_27_ship_e2e_real_push.py (verify) (default: unset) [Iter 0, 2026-08-27T05:09:30.760074Z] <!-- inv:envvar:AUREM_DRILL_REPO_OWNER -->
 - `AUREM_DRILL_REPO_NAME` — auto-detected in backend/tests/test_iter2026_08_27_ship_e2e_real_push.py (verify) (default: unset) [Iter 0, 2026-08-27T05:09:30.760093Z] <!-- inv:envvar:AUREM_DRILL_REPO_NAME -->
 - `AUREM_DRILL_USER_ID` — auto-detected in backend/tests/test_iter2026_08_27_ship_e2e_real_push.py (verify) (default: unset) [Iter 0, 2026-08-27T05:09:30.760110Z] <!-- inv:envvar:AUREM_DRILL_USER_ID -->
+- `services/journey_watch.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-27T18:02:48.110010Z] <!-- inv:service:services/journey_watch.py -->
+- `JOURNEY_WATCH_INTERVAL_S` — auto-detected in backend/services/journey_watch.py (verify) (default: unset) [Iter 0, 2026-08-27T18:02:48.110050Z] <!-- inv:envvar:JOURNEY_WATCH_INTERVAL_S -->
+- `JOURNEY_WATCH_LOOKBACK_HOURS` — auto-detected in backend/services/journey_watch.py (verify) (default: unset) [Iter 0, 2026-08-27T18:02:48.110067Z] <!-- inv:envvar:JOURNEY_WATCH_LOOKBACK_HOURS -->
+- `JW_SLO_CONNECT_CLICK_MIN` — auto-detected in backend/services/journey_watch.py (verify) (default: unset) [Iter 0, 2026-08-27T18:02:48.110083Z] <!-- inv:envvar:JW_SLO_CONNECT_CLICK_MIN -->
+- `JW_SLO_AUTH_STARTED_MIN` — auto-detected in backend/services/journey_watch.py (verify) (default: unset) [Iter 0, 2026-08-27T18:02:48.110098Z] <!-- inv:envvar:JW_SLO_AUTH_STARTED_MIN -->
+- `JW_SLO_APP_GRANTED_MIN` — auto-detected in backend/services/journey_watch.py (verify) (default: unset) [Iter 0, 2026-08-27T18:02:48.110113Z] <!-- inv:envvar:JW_SLO_APP_GRANTED_MIN -->
+- `JW_SLO_PROJECT_CONNECTED_MIN` — auto-detected in backend/services/journey_watch.py (verify) (default: unset) [Iter 0, 2026-08-27T18:02:48.110129Z] <!-- inv:envvar:JW_SLO_PROJECT_CONNECTED_MIN -->
+- `JW_SLO_GRAPH_BUILT_MIN` — auto-detected in backend/services/journey_watch.py (verify) (default: unset) [Iter 0, 2026-08-27T18:02:48.110147Z] <!-- inv:envvar:JW_SLO_GRAPH_BUILT_MIN -->
+- `ENABLE_FUNNEL_DIGEST_CRON` — auto-detected in backend/services/journey_watch.py (verify) (default: unset) [Iter 0, 2026-08-27T18:02:48.110165Z] <!-- inv:envvar:ENABLE_FUNNEL_DIGEST_CRON -->
+- `ADMIN_EMAIL` — auto-detected in backend/services/journey_watch.py (verify) (default: unset) [Iter 0, 2026-08-27T18:02:48.110180Z] <!-- inv:envvar:ADMIN_EMAIL -->
+- `FUNNEL_DIGEST_WEEKDAY_UTC` — auto-detected in backend/services/journey_watch.py (verify) (default: unset) [Iter 0, 2026-08-27T18:02:48.110198Z] <!-- inv:envvar:FUNNEL_DIGEST_WEEKDAY_UTC -->
+- `FUNNEL_DIGEST_HOUR_UTC` — auto-detected in backend/services/journey_watch.py (verify) (default: unset) [Iter 0, 2026-08-27T18:02:48.110212Z] <!-- inv:envvar:FUNNEL_DIGEST_HOUR_UTC -->

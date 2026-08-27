@@ -2430,7 +2430,7 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
             sk_ctx = build_skill_context(task)
             if sk_ctx:
                 extra_context_block += f"\n\n{sk_ctx}"
-                await _log(task_id, "🛡️ injected Vanguard security skills")
+                await _log(task_id, "🛡️ Applying security best practices for this task")
         except Exception:
             pass
         # Multi-file task detection — tells ORA to ship everything in
@@ -2755,7 +2755,8 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
                        "success")
 
         await _emit(task_id, "Running linter…", kind="phase_verify", pct=75)
-        await _log(task_id, f"✅ {len(edits)} files passed truncation check", "success")
+        await _log(task_id, f"✅ {len(edits)} file{'' if len(edits) == 1 else 's'} "
+                             f"generated cleanly", "success")
 
         # ── Multi-file contract — verify every file the user promised
         # actually arrived. If something is missing we ask the LLM to
@@ -3279,12 +3280,19 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
         _allow_tests = bool(_task_row.get("allow_test_file_change"))
         if _test_touched and not _allow_tests:
             _paths = list(_test_touched)
+            # 2026-08-27 · P5 (Journey/Intent-Grounding build round) —
+            # this used to read like an internal changelog entry
+            # ("Loop-pipeline test-file lock is enforced on this path
+            # (Iter 286)."). The LOCK BEHAVIOR is correct and unchanged
+            # — only the wording changes: one plain-English line, with
+            # the exact file paths still available in `blocked_paths`
+            # for the frontend to show on expand.
             await _log(task_id,
-                       "⛔ ship_code blocked — task tried to modify "
-                       f"test file(s) {_paths}. Loop-pipeline "
-                       "test-file lock is enforced on this path "
-                       "(Iter 286). Route through Loop mode with "
-                       "human approval instead.",
+                       "⛔ Can't apply this change — "
+                       f"{'that file is' if len(_paths) == 1 else 'those files are'} "
+                       "locked (test file"
+                       f"{'' if len(_paths) == 1 else 's'}). Approve "
+                       "it in Loop mode and I'll make the change.",
                        "error")
             await _db_plan.cto_tasks.update_one(
                 {"task_id": task_id},
@@ -3667,7 +3675,7 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
             sk_ctx = build_skill_context(task)
             if sk_ctx:
                 extra_context_block += f"\n\n{sk_ctx}"
-                await _log(task_id, "🛡️ injected Vanguard security skills")
+                await _log(task_id, "🛡️ Applying security best practices for this task")
         except Exception:
             pass
         user_msg = (

@@ -1,0 +1,33 @@
+{
+  "summary": "Phase A (P1 intent grounding + P2 plan-scan consistency contract) verified. All 28 pre-existing unit tests in test_iter2026_08_27_intent_grounding_plan_scan.py pass. Added 5 live API tests hitting the preview /api/aurem-dev/loop/start endpoint — all pass. Regression suites for ambiguity gate + Mode D unaffected (19/19 pass in stage1_2_slo_ambiguity, iter162_mode_d_tightening, iter162_all_modes_audit). Total: 33 tests passing for the phase A build round.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter2026_08_27_intent_grounding_plan_scan.py",
+    "/app/backend/tests/live/test_phase_a_intent_grounding_live.py",
+    "/app/test_reports/pytest/phase_a_2026_08_27.xml"
+  ],
+  "verified_behaviors": [
+    "P1: POST /loop/start with user_message='yes' and NO pending_scan on session returns {needs_clarification:true, reason:'no_pending_proposal', message:\"I don't have a pending proposal to confirm yet...\"} — NOT the old 'too broad' CLARIFICATION_MESSAGE. VERIFIED live.",
+    "Ambiguity gate unchanged: 'fix it' and 'improve the app' still return the original 'That's a bit broad...' clarification (needs_clarification=true, reason != no_pending_proposal). VERIFIED live for both messages.",
+    "P1 grounding flow end-to-end: seeded pending_scan on chat_sessions doc → bare 'yes' → grounding resolved (no clarification, no 'no_pending_proposal'), pending_scan CONSUMED (cleared from doc after use). Downstream 403 (GitHub App) hit AFTER grounding path — proves gate was skipped. VERIFIED live.",
+    "P2 wiring: services/loop_engine.py::_do_plan (line 676-702) attaches plan.scan_coverage from check_plan_scan_consistency() when self.source_findings is set, and blocks via self._fail('plan', ...) when mismatched_files non-empty BEFORE self.context['plan']=plan. Verified by unit tests test_plan_matching_scan_files_has_no_mismatch, test_plan_targeting_wrong_files_is_blocked, test_partial_plan_shows_visible_deferral_not_silent (all pass).",
+    "Frontend: ChatPanel.jsx::formatPlanMarkdown() (line 3386-3430) renders '_Fixing X of Y findings from the scan · Z deferred_' header when coverage.total_findings>0, and appends '**Not in this plan** (N):' section listing each deferred finding. Code-review confirmed.",
+    "Regression: normal concrete task ('fix the login bug in Signup.jsx') passed ambiguity gate & grounding cleanly — hit downstream 409 (loop_already_running), NOT any P1 clarification. VERIFIED live.",
+    "Regression: Mode D 'pending_fix_task' + is_fix_confirmation path in routers/chat.py untouched by this build — separate list _CONFIRMATORY in intent_grounding.py deliberately excludes 'fix it'/'apply the fix' per code comment (line 31-35).",
+    "Mode E pending_scan write (routers/chat.py ~1855-1875) persists {findings, project_id, created_at} to chat_sessions when audit produces findings with filepath. Code-review confirmed."
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "intent_grounding.resolve_confirmatory_scope() — when session_id is missing but message IS confirmatory, returns {grounded:True, no_pending:True}. Correct behavior but consider logging this at info level for observability (current code has no log line here).",
+    "plan_scan_contract._norm() strips leading './' but not 'src/../' or other path normalizations. If planner ever emits non-canonical paths, mismatch check could be over-eager. Low risk since planner is prompted with the exact filepaths from findings; noting for future robustness.",
+    "loop.py line 187-206: source_findings and effective_message initialized OUTSIDE the try/except guard block. If resolve_confirmatory_scope raises (e.g. transient DB error), start_loop 500s. Consider wrapping in try/except with warn log + fallback to raw body.user_message. Not a bug today (no observed exceptions in tests) but a defensive gap."
+  ],
+  "updated_files": ["/app/backend/tests/live/test_phase_a_intent_grounding_live.py"],
+  "success_rate": {"backend": "100% (33/33)", "frontend": "n/a — not in scope this phase"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview) — user record in dev_users collection, user_id=test_admin_001",
+  "seed_data_creation": "Live test seeds a synthetic pending_scan doc onto chat_sessions{session_id=test_phase_a_*, user_id=test_admin_001} then verifies it is cleared after grounding. Each run uses a fresh uuid session_id — no residue.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase A (P1+P2) is verified backend+wiring complete. Next phases per plan: B=P3 zero-residue failure + P4 loop timeline UI (will need frontend Playwright), C=P5 compactness/leak cleanup, D=P6 e2e proof, E=P7 funnel card. Live test file at /app/backend/tests/live/test_phase_a_intent_grounding_live.py can be re-run as regression. Login endpoint is /api/aurem-dev/auth/login (NOT /api/auth/login). Users are in dev_users collection (NOT users)."
+}
