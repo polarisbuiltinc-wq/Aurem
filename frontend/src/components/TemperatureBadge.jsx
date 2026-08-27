@@ -13,16 +13,11 @@ export default function TemperatureBadge({ temperature, mode }) {
     <span
       data-testid="temperature-badge"
       title={`mode: ${mode || "?"} · temperature ${temperature}`}
+      className="chip chip-sm"
       style={{
-        display: "inline-flex",
-        alignItems: "center",
         gap: 4,
-        fontFamily: "'JetBrains Mono', monospace",
-        fontSize: 10,
         color,
-        padding: "2px 6px",
         border: `1px solid ${cold ? "rgba(96,165,250,0.3)" : "rgba(255,197,96,0.35)"}`,
-        borderRadius: 999,
         letterSpacing: "0.05em",
         background: cold ? "rgba(96,165,250,0.08)" : "rgba(255,197,96,0.08)",
       }}

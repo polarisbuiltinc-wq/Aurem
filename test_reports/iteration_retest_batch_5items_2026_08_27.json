@@ -1,0 +1,28 @@
+{
+  "summary": "Retest of 5-item preview batch (restart-loop honesty + chip-token adoption + verify-trio grep + free-gate flag legacy + vitest regression + public_routes flake sanity). All 6 tested items PASS. Item 1: restart_loop_honesty.spec.js PASSED 1/1 (same loop_id reused across restart click; plan re-presents; engine advanced to 'executing' — original=loop_da80e63fb3514f, restart_used=loop_da80e63fb3514f, final_state=executing). Item 2: All 10 required chip components use shared .chip/.chip-sm/.chip-md classes (WorkCard, ShipLintBadge, LiveStepFloatingCard, LiveTaskPopup, TemperatureBadge, IntentTierIndicator, ModeLoopPill, LoopStepBar, ShipPendingCard, LoopStatusChip). CharCounter uses var(--chip-font-md) inline (accepted exception). ToolButton and LoopActionCards intentionally excluded (icon/CTA family) — confirmed no chip class present. Item 3: grep for 'verification_results|verify_result' in frontend/src/components returns 0 matches — Chip.jsx ChipRow/GroupChip have no real production caller (fixture-only). Item 4: chip_row_width.spec.js PASSED 3/3 viewports (mobile-360 rowWidth=336 ≤ 360; tablet-768 rowWidth=720 ≤ 768; desktop-1440 rowWidth=960 ≤ 1440; no page overflow). Item 5: Login as free-gate-test-0822@aurem.dev succeeded, /auth/me returned workcard_chip_v2_enabled:false, user_id=87e776a93bc747bc9ec01f4910dc6988, tier=free, is_admin=false. Dashboard loaded normally with standard 'Connect your GitHub repo' onboarding wizard, no WorkCard/chip-v2 elements, no errors, visually intact. DB feature_flags collection verified: all 4 flags (workcard_chip_v2, workcard_first_scan, workcard_scan_strip, workcard_loop_receipts) have user_allowlist:['test_admin_001'] and rollout_pct:0 — free-gate user NOT in allowlist. Item 6: vitest 485/485 tests passing across 79 files (0 regressions). Item 7: public_routes.spec.js shows 2/5 failing ('/' and '/login' pixel-diffs) matching pre-existing flake baseline (not new/worse).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/frontend/tests/visual/restart_loop_honesty.spec.js",
+    "/app/frontend/tests/visual/chip_row_width.spec.js",
+    "/app/frontend/tests/visual/public_routes.spec.js"
+  ],
+  "action_items": [
+    "Main agent: revert LOOP_AWAITING_CONFIRM_MAX_S=15 from backend/.env and restart backend (as planned).",
+    "No functional bugs found; batch is safe to merge/proceed."
+  ],
+  "critical_code_review_comments": [
+    "handleRestartLoop() finally{setBusy(false)} fix in ChatPanel.jsx is proven end-to-end in a real browser (Item 1). Restart correctly revives the same loop_id from EXPIRED state (backend loop_engine.py confirm() revival branch working).",
+    "Chip token adoption is uniform across the 10 targeted components; no ad-hoc inline font-size/padding drift observed.",
+    "verify-trio narration is properly kept as backend _narrate() text; ChipRow/GroupChip remain fixture-only which is acceptable but consider deleting or moving to /dev/visual if no production caller emerges within one release cycle.",
+    "public_routes.spec.js flake on '/' and '/login' from cookie-banner animation and dynamic founder-spot counters — recommend adding data-driven stubs or route-freezing (mock counter API + hide cookie banner via ?ci=1 query) to stabilize in a follow-up."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100% (excluding pre-existing public_routes flake, which is confirmed baseline)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (admin), free-gate-test-0822@aurem.dev / FreeGateTest2026! (non-allowlisted free tier)",
+  "seed_data_creation": "None. Restart-loop test created a live loop against p_68dfb110b1 and self-cancelled it via /api/aurem-dev/loop/{id}/cancel at end of spec (built-in cleanup).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "backend/.env currently contains LOOP_AWAITING_CONFIRM_MAX_S=15 (intentional, added by prior testing_agent run in same session to exercise the awaiting_confirmation TTL sweep for restart-loop honesty). Main agent will revert this line and restart backend after receiving this report. Playwright browsers were downloaded to /pw-browsers/ (chromium-1234, chromium_headless_shell-1234) during this run since they were missing — they now persist.",
+  "rca of the issue": "N/A — no bugs found; this run was a verification retest of previously-shipped fixes."
+}

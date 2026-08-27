@@ -87,12 +87,11 @@ export default function IntentTierIndicator({ liveText, lastTier }) {
       data-tier={activeTier}
       data-pending={tier ? undefined : "true"}
       title={`Intent: ${theme.label}${confLabel} (read-only — Gateway picks the path)`}
+      className="chip chip-md"
       style={{
-        display: "inline-flex", alignItems: "center", gap: 6,
-        padding: "0 8px", height: 28, borderRadius: 999,
+        gap: 6,
         background: "rgba(255,255,255,0.03)",
         border: "1px solid rgba(255,255,255,0.06)",
-        fontSize: 9, fontFamily: "'JetBrains Mono', monospace",
         letterSpacing: "0.08em", color: theme.color,
         cursor: "default", userSelect: "none",
       }}

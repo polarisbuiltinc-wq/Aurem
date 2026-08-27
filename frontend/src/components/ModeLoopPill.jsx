@@ -157,11 +157,10 @@ export default function ModeLoopPill({ mode, onModeChange, execMode, onExecModeC
           onClick={openPill}
           data-testid="ds2-mode-collapsed"
           title="Change mode"
+          className="chip chip-md chip-interactive"
           style={{
-            display: "inline-flex", alignItems: "center", gap: 6,
-            borderRadius: 999, padding: "5px 12px",
-            fontSize: 11, fontWeight: 600, fontFamily: "'JetBrains Mono', monospace",
-            border: "none", cursor: "pointer",
+            gap: 6,
+            border: "none",
             background: "var(--accent, #FF6608)", color: "#0A0A0A",
           }}>
           <ActiveModeIcon size={11} strokeWidth={2.5} />

@@ -671,6 +671,26 @@ class LoopEngine:
 
     # ── Confirmation handler (router calls this) ─────────────────────
     async def confirm(self, approved: bool, feedback: str = "") -> None:
+        # 2026-08-27 · Restart-loop honesty fix — [Restart loop] on the
+        # D1 Expired card used to be UI-only (never resubmitted). This
+        # reuses the confirm gate itself: an EXPIRED session still has
+        # its plan/context (dumped to Mongo on every transition, see
+        # G5 above) and its lock already released — revive it back to
+        # AWAITING_CONFIRMATION so the SAME plan re-presents; the user
+        # must still press Confirm again for real (no auto-execute).
+        if self.state == LoopState.EXPIRED and approved:
+            from services.loop_safety import acquire_loop_lock
+            ok, existing = await acquire_loop_lock(
+                self.db, self.project_id or "_no_project", self.user_id, self.loop_id)
+            if not ok:
+                raise ValueError(
+                    f"project busy with loop {(existing or {}).get('loop_id')}")
+            self.state = LoopState.AWAITING_CONFIRMATION
+            await _persist_session(self.db, self._doc())
+            await self._emit(LoopState.AWAITING_CONFIRMATION, "plan",
+                             message="Plan restored — review and confirm to continue.",
+                             data={"plan": self.context.get("plan"), "revived": True})
+            return
         if self.state != LoopState.AWAITING_CONFIRMATION:
             raise ValueError(
                 f"cannot confirm in state {self.state.value}",
@@ -4311,6 +4331,10 @@ async def lookup_or_rehydrate(
     _PAUSED_STATES = {
         LoopState.AWAITING_CONFIRMATION.value,
         LoopState.PAUSED_FOR_USER.value,
+        # 2026-08-27 · Restart-loop fix — EXPIRED has no live pipeline
+        # anywhere (the sweep already terminated it) and retains its
+        # plan/context, so rehydrating it is exactly as safe as PAUSED.
+        LoopState.EXPIRED.value,
     }
     if persisted_state not in _PAUSED_STATES:
         logger.warning(

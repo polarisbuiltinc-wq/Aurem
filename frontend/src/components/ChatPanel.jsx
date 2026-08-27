@@ -4137,18 +4137,57 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     setLoopExpired(null);
     _clearExpiredMarker();
   }
-  function handleRestartLoop() {
+  // Build Prompt v4 · Phase C (D1) · Restart-loop honesty fix
+  // (2026-08-27) — this used to be UI-only (clear + refocus, never
+  // resubmitted anything — a real "confident wrong answer"). Now
+  // reuses the EXISTING /loop/{id}/confirm + SSE stream: the engine
+  // revives the SAME session (plan/context intact, see
+  // LoopEngine.confirm()'s EXPIRED branch in loop_engine.py) back to
+  // awaiting_confirmation, and the plan re-arrives through the exact
+  // same SSE handler that renders PlanApprovalCard for a brand-new
+  // loop (state==='awaiting_confirmation', phase==='plan', data.plan)
+  // — zero new frontend rendering path. The user still has to press
+  // Confirm again for real; this only re-presents the gate.
+  async function handleRestartLoop() {
+    const targetLoopId = loopId;
     if (loopAbortRef.current) {
       try { loopAbortRef.current.abort(); } catch { /* swallow */ }
       loopAbortRef.current = null;
     }
     setLoopExpired(null);
     _clearExpiredMarker();
-    setLoopPhase(null);
-    setLoopId(null);
-    setLoopPlan(null);
     setLoopTerminal(false);
-    try { taRef.current?.focus(); } catch { /* ignore */ }
+    if (!targetLoopId) {
+      setLoopPhase(null);
+      setLoopId(null);
+      setLoopPlan(null);
+      try { taRef.current?.focus(); } catch { /* ignore */ }
+      return;
+    }
+    setBusy(true);
+    try {
+      await confirmLoop(targetLoopId, true, "");
+      openLoopStream(targetLoopId);
+    } catch (e) {
+      toast(e?.response?.data?.detail || e?.message
+        || "Couldn't restart that plan — start a new task instead.");
+      setLoopPhase(null);
+      setLoopId(null);
+      setLoopPlan(null);
+      try { taRef.current?.focus(); } catch { /* ignore */ }
+    } finally {
+      // 2026-08-27 · Restart-loop honesty fix follow-up — mirrors
+      // runLoopPlan()'s own `finally { setBusy(false); }` (line ~3354).
+      // Without this, the success path left `busy=true` forever (only
+      // the catch branch cleared it), which silently defeated
+      // showPlanCard's `!busy` gate — the engine correctly revived the
+      // SAME session (loop_id unchanged, plan restored) but the
+      // interactive Approve/Cancel card never re-mounted, leaving the
+      // user with only a passive "Plan restored" text bubble and no
+      // way to actually act on it. Found via a real Playwright replay
+      // of the restart click, not by inspection.
+      setBusy(false);
+    }
   }
   // Toggle handler — switch exec mode and, when entering loop, force
   // chatMode away from "swift" (loop disables swift per spec).

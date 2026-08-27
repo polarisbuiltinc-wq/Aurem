@@ -22,6 +22,7 @@ import { useSearchParams } from "react-router-dom";
 import LoopStepBar from "../components/LoopStepBar";
 import LoopLiveFeed from "../components/LoopLiveFeed";
 import { UserActionCard } from "../components/LoopActionCards";
+import { Chip, ChipRow } from "../components/Chip";
 
 
 // Fixed reference timestamps (Unix epoch millis) so every snapshot
@@ -164,7 +165,48 @@ const FIXTURES = {
   // Iter 334 — ship human-review gate (regression lock for the
   // 2026-07-28 infinite-loop bug; driven by ship_gate.spec.js).
   "ship-gate":             ShipGateFixture,
+  // Phase E · chip sizing 3-viewport proof — worst-case dense chip
+  // row rendered inside the REAL [data-testid="chat-panel"] +
+  // [data-testid="chat-form"].glass-composer containers so the
+  // production container-query CSS (index.css:1150-1176) governs
+  // the width the same way it does in ChatPanel.jsx. Driven by
+  // chip_row_width.spec.js at 360/768/1440.
+  "chip-row-dense":        ChipRowDenseFixture,
 };
+
+// Simulates the densest realistic composer-adjacent chip row: every
+// chip family from the A1 audit's 14-surface table that renders via
+// the shared `.chip`/`.chip-sm`/`.chip-md` tokens, packed into ONE
+// row so the count-cap (`<ChipRow max=6>`) has a genuine worst case
+// to react to at narrow viewports.
+function ChipRowDenseFixture() {
+  return (
+    <div
+      data-testid="visual-fixture-stage"
+      style={{ minHeight: "100vh", width: "100%", background: "#0a0a0a" }}
+    >
+      <div
+        data-testid="chat-panel"
+        style={{ containerType: "inline-size", containerName: "chat-panel", width: "100%" }}
+      >
+        <div data-testid="chat-form" className="glass-composer">
+          <ChipRow testId="chip-row-dense" max={6}>
+            <Chip size="sm" tone="info">plan</Chip>
+            <Chip size="sm" tone="success">clean</Chip>
+            <Chip size="sm" tone="warn">still scanning</Chip>
+            <Chip size="sm" tone="error">blocked</Chip>
+            <Chip size="md" tone="neutral">casual · 82%</Chip>
+            <Chip size="md" tone="neutral">loop</Chip>
+            <Chip size="sm" tone="success">integrity guard: clean</Chip>
+            <Chip size="sm" tone="neutral">+42</Chip>
+            <Chip size="sm" tone="neutral">−7</Chip>
+            <Chip size="sm" tone="info">retry 1/2</Chip>
+          </ChipRow>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 
 function ShipGateFixture() {

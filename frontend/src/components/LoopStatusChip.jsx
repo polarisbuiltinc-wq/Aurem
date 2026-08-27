@@ -499,15 +499,13 @@ export default function LoopStatusChip({ projectId = null, onPhaseUpdate = null 
               aria-pressed={stopState === "confirming"}
               onClick={onStopClick}
               disabled={busy && stopState !== "confirming"}
+              className="chip chip-sm chip-interactive"
               style={{
                 appearance: "none",
                 background: stopState === "confirming" ? C.red : "transparent",
                 color: stopState === "confirming" ? "#000" : C.red,
                 border: `1px solid ${C.red}`,
                 borderRadius: 6,
-                padding: "3px 10px",
-                fontFamily: C.mono,
-                fontSize: 11,
                 letterSpacing: "0.06em",
                 cursor: busy ? "wait" : "pointer",
                 textTransform: "uppercase",
@@ -533,15 +531,13 @@ export default function LoopStatusChip({ projectId = null, onPhaseUpdate = null 
               data-testid="loop-status-chip-done"
               aria-label="Dismiss shipped loop status"
               onClick={onDoneClick}
+              className="chip chip-sm chip-interactive"
               style={{
                 appearance: "none",
                 background: "transparent",
                 color: C.green,
                 border: `1px solid ${C.green}88`,
                 borderRadius: 6,
-                padding: "3px 10px",
-                fontFamily: C.mono,
-                fontSize: 11,
                 letterSpacing: "0.06em",
                 cursor: "pointer",
                 textTransform: "uppercase",

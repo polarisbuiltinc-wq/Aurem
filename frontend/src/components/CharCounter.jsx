@@ -23,7 +23,7 @@ export function CharCounter({ value = "", max, style = {} }) {
       title={pct >= 1 ? "Too long — shorten or split into multiple messages"
                        : `${n} / ${max} characters`}
       style={{
-        fontSize: 11,
+        fontSize: "var(--chip-font-md)",
         fontFamily: "'JetBrains Mono', monospace",
         color,
         fontWeight: pct >= 0.8 ? 600 : 400,

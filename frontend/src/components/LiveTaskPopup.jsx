@@ -260,21 +260,16 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
               <div
                 key={`${p.kind}-${i}`}
                 data-testid={`ltp-phase-chip-${p.kind}`}
+                className="chip chip-sm"
                 style={{
-                  display: "inline-flex", alignItems: "center", gap: 4,
-                  padding: "3px 8px",
-                  borderRadius: 12,
                   background: isActive
                     ? `${cfg.color}22`
                     : "rgba(255,255,255,0.04)",
                   border: `1px solid ${isActive
                     ? cfg.color + "44"
                     : "transparent"}`,
-                  fontSize: 11,
                   color: isActive ? cfg.color : "#475569",
                   transition: "all 0.2s",
-                  fontFamily:
-                    "system-ui, -apple-system, sans-serif",
                 }}
               >
                 <span>{cfg.icon}</span>

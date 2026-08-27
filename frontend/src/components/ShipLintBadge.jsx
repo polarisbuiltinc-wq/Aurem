@@ -80,13 +80,8 @@ export default function ShipLintBadge({ brief, testidSuffix }) {
     <span
       data-testid={testId}
       title={title}
+      className="chip chip-sm"
       style={{
-        padding: "3px 8px",
-        borderRadius: 4,
-        fontSize: 10,
-        fontWeight: 700,
-        letterSpacing: "0.05em",
-        fontFamily: "'JetBrains Mono', monospace",
         background: bg,
         color: fg,
         border: `1px solid ${border}`,

@@ -57,17 +57,16 @@ function IntegrityPill({ verdict }) {
     <div
       data-testid="ship-integrity-pill"
       data-verdict={verdict}
+      className="chip chip-sm"
       style={{
-        display: "inline-flex", alignItems: "center", gap: 6,
-        padding: "4px 10px",
+        gap: 6,
         background: clean
           ? "rgba(52, 211, 153, 0.12)"
           : "rgba(250, 204, 21, 0.10)",
         border: `1px solid ${clean
           ? "rgba(52, 211, 153, 0.45)"
           : "rgba(250, 204, 21, 0.45)"}`,
-        borderRadius: 999,
-        fontSize: 10.5, fontWeight: 700, letterSpacing: 0.25,
+        letterSpacing: 0.25,
         color: clean ? "#4ade80" : "#facc15",
         fontFamily: "inherit",
       }}
@@ -94,12 +93,11 @@ function FileDiffChip({ row }) {
         <span
           data-testid="ship-file-diff-chip"
           data-diff-source={diff_source || "unknown"}
+          className="chip chip-sm"
           style={{
-            fontSize: 9.5, fontWeight: 700, letterSpacing: 0.2,
+            fontWeight: 700, letterSpacing: 0.2,
             color: "var(--text-faint, #888)",
             fontFamily: "inherit",
-            padding: "1px 5px",
-            borderRadius: 4,
             background: "rgba(255,255,255,0.04)",
           }}
           title={`Byte delta (line diff unavailable): ${sign}${delta_bytes} bytes`}
@@ -116,16 +114,16 @@ function FileDiffChip({ row }) {
       data-diff-source={diff_source || "unknown"}
       style={{
         display: "inline-flex", alignItems: "center", gap: 4,
-        fontSize: 9.5, fontWeight: 700, letterSpacing: 0.2,
+        fontSize: "var(--chip-font-sm)", fontWeight: 700, letterSpacing: 0.2,
         fontFamily: "inherit",
       }}
     >
       {is_new && (
         <span
           data-testid="ship-file-new-badge"
+          className="chip chip-sm"
           style={{
-            fontSize: 8.5, fontWeight: 800,
-            padding: "1px 4px", borderRadius: 3,
+            fontWeight: 800,
             background: "rgba(96, 165, 250, 0.15)",
             border: "1px solid rgba(96, 165, 250, 0.4)",
             color: "#60a5fa",

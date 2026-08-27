@@ -3,6 +3,69 @@
 **Live URL**: https://auremcto.com
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
+## 2026-08-27 (later) — Preview-only 5-item follow-up batch closed: restart-loop honesty fix, chip sizing uniformity, dense-row reconciliation, 3-viewport overflow proof, non-allowlisted flag proof — testing_agent verified (2 passes)
+
+Closed the founder's 5-item Preview acceptance list from the WorkCard/Phase-E work:
+
+1. **Restart-loop honesty (real bug found + fixed):** `handleRestartLoop()` in
+   `ChatPanel.jsx` (~line 4151) set `busy=true` before reviving an EXPIRED loop
+   but never cleared it on the success path (only in `catch`) — this silently
+   blocked `showPlanCard`'s `!busy` gate even though the backend correctly
+   revived the SAME session. Backend revival (loop_engine.py confirm()
+   EXPIRED-branch, ~24 additive lines, pre-existing from earlier this session)
+   was already correct. Fixed with `finally { setBusy(false); }` mirroring
+   `runLoopPlan()`'s existing pattern. Found via real Playwright browser replay
+   (`frontend/tests/visual/restart_loop_honesty.spec.js`), not code inspection.
+   Proof: loop_id unchanged across the Restart click, plan-approval-card
+   re-presents with a working Approve button, engine advances to `executing`
+   after re-approval — real forward progress, not just a card reappearing.
+2. **Chip sizing uniformity:** all 10 remaining chip/pill/badge surfaces from
+   the `task1_task2_audit_report_2026-08-27.md` 14-item audit now use shared
+   `.chip .chip-sm`/`.chip-md` CSS tokens (`index.css` ~1272-1310): WorkCard,
+   ShipLintBadge, LiveStepFloatingCard, LiveTaskPopup, TemperatureBadge,
+   IntentTierIndicator, ModeLoopPill (collapsed), LoopStepBar (retry pill),
+   ShipPendingCard (integrity pill + diff/NEW badges), LoopStatusChip
+   (stop/done). `CharCounter` keeps `var(--chip-font-md)` inline (plain text,
+   no chip shape — accepted exception). `chat/ToolButton.jsx` (icon button)
+   and `LoopActionCards.jsx`'s `ActionBtn` (CTA button) intentionally excluded
+   — different UI family (fixed-size icon/CTA button, not a label-chip).
+3. **Dense-row reconciliation:** confirmed via repo-wide grep that
+   `verification_results`/the "verify trio" is only narrated as plain text via
+   backend `_narrate()` calls — never rendered as chips anywhere in the
+   frontend. `ChipRow`/`GroupChip` (count-cap/group-merge, `Chip.jsx`) have no
+   real production caller today. Deferred with trigger condition: wire when a
+   UI surface renders the verify trio's sub-results as chips.
+4. **3-viewport overflow proof:** new fixture `chip-row-dense`
+   (`VisualFixtures.jsx`) + `frontend/tests/visual/chip_row_width.spec.js` —
+   real measured `getBoundingClientRect`/`scrollWidth` at 360/768/1440px,
+   passes 3/3 (no composer overflow, no page horizontal scroll).
+5. **Non-allowlisted account proof:** `free-gate-test-0822@aurem.dev`
+   (user_id `87e776a93bc747bc9ec01f4910dc6988`) confirmed NOT in any
+   WorkCard/chip allowlist (`workcard_chip_v2`, `workcard_first_scan`,
+   `workcard_scan_strip`, `workcard_loop_receipts` all `user_allowlist:
+   ['test_admin_001']`, `rollout_pct: 0`) — legacy/flagged behavior unchanged,
+   while the ungated Phase-E sizing/contrast CSS fixes still apply for them
+   (correct, not a regression — two separate, honestly-scoped assertions).
+
+Regression: Vitest 485/485 (79 files). `public_routes.spec.js` has 2/5
+pre-existing pixel-diff flakes (landing `/`, `/login` — dynamic cookie-banner
+timing + live founder-spot counters) confirmed via git-stash baseline as
+PRE-EXISTING (baseline showed 4/5 failing, worse) — not a regression from this
+batch, left untouched per scope.
+
+`testing_agent` ran twice: first pass caught a main-agent instruction error
+(told it the restart-loop test's TTL override wasn't needed — it was) and
+correctly self-diagnosed by adding it back; second pass re-verified all 6
+areas clean, 100% pass, no bugs found. `backend/.env`'s temporary
+`LOOP_AWAITING_CONFIRM_MAX_S` override was reverted after both passes;
+production untouched throughout (Preview-only, no flag rollout).
+
+**Health-probe production closure — still explicitly NOT CLOSED / UNCERTAIN**
+per the founder's own instruction: this batch does not touch or close that
+separate thread. Closure requires founder-supplied production nginx `/health`
+logs from a post-deploy window; agent has no production log access.
+
+
 ## 2026-08-27 (overnight, latest) — WorkCard/Output-Rendering Contract build (Phases A→D) complete — testing_agent verified across 3 passes, all new UI flag-gated to test_admin_001 only
 
 Fixed the "work happened, chip vanished, nothing remains" pattern across FirstScanCard,

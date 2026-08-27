@@ -376,14 +376,13 @@ export default function LoopStepBar({
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <span
             data-testid="loop-retry-pill"
+            className="chip chip-sm"
             title={
               verifyRetryCount > 0
                 ? `Outer verify retry ${verifyRetryCount} of ${maxVerifyRetries}`
                 : `Self-heal round ${retryCount} of 2`
             }
             style={{
-              padding: "3px 9px", borderRadius: 999,
-              fontSize: 10, fontWeight: 700,
               color: "#FB923C",
               background: "rgba(251,146,60,0.10)",
               border: "1px solid rgba(251,146,60,0.32)",

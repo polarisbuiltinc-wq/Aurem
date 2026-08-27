@@ -79,13 +79,11 @@ export default function WorkCard({
           ) : (
             <span
               data-testid={testId ? `${testId}-badge` : undefined}
+              className="chip chip-sm chip-uppercase"
               style={{
-                fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
-                textTransform: "uppercase",
-                padding: "2px 8px", borderRadius: 999,
+                fontWeight: 700,
                 background: c.soft, color: c.fg,
                 border: `1px solid ${c.border}`,
-                whiteSpace: "nowrap",
               }}
             >
               {badgeLabel}

@@ -123,12 +123,8 @@ export default function LiveStepFloatingCard({ steps, provider, tokens, onClose 
               key={p.id}
               data-testid={`live-step-pill-${p.id}`}
               data-active={active ? "true" : "false"}
+              className="chip chip-sm"
               style={{
-                fontSize: 10,
-                padding: "3px 7px",
-                borderRadius: 4,
-                fontFamily: "'JetBrains Mono', monospace",
-                letterSpacing: ".02em",
                 background: active
                   ? "rgba(255,197,96,0.18)"
                   : seen
@@ -142,7 +138,6 @@ export default function LiveStepFloatingCard({ steps, provider, tokens, onClose 
                 border: active
                   ? "1px solid rgba(255,197,96,0.36)"
                   : "1px solid transparent",
-                whiteSpace: "nowrap",
               }}
             >
               {p.label}
