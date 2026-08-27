@@ -386,6 +386,70 @@ async def _run_digest_once(db) -> None:
             logger.info("RESEND_API_KEY not set — funnel digest only logged.")
 
 
+# ── P7 — admin Journey Watch card (2026-08-27) ──────────────────────
+# Reuses ONLY `health_notifications` (already written by `_fire_bell`
+# above) + `health_check_state` (already written by `_check_stall`) —
+# no new collection, no new endpoint-side write path.
+
+async def compute_journey_watch_card(db, period_days: int = 7) -> dict:
+    """7-day rollup for the admin Overview card: stalls/resolves/
+    hard-breaks + a per-stage breakdown + currently-still-stalled
+    users, plus the 5 most recent rows for the card's "view in bell"
+    deep link to make sense of at a glance."""
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(days=period_days)
+
+    stalls = await db.health_notifications.count_documents({
+        "category": "journey_watch", "to_state": "red",
+        "check_id": {"$not": {"$regex": "^journey:hardbreak:"}},
+        "created_at_dt": {"$gte": since},
+    })
+    resolved = await db.health_notifications.count_documents({
+        "category": "journey_watch", "to_state": "green",
+        "created_at_dt": {"$gte": since},
+    })
+    hardbreaks = await db.health_notifications.count_documents({
+        "category": "journey_watch", "check_id": {"$regex": "^journey:hardbreak:"},
+        "created_at_dt": {"$gte": since},
+    })
+
+    by_stage: dict[str, int] = {}
+    cur = db.health_notifications.find(
+        {"category": "journey_watch", "to_state": "red",
+         "check_id": {"$not": {"$regex": "^journey:hardbreak:"}},
+         "created_at_dt": {"$gte": since}},
+        {"_id": 0, "from_state": 1},
+    )
+    async for row in cur:
+        stage = row.get("from_state") or "unknown"
+        by_stage[stage] = by_stage.get(stage, 0) + 1
+    stage_breakdown = [
+        {"stage": s, "label": STAGE_LABELS.get(s, s), "count": c}
+        for s, c in sorted(by_stage.items(), key=lambda kv: -kv[1])
+    ]
+
+    active_stalls = await db.health_check_state.count_documents({
+        "_id": {"$regex": "^journey:"}, "last_known": "stalled",
+    })
+
+    recent_rows = await db.health_notifications.find(
+        {"category": "journey_watch"},
+        {"_id": 0, "notif_id": 1, "name": 1, "detail": 1, "to_state": 1,
+         "created_at": 1},
+    ).sort("created_at", -1).limit(5).to_list(5)
+
+    return {
+        "period_days":     period_days,
+        "generated_at":    now.isoformat(),
+        "stalls_flagged":  stalls,
+        "stalls_resolved": resolved,
+        "hardbreaks":      hardbreaks,
+        "active_stalls":   active_stalls,
+        "by_stage":        stage_breakdown,
+        "recent":          recent_rows,
+    }
+
+
 async def schedule_funnel_digest_cron() -> None:
     if not _digest_enabled():
         logger.info("funnel_digest_cron disabled (ENABLE_FUNNEL_DIGEST_CRON=0)")

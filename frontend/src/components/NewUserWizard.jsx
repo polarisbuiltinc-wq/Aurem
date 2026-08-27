@@ -71,7 +71,7 @@ export default function NewUserWizard({ onComplete }) {
   // postMessage was dropped.
   const {
     status: ghConnectStatus, connecting: appConnecting,
-    timedOut: appTimedOut, startConnect: startAppConnect,
+    timedOut: appTimedOut, denied: appDenied, startConnect: startAppConnect,
     retry: retryAppConnect, refresh: refreshGhConnectStatus,
   } = useGitHubConnectStatus();
   const appInstalls = ghConnectStatus.installations;
@@ -567,12 +567,21 @@ export default function NewUserWizard({ onComplete }) {
                               <Loader2 size={14} className="spin" color="#ff9d5c" />
                               Waiting for you to finish in the GitHub popup…
                             </div>
-                          ) : appTimedOut ? (
+                          ) : appTimedOut || appDenied ? (
                             <div data-testid="wizard-app-timeout" style={{
                               display: "flex", alignItems: "center", gap: 10,
                             }}>
+                              {/* 2026-08-27 — founder-reported: a real
+                                  GitHub install whose popup closed before
+                                  our poll caught "connected" (the common,
+                                  fast-install case — `denied`, not the 60s
+                                  `appTimedOut`) used to silently revert to
+                                  the plain install CTA below with NO
+                                  feedback at all. Same retry copy either
+                                  way; the fix is "try again" regardless of
+                                  which of the two the poll landed on. */}
                               <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                                It looks like the connection didn't finish.
+                                Connection didn't finish — please try again.
                               </span>
                               <button
                                 type="button"

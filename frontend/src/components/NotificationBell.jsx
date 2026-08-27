@@ -132,6 +132,18 @@ export default function NotificationBell() {
     return () => clearInterval(t);
   }, [fetchNow]);
 
+  // 2026-08-27 · P7 — Journey Watch card's "View in bell log" deep
+  // link. The bell is a dropdown widget, not a page, so "deep link"
+  // means: open it + refresh, from anywhere on the admin surface.
+  useEffect(() => {
+    const onOpenBell = () => {
+      setOpen(true);
+      fetchNow();
+    };
+    window.addEventListener("aurem:open-bell", onOpenBell);
+    return () => window.removeEventListener("aurem:open-bell", onOpenBell);
+  }, [fetchNow]);
+
   // Close dropdown on outside click.
   useEffect(() => {
     if (!open) return;

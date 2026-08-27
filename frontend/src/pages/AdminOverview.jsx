@@ -37,6 +37,7 @@ export default function AdminOverview() {
   const [dora, setDora] = useState(null); // 2026-08-24 — Guard 22, DORA metrics
   const [slo, setSlo] = useState(null); // 2026-08-26 — Phase 5.3, SLO compliance
   const [costAlert, setCostAlert] = useState(null); // 2026-08-27 — Live Cost Alert
+  const [journeyWatch, setJourneyWatch] = useState(null); // 2026-08-27 — P7 Journey Watch card
   const [refreshingHealth, setRefreshingHealth] = useState(false);
   const [refreshingAll, setRefreshingAll] = useState(false); // 2026-08-27 · Admin Compact M1
   const [loading, setLoading] = useState(true);
@@ -45,7 +46,7 @@ export default function AdminOverview() {
     const h = { Authorization: `Bearer ${getToken()}` };
     const HEALTH_URL = `${process.env.REACT_APP_BACKEND_URL}/api/health`;
     try {
-      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes, ghFunnelRes, nudgeStagesRes, backupStatusRes, drillHistoryRes, deployReadinessRes, doraRes, sloRes, costAlertRes] =
+      const [healthRes, statsRes, wallRes, councilRes, telRes, dbHealthRes, metricsRes, patternsRes, funnelRes, alertsRes, councilHealthRes, ghSyncRes, breakersRes, vscodeRes, ghFunnelRes, nudgeStagesRes, backupStatusRes, drillHistoryRes, deployReadinessRes, doraRes, sloRes, costAlertRes, journeyWatchRes] =
         await Promise.allSettled([
           fetch(HEALTH_URL, { signal: AbortSignal.timeout(10000) }).then((r) => r.json()),
           api.get("/usage/public/stats"),
@@ -69,6 +70,7 @@ export default function AdminOverview() {
           api.get("/admin/insights/dora", { headers: h }),         // 2026-08-24 — Guard 22 DORA metrics
           api.get("/admin/insights/slo", { headers: h }),          // 2026-08-26 — Phase 5.3 SLO compliance
           api.get("/admin/insights/cost-alert", { headers: h }),   // 2026-08-27 — Live Cost Alert
+          api.get("/admin/insights/journey-watch", { headers: h }), // 2026-08-27 — P7 Journey Watch card
         ]);
       if (healthRes.status   === "fulfilled") setHealth(healthRes.value);
       if (statsRes.status    === "fulfilled") setStats(statsRes.value.data);
@@ -92,6 +94,7 @@ export default function AdminOverview() {
       if (doraRes.status === "fulfilled") setDora(doraRes.value.data);
       if (sloRes.status === "fulfilled") setSlo(sloRes.value.data);
       if (costAlertRes.status === "fulfilled") setCostAlert(costAlertRes.value.data);
+      if (journeyWatchRes.status === "fulfilled") setJourneyWatch(journeyWatchRes.value.data);
     } catch { /* silent */ }
     finally { setLoading(false); }
   }, []);
@@ -900,6 +903,10 @@ export default function AdminOverview() {
       {/* ── 2026-08-27 — Live Cost Alert ─────────────────────── */}
       {costAlert && !costAlert.error && (
         <CostAlertCard data={costAlert} />
+      )}
+      {/* ── 2026-08-27 — P7 — Journey Watch (7d stall/resolve/hard-break) ── */}
+      {journeyWatch && !journeyWatch.error && (
+        <JourneyWatchCard data={journeyWatch} />
       )}
       {/* ── 2026-08-20 — stage-aware nudge visibility ────────── */}
       {nudgeStages?.nudge_stages && (
@@ -2189,6 +2196,96 @@ function CostAlertCard({ data }) {
 
 
 
+
+// ── Journey Watch card (2026-08-27, P7) ───────────────────────────
+// 7-day stalls/resolves/hard-breaks + per-stage breakdown, reusing
+// ONLY the existing health_notifications/health_check_state data
+// journey_watch.py's own bell rows already populate — no new
+// collection. "View in bell log" opens the existing NotificationBell
+// dropdown (a global event — the bell is a widget, not a page).
+function JourneyWatchCard({ data }) {
+  const stalls = data.stalls_flagged || 0;
+  const resolved = data.stalls_resolved || 0;
+  const hardbreaks = data.hardbreaks || 0;
+  const active = data.active_stalls || 0;
+  const byStage = data.by_stage || [];
+  const recent = data.recent || [];
+  const openBell = () => window.dispatchEvent(new CustomEvent("aurem:open-bell"));
+  return (
+    <Section title={`Journey Watch · last ${data.period_days}d`}>
+      <div data-testid="journey-watch-card" style={{
+        display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10,
+      }}>
+        <div data-testid="journey-watch-tile-active" style={{
+          padding: "12px 14px", borderRadius: 6,
+          background: active > 0 ? "rgba(232, 70, 70, 0.06)" : "var(--panel-2)",
+          border: active > 0 ? "1px solid rgba(232, 70, 70, 0.28)" : "1px solid var(--border)",
+        }}>
+          <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".04em" }}>
+            Stuck right now
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4, color: active > 0 ? "#ff8a8a" : "var(--text)" }}>
+            {active}
+          </div>
+        </div>
+        <div data-testid="journey-watch-tile-stalls" style={{
+          padding: "12px 14px", borderRadius: 6, background: "var(--panel-2)", border: "1px solid var(--border)",
+        }}>
+          <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".04em" }}>
+            Stalls flagged
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4, color: "var(--text)" }}>{stalls}</div>
+        </div>
+        <div data-testid="journey-watch-tile-resolved" style={{
+          padding: "12px 14px", borderRadius: 6, background: "var(--panel-2)", border: "1px solid var(--border)",
+        }}>
+          <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".04em" }}>
+            Resolved on their own
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4, color: "#3ecf8e" }}>{resolved}</div>
+        </div>
+        <div data-testid="journey-watch-tile-hardbreaks" style={{
+          padding: "12px 14px", borderRadius: 6,
+          background: hardbreaks > 0 ? "rgba(232, 70, 70, 0.06)" : "var(--panel-2)",
+          border: hardbreaks > 0 ? "1px solid rgba(232, 70, 70, 0.28)" : "1px solid var(--border)",
+        }}>
+          <div style={{ fontSize: 10, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".04em" }}>
+            GitHub install declined
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4, color: hardbreaks > 0 ? "#ff8a8a" : "var(--text)" }}>{hardbreaks}</div>
+        </div>
+      </div>
+
+      {byStage.length > 0 && (
+        <div data-testid="journey-watch-by-stage" style={{ marginTop: 10, fontSize: 11.5, color: "var(--text-dim)" }}>
+          {byStage.map((s) => (
+            <div key={s.stage} data-testid={`journey-watch-stage-${s.stage}`} style={{
+              display: "flex", justifyContent: "space-between", padding: "4px 2px",
+              borderBottom: "1px solid var(--border)",
+            }}>
+              <span>{s.label}</span>
+              <span>{s.count} stall(s)</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button
+        type="button"
+        data-testid="journey-watch-view-bell-btn"
+        onClick={openBell}
+        title="Open the notification bell filtered to these events"
+        style={{
+          marginTop: 10, fontSize: 11.5, color: "var(--accent, #ff6608)",
+          background: "none", border: "none", cursor: "pointer",
+          textDecoration: "underline", padding: 0,
+        }}
+      >
+        View {recent.length > 0 ? recent.length : ""} recent in bell log →
+      </button>
+    </Section>
+  );
+}
 
 function FunnelCard({ data }) {
   const steps = (data && data.funnel_steps) || [];

@@ -660,7 +660,13 @@ async def chat_send(
         try:
             from services.output_guard import strip_machinery_leak, enforce_length_cap
             from core.errors import new_ref_id
-            content, _leak_stripped = strip_machinery_leak(content)
+            # universal_only=True unless the explain-mode contract is
+            # active this turn — otherwise the explain-only tier (file
+            # paths, DB collection names, framework jargon) would strip
+            # legitimate scan/dev content for every user (the P6 regression).
+            content, _leak_stripped = strip_machinery_leak(
+                content, universal_only=not _plain_english_active
+            )
             if _plain_english_active:
                 content, _length_capped = await enforce_length_cap(content)
             if _leak_stripped or _length_capped:
@@ -1871,13 +1877,32 @@ async def chat_stream(
                         ]
                         if _findings:
                             try:
+                                # 2026-08-27 · P6 live-drive fix — a scan is
+                                # almost always the session's FIRST-EVER
+                                # turn; the `chat_sessions` doc doesn't
+                                # exist yet at this point (it's only
+                                # created afterwards by `_persist_turn`'s
+                                # own upsert). Without `upsert=True` here,
+                                # this update silently no-ops on a
+                                # nonexistent doc — pending_scan was NEVER
+                                # actually written, so every "yes" after a
+                                # first-turn scan hit the ambiguity gate
+                                # instead of resolving. Confirmed live via
+                                # a real GitHub-App-installed drill repo.
                                 await db_h.chat_sessions.update_one(
                                     {"session_id": body.session_id, "user_id": user_id},
                                     {"$set": {"pending_scan": {
                                         "findings":   _findings,
                                         "project_id": body.project_id,
                                         "created_at": time.time(),
-                                    }}},
+                                    }},
+                                     "$setOnInsert": {
+                                        "session_id": body.session_id,
+                                        "user_id":    user_id,
+                                        "created_at": time.time(),
+                                        "project_id": body.project_id,
+                                     }},
+                                    upsert=True,
                                 )
                             except Exception:
                                 pass
@@ -3062,7 +3087,11 @@ async def chat_stream(
             try:
                 from services.output_guard import strip_machinery_leak, enforce_length_cap
                 from core.errors import new_ref_id
-                content, _leak_stripped = strip_machinery_leak(content)
+                # universal_only=True unless explain-mode is active this
+                # turn — see identical comment on chat/send above.
+                content, _leak_stripped = strip_machinery_leak(
+                    content, universal_only=not _plain_english_active
+                )
                 if _plain_english_active:
                     content, _length_capped = await enforce_length_cap(content)
                 if _leak_stripped or _length_capped:

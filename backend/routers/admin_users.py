@@ -1032,6 +1032,23 @@ async def cost_revenue_alert_endpoint(
     return status
 
 
+@router.get("/insights/journey-watch")
+async def journey_watch_card_endpoint(
+    period_days: int = 7,
+    authorization: Optional[str] = Header(None),
+) -> dict:
+    """2026-08-27 · P7 — admin Journey Watch card. Same 7-day stall/
+    resolve/hard-break numbers services/journey_watch.py's Quiet Funnel
+    Digest email already computes, plus a per-stage breakdown and the
+    5 most recent rows — purely reads `health_notifications` /
+    `health_check_state`, no new collection."""
+    await _require_admin(authorization)
+    db = require_db()
+    from services.journey_watch import compute_journey_watch_card
+    period_days = max(1, min(period_days, 30))
+    return await compute_journey_watch_card(db, period_days=period_days)
+
+
 @router.get("/insights/confidence-checks")
 async def confidence_checks_endpoint(
     mismatch_only: bool = False,

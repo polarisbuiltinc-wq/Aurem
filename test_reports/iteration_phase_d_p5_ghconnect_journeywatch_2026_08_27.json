@@ -1,0 +1,24 @@
+{
+  "summary": "Verified 5 items from continuation request: (1) P5 chat.py regression fix — pytest suite test_iter2026_08_27_p5_engine_leak_cleanup.py 17/17 tests pass, including named before/after tests proving real file paths (backend/services/orchestrator.py etc.) are preserved for non-explain users while genuine machinery leaks (tracebacks, 'Iter NNN', 'Mode X') are still stripped universally; (2) chat.py call-site wiring for universal_only=not _plain_english_active is verified by AST test at lines 661 and 3088; (3) GitHub Connect state recovery backend — pytest suite test_iter2026_08_27_github_connect_state_recovery.py 5/5 tests pass; (4) GitHub Connect denied-state UI in AddProjectWizard — LIVE end-to-end verified: forced denied path by mocking /github/app/status → idle + window.open returning immediately-closed popup, banner data-testid=add-wizard-app-timeout with text 'Connection didn't finish — please try again.' rendered, retry button data-testid=add-wizard-app-retry-btn works and re-invokes window.open (opens count went 1 → 2) and toggles add-wizard-app-connecting; (5) P7 Journey Watch — /api/aurem-dev/admin/insights/journey-watch returns 200 with expected shape; live admin overview render verified: card + 4 tiles (Stuck right now:1, Stalls flagged:2, Resolved:0, GitHub install declined:0) + by_stage 'clicking Connect Repo: 2 stall(s)' + View 2 recent in bell log button opens NotificationBell dropdown containing matching journey rows (notification-row-journey:6d6bee...). Regression check: DORA, SLO, Live Cost Alert, Funnel Nudge, Activation Funnel all still render alongside JourneyWatchCard.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter2026_08_27_p5_engine_leak_cleanup.py",
+    "/app/backend/tests/test_iter2026_08_27_github_connect_state_recovery.py",
+    "/app/backend/tests/test_iter2026_08_27_intent_grounding_plan_scan.py",
+    "/app/test_reports/pytest/iter2026_08_27_p5_ghconnect.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AdminOverview.jsx is now 2626 lines — well over the 700-line threshold from the code-review guidelines. JourneyWatchCard and other inline card components should be split into separate files for maintainability. Not a functional bug, but a growing violation on every card-add pass.",
+    "useGitHubConnectStatus.js polls every 2.5s for up to 60s — if the initial fetchStatus() call happens to return state==='connected' from a stale server response (user has ANY installation), the subsequent 'popup closed' denied path is never reached. During live testing this required mocking the status endpoint to force state==='idle'. In production this is only a problem if a user with an existing installation clicks Connect for a repo not covered by their installation and the popup closes early — the hook would silently show them the plain CTA again. Low risk since the AddProjectWizard checks installationForRepo first and skips the CTA path when they have a matching install, but worth noting."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (22/22 targeted pytest passed + 30/30 intent_grounding)", "frontend": "100% (Journey Watch card + GitHub Connect denied UI both live-verified)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview admin) — used successfully",
+  "seed_data_creation": "None. Reused existing live-preview data (funnel-test-0827@aurem.dev's 2 stall events under check_id journey:6d6bee...) for Journey Watch card verification.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 5 items from Phase D signed off. Live-verification technique for denied wizard UI: (a) admin already has installs so /github/app/status returns state==='connected' immediately — hook exits before popup-closed check ever runs; (b) mock it via page.route to force state==='idle', then override window.open to return {closed:true, close:()=>{}}, then repo-input must be a repo NOT covered by any existing installation so installationForRepo is null and CTA path is reached. This unlocks the exact denied banner path the founder reported.",
+  "rca_of_the_issue": "N/A — this pass verified fixes already implemented by main agent. No new bugs found."
+}

@@ -73,7 +73,7 @@ export default function AddProjectWizard({ onClose, onAdded }) {
   // ONE shared hook (also used by NewUserWizard.jsx) — the wizard is a
   // pure function of the authoritative /github/app/status endpoint,
   // not a local postMessage/count-poll guess.
-  const { status, connecting, timedOut, startConnect, retry } = useGitHubConnectStatus();
+  const { status, connecting, timedOut, denied, startConnect, retry } = useGitHubConnectStatus();
   const justConnectedRef = useRef(false);
 
   // The specific installation (if any) that covers the current `repo`.
@@ -381,7 +381,7 @@ export default function AddProjectWizard({ onClose, onAdded }) {
                   </div>
                 </div>
               </div>
-            ) : timedOut ? (
+            ) : timedOut || denied ? (
               <div
                 data-testid="add-wizard-app-timeout"
                 style={{
@@ -392,7 +392,15 @@ export default function AddProjectWizard({ onClose, onAdded }) {
                   borderRadius: 8,
                 }}>
                 <div style={{ fontSize: 13, lineHeight: 1.4, flex: 1 }}>
-                  It looks like the connection didn't finish.
+                  {/* 2026-08-27 — founder-reported: a real GitHub install
+                      that closed the popup before our status poll caught
+                      "connected" used to revert to the plain CTA below
+                      with ZERO feedback — this branch used to only catch
+                      the 60s client timeout, never the "popup closed
+                      early" case (`denied`), which is what a normal-speed
+                      install actually hits. Same copy either way — the
+                      user's fix is identical (retry). */}
+                  Connection didn't finish — please try again.
                 </div>
                 <button
                   type="button"

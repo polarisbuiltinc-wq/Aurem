@@ -300,21 +300,37 @@ async def install_callback(
             {"$set": {"used": True, "used_at": _now_utc_epoch()}},
         )
 
+    _recovered_user_id = None
     if state and state_row is None:
-        # State was present but invalid (expired / replayed / forged).
-        # Do NOT proceed to write anything — the webhook handler will
-        # still receive `installation.created` from GitHub and record
-        # the install with user_id:null (external-install case).
+        # State row missing/expired/already-used — this used to be a
+        # dead end: the webhook still records `installation.created`
+        # with user_id:null, and the user's wizard silently reverts to
+        # the connect CTA with zero feedback (2026-08-27 founder report
+        # — real-world GitHub App install that never linked). FIX: our
+        # own state string is `gha:<user_id>:<random 24-byte token>` —
+        # the random suffix makes it unforgeable, so on TTL-expiry or a
+        # benign double-fire (GitHub occasionally redirects the
+        # callback twice) it is safe to recover `user_id` from the
+        # string itself rather than dropping the link entirely. Still
+        # a hard 401/redirect-to-error below if the string doesn't even
+        # match our own format (can't recover a user_id from nothing —
+        # that's a genuinely malformed/forged state).
+        if state.startswith("gha:"):
+            _parts = state.split(":", 2)
+            if len(_parts) == 3 and _parts[1]:
+                _recovered_user_id = _parts[1]
         logger.warning(
-            "github_app callback: invalid state=%s installation_id=%s",
-            state, installation_id,
+            "GH_CONNECT_STATE_INVALID installation_id=%s state_prefix=%s "
+            "recovered_user_id=%s (row missing/expired/used — see comment)",
+            installation_id, state[:8], _recovered_user_id,
         )
-        return RedirectResponse(
-            url=_dashboard_url(request, _DEEP_LINK_ERR_STATE),
-            status_code=302,
-        )
+        if _recovered_user_id is None:
+            return RedirectResponse(
+                url=_dashboard_url(request, _DEEP_LINK_ERR_STATE),
+                status_code=302,
+            )
 
-    user_id_to_link = (state_row or {}).get("user_id")
+    user_id_to_link = (state_row or {}).get("user_id") or _recovered_user_id
     funnel_session  = (state_row or {}).get("funnel_session")
 
     # ── Fetch installation metadata from GitHub ───────────────────────
@@ -357,6 +373,12 @@ async def install_callback(
         user_id=user_id_to_link,
         repositories=repos_slim,
     )
+    if _recovered_user_id:
+        logger.info(
+            "GH_CONNECT_STATE_RECOVERED installation_id=%s user_id=%s "
+            "— linked successfully despite expired/used state row",
+            installation_id, _recovered_user_id,
+        )
 
     # ── Restore cascade — if a prior suspend/delete was recorded,
     #     re-enabling the install should re-enable the projects too.

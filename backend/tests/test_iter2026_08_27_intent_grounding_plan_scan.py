@@ -199,3 +199,79 @@ def test_partial_plan_shows_visible_deferral_not_silent():
     # Same-file plan covers ALL findings in that file (file-level grain);
     # verify deferred + covered always sum to total (contract invariant).
     assert coverage["covered_count"] + coverage["deferred_count"] == coverage["total_findings"]
+
+
+
+# ---------------------------------------------------------------------------
+# 2026-08-27 · P6 live-drive regression, NAMED BEFORE/AFTER.
+#
+# BEFORE (bug): routers/chat.py's Mode E branch wrote `pending_scan` via
+# `db_h.chat_sessions.update_one({...}, {"$set": {...}})` with NO
+# `upsert=True`. A scan is almost always the session's FIRST-EVER turn —
+# the `chat_sessions` document doesn't exist yet at that point (it's
+# only created afterwards, downstream, by `_persist_turn`'s own
+# upsert). Mongo's `update_one` without `upsert=True` silently no-ops
+# on a document that doesn't exist — pending_scan was NEVER actually
+# persisted, so EVERY bare "yes" immediately after a real first-turn
+# scan hit "no pending proposal" / the ambiguity gate instead of
+# resolving to the scan's scope. Confirmed live via a real
+# GitHub-App-installed drill repo (polarisbuiltinc-wq/ora-grounding,
+# session p6_drill_session_3): a fresh scan turn left
+# `"pending_scan" not in chat_sessions doc` even though findings were
+# genuinely returned in the report.
+#
+# AFTER (fix): the update now carries `upsert=True` + `$setOnInsert`
+# for the doc-identity fields, so the very first write in a session
+# creates the document with pending_scan attached.
+# ---------------------------------------------------------------------------
+
+def test_chat_py_pending_scan_write_has_upsert_true():
+    """Source-level regression guard: the Mode E pending_scan write in
+    routers/chat.py must upsert — a scan is almost always the
+    session's first-ever turn, so a non-upserting update is a
+    guaranteed silent no-op (this is exactly what P6's live drive
+    caught)."""
+    src = open("/app/backend/routers/chat.py").read()
+    idx = src.index('"$set": {"pending_scan": {')
+    # Look at the update_one(...) call this $set lives inside — the
+    # matching `upsert=True,` must appear before its closing `)`.
+    window = src[idx: idx + 900]
+    assert "upsert=True" in window
+    assert '"$setOnInsert"' in window
+
+
+async def test_before_fix_non_upserting_update_on_missing_doc_is_a_no_op():
+    """Documents the exact Mongo semantics that made the bug possible:
+    `update_one` with only `$set` and no `upsert=True` against a
+    session_id that has no document yet does nothing — 0 documents
+    modified, none created."""
+
+    class _Coll:
+        def __init__(self):
+            self.docs = {}
+
+        async def update_one(self, query, update, upsert=False):
+            key = query.get("session_id")
+            if key in self.docs:
+                self.docs[key].update(update.get("$set") or {})
+                return
+            if upsert:
+                self.docs[key] = dict(update.get("$set") or {})
+                self.docs[key].update(update.get("$setOnInsert") or {})
+
+    coll = _Coll()
+    await coll.update_one(
+        {"session_id": "s1", "user_id": "u1"},
+        {"$set": {"pending_scan": {"findings": [{"filepath": "a.py"}]}}},
+    )
+    assert "s1" not in coll.docs  # BEFORE-fix behavior: silently dropped
+
+    coll2 = _Coll()
+    await coll2.update_one(
+        {"session_id": "s2", "user_id": "u1"},
+        {"$set": {"pending_scan": {"findings": [{"filepath": "a.py"}]}},
+         "$setOnInsert": {"session_id": "s2", "user_id": "u1"}},
+        upsert=True,
+    )
+    assert "s2" in coll2.docs  # AFTER-fix behavior: document created
+    assert coll2.docs["s2"]["pending_scan"]["findings"][0]["filepath"] == "a.py"

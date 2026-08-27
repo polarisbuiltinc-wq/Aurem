@@ -877,3 +877,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `ADMIN_EMAIL` — auto-detected in backend/services/journey_watch.py (verify) (default: unset) [Iter 0, 2026-08-27T18:02:48.110180Z] <!-- inv:envvar:ADMIN_EMAIL -->
 - `FUNNEL_DIGEST_WEEKDAY_UTC` — auto-detected in backend/services/journey_watch.py (verify) (default: unset) [Iter 0, 2026-08-27T18:02:48.110198Z] <!-- inv:envvar:FUNNEL_DIGEST_WEEKDAY_UTC -->
 - `FUNNEL_DIGEST_HOUR_UTC` — auto-detected in backend/services/journey_watch.py (verify) (default: unset) [Iter 0, 2026-08-27T18:02:48.110212Z] <!-- inv:envvar:FUNNEL_DIGEST_HOUR_UTC -->
+- `services/intent_grounding.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-27T19:37:43.635313Z] <!-- inv:service:services/intent_grounding.py -->
+- `loop_run_log kind='execute_partial_generation'` — auto-detected in backend/services/loop_engine.py (verify) [Iter 0, 2026-08-27T19:37:43.635350Z] <!-- inv:loop_run_log_kind:execute_partial_generation -->
+- `loop_run_log kind='partial_generation'` — auto-detected in backend/services/loop_engine.py (verify) [Iter 0, 2026-08-27T19:37:43.635370Z] <!-- inv:loop_run_log_kind:partial_generation -->
+- `services/plan_scan_contract.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-27T19:37:43.635390Z] <!-- inv:service:services/plan_scan_contract.py -->

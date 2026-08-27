@@ -127,3 +127,76 @@ def test_engine_leak_stripping_is_universal_not_flag_gated():
         "leak-stripping must no longer be gated behind "
         "_plain_english_active — only length-capping stays gated"
     )
+
+
+
+# ---------------------------------------------------------------------------
+# 2026-08-27 · P6 live-run regression, NAMED BEFORE/AFTER.
+#
+# BEFORE (bug): routers/chat.py called `strip_machinery_leak(content)`
+# with no `universal_only` kwarg -> defaulted to False -> the
+# explain-mode-only tier (bare file paths -> "a project file", DB
+# collection names -> "the database", framework jargon) ran for EVERY
+# user, including a live repo scan reply. This is the exact failure a
+# P6 live drive-through surfaced: a real scan mentioning
+# "backend/services/orchestrator.py" or "cto_projects" collection came
+# back as "a project file" / "the database", destroying the scan's
+# useful structured content.
+#
+# AFTER (fix): chat.py now calls
+# `strip_machinery_leak(content, universal_only=not _plain_english_active)`
+# — regular users (the common case) get ONLY the always-a-bug
+# universal tier (Iter NNN, Mode X, raw tracebacks); the explain-only
+# tier only runs when the founder's explain-mode contract is active
+# for that turn.
+# ---------------------------------------------------------------------------
+
+def test_before_fix_default_call_over_strips_real_scan_content():
+    """Reproduces the exact bug: the OLD call signature (no kwarg,
+    universal_only defaults to False) strips legitimate file paths and
+    DB collection names out of a real scan reply — this is what P6
+    caught live."""
+    scan_reply = (
+        "I scanned the repo. The bug is in backend/services/orchestrator.py "
+        "and the affected records live in the cto_projects collection."
+    )
+    text, stripped = strip_machinery_leak(scan_reply)  # old default behavior
+    assert stripped is True
+    assert "backend/services/orchestrator.py" not in text
+    assert "a project file" in text
+    assert "cto_projects" not in text
+
+
+def test_after_fix_universal_only_preserves_real_scan_content():
+    """The FIX: regular users go through universal_only=True, which
+    must leave real file paths and DB collection names untouched while
+    still catching genuine leaks."""
+    scan_reply = (
+        "I scanned the repo. The bug is in backend/services/orchestrator.py "
+        "and the affected records live in the cto_projects collection."
+    )
+    text, stripped = strip_machinery_leak(scan_reply, universal_only=True)
+    assert stripped is False
+    assert "backend/services/orchestrator.py" in text
+    assert "cto_projects" in text
+
+
+def test_after_fix_universal_only_still_catches_real_leaks():
+    """universal_only=True must still strip the always-a-bug tier
+    (Iter counters, Mode letters, raw tracebacks) for regular users —
+    the fix must not throw out the real leak protection."""
+    text, stripped = strip_machinery_leak(
+        "Blocked (Iter 286, Mode D): AttributeError: boom", universal_only=True
+    )
+    assert stripped is True
+    assert "Iter 286" not in text
+    assert "Mode D" not in text
+    assert "AttributeError" not in text
+
+
+def test_chat_py_call_sites_pass_universal_only_flag():
+    """Both chat/send and chat/stream call sites must gate the
+    explain-only tier behind _plain_english_active, never apply it
+    unconditionally to every user."""
+    src = open("/app/backend/routers/chat.py").read()
+    assert src.count("universal_only=not _plain_english_active") == 2
