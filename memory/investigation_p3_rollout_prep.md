@@ -17,24 +17,28 @@
       This is unit-level proof (mocked feature-flag check), not a live
       curl against a second real account — recommend one live spot-check
       before 100% if you want belt-and-suspenders, but not blocking.
-- [ ] **P0a ship-E2E green** — BLOCKED on founder installing the GitHub
-      App on `polarisbuiltinc-wq/aurem-rollback-testbed`. Founder has
-      confirmed this is in progress on their side as of 2026-08-27.
+- [ ] **P0a ship-E2E green** — Still **BLOCKED** (re-verified live 2026-08-27
+      16:11 UTC): `get_repo_token_or_error()` on the drill repo project
+      (`p_6d0be78cdd`, `polarisbuiltinc-wq/aurem-rollback-testbed`) returns
+      `app_installation_missing`. The GitHub App install has not landed yet.
 - [ ] **Founder has reviewed on their own account (test_admin_001)** —
       founder has reviewed the P0/P1/P2 *reports* and accepted them;
       no explicit confirmation yet of hands-on review of the live
       explain-branch UI (chip + shortened answers) on their own account.
       Recommend the founder do one live "how do the agents work" chat
       on test_admin_001 before widening.
-- [ ] **No leak-alert in the last 24h (the canary is quiet)** — the
-      `leak_alert_cron` (services/leak_alert_cron.py) only started
-      running in this session; no full 24h window has elapsed yet to
-      make this claim either way. Re-check after the cron has run for
-      a full day.
+- [x] **No leak-alert in the last 24h (the canary is quiet)** — re-checked
+      live 2026-08-27 16:11 UTC via the exact query `leak_alert_cron.py`
+      runs: `count_leak_stripped_last_24h()=0`,
+      `count_internal_faults_last_24h()=0`. Genuinely quiet right now.
+      (Caveat: the cron process itself has only been running ~12h in this
+      pod, not the full 24h — but the underlying data query is a real
+      rolling 24h window regardless of process uptime, so this reading
+      is trustworthy.)
 
-**3 of 6 preconditions are green. 3 are outside this codebase's
-control (founder action / elapsed time) — nothing further to build
-here.**
+**4 of 6 preconditions are now green** (canary-quiet flipped green this
+pass). **2 remain outside this codebase's control** (founder action /
+founder's own hands-on review) — nothing further to build here.
 
 ## Flag-removal diff (documented, NOT committed)
 

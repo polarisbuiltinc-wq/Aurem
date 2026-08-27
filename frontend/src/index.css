@@ -1246,6 +1246,22 @@ table { max-width: 100%; }
   .aurem-countdown-urgent { animation: none; }
 }
 
+/* 2026-08-27 · P3a "ORA remembers this" chip — subtle entrance so the
+   trust moment feels alive, not just a hard-appearing div. 240ms,
+   opacity + small upward translate, ease-out (matches the countdown-
+   pulse's calm easing style above). Respects prefers-reduced-motion
+   by skipping straight to the final state. */
+@keyframes aurem-remembers-fade-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.aurem-remembers-chip {
+  animation: aurem-remembers-fade-in 240ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aurem-remembers-chip { animation: none; }
+}
+
 /* ────────────────────────────────────────────────────────────────
    2026-08-27 · Phase E E1 — Chip size scale + tone tokens.
    Single source of truth for every chip/pill/badge in the app

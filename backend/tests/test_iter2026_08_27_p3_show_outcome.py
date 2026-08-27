@@ -90,6 +90,46 @@ class TestOraRemembersChip:
         src = _chatpanel_src()
         assert "plainEnglishContractActive: !!d.plain_english_contract_active" in src
 
+    def test_chip_has_fade_in_animation_class(self):
+        """2026-08-27 chip polish — the chip carries the fade-in class,
+        and the div is still the one gated on both conditions (not a
+        stray/duplicate div elsewhere)."""
+        src = _chatpanel_src()
+        idx = src.find("ora-remembers-chip-")
+        assert idx > -1
+        div_end = src.find("</div>", idx)
+        block = src[max(0, idx - 200): div_end]
+        assert 'className="aurem-remembers-chip"' in block
+
+    def test_fade_in_animation_respects_reduced_motion(self):
+        """The CSS animation must have a `prefers-reduced-motion:
+        reduce` override that disables it — no forced motion for
+        users who opted out at the OS level."""
+        css_path = _REPO / "frontend" / "src" / "index.css"
+        css = css_path.read_text()
+        idx = css.find(".aurem-remembers-chip")
+        assert idx > -1, "fade-in class not defined in index.css"
+        assert "animation: aurem-remembers-fade-in" in css[idx: idx + 200]
+        reduced_idx = css.find("prefers-reduced-motion", idx)
+        assert reduced_idx > -1
+        reduced_block = css[reduced_idx: reduced_idx + 200]
+        assert ".aurem-remembers-chip" in reduced_block
+        assert "animation: none" in reduced_block
+
+    def test_fade_in_duration_is_subtle_not_flashy(self):
+        """Founder asked for ~200-300ms, nothing flashy — guard against
+        a future edit accidentally making this a long/looping animation."""
+        css_path = _REPO / "frontend" / "src" / "index.css"
+        css = css_path.read_text()
+        idx = css.find("@keyframes aurem-remembers-fade-in")
+        assert idx > -1
+        rule_block = css[idx: css.find(".aurem-remembers-chip {", idx) + 200]
+        match = re.search(r"aurem-remembers-fade-in\s+(\d+)ms", rule_block)
+        assert match, "could not find animation duration"
+        duration_ms = int(match.group(1))
+        assert 150 <= duration_ms <= 400, f"duration {duration_ms}ms is outside the subtle 150-400ms range"
+        assert "infinite" not in rule_block, "chip fade-in must play once, not loop"
+
 
 # ── P3b — Quiet Leak Digest ──────────────────────────────────────────────
 class _FakeColl:

@@ -6953,7 +6953,7 @@ Founder approved P2 with 5 locked decisions (Q1-Q5, see `memory/investigation_p2
 4. **Audit spine + 24h alert** — reused `ora_audit` (`services/audit_log.py`) + `loop_run_log` (`services/loop_audit_log.py`, new `KIND_INTERNAL_FAULT`) + G10 founder-alerts channel. New `services/leak_alert_cron.py` alerts if leak-stripped turns > 5/24h (env-configurable). No new collection, no new endpoint. 7/7 tests pass.
 5. **MessageBubble.jsx copy** — "5-adviser council · chairman verdict" → "double-checked by a second reviewer". Verified via grep + linter + regression test.
 
-**STOPPED per governing rule — P3 ("ORA remembers this" indicator) NOT started, awaiting founder review of P2.**
+**STOPPED per governing rule — P3 ("ORA remembers this" indicator) NOT started, awaiting founder review of P2.** [Superseded — P3 subsequently approved and shipped, see entry below.]
 
 
 ## 2026-08-27 — "Show the Outcome, Never the Engine" P3 (final phase) — DONE, testing_agent-verified
@@ -6965,4 +6965,16 @@ P3a ("ORA remembers this" plain-trust chip), P3b (weekly Quiet Leak Digest), P3c
 - P3c: documented flag-removal diff + widening-precondition checklist in `memory/investigation_p3_rollout_prep.md`. NOT executed — founder owns the rollout.
 
 **"Show the Outcome, Never the Engine" (P0→P3) is now fully complete.** Remaining founder actions: finish GitHub App install on drill repo (unblocks P2 item 3 + P3a screenshot); decide on rollout widening timing.
+
+
+## 2026-08-27 (later) — P3 follow-ups closed: chip fade-in, digest send proof, GitHub-App re-check, rollout-checklist refresh — testing_agent verified
+
+1. **Chip polish** — "ORA remembers this" chip now has a subtle 240ms opacity+translateY fade-in (`frontend/src/index.css`, new `.aurem-remembers-chip` + `@keyframes aurem-remembers-fade-in`), correctly disabled under `prefers-reduced-motion: reduce`. 3 new regression tests added to `test_iter2026_08_27_p3_show_outcome.py` (13/13 total pass).
+2. **Digest preview** — manually triggered one real `services/leak_digest.py` send via Resend (`SENT: True`, confirmed live, not a mock) to `ADMIN_EMAIL`. Did not touch the weekly schedule.
+3. **GitHub App re-check** — still `app_installation_missing` on the drill repo as of 2026-08-27 16:11 UTC. Ship-E2E test correctly SKIPS with the exact reason. No code work possible until founder completes the install.
+4. **Rollout checklist refresh** — `memory/investigation_p3_rollout_prep.md` updated with live data: canary-quiet precondition flipped to green (0 leak-strips, 0 internal-faults in the real trailing 24h query). Now 4/6 preconditions green; remaining 2 are founder-owned (GitHub App install, founder's own hands-on review).
+
+testing_agent independently re-verified (report: `/app/test_reports/iteration_p3a_fade_in_2026_08_27.json`) — 49/49 backend pass (+1 expected skip), frontend smoke clean, 0 issues.
+
+**Production status**: confirmed live on `auremcto.com` (build `f9c731dcce28`, verified via `/api/health`) — includes the health-probe crash fix and the earlier chip/pill/badge sizing uniformity batch. Does NOT yet include P2, P3, or this chip-polish follow-up (2+ commits ahead in Preview, awaiting next founder deploy).
 

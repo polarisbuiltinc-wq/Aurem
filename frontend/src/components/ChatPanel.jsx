@@ -4685,6 +4685,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                 && m.plainEnglishContractActive && (
                 <div
                   data-testid={`ora-remembers-chip-${i}`}
+                  className="aurem-remembers-chip"
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
