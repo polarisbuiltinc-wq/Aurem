@@ -4,7 +4,7 @@ Iter 165 — Codebase Graph (hybrid regex + LLM top-20).
 Locks in:
   - graph_builder module exports the full contract
   - LLM step is wired to MiniMax M2.5 via call_openrouter_model
-  - TOP_FILES_FOR_LLM = 20 + MAX_FILES = 200 are the cost caps
+  - TOP_FILES_FOR_LLM = 20 + MAX_FILES = 600 (env: GRAPH_MAX_FILES) are the cost caps
   - Endpoints /build-graph + /graph exist on cto_projects router
   - warm-start `agents_total` includes "graph" + agent_graph is fired
   - Orchestrator injects [CODEBASE GRAPH] block with 1.5s timeout cap
@@ -38,10 +38,26 @@ def test_graph_builder_exports_contract():
 
 
 def test_cost_caps_are_locked():
-    """Token + GitHub cost depends on these caps — pin them."""
-    from services.graph_builder import MAX_FILES, TOP_FILES_FOR_LLM
-    assert MAX_FILES == 200
-    assert TOP_FILES_FOR_LLM == 20
+    """Token + GitHub cost depends on these caps — pin them.
+
+    2026-08-28 · Loop N item 3 — MAX_FILES is now env-overridable
+    (GRAPH_MAX_FILES) with a default of 600 (was a hardcoded 200 that
+    silently truncated large repos, no warning). TOP_FILES_FOR_LLM is
+    unchanged/unaffected — the LLM-description cost cap is independent
+    of how many files the regex pass covers."""
+    import importlib
+    import os
+    from services import graph_builder as gb
+    assert gb.MAX_FILES == 600
+    assert gb.TOP_FILES_FOR_LLM == 20
+    # Env override actually takes effect on (re)import.
+    os.environ["GRAPH_MAX_FILES"] = "1200"
+    try:
+        importlib.reload(gb)
+        assert gb.MAX_FILES == 1200
+    finally:
+        del os.environ["GRAPH_MAX_FILES"]
+        importlib.reload(gb)
 
 
 def test_llm_step_uses_minimax_m25():

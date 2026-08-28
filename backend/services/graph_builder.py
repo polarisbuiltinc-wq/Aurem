@@ -68,7 +68,15 @@ CODE_EXTENSIONS = {
     ".go", ".rs", ".java",
 }
 
-MAX_FILES = 200
+import os
+
+# 2026-08-28 · Loop N item 3 — was a hardcoded 200. Env-overridable so
+# the ceiling can be raised without a code deploy; default raised to
+# 600 (was silently truncating repos with 1,925+ files to ~10% visible
+# to fix-planning, no warning). See CHANGELOG 2026-08-28 for the
+# benchmark backing this default (600 is cheap; 1800 is a real
+# GitHub-API-rate-limit + wall-clock cost, not a memory problem).
+MAX_FILES = int(os.environ.get("GRAPH_MAX_FILES", "600"))
 TOP_FILES_FOR_LLM = 20
 
 

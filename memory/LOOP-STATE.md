@@ -132,3 +132,20 @@ Planned ~55% Track B (severity-weighted — a reliability issue affecting real u
 - T8 Final report: DONE. /app/memory/REPORT-overnight.md.
 
 Loop closed clean — no task left IN-PROGRESS. All skips documented in REPORT-overnight.md §4/§7.
+
+
+## 2026-08-28 (continuation) — Loop N: 5 scoped items, P0 stays OPEN (founder confirming in parallel)
+
+Explicit constraint honored: did NOT re-verify or touch the P0 commit_files/rollback-approve-button fix from the prior loop — that stays open on the founder's own production confirmation.
+
+- **Item 1 (R10 risk memo)**: DONE, analysis only, no code. `/app/memory/R10-ROLLOBACK-PR-GAP.md`. Verdict: rollback-on-PR is NOT SAFE — stale pre-merge SHA never updated to the real `merge_commit_sha`, a network-blip on the live PR check can make rollback silently no-op while reporting "done". `ship_via_pr` stays flag-OFF-in-prod; this memo does not clear it for R9.
+- **Item 2 (sign-in diagnosis)**: DONE, diagnosis only. `/app/memory/R11-SIGNIN-DIAGNOSIS.md`. Ruled out stale/different deployed commit (verified via live `/version` on both prod and this pod — same lineage). Code has zero env-sensitive path for this button. Top hypothesis: stale/older service-worker registration in the founder's own browser profile — exact DevTools check provided, not yet founder-confirmed.
+- **Item 3 (graph cap)**: DONE + tested. `MAX_FILES` env-overridable (`GRAPH_MAX_FILES`), default raised 200→600. Benchmarked locally (1,627 real files) + analytically for the network-bound half — numbers in CHANGELOG. Test updated (`test_iter165_codebase_graph.py::test_cost_caps_are_locked`), 20/20 graph tests pass.
+- **Item 4 (lint engine)**: DONE. `frontend/eslint.config.js` added — root cause was NO config file existing at all (ESLint v9 requires one). Confirmed local `eslint`+plugins install is NOT viable here (breaks `@eslint/config-array`'s minimatch against the existing `resolutions.brace-expansion` pin) — reverted that attempt, `package.json`/`yarn.lock` confirmed clean. `oxlint` remains the real zero-config linter (0 errors).
+- **Item 5 (Track B dry-run)**: PREPARED + one real dry-run executed (labeled pending production confirmation, NOT the official number). `/app/scripts/track_b_rerun.py` — single-command rerun. Live result on this pod's `ora-grounding` fixture: 4/5 (80%), 1 failure was an unrelated intentional security-file guardrail, not the original crash class.
+
+**DO NOT** (per explicit founder instruction this loop): rerun R5e, build P2-B/unified ship-UI, start R8/R9/Phase 3, re-verify P0 or touch ship-via-PR flags. None of these were touched.
+
+**New risks surfaced**: the R10 memo's squash/rebase-merge SHA mismatch is a previously-undocumented gap (existing test `test_rollback_merged_pr_falls_through` cannot catch it — it uses the same SHA for pre- and post-merge, so it isn't testing the thing that's actually broken). Flagged in R10, not fixed (analysis-only per this loop's scope).
+
+**Next actions**: founder confirms P0 on production (parallel) → then run the official Track B rerun against the real repo/tasks; founder checks the sign-in DevTools hypothesis; R10 gap needs an actual code fix (3-4 sub-items scoped in the memo) before `ship_via_pr` can be considered for R9.
