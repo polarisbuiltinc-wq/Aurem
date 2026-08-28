@@ -883,3 +883,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `services/plan_scan_contract.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-27T19:37:43.635390Z] <!-- inv:service:services/plan_scan_contract.py -->
 | `routers/admin_llm_config.py` | `/admin/llm/configs` | 6 | auto-detected new router (verify) (Iter 0, 2026-08-27T23:05:43.687048Z) | <!-- inv:router:routers/admin_llm_config.py -->
 - `services/llm_config_store.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-27T23:05:43.687185Z] <!-- inv:service:services/llm_config_store.py -->
+
+### Iter 0 · 2026-08-28
+
+- `services/write_guard.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-28T00:09:57.979446Z] <!-- inv:service:services/write_guard.py -->
