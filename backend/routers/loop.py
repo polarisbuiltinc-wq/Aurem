@@ -1324,6 +1324,53 @@ async def rollback_loop(
             403, f"GitHub App auth failed ({_auth_err}): {_auth_detail}",
         )
 
+    # Rollback-gap fix (2026-08-28) — a ship_via_pr commit landed on a
+    # throwaway branch, not `branch`. If that PR never merged, there is
+    # nothing to revert on `branch` — run_rollback's git-revert path
+    # would either no-op or error against a commit not in its history.
+    # Check live PR state and close+delete the branch instead when
+    # unmerged; an already-merged PR falls through to the existing,
+    # unchanged revert-commit path below (same as the always-on
+    # direct-commit ships).
+    pr_url = commit.get("pr_url")
+    pr_number = commit.get("pr_number")
+    pr_branch = commit.get("pr_branch")
+    if pr_url and pr_number:
+        owner = proj.get("github_owner") or proj.get("owner")
+        repo = proj.get("github_repo") or proj.get("repo")
+        from services.loop_safety import get_pr_status, close_and_retract
+        pr_status = await get_pr_status(owner=owner, repo=repo, pr_number=pr_number, token=user_token)
+        if not pr_status.get("merged"):
+            await db.loop_sessions.update_one(
+                {"loop_id": loop_id},
+                {"$set": {"rollback_status": "running",
+                          "rollback_started_at": time.time(),
+                          "rollback_commit_sha": full_sha}},
+            )
+            result = await close_and_retract(
+                owner=owner, repo=repo, pr_number=pr_number,
+                branch=pr_branch, token=user_token,
+            )
+            ok = bool(result.get("pr_closed")) and bool(result.get("branch_deleted"))
+            await db.loop_sessions.update_one(
+                {"loop_id": loop_id},
+                {"$set": {
+                    "rollback_status":       "done" if ok else "failed",
+                    "rollback_completed_at": time.time(),
+                    "rollback_error":        "; ".join(result.get("errors") or []) or None,
+                }},
+            )
+            return {
+                "ok":              ok,
+                "loop_id":         loop_id,
+                "rollback_status": "done" if ok else "failed",
+                "commit_sha":      full_sha,
+                "detail":          ("PR was never merged — closed the PR and deleted "
+                                     "the ship branch instead of reverting a commit."),
+            }
+        # Merged — the commit really is on `branch` now. Fall through
+        # to the unchanged revert-commit path below.
+
     await db.loop_sessions.update_one(
         {"loop_id": loop_id},
         {"$set": {

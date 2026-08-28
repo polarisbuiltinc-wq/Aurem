@@ -1,5 +1,7 @@
 # AUREM CTO — Changelog (append-only)
 
+- **Phase 2 continuation 2, rollback-gap FIXED (2026-08-28, same fork, "continue then whats left all one by one")** — closed the one gap flagged as "not fixed" in the previous entry. `routers/loop.py::rollback_loop` now checks live PR merge-state (new `services/loop_safety.py::get_pr_status`) before deciding revert-commit vs close+retract; `services/loop_engine.py` now persists `pr_number`/`pr_branch` alongside `pr_url` so rollback can act on it. 6 new tests + 40-test regression pass (0 new failures vs baseline). Full detail in `/app/memory/LOOP-STATE.md`'s "PHASE 2 continuation 2" section. Nothing else left that doesn't require the founder's own action (GitHub webhook settings, P2-B re-scope call, "GO PHASE 3").
+
 - **Phase 2 continuation, "CONTINUE ALL ONE BY ONE" (2026-08-28, same fork)** — full detail in `/app/memory/LOOP-STATE.md`'s "PHASE 2 continuation" section.
   - **Ship-status truthfulness fix (P2-C/P2-E narrow slice)**: when `ship_via_pr` is ON, the app had no auto-merge anywhere (confirmed by grep) yet the UI said "Shipped {sha}" and linked to an unmerged commit. Fixed in the existing `ShippedRow`/`extractShipInfo` (`LoopLiveFeed.jsx`) + `loop_engine.py::_do_ship` — now says "PR opened for {sha}", links to the PR, shows an accurate 3-step mini-guide (no fake "Approve here" button). Zero change to the direct-commit path. 6 new tests + 25 + 12 regression, all pass.
   - **Notification bell poll 30s → 10s** (`UserNotificationBell.jsx`) per testing_agent's own P2-A review note.

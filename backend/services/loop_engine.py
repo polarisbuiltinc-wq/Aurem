@@ -3765,6 +3765,15 @@ class LoopEngine:
             "html_url":  html_url,
             "files":     list(files_dict.keys()),
             "pr_url":    pr_url,
+            # Rollback-gap fix (2026-08-28) — rollback previously had no
+            # way to know this ship went via an unmerged PR on a
+            # throwaway branch (it always tried to revert `full_sha` on
+            # the base `branch`, where that commit was never applied).
+            # Persist what's needed to close+retract instead when the
+            # PR never merged. `None` for both on the always-on direct-
+            # commit path — zero shape change there.
+            "pr_number":  pr_number,
+            "pr_branch":  pr_ship_branch if pr_url else None,
         }
         # 2026-08-24 · Pillar 4 — independent, non-blocking read-back
         # verification (services/ship_verification_audit.py). Never

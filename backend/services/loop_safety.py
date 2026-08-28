@@ -464,6 +464,36 @@ async def close_pr(
     return False, f"close_pr_status_{r.status_code}"
 
 
+# Rollback-gap fix (2026-08-28) — live PR merge-state check. The
+# rollback endpoint needs this BEFORE deciding whether to revert a
+# commit on the base branch (already merged — safe, history-preserving)
+# or close+retract the still-open PR (never merged — nothing to revert
+# on the base branch, closing+deleting the throwaway branch is correct).
+async def get_pr_status(
+    *, owner: str, repo: str, pr_number: int, token: str,
+) -> dict:
+    """Returns {"merged": bool, "state": str} for a live PR lookup.
+    Never raises — an unreachable/errored lookup returns merged=False
+    so the caller fails toward the safer close+retract path rather
+    than silently reverting a commit that was never actually applied."""
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept":        "application/vnd.github+json",
+        "User-Agent":    "aurem-pr-helper",
+    }
+    try:
+        r = await github_request_with_retry(
+            "GET", f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}",
+            headers=headers,
+        )
+        if r.status_code == 200:
+            j = r.json() or {}
+            return {"merged": bool(j.get("merged")), "state": j.get("state") or "unknown"}
+    except Exception as e:                                    # noqa: BLE001
+        logger.warning("get_pr_status(%s/%s#%s) failed: %r", owner, repo, pr_number, e)
+    return {"merged": False, "state": "unknown"}
+
+
 async def delete_ship_branch(
     *, owner: str, repo: str, branch: str, token: str,
 ) -> tuple[bool, Optional[str]]:
