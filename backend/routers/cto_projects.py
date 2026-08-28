@@ -3403,6 +3403,11 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
             )
             from services.ora_chat.tool_output_wrapper import wrap_edited_files
             rich_changes = build_files_changed(contents, edits)
+            # Overnight T1 (METER) — deterministic diff metrics off the
+            # diff the writer already computed above. Zero LLM, zero
+            # extra GitHub call.
+            from services.ship_meter import compute_meter_fields
+            ship_meter = compute_meter_fields(rich_changes)
             findings_clean = shape_vanguard_findings(
                 (verify_result.get("findings", []) if "verify_result" in locals() else []),
                 status=("blocked" if "verify_result" in locals()
@@ -3443,6 +3448,7 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
                 edited_files=edited_files_payload,
                 time_taken_seconds=elapsed,
                 github_url=f"https://github.com/{owner}/{repo}/commit/{commit_full_sha}",
+                ship_meter=ship_meter,
             )
         except Exception as _diff_e:
             logger.warning("task_diff/popup persistence failed: %r", _diff_e)
@@ -3944,6 +3950,10 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
             )
             from services.ora_chat.tool_output_wrapper import wrap_edited_files
             rich_changes = build_files_changed(contents, edits)
+            # Overnight T1 (METER) — deterministic diff metrics off the
+            # diff already computed above. Zero LLM, zero extra call.
+            from services.ship_meter import compute_meter_fields
+            ship_meter = compute_meter_fields(rich_changes)
             findings_clean = shape_vanguard_findings(
                 (verify_result.get("findings", []) if "verify_result" in locals() else []),
                 status=("blocked" if "verify_result" in locals()
@@ -3971,6 +3981,7 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
                 edited_files=edited_files_payload,
                 time_taken_seconds=elapsed,
                 github_url=f"https://github.com/{owner}/{repo}/commit/{commit_full_sha}",
+                ship_meter=ship_meter,
             )
         except Exception as _diff_e:
             logger.warning("task_diff/popup persistence (git path) failed: %r", _diff_e)

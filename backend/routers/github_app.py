@@ -670,6 +670,16 @@ async def install_webhook(request: Request):
             except Exception as e:                                # noqa: BLE001
                 logger.error("meta.deleted cascade failed: %r", e)
 
+        elif event == "pull_request":
+            # ── Overnight T7 (Wave 2 · ship-via-PR) — label dispatch.
+            # Logic lives in services.loop_safety.dispatch_pull_request_webhook
+            # (extracted so it's unit-testable without an HTTP round-trip).
+            try:
+                from services.loop_safety import dispatch_pull_request_webhook
+                await dispatch_pull_request_webhook(db, payload=payload, action=action)
+            except Exception as e:                            # noqa: BLE001
+                logger.warning("pull_request label dispatch failed: %r", e)
+
         else:
             # Unknown event — log and 200. GitHub adds new events
             # over time; we never 4xx here so deliveries aren't

@@ -339,7 +339,7 @@ export async function streamChat({ prompt, sessionId, session_id,
                      `into multiple messages.`;
         }
       } catch { /* fall through */ }
-      onError?.(friendly || `HTTP 422: ${txt || res.statusText}`);
+      onError?.(friendly || `HTTP ${res.status}: ${txt || res.statusText}`);
       return;
     }
     // Iter 388l — Bug 15 fix. Cloudflare (520/521/522/523/524/525/
@@ -363,6 +363,21 @@ export async function streamChat({ prompt, sessionId, session_id,
       onError?.(friendly);
       return;
     }
+    // Overnight T6/P1d (2026-08-28) — plain-English bar: a structured
+    // {detail: "..."} error body (401/403/404/409/429/5xx etc.) used
+    // to fall through to the raw `HTTP ${status}: {"detail":"..."}`
+    // wrapper below, even though the detail string itself is already
+    // human-readable and a themed action panel (e.g. reconnect-GitHub)
+    // renders right below it from the same detail text — the raw
+    // "HTTP 403: {...}" prefix + JSON braces was pure noise stacked on
+    // top of the good copy. Strip to the detail string when present.
+    try {
+      const body = JSON.parse(txt);
+      if (typeof body?.detail === "string" && body.detail.trim()) {
+        onError?.(body.detail);
+        return;
+      }
+    } catch { /* not JSON — fall through to the raw wrapper below */ }
     onError?.(`HTTP ${res.status}: ${txt || res.statusText}`);
     return;
   }

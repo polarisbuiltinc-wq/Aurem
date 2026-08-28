@@ -519,11 +519,12 @@ export default function ShipConfirmModal() {
           )}
           {phase === "shipping" && (
             <button data-testid="ship-modal-minimize" onClick={closeAll}
+              title="Closing stops this dialog's own status polling — the task itself keeps running on the server and will finish either way."
               style={{
                 padding: "9px 16px", fontSize: 13, fontWeight: 600,
                 background: "transparent", color: "#8A8A8A",
                 border: "1px solid #333", borderRadius: 6, cursor: "pointer",
-              }}>Run in background</button>
+              }}>Close (task keeps running)</button>
           )}
           {phase === "shipped" && (
             <>

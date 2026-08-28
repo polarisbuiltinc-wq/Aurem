@@ -14,6 +14,7 @@ import { useNavigate }             from "react-router-dom";
 import { ArrowLeft }               from "lucide-react";
 import { api, getToken }           from "../lib/api";
 import { toast }                   from "../components/Toast";
+import ConfirmModal                from "../components/ConfirmModal";
 
 const TABS = [
   { id: "cursor",         label: "Cursor",          icon: "🖱" },
@@ -420,16 +421,26 @@ function ConfigBlock({ json, onCopy, testid, apiKey }) {
   // page's masking pattern); "Reveal" needs explicit re-confirmation.
   // Copy still copies the REAL config so the paste-into-IDE flow works.
   const [reveal, setReveal] = useState(false);
+  // Overnight T6/P1e (2026-08-28) — themed confirm, not window.confirm().
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const str = JSON.stringify(json, null, 2);
   const masked = apiKey ? `${apiKey.slice(0, 14)}…${apiKey.slice(-4)}` : "";
   const display = (!apiKey || reveal) ? str : str.split(apiKey).join(masked);
   const toggleReveal = () => {
-    if (!reveal && !window.confirm(
-      "Reveal your full API key on screen? Anyone looking at your screen will be able to copy it.")) return;
-    setReveal((v) => !v);
+    if (!reveal) { setConfirmOpen(true); return; }
+    setReveal(false);
   };
   return (
     <div style={{ position: "relative" }}>
+      <ConfirmModal
+        open={confirmOpen}
+        testidPrefix={`${testid}-reveal-confirm`}
+        title="Reveal API key?"
+        body="Anyone looking at your screen will be able to copy your full API key."
+        confirmLabel="Reveal"
+        onConfirm={() => { setReveal(true); setConfirmOpen(false); }}
+        onCancel={() => setConfirmOpen(false)}
+      />
       <pre data-testid={testid} style={styles.configPre}>
         <code>{display}</code>
       </pre>

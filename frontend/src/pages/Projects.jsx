@@ -22,6 +22,7 @@ import RobotGuide, { RobotGuideKeyframes, escapeHtml, oraPulseRingStyle } from "
 import DOMPurify from "dompurify";
 import AddProjectWizard from "../components/AddProjectWizard";
 import FounderOfferPill from "../components/FounderOfferPill";
+import ConfirmModal from "../components/ConfirmModal";
 
 export default function Projects() {
   return (
@@ -1696,6 +1697,8 @@ function ProjectDetail({ project, onRemoved, onChanged }) {
   const [activeTaskId, setActiveTaskId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  // Overnight T6/P1e (2026-08-28) — themed confirm, not window.confirm().
+  const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -1755,7 +1758,11 @@ function ProjectDetail({ project, onRemoved, onChanged }) {
   }
 
   async function remove() {
-    if (!window.confirm(`Remove project "${project.name}"?`)) return;
+    setConfirmRemoveOpen(true);
+  }
+
+  async function doRemove() {
+    setConfirmRemoveOpen(false);
     try {
       await api.delete(`/cto/projects/${project.project_id}`);
       toast({ message: "Project removed", kind: "info" });
@@ -1781,6 +1788,15 @@ function ProjectDetail({ project, onRemoved, onChanged }) {
 
   return (
     <div data-testid="proj-detail" style={{ display: "grid", gap: 18 }}>
+      <ConfirmModal
+        open={confirmRemoveOpen}
+        testidPrefix="proj-remove-confirm"
+        title="Remove project?"
+        body={`Remove project "${project.name}"? This unlinks it from AUREM — it does not touch anything on GitHub.`}
+        confirmLabel="Remove"
+        onConfirm={doRemove}
+        onCancel={() => setConfirmRemoveOpen(false)}
+      />
       <div className="card">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div>

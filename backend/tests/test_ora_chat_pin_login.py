@@ -51,8 +51,16 @@ class TestPinRateLimitStillActive:
     """PIN rate-limit (5 wrong / hour) must NOT be affected by the fix."""
 
     def test_rate_limit_check_present(self):
-        assert "if n_fail >= 5:" in _ROUTER_SRC
+        # Overnight T6/P1a (2026-08-28) — extended with an ADDITIVE
+        # per-account counter (n_fail_account) alongside the original
+        # per-IP one (n_fail); either tripping still 429s. The 5-per-
+        # hour threshold itself is unchanged.
+        assert "if n_fail >= 5 or n_fail_account >= 5:" in _ROUTER_SRC
         assert '"too_many_attempts"' in _ROUTER_SRC
+
+    def test_per_account_lockout_key_present(self):
+        assert "n_fail_account" in _ROUTER_SRC
+        assert "account_key" in _ROUTER_SRC
 
     def test_hmac_compare_used(self):
         # Timing-safe compare — critical for the PIN.

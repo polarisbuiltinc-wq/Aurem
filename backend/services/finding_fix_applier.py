@@ -486,3 +486,40 @@ async def apply_finding_fix(
             + (f" on branch {commit_target}" if commit_target != branch else "")
         ),
     }
+
+
+# ─── Overnight T7 — revert, via the shared close_and_retract() ─────
+# finding_fix_applier had NO revert mechanism before this. Reuses the
+# same helper the ship-via-PR path uses (services.loop_safety), so
+# there is exactly one audited close+delete implementation, not two.
+# Branch deletion only actually happens for `auremcto/`-namespaced
+# branches (delete_ship_branch's hard guard) — a legacy `aurem/fix-*`
+# branch from THIS function gets its PR closed but the branch itself
+# is left alone (safer default; matches why the guard exists).
+async def revert_finding_fix(db, *, fix_id: str, token: str) -> dict:
+    fix = await db.finding_fixes.find_one({"fix_id": fix_id})
+    if not fix:
+        return {"ok": False, "error": "fix_not_found"}
+    pr_url = fix.get("pr_url")
+    branch = fix.get("branch")
+    pr_number = None
+    if pr_url:
+        try:
+            pr_number = int(pr_url.rsplit("/", 1)[-1])
+        except (ValueError, TypeError):
+            pr_number = None
+    # Need owner/repo — read from the project, not the fix row (fix
+    # row doesn't store them; project does).
+    proj = await db.cto_projects.find_one({"project_id": fix.get("project_id")})
+    if not proj:
+        return {"ok": False, "error": "project_not_found"}
+    from services.loop_safety import close_and_retract
+    result = await close_and_retract(
+        owner=proj.get("github_owner"), repo=proj.get("github_repo"),
+        pr_number=pr_number, branch=branch, token=token,
+    )
+    await db.finding_fixes.update_one(
+        {"fix_id": fix_id},
+        {"$set": {"reverted": True, "revert_result": result}},
+    )
+    return {"ok": True, **result}

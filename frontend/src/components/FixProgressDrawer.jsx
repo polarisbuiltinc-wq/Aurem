@@ -536,10 +536,13 @@ export default function FixProgressDrawer() {
             <span style={{ fontSize: 11 }}>Hide</span>
           </button>
           {/* Legacy close icon kept for muscle-memory but it ALSO hides
-              now (never cancels). */}
+              now (never cancels). Overnight T6/P1c (2026-08-28):
+              added the same explicit title as the Hide button so the
+              legacy icon doesn't read as "cancel" without a tooltip. */}
           <button
             data-testid="fix-progress-close"
             onClick={hidePanel}
+            title="Hide — fix continues"
             style={{
               padding: 6, background: "transparent",
               border: "1px solid rgba(255,255,255,0.12)",

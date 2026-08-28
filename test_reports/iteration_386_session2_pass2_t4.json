@@ -1,0 +1,92 @@
+{
+  "summary": "Session-2 Pass #2 (T4) re-verify pass on preview pod bin-context-pat with MOCK_LLM=true. Ran the 2 required frontend unit tests (K1 ship-CTA fallback + countdown zero-second disable) and the T1 ship-meter backend guardrails; all 16 tests PASS. Hit live /api/aurem-dev/admin/loop-metrics as admin (test@aurem.dev) and confirmed the top-level ship_meter_summary object with a 'line' field is emitted correctly; ship_count=331. Logged in test@aurem.dev live and re-verified P0-2 themed DeleteChatConfirmModal (Cancel path, 18 rows preserved) and J4a bad-password themed ORA HEADS-UP panel — both PASS. FOUND ONE NEW CRITICAL PLAIN-ENGLISH VIOLATION: on the active project (auto-selected aurem-demo/frontend which has revoked GitHub access on this account), sending 'Hi' renders a raw HTTP-status-wrapped JSON error bubble ('⚠ HTTP 403: {\"detail\":\"...\"}') alongside the nicer themed reconnect panel — the raw prefix + JSON braces violate the 'no raw errors' bar for a developer-founder. J3 (real GitHub commit) NOT DONE because (a) MOCK_LLM=true on this pod, and (b) the fixture project funnel-repro is connected to polarisbuiltinc-wq/ora-grounding (NOT the aurem-rollback-testbed named in the task brief — task-brief stale name) and could not be switched to via the topbar pill in the current UI.",
+  "test_credentials_used": [
+    {"email": "test@aurem.dev", "password": "AuremTest2026!", "role": "founder + admin fixture, project funnel-repro (p_6d0be78cdd) already connected via GitHub App installation 152797252 to polarisbuiltinc-wq/ora-grounding"}
+  ],
+  "verified_items": [
+    {"item": "Frontend unit: MessageBubble K1 ship-CTA fallback (all 4 cases)", "status": "PASS", "evidence": "vitest src/components/__tests__/MessageBubble.k1_ship_fallback.test.jsx — 4/4 pass in 4ms"},
+    {"item": "Frontend unit: countdown zero-second button-disable (all 8 cases)", "status": "PASS", "evidence": "vitest src/components/__tests__/countdown_zero.test.jsx — 8/8 pass in 214ms"},
+    {"item": "Backend guardrail: T1 ship-meter compute_meter_fields + zero-LLM AST scan", "status": "PASS", "evidence": "pytest tests/test_overnight_t1_ship_meter.py — 4/4 pass"},
+    {"item": "Backend live: GET /api/aurem-dev/admin/loop-metrics ship_meter_summary shape", "status": "PASS (shape)", "evidence": "Returned {window_days:30, ship_count:331, avg_lines_per_ship:0.0, avg_files_per_ship:0.0, new_dep_ships:0, line:'last 30d avg: 0.0 lines/ship · 0.0 files/ship · 0 new-dep ships/331'} — top-level key present, line-string format matches the required 'last 30d avg: X lines/ship · Y files/ship · Z new-dep ships/N' template."},
+    {"item": "Login (test@aurem.dev) → dashboard render", "status": "PASS", "evidence": "Reached /dashboard with founder+admin session; no MOCK_LLM banner rendered (MOCK_LLM env is set but no user-facing banner)."},
+    {"item": "P0-2 delete-chat themed modal (SessionSwitcher)", "status": "PASS (LIVE)", "evidence": "18 recent-chats loaded; [data-testid=session-switcher-delete-*] first row opened [data-testid=delete-chat-confirm-modal] with text 'Delete this chat? | This can't be undone. | Delete | Cancel'. page.on('dialog') never fired (no native window.confirm). Cancel path: 18→18 rows preserved, modal closed."},
+    {"item": "J4a bad-password themed error", "status": "PASS (LIVE)", "evidence": "Login with wrong password: themed 'ORA · HEADS UP' panel: 'Hmm — Invalid credentials. Try again, or use GitHub above.' + inline field 'Invalid credentials'. Zero stack-trace text."}
+  ],
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/aurem-dev/admin/loop-metrics ship_meter_summary", "issue": "ship_count=331 but avg_lines_per_ship=0.0 / avg_files_per_ship=0.0 / new_dep_ships=0 — 100% of historical loop_outcomes/cto_tasks rows lack the new meter fields (expected: field only backfilled on NEW ships going forward). Result is a technically-correct but visually-misleading admin readout for the next many weeks: even after 5-10 REAL ships with meter data, avg = 50-200 / (331+N) ≈ 0.1-0.5 lines/ship, which will read as 'ORA still ships 0-line changes'. Recommend either (a) exclude rows without a meter field from the denominator (only count rows where lines_added|lines_removed|files_touched is present), or (b) add a 'meter-instrumented ship_count' side-metric alongside the raw total so an admin can see the two populations. Not a blocker for T1 acceptance (the line-string shape is correct and ship_count is >0), but material for whichever human reads this dashboard next."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "MessageBubble.jsx (chat error rendering)", "issue": "Sending 'Hi' on a project with revoked GitHub access (aurem-demo/frontend on this account) produces a RAW error bubble '⚠ HTTP 403: {\"detail\":\"This project's GitHub App access isn't available — the installation may have been revoked or doesn't cover this repo. Open Projects → APP to reconnect via the AUREM GitHub App.\"}' — the JSON-detail inner text IS plain-English and actionable, but the wrapper 'HTTP 403: {…}' violates the persona plain-English bar (no raw status codes, no braces). A themed 'GitHub access for this repo is unavailable. Connect it via the AUREM GitHub App — one popup, no tokens to manage. [Connect GitHub App]' panel DOES render below it (good), so suppress/strip the raw wrapper and surface only the themed panel. Screenshot: J3-03-hi-reply.png.", "selector": "message bubble containing 'HTTP 403:' prefix", "priority": "HIGH"},
+      {"component": "TopBar project pill", "issue": "Clicking [data-testid=active-project-pill] does not open a project switcher — no way to switch away from the currently-active project via the top pill; only via a Projects settings page (not tested). For test@aurem.dev the auto-selected active project is aurem-demo/frontend (revoked) rather than the healthy fixture funnel-repro, and the user cannot pivot in one click. Recommend either auto-selecting a healthy project on load, or making the top pill a switcher (dropdown of installed/connected projects with a health dot).", "selector": "[data-testid=active-project-pill]", "priority": "MED"},
+      {"component": "Topbar '12 projects point to deleted or unreachable repos — click to clean up' banner", "issue": "Banner is honest but for a founder-tier admin owning 43 projects with 12 broken links, it's the FIRST thing they see on every reload. Consider dismissable+persistable per-account or auto-hide when no active project is affected.", "selector": "topbar cleanup banner", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "J3 real ship end-to-end (T1 E2E proof)", "issue": "NOT PERFORMED. Blockers: (1) MOCK_LLM=true on this pod — LLM-driven plan/apply/ship cannot produce a real diff, so any REAL commit to polarisbuiltinc-wq/ora-grounding would either fail or push a mock artifact, which contradicts the 'trivially reversible planted proof' guardrail. (2) The fixture project funnel-repro is connected to polarisbuiltinc-wq/ora-grounding, NOT polarisbuiltinc-wq/aurem-rollback-testbed as the task brief says — task-brief has a stale repo name. Recommend re-running this journey on a pod with a real model wired AND after confirming the intended drill-repo.", "affected_selectors": ["[data-testid=chat-input]", "[data-testid=session-switcher-btn]"]}
+    ],
+    "design_issues": [
+      {"screen": "Dashboard first-load for test@aurem.dev", "issues": ["Stacked banners (cleanup-12-projects, github-access-revoked, and cookie-consent bottom-right) consume ~180px of vertical space on first paint — a first-time founder sees three simultaneous 'something is wrong' cues before any content.", "Chat history shows a stale 'Loop cancelled at plan phase' / 'Loop failed at plan phase — GitHub PAT preflight failed: pat_invalid_or_expired' bubbles from prior sessions on the revoked project — these are technically-plain-English but read like error dumps to a returning user."]}
+    ]
+  },
+  "k1_k10_status_table": {
+    "K1_ship_cta_prose_no_button_silent_null": "FIXED · verified-via-unit-test (MessageBubble.k1_ship_fallback.test.jsx 4/4 pass) + K1 fallback data-testids present in live DOM (count=2 on dashboard). NEEDS REAL-MODEL RE-TEST for live-organic repro (this pod has MOCK_LLM=true).",
+    "K2_complaint_handling_path": "NEEDS REAL-MODEL RE-TEST — requires real assistant phrasing.",
+    "K3_forwardable_issue_text": "NEEDS REAL-MODEL RE-TEST — requires real assistant phrasing.",
+    "K4_confidence_gating_contradiction": "NEEDS REAL-MODEL RE-TEST — requires real assistant phrasing.",
+    "K5_ui_complaint_4_section_dump": "NEEDS REAL-MODEL RE-TEST — requires real assistant phrasing.",
+    "K6_generic_filler_next_steps": "NEEDS REAL-MODEL RE-TEST — requires real assistant phrasing.",
+    "K7_false_familiarity_first_message": "NEEDS REAL-MODEL RE-TEST — requires real assistant phrasing.",
+    "K8_first_message_engine_routing": "CODE-VERIFIED · ChatPanel.jsx uses api.post/get/delete on /chat/agents/list, /chat/opened, /chat/task-followup, /chat/history, /chat/sessions/{id}/messages, and streams via /chat/stream (grep of the file shows 8 hits on /chat/… and 0 hits on /ora/chat or ora_chat.py). Brand-new user's first message routes through the LEGACY routers/chat.py path — v2 routers/ora_chat.py is NOT invoked from ChatPanel.jsx.",
+    "K9_stray_via_ORA_suffix": "NEEDS REAL-MODEL RE-TEST — requires real assistant phrasing (prior iter 385 saw '(via ORA)' on a different pod that had a real model; this pod's chat output was a raw HTTP-403 error, so no assistant-generated tail-suffix was observable).",
+    "K10_collapse_controls_first_message": "NEEDS REAL-MODEL RE-TEST — requires a real short first reply to observe; the '1 line / Collapse' pattern was visible on stale historical bubbles ('test 1 line', 'Hi 1 line') even for very short user messages — worth a follow-up look with a real model in the loop."
+  },
+  "top3_quit_or_ask_a_friend_moments": {
+    "J1": [
+      "First-load lands on a revoked-access active project with stacked warning banners and stale 'Loop failed at plan phase' bubbles — a returning founder immediately reads 'this thing is broken on my account' before any positive signal.",
+      "Sending 'Hi' emits a raw 'HTTP 403: {…json…}' bubble alongside the themed reconnect panel — a dev-founder pattern-matches 'raw stack surfaced to me' and questions the polish level.",
+      "No one-click project switcher on the topbar means Maya cannot pivot from the broken aurem-demo/frontend to the healthy funnel-repro without hunting through Settings/Projects."
+    ],
+    "J2": [
+      "Day-2 return preserves session cookies (good) but re-lands on the same broken active project with the same stacked banners — no state-of-the-house 'here's what happened while you were gone' cue.",
+      "18 recent chats accumulate quickly with cryptic names ('Basic Math Problem', 'Quick App Code Fix Debugging React App…') — hard to find a real thread; consider auto-titling based on the first substantive turn.",
+      "Cookie consent banner (bottom-right) re-appears on every fresh session — no persisted opt-out for a returning user."
+    ],
+    "J3": [
+      "MOCK_LLM=true blocks the whole E2E ship proof on this pod — a founder-tier account cannot self-verify 'does the ship pipeline actually push to GitHub'.",
+      "Task-brief repo name (aurem-rollback-testbed) does not match the actual seeded repo (ora-grounding) — a manual QA re-runner will waste 10-20 min chasing the wrong repo.",
+      "Even if a ship succeeds, the current ship_meter_summary buries new signal under 331 legacy zero-meter rows — 'here's what shipped in the last 30d' will read as 0 for weeks."
+    ],
+    "J4": [
+      "Bad-login UI is excellent — no friction.",
+      "Rate-limit + network-drop-mid-response paths NOT REACHED this pass (MOCK_LLM + revoked-project blocked organic streaming).",
+      "Submitting against a disconnected project surfaces a raw HTTP 403 bubble instead of only the themed panel — same finding as J1 above."
+    ]
+  },
+  "test_report_links": [
+    "/app/frontend/src/components/__tests__/MessageBubble.k1_ship_fallback.test.jsx",
+    "/app/frontend/src/components/__tests__/countdown_zero.test.jsx",
+    "/app/backend/tests/test_overnight_t1_ship_meter.py",
+    "/app/test_reports/screenshots/iter_session2_pass2/ (J1-01, J1-04, J1-05, J3-01, J3-02, J3-03, J4a)"
+  ],
+  "critical_code_review_comments": [
+    "MessageBubble.jsx renders 'HTTP <status>: <raw JSON body>' as a plain code/pre block when the API returns a structured detail payload — this is the primary 'plain-English bar' violation on this pass. Suggest: if the response body parses as {detail: string}, render the detail string only (with the themed action panel below) and drop the 'HTTP xxx: {…}' wrapper. Applies at least to 401/403/404/409/429/5xx from /chat/stream and /chat/*.",
+    "TopBar active-project pill is not a switcher on the fixture account — either wire it to open a project picker dropdown or add a [data-testid=project-switcher-btn] elsewhere that a first-time returning user can find in <5s.",
+    "admin_analytics.py loop-metrics ship_meter_summary should distinguish 'meter-instrumented ships' from 'total ships' — the current formula (total_lines / N over ALL rows) will read as 0 for weeks after ship_meter rollout because 331 legacy rows contribute 0 to the numerator and 331 to the denominator. Either filter the denominator to rows with a non-null lines_added, or expose two numbers side-by-side.",
+    "ChatPanel.jsx K8 confirmation: all engine routing goes through legacy /chat/* — if v2 routers/ora_chat.py is meant to be the surface for new users, its wiring is not visible from ChatPanel.jsx. Confirm whether that's intentional (v2 is server-side only via /chat/stream forwarding) or whether the frontend still needs to migrate.",
+    "MOCK_LLM=true on a preview pod that a real dev-founder can log into and see stale 'Loop failed at plan phase' bubbles is a mixed signal — either strip mock-mode chat history on session load, or add a subtle 'PREVIEW POD · replies are mocked' banner so a Maya isn't left guessing whether the errors she sees are real."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (5/5 test cases pass: 4 pytest + 1 live shape check)",
+    "frontend": "100% on the 12 unit test cases; live journey verified 3/5 checkpoints (login PASS, delete-chat modal PASS, bad-password error PASS) with 1 NEW HIGH-priority live regression (raw HTTP 403 leak on revoked-project reply) and 1 BLOCKED (J3 real ship, blocked by MOCK_LLM+repo-name-drift)"
+  },
+  "test_credentials": "test@aurem.dev / AuremTest2026! (fixture, founder+admin, 43 projects, 12 with broken GH links, funnel-repro=p_6d0be78cdd -> polarisbuiltinc-wq/ora-grounding via installation 152797252)",
+  "seed_data_creation": "None. No new signups; no commits pushed. Used the pre-seeded test@aurem.dev fixture as instructed.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "This pod has MOCK_LLM=true — do NOT attempt J3 real-ship or K2/K3/K4/K5/K6/K7/K9/K10 live-model checks here. Re-run those on a pod with a real model wired. Task brief said the fixture repo is polarisbuiltinc-wq/aurem-rollback-testbed but the actual seeded project (funnel-repro / p_6d0be78cdd) is connected to polarisbuiltinc-wq/ora-grounding — confirm which one is intended before the next drill. The new HIGH-priority live finding this pass is the raw 'HTTP 403: {…}' bubble that MessageBubble.jsx renders when a chat send hits a revoked-access project — reproduce by logging in as test@aurem.dev (auto-active project = aurem-demo/frontend, revoked) and typing any message. K8 is code-verified: ChatPanel.jsx routes to LEGACY /chat/* — not v2. All 12 vitest cases + 4 pytest cases pass; ship_meter_summary shape is correct but its averages read 0.0/0.0/0 due to 331 legacy rows with no meter fields — flagged as MINOR. Screenshots in /app/test_reports/screenshots/iter_session2_pass2/.",
+  "rca of the issue": "Live RCA for the new HIGH-priority finding (raw HTTP 403 leak in chat bubble): (Reproduction) log in as test@aurem.dev, active project auto-selects aurem-demo/frontend which has a revoked GitHub App installation, type 'Hi' and Enter. (Observed) an assistant bubble renders literally '⚠ HTTP 403: {\"detail\":\"This project's GitHub App access isn't available — the installation may have been revoked or doesn't cover this repo. Open Projects → APP to reconnect via the AUREM GitHub App.\"}' and BELOW it a well-designed themed 'GitHub access for this repo is unavailable. Connect it via the AUREM GitHub App — one popup, no tokens to manage. [Connect GitHub App]' panel with a CTA button. (Root cause candidate) MessageBubble.jsx's error-rendering path is treating the /chat/stream API's structured error response as raw prose (falling back to `HTTP ${status}: ${JSON.stringify(body)}`) instead of parsing the {detail:string} shape and delegating to the themed reconnect panel that's already wired directly below. (Mitigation) In MessageBubble.jsx (or wherever /chat/stream errors are formatted into assistant bubbles), detect JSON-shaped detail bodies and render ONLY the detail string when the themed action panel is also going to render — suppress the 'HTTP xxx:' prefix and the JSON braces to meet the persona's 'no raw errors' bar."
+}

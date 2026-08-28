@@ -30,3 +30,21 @@ See PRD.md for original requirements/architecture, CHANGELOG.md for what's shipp
 
 ## P2 — future / nice-to-have
 - `ora_chat_v2` catalog currently has a small, deliberately-scoped action set (create/park backlog item, toggle a single whitelisted flag, trigger digest, set funnel SLO, set whitelisted env). Expanding the catalog is a P2+ decision for the founder to make explicitly per-action (each new action needs its own risk-tier + idempotency + audit wiring).
+
+## FUTURE LEDGER (v2 / PARKED)
+
+**Standing rules (R1-R5):**
+- R1 — Entries here are PARKED, not work items. No agent may build an F-ID without an explicit founder go-ahead to promote it off this ledger.
+- R2 — Any NEW parked item discovered during any session gets a new F-ID appended here (all 6 fields: ID / Name / What / Why parked / Trigger / Effort) before that session's loop ends.
+- R3 — No renaming, removing, or silently rewording an existing F-ID's fields without a founder ruling — append a dated note instead.
+- R4 — "Trigger" is the exact condition that promotes the item off PARKED — not a date, a fact (e.g. "founder review", "Wave 2 stable 2 weeks").
+- R5 — This section is founder-owned backlog, not a roadmap commitment — presence here is not a promise of when/if it ships.
+
+**F1-F15 — BLOCKED, not seeded.** The overnight run (2026-08-28) was instructed to seed F1..F15 verbatim from "the prior ledger prompt". A full search of `/app/memory/*.md` (including `ROADMAP.md`'s own prior revisions, `PRD.md`, and `FUTURE_BUILDS_LEDGER.md`, which uses an unrelated freeform format with no F-numbered/6-field entries) found **no F1-F15 seed text anywhere on disk**. Per the run's own instruction ("if absent from disk, mark BLOCKED, do not invent"), this sub-item is logged BLOCKED, not fabricated. **Needs founder**: re-forward the original F1-F15 list (ID/Name/What/Why parked/Trigger/Effort per item) so it can be seeded verbatim in a follow-up pass. F16/F17 below were fully specified in the overnight run's own instruction and are seeded now.
+
+| ID | Name | What | Why parked | Trigger | Effort |
+|---|---|---|---|---|---|
+| F16 | Day-1 lighter repo-connect | A lower-friction repo-connect path so a fresh signup can see product value before completing external GitHub OAuth | v2 scope; found overnight (2026-08-28 Session-2 pass) — fresh signups cannot connect a repo without an external OAuth popup, no manual/paste fallback exists, confirmed the #1 quit-risk in the J1 live journey | After UX wave; founder design call | M |
+| F17 | 3-ship-surface component consolidation | Fold the 3 live ship surfaces (`ShipDialog` inline, `LoopLiveFeed` ShippedRow, `ShipConfirmModal`) into ONE canonical "approve a change" component + status set | Copy is already unified ("Approve the fix" everywhere per N3), but merging 3 live, independently-tested surfaces + the new Wave-2 PR flow in one pass carries real regression risk | After Wave 2 (ship-via-PR) is stable in Preview for 2 weeks | M |
+
+**Housekeeping index (2026-08-28):** the two standing regression-discipline items are tracked at their own source-of-truth files, not duplicated here — `backend/test-baseline.txt` (404 pre-existing failures/errors) and `lint-baseline.txt` (37 backend + 1 frontend). Both stay untouched per standing rule; a dedicated cleanup day is a founder call, not opportunistic work.

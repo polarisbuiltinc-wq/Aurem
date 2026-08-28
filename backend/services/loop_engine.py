@@ -3536,6 +3536,7 @@ class LoopEngine:
         token   = pending["token"]
         files_dict      = pending["files"]
         commit_message  = pending["commit_message"]
+        _ship_files_diff = pending.get("files_diff") or []
         # 2026-08-23 — same staleness fix as the initial ship path
         # above: `pending["token"]` was minted whenever ship was first
         # staged. If the user paused before confirming, re-mint fresh
@@ -3556,6 +3557,33 @@ class LoopEngine:
             logger.warning(
                 "[loop %s] ship-resume token refresh failed, falling back "
                 "to pending token: %r", self.loop_id, _tok_refresh_err)
+
+        # ── Overnight T7 (Wave 2 · ship-via-PR) ─────────────────────
+        # Preview-only feature flag (services.feature_flags, Mongo-
+        # backed per-environment — Preview Mongo has it ON, prod Mongo
+        # has no row = OFF by default, no env var, no code-level prod
+        # flip possible). When ON: commit lands on a NEW
+        # `auremcto/ship-{slug}` branch instead of the project's base
+        # branch, then a draft PR opens head→base labeled `aura:ship`.
+        # When OFF (default / prod): unchanged direct-to-branch path.
+        from services.feature_flags import is_enabled as _ff_is_enabled
+        ship_via_pr = await _ff_is_enabled("ship_via_pr", user_id=self.user_id)
+        pr_ship_branch = None
+        if ship_via_pr:
+            from services.loop_safety import ship_branch_name, create_or_reuse_branch
+            pr_ship_branch = ship_branch_name(self.loop_id)
+            _br_ok, _br_err = await create_or_reuse_branch(
+                owner=owner, repo=repo, base_branch=branch,
+                new_branch=pr_ship_branch, token=token,
+            )
+            if not _br_ok:
+                await _log_error(self.db, self.loop_id, "ship",
+                                  f"ship-via-PR branch create failed: {_br_err}")
+                await self._fail_ship(f"Couldn't create the ship branch: {_br_err}")
+                return
+            logger.info("[loop %s] ship-via-PR: branch %s created off %s",
+                        self.loop_id, pr_ship_branch, branch)
+
         logger.info("[loop %s] SHIP CONFIRMED — pushing %s/%s@%s with %d file(s)",
                     self.loop_id, owner, repo, branch, len(files_dict))
         await self._emit(LoopState.SHIPPING, "ship",
@@ -3622,7 +3650,7 @@ class LoopEngine:
                 summary=commit_message,
             )
             res = await commit_files(
-                owner=owner, repo=repo, branch=branch, token=token,
+                owner=owner, repo=repo, branch=(pr_ship_branch or branch), token=token,
                 files=files_dict, commit_message=final_commit_msg,
                 author_name=author_name, author_email=author_email,
                 progress=None,
@@ -3644,8 +3672,55 @@ class LoopEngine:
             f"https://github.com/{owner}/{repo}/commit/{full_sha}" if full_sha else None
         )
 
+        # ── Overnight T7 — open the ship PR (ship_via_pr flag only).
+        # Best-effort: a PR-open/label failure must never lose an
+        # already-landed commit — falls back to reporting the raw
+        # commit the same way the non-PR path always has.
+        pr_url = None
+        pr_number = None
+        if ship_via_pr and pr_ship_branch:
+            try:
+                from services.loop_safety import open_draft_pr, add_pr_label
+                pr_url, pr_err = await open_draft_pr(
+                    owner=owner, repo=repo,
+                    head_branch=pr_ship_branch, base_branch=branch,
+                    title=f"ship: {commit_message.splitlines()[0][:200]}",
+                    body=(f"Opened by ORA (Loop {self.loop_id}).\n\n"
+                          f"Commit: {full_sha}\n\nAUREM CTO ship-via-PR "
+                          f"(Overnight T7, Preview only)."),
+                    token=token,
+                )
+                if pr_err:
+                    logger.warning("[loop %s] ship-via-PR open_draft_pr failed: %s",
+                                   self.loop_id, pr_err)
+                elif pr_url:
+                    pr_number = int(pr_url.rsplit("/", 1)[-1])
+                    await add_pr_label(owner=owner, repo=repo,
+                                        pr_number=pr_number, label="aura:ship",
+                                        token=token)
+                    try:
+                        await self.db.ship_pr_events.insert_one({
+                            "event": "ship_pr_opened", "user_id": self.user_id,
+                            "loop_id": self.loop_id, "pr_url": pr_url,
+                            "pr_number": pr_number, "ts": _now(),
+                        })
+                    except Exception:
+                        pass
+            except Exception as _pr_e:                        # noqa: BLE001
+                logger.warning("[loop %s] ship-via-PR open/label failed: %r",
+                               self.loop_id, _pr_e)
+
         # ── Iter 272 Feature 2.1 — record the shipped commit so
         # future runs can detect repeat_touch on the same file paths.
+        # Overnight T1 (METER) — deterministic diff metrics, zero LLM,
+        # zero extra GitHub call: computed from `_ship_files_diff`,
+        # which was already built pre-ship by loop_ship_diff.compute_files_diff()
+        # for ShipPendingCard's own preview UI.
+        try:
+            from services.ship_meter import compute_meter_fields
+            _ship_meter = compute_meter_fields(_ship_files_diff)
+        except Exception:                                     # noqa: BLE001
+            _ship_meter = None
         try:
             from services import loop_outcomes as _lo
             await _lo.record_shipped_commit(
@@ -3657,6 +3732,8 @@ class LoopEngine:
                 commit_sha=full_sha or short_sha,
                 file_paths=list(files_dict.keys()),
                 owner=owner, repo=repo, branch=branch,
+                meter=_ship_meter,
+                pr_url=pr_url, pr_number=pr_number, ship_branch=pr_ship_branch,
             )
         except Exception as e:                                # noqa: BLE001
             logger.warning("[loop %s] outcome record failed: %r",
@@ -3678,6 +3755,7 @@ class LoopEngine:
             "full_sha":  full_sha,
             "html_url":  html_url,
             "files":     list(files_dict.keys()),
+            "pr_url":    pr_url,
         }
         # 2026-08-24 · Pillar 4 — independent, non-blocking read-back
         # verification (services/ship_verification_audit.py). Never

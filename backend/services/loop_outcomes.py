@@ -55,10 +55,26 @@ async def record_shipped_commit(db, *,
                                  file_paths: Iterable[str],
                                  owner: str,
                                  repo: str,
-                                 branch: str) -> dict:
+                                 branch: str,
+                                 meter: Optional[dict] = None,
+                                 pr_url: Optional[str] = None,
+                                 pr_number: Optional[int] = None,
+                                 ship_branch: Optional[str] = None) -> dict:
     """Insert one outcome row and inline-check for repeat_touch. Never
-    raises. Returns the (possibly-decorated) inserted row."""
+    raises. Returns the (possibly-decorated) inserted row.
+
+    `meter` (Overnight T1) — optional {lines_added, lines_removed,
+    files_touched, new_dependencies_added} from services.ship_meter,
+    computed by the caller with zero LLM/network cost. Defaulted to 0s
+    when the caller couldn't compute it (fail-open, never blocks ship).
+
+    `pr_url`/`pr_number`/`ship_branch` (Overnight T7) — only set when
+    the `ship_via_pr` flag was on for this ship. `pr_status` starts at
+    "open" and is later flipped to "merged"/"closed" by the GitHub
+    webhook's label-dispatch handler (routers/github_app.py) matching
+    on `ship_branch`."""
     paths = sorted({str(p or "").strip() for p in (file_paths or []) if p})
+    meter = meter or {}
     row = {
         "commit_sha":   commit_sha,
         "loop_id":      loop_id,
@@ -72,6 +88,14 @@ async def record_shipped_commit(db, *,
         "shipped_at":   _now(),
         "repeat_touch": False,
         "reverted":     False,
+        "lines_added":            int(meter.get("lines_added") or 0),
+        "lines_removed":          int(meter.get("lines_removed") or 0),
+        "files_touched":          int(meter.get("files_touched") or len(paths)),
+        "new_dependencies_added": int(meter.get("new_dependencies_added") or 0),
+        "pr_url":       pr_url,
+        "pr_number":    pr_number,
+        "ship_branch":  ship_branch,
+        "pr_status":    ("open" if pr_url else None),
     }
 
     # ── Repeat-touch scan (indexed, cheap) ────────────────────────

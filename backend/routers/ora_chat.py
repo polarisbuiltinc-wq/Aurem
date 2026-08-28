@@ -512,44 +512,16 @@ async def pin_login(body: PinLoginBody,
     db = get_db()
     if db is None:
         raise HTTPException(503, "Database unavailable")
-    cutoff = _time.time() - 3600
-    n_fail = await db.ora_chat_pin_attempts.count_documents({
-        "ip": ip, "ok": False, "ts": {"$gte": cutoff},
-    })
-    if n_fail >= 5:
-        raise HTTPException(429, {
-            "error":   "too_many_attempts",
-            "message": "Too many wrong PIN attempts. Try again in an hour.",
-        })
 
-    expected = os.getenv("ORA_QUICK_PIN", "").strip()
-    if not expected:
-        raise HTTPException(503, "PIN login not configured")
-    ok = hmac.compare_digest(body.pin.strip(), expected)
-
-    await db.ora_chat_pin_attempts.insert_one({
-        "ip": ip, "ok": ok, "ts": _time.time(),
-    })
-    if not ok:
-        remaining = max(0, 5 - (n_fail + 1))
-        raise HTTPException(401, {
-            "error":              "invalid_pin",
-            "attempts_remaining": remaining,
-        })
-
-    # Resolve the founder → mint a real admin JWT tied to that identity.
-    # Never falls back to a random admin (privilege-escalation risk).
-    #
-    # Iter 212m-248 — Production PIN was failing 503 because it only
-    # trusted the `is_founder=True` DB flag. That flag isn't reliably
-    # backfilled on prod Mongo; the authoritative signal is
-    # `FOUNDER_EMAILS` (env, with a hardcoded fallback for the company
-    # founder in services/usage.py::founder_emails()). So we now:
-    #   1. Look up any dev_users row whose email is in the trusted
-    #      founder set.
-    #   2. Fall back to the legacy `is_founder=True` flag.
-    #   3. If a founder row is found but lacks the flag, backfill it
-    #      idempotently so downstream code stays consistent.
+    # Overnight T6/P1a (2026-08-28) — per-ACCOUNT lockout, additive to
+    # the existing per-IP one. The old counter was keyed by `ip` only,
+    # so an attacker rotating IPs could brute-force the single shared
+    # PIN against the one fixed founder account with zero backoff.
+    # Resolve the target account key BEFORE checking the PIN (so the
+    # lockout key exists regardless of guess correctness) and reuse
+    # that lookup for the real mint below on success — no duplicate
+    # Mongo round-trip, no schema/migration needed (same collection,
+    # one extra field on each attempt row).
     from services.usage import founder_emails as _founder_emails_set
     trusted = list(_founder_emails_set())
     founder = None
@@ -563,6 +535,41 @@ async def pin_login(body: PinLoginBody,
             {"is_founder": True},
             {"user_id": 1, "email": 1, "is_admin": 1, "is_founder": 1, "_id": 0},
         )
+    account_key = (founder or {}).get("user_id") or "unresolved"
+
+    cutoff = _time.time() - 3600
+    n_fail = await db.ora_chat_pin_attempts.count_documents({
+        "ip": ip, "ok": False, "ts": {"$gte": cutoff},
+    })
+    n_fail_account = await db.ora_chat_pin_attempts.count_documents({
+        "account_key": account_key, "ok": False, "ts": {"$gte": cutoff},
+    })
+    if n_fail >= 5 or n_fail_account >= 5:
+        raise HTTPException(429, {
+            "error":   "too_many_attempts",
+            "message": "Too many wrong PIN attempts. Try again in an hour.",
+        })
+
+    expected = os.getenv("ORA_QUICK_PIN", "").strip()
+    if not expected:
+        raise HTTPException(503, "PIN login not configured")
+    ok = hmac.compare_digest(body.pin.strip(), expected)
+
+    await db.ora_chat_pin_attempts.insert_one({
+        "ip": ip, "account_key": account_key, "ok": ok, "ts": _time.time(),
+    })
+    if not ok:
+        remaining = max(0, 5 - max(n_fail + 1, n_fail_account + 1))
+        raise HTTPException(401, {
+            "error":              "invalid_pin",
+            "attempts_remaining": remaining,
+        })
+
+    # Mint a real admin JWT tied to that identity. Never falls back to
+    # a random admin (privilege-escalation risk). `founder` was
+    # already resolved above (for the account-lockout key) using the
+    # same trusted-email-first, is_founder-flag-fallback lookup
+    # (Iter 212m-248) — reused here, no duplicate Mongo round-trip.
     if not founder:
         # Fresh install / seed missing — refuse rather than issue a
         # token that could bind to whoever we pick.

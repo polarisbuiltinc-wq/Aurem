@@ -1937,10 +1937,63 @@ async def loop_metrics(
         c = row["classification"]
         owner_counts[c] = owner_counts.get(c, 0) + 1
 
+    # ── Overnight T1 (METER) — last-30d ship-meter summary ──────────
+    # Deterministic diff metrics (lines_added/removed, files_touched,
+    # new_dependencies_added) recorded at ship time by both engines
+    # (Loop → loop_outcomes, legacy → cto_tasks.ship_meter). Read-only
+    # aggregate, zero LLM/GitHub calls — pure Mongo math.
+    since_30d = now - timedelta(days=30)
+    ship_meter_summary = {
+        "window_days": 30, "ship_count": 0,
+        "avg_lines_per_ship": 0.0, "avg_files_per_ship": 0.0,
+        "new_dep_ships": 0, "line": "n/a — no ships in last 30d",
+    }
+    try:
+        _loop_rows = await db.loop_outcomes.find(
+            {"shipped_at": {"$gte": since_30d.isoformat()},
+             "lines_added": {"$exists": True}},
+            {"_id": 0, "lines_added": 1, "lines_removed": 1,
+             "files_touched": 1, "new_dependencies_added": 1},
+        ).to_list(length=5000)
+        _task_rows = await db.cto_tasks.find(
+            {"status": "done", "ship_meter": {"$exists": True},
+             "completed_at": {"$gte": since_30d.timestamp()}},
+            {"_id": 0, "ship_meter": 1},
+        ).to_list(length=5000)
+        _all = [r for r in _loop_rows] + [
+            (r.get("ship_meter") or {}) for r in _task_rows
+        ]
+        n = len(_all)
+        if n:
+            total_lines = sum(
+                (r.get("lines_added") or 0) + (r.get("lines_removed") or 0)
+                for r in _all
+            )
+            total_files = sum(r.get("files_touched") or 0 for r in _all)
+            new_dep_ships = sum(
+                1 for r in _all if (r.get("new_dependencies_added") or 0) > 0
+            )
+            avg_lines = round(total_lines / n, 1)
+            avg_files = round(total_files / n, 1)
+            ship_meter_summary = {
+                "window_days": 30, "ship_count": n,
+                "avg_lines_per_ship": avg_lines,
+                "avg_files_per_ship": avg_files,
+                "new_dep_ships": new_dep_ships,
+                "line": (
+                    f"last 30d avg: {avg_lines} lines/ship · "
+                    f"{avg_files} files/ship · "
+                    f"{new_dep_ships} new-dep ships/{n}"
+                ),
+            }
+    except Exception as _sm_err:                              # noqa: BLE001
+        logger.debug("ship_meter_summary skipped: %r", _sm_err)
+
     return {
         "ok":            True,
         "window_days":   window_days,
         "data_source":   data_source,
+        "ship_meter_summary": ship_meter_summary,
         "current": {
             "since_utc":  cur_start.isoformat(),
             "until_utc":  now.isoformat(),

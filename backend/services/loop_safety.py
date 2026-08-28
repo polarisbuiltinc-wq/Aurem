@@ -406,3 +406,176 @@ async def open_draft_pr(
     if r.status_code in (200, 201):
         return (r.json() or {}).get("html_url"), None
     return None, f"pr_status_{r.status_code}"
+
+
+# ─── Overnight T7 (Wave 2 · ship-via-PR) — additional primitives ───
+# Everything below is NEW (2026-08-28), additive only. Existing
+# `aurem/fix-*` branches (finding_fix_applier) and the `aurem_branch_name()`
+# helper above are UNTOUCHED — ship-via-PR uses its own namespace,
+# `auremcto/ship-{slug}`, so the two systems can never collide.
+
+SHIP_BRANCH_PREFIX = "auremcto/"
+
+
+def ship_branch_name(slug: str) -> str:
+    """Deterministic ship-PR branch name. Always under the
+    `auremcto/` namespace so delete_ship_branch()'s guard applies."""
+    import re
+    safe = re.sub(r"[^a-zA-Z0-9_-]", "-", slug or "x")[:40].strip("-") or "x"
+    ts = int(time.time())
+    return f"{SHIP_BRANCH_PREFIX}ship-{safe}-{ts}"
+
+
+async def add_pr_label(
+    *, owner: str, repo: str, pr_number: int, label: str, token: str,
+) -> tuple[bool, Optional[str]]:
+    """Attach a label to a PR/issue. Returns (ok, error). Best-effort —
+    a label-attach failure must never block a ship that already
+    landed a real commit + PR."""
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept":        "application/vnd.github+json",
+        "User-Agent":    "aurem-pr-helper",
+    }
+    r = await github_request_with_retry(
+        "POST",
+        f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/labels",
+        headers=headers, json={"labels": [label]},
+    )
+    if r.status_code in (200, 201):
+        return True, None
+    return False, f"label_status_{r.status_code}"
+
+
+async def close_pr(
+    *, owner: str, repo: str, pr_number: int, token: str,
+) -> tuple[bool, Optional[str]]:
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept":        "application/vnd.github+json",
+        "User-Agent":    "aurem-pr-helper",
+    }
+    r = await github_request_with_retry(
+        "PATCH", f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}",
+        headers=headers, json={"state": "closed"},
+    )
+    if r.status_code == 200:
+        return True, None
+    return False, f"close_pr_status_{r.status_code}"
+
+
+async def delete_ship_branch(
+    *, owner: str, repo: str, branch: str, token: str,
+) -> tuple[bool, Optional[str]]:
+    """HARD namespace guard — only `auremcto/`-prefixed branches may
+    ever be deleted through this function. Any other branch name is
+    rejected + logged as GW_BLOCK, no GitHub call made. This is the
+    one guard standing between "close an unmerged ship PR" and
+    "accidentally delete `main`" or a legacy `aurem/fix-*` branch."""
+    if not (branch or "").startswith(SHIP_BRANCH_PREFIX):
+        logger.error(
+            "GW_BLOCK delete_ship_branch refused non-%s branch: %r "
+            "(owner=%s repo=%s)", SHIP_BRANCH_PREFIX, branch, owner, repo,
+        )
+        return False, "GW_BLOCK_non_namespaced_branch"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept":        "application/vnd.github+json",
+        "User-Agent":    "aurem-branch-helper",
+    }
+    r = await github_request_with_retry(
+        "DELETE",
+        f"https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch}",
+        headers=headers,
+    )
+    if r.status_code in (204, 200):
+        return True, None
+    if r.status_code == 422:                     # already gone
+        return True, None
+    return False, f"delete_branch_status_{r.status_code}"
+
+
+async def close_and_retract(
+    *, owner: str, repo: str, pr_number: Optional[int],
+    branch: Optional[str], token: str,
+) -> dict:
+    """Shared close+delete helper for any unmerged ship-PR path —
+    used by BOTH the new confirm_ship-via-PR flow AND
+    finding_fix_applier's existing draft-PR flow (which previously
+    had no revert mechanism at all). Closing an ALREADY-MERGED PR is
+    a no-op here by design — that case uses the existing audited
+    reverse-commit path (user_rollback → loop_rollback →
+    revert_commit), never branch deletion, never force-push."""
+    out = {"pr_closed": False, "branch_deleted": False, "errors": []}
+    if pr_number:
+        ok, err = await close_pr(owner=owner, repo=repo, pr_number=pr_number, token=token)
+        out["pr_closed"] = ok
+        if err:
+            out["errors"].append(f"close_pr:{err}")
+    if branch:
+        ok, err = await delete_ship_branch(owner=owner, repo=repo, branch=branch, token=token)
+        out["branch_deleted"] = ok
+        if err:
+            out["errors"].append(f"delete_branch:{err}")
+    return out
+
+
+async def dispatch_pull_request_webhook(db, *, payload: dict, action: str) -> dict:
+    """Overnight T7 — label-dispatch for GitHub `pull_request` webhook
+    events. Extracted as a standalone, unit-testable function (called
+    from routers/github_app.py::install_webhook AFTER signature
+    verification — this function itself does no auth, it's pure
+    label-routing logic over an already-trusted payload).
+
+    `aura:ship`                 → ship status on loop_outcomes,
+                                   matched on ship_branch = head ref.
+    `auremcto/visibility-kit-*` → its OWN collection
+                                   (visibility_kit_pr_events) — kept
+                                   deliberately separate from
+                                   loop_outcomes so the two label
+                                   families can never cross-write
+                                   each other's state.
+    anything else                → log only, no state write.
+
+    Returns a dict describing what was written (for tests + logs).
+    """
+    pr = payload.get("pull_request") or {}
+    labels = [(l.get("name") or "") for l in (pr.get("labels") or [])]
+    head_ref = ((pr.get("head") or {}).get("ref")) or ""
+    merged = bool(pr.get("merged"))
+    pr_number = pr.get("number")
+    is_ship_label = "aura:ship" in labels
+    kit_labels = [l for l in labels if l.startswith("auremcto/visibility-kit-")]
+
+    if is_ship_label and head_ref:
+        new_status = (
+            "merged" if (action == "closed" and merged)
+            else "closed" if action == "closed"
+            else "open"
+        )
+        await db.loop_outcomes.update_one(
+            {"ship_branch": head_ref},
+            {"$set": {"pr_status": new_status, "pr_status_updated_at": time.time()}},
+        )
+        try:
+            await db.ship_pr_events.insert_one({
+                "event": f"ship_pr_{new_status}", "pr_url": pr.get("html_url"),
+                "pr_number": pr_number, "head_ref": head_ref, "ts": time.time(),
+            })
+        except Exception:
+            pass
+        return {"routed": "ship", "status": new_status, "head_ref": head_ref}
+
+    if kit_labels:
+        await db.visibility_kit_pr_events.update_one(
+            {"pr_number": pr_number,
+             "repo_full_name": (payload.get("repository") or {}).get("full_name")},
+            {"$set": {"labels": kit_labels, "action": action, "merged": merged,
+                      "updated_at": time.time()}},
+            upsert=True,
+        )
+        return {"routed": "kit", "labels": kit_labels}
+
+    logger.info("dispatch_pull_request_webhook: no matching label (labels=%s) "
+                "— log-only, no state write", labels)
+    return {"routed": "none", "labels": labels}

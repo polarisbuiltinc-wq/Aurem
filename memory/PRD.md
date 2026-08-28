@@ -3,6 +3,65 @@
 **Live URL**: https://auremcto.com
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
+## 2026-08-28 (overnight) — T1-T8 unattended run, full report
+
+Full details: `/app/memory/REPORT-overnight.md`,
+`/app/memory/PART_D_E_F_SYNTHESIS_2026_08_28.md`,
+`/app/memory/OVERNIGHT-LOG.md`, `/app/memory/LOOP-STATE.md` (closed).
+
+**Shipped this run** (all with tests + regression, see report for E2E
+proof paths):
+- **T1 METER** — `services/ship_meter.py` (new, zero-import, pure
+  arithmetic). Every ship/task-completion record on BOTH engines
+  (Loop → `loop_outcomes`, legacy → `cto_tasks.ship_meter`) now carries
+  `lines_added`/`lines_removed`/`files_touched`/`new_dependencies_added`.
+  `/admin/loop-metrics` gained a `ship_meter_summary.line` ("last 30d
+  avg: X lines/ship · Y files/ship · Z new-dep ships/N"), instrumented-
+  rows-only denominator (bugfix mid-run from a testing_agent finding).
+- **T3 Future Ledger** — `memory/ROADMAP.md` §FUTURE LEDGER (R1-R5 +
+  F16 Day-1 onboarding + F17 3-ship-surface consolidation). F1-F15
+  BLOCKED — seed text not found anywhere on disk, needs founder
+  re-forward.
+- **T6-P1a** — `/ora-chat/pin-login` per-account lockout (additive to
+  the existing per-IP one) — closes an IP-rotation bypass against the
+  single shared PIN. Live E2E-proved. `integration_expert` consulted
+  first per platform auth rule. Per-user PIN not built (needs schema +
+  prod migration — founder GO required).
+- **T6-P1b** — "Run in background" → "Close (task keeps running)"
+  (`ShipConfirmModal.jsx`) — was misleading, closing actually stops
+  the local poll, only the server task survives.
+- **T6-P1c** — `FixProgressDrawer` legacy close-icon tooltip parity
+  (main Hide semantics were already shipped pre-run).
+- **T6-P1d** — `frontend/src/lib/api.js` no longer shows a raw
+  `HTTP {status}: {"detail":"..."}` wrapper when a themed panel
+  already renders the same `detail` text below it — live-caught by
+  testing_agent this run, fixed same session.
+- **T6-P1e** — new reusable `components/ConfirmModal.jsx`, replacing
+  native `window.confirm()` on `Projects.jsx` (remove project) and
+  `Integrations.jsx` (reveal API key). Ship/rollback confirms
+  explicitly excluded — parked under F17.
+- **T7-build** — Wave 2 ship-via-PR plumbing: `services/loop_safety.py`
+  gained `ship_branch_name`/`add_pr_label`/`close_pr`/
+  `delete_ship_branch` (hard `auremcto/`-namespace guard)/
+  `close_and_retract`/`dispatch_pull_request_webhook`.
+  `loop_engine.py::confirm_ship` wired behind the new Mongo-backed
+  `ship_via_pr` feature flag (Preview: **ON**, prod: no row = OFF,
+  no env var, no prod code path). `routers/github_app.py` webhook now
+  label-dispatches `pull_request` events (`aura:ship` vs
+  `auremcto/visibility-kit-*`, no cross-write, unknown = log-only).
+  `finding_fix_applier.py` gained `revert_finding_fix()` reusing the
+  same shared helper. 12/12 named+guardrail tests pass. **Live PR-open
+  drill is CREDENTIALS-PENDING** — the pre-seeded fixture's GitHub App
+  installation (152797252, `polarisbuiltinc-wq/ora-grounding`) returns
+  `app_installation_missing` from this pod despite an `active:true`
+  Mongo row — needs founder to re-install the App or confirm a working
+  fixture.
+
+**Findings, not built** (parked / needs founder): F1-F15 ledger seed
+missing · per-user PIN · Day-1 OAuth-before-value onboarding (F16) ·
+GitHub App installation gap on the fixture repo · N1/K2-K7/K9 real-
+model verification (MOCK_LLM=true this pod) · SHIP_VIA_PR prod flip.
+
 ## 2026-08-28 (later) — Test-baseline formalized + Session 2 (J1-J4) live journey pass #1
 
 **Test baseline (founder request A).** Created `backend/test-baseline.txt`
