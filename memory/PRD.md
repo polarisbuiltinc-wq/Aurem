@@ -3,6 +3,81 @@
 **Live URL**: https://auremcto.com
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
+## 2026-08-28 (later) — Test-baseline formalized + Session 2 (J1-J4) live journey pass #1
+
+**Test baseline (founder request A).** Created `backend/test-baseline.txt`
+(mirrors `lint-baseline.txt`'s convention exactly). Full unfiltered run:
+`pytest tests/ --tb=no -q --continue-on-collection-errors` → **339 FAILED
++ 65 ERROR = 404 pre-existing entries**, 6107 passed. Answered the "1 ->
+~295/404" jump question: the earlier "1 known-fail" figure came from a
+narrow `-k` keyword-filtered subset (~121 tests, matching CI's fast
+"invariants" lane) that never exercised the ~5900 other tests in the
+repo — most of today's 404 need live external services (GitHub App,
+Stripe, live LLM) or sandbox-only setup gaps the narrow lane never
+touched. Scope difference, not a new regression (git-stash A/B
+confirmed on a sample). **New gate definition, this commit forward**:
+"regression green" = "no NEW failing/erroring node IDs vs
+test-baseline.txt", not "all green" — matches lint-baseline.txt's own
+current (manual-diff, not yet CI-automated) consumption pattern.
+
+**A7 Kit** — founder-owned manual citation baseline, explicitly not
+started/scheduled by the agent; `marketing/` left untouched.
+
+**Session 2 — J1-J4 live journey, pass #1** (`/app/test_reports/
+iteration_385_live_journey_j1_j4.json`, testing_agent, fresh disposable
+account `maya-nova-1787892952@aurem.dev` / `MayaAudit2026!`).
+
+Verified LIVE (upgrades prior "NEEDS REAL-MODEL RE-TEST" flags):
+- **N1 identity fix CONFIRMED LIVE** — no MOCK_LLM on this pod anymore,
+  real model answering. Assistant says "I'm ORA, by Aurem" / "(via
+  ORA)" across 4 accounts, zero "I am/I'm AUREM" anywhere.
+- **P0-2 delete-chat confirm CONFIRMED LIVE end-to-end** on
+  SessionSwitcher (topbar) — themed modal, no native `window.confirm`,
+  Cancel keeps the row, Approve removes it.
+- J4 bad-login error: themed, plain-English, actionable — no friction.
+- J2 day-2 logout/relogin persistence: sessions and repo-connection
+  state survive correctly.
+
+**MED bug found + fixed same session**: `Shell.jsx`'s legacy
+left-sidebar "Recent Chats" rail had a SECOND, un-migrated delete
+button calling `deleteSession()` directly with zero confirm — the
+exact P0-2 bug, missed because it lives in a different (currently
+not-rendered-for-fresh-users, but still shipped) component. Fixed:
+wired the same `DeleteChatConfirmModal` in via a new
+`pendingDeleteLegacy` state, `Shell.jsx`. New test:
+`Shell.legacy_sidebar_delete_confirm.test.jsx`. Full frontend suite
+re-verified: 90 files / 524 tests green.
+
+**BLOCKED this pass**: J1-continued (drill-repo scan+ship), J3 (full
+ship flow), K1-fallback live-render — a FRESH signup has no GitHub App
+installation bound to it and the wizard only offers an external OAuth
+popup (no way to reuse the preview pod's already-authorized
+installation 152797252 from a new identity, and no manual repo-paste
+fallback). **Action needed from founder before re-test**: either (a)
+retest J3/K1 using the pre-seeded fixture account (`test@aurem.dev` /
+project `funnel-repro` → repo `polarisbuiltinc-wq/aurem-rollback-
+testbed`, NOT `ora-grounding` as originally briefed — confirm which
+repo is actually intended), or (b) decide whether fresh signups should
+have a lower-friction repo-connect path at all (this itself may be a
+Part-D/E finding worth its own line: "Day-1 blocked entirely without
+external GitHub OAuth" was J1's #1 quit-risk).
+
+**Not fixed (reported only, founder to prioritize)**:
+- LOW: after deleting the *currently-viewed* session, SessionSwitcher's
+  row count visually dropped to 0 instead of 1 (possible stale-render,
+  not confirmed as real data loss — not re-verified this pass).
+- LOW: `CookieConsentBanner` doesn't dismiss on Escape, overlaps the
+  ORA-GUIDE tooltip on first paint.
+- Design notes: "500 of 500 founder spots" counter reads static/
+  suspicious on a fresh signup; TopBar shows no ORA/product branding
+  on `/dashboard` (only "No repo connected" + an orange dot).
+
+Full K2-K10 status not reconciled — those numbers were assigned in an
+earlier, now-compacted fork and aren't in current agent context; this
+pass logged new candidate issues independently instead (see above)
+for founder to reconcile against any existing K-list.
+
+
 ## 2026-08-28 — Naming & Identity Canon + UX Wave 1 / Round-2 consolidated PR (8 items: N1-N4, P0-1..P0-4) — testing_agent verified, 43/43 new + 523/523 frontend + 20/20 new/regressed backend green
 
 Founder locked 3 naming/identity decisions (D-NAMING: product = "ORA by

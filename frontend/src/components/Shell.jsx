@@ -39,6 +39,7 @@ import PWAInstallPrompt from "./PWAInstallPrompt";
 import FloatingORAButton from "./FloatingORAButton";
 import ClearCacheButton from "./ClearCacheButton";
 import ThemeToggle from "./ThemeToggle";
+import DeleteChatConfirmModal from "./DeleteChatConfirmModal";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard" },
@@ -102,6 +103,12 @@ export default function Shell({ children, requireAuth, chromeless = false }) {
   const [health, setHealth] = useState({ ok: true, _initial: true });
   const [sessionId, setSessionIdState] = useState(null);
   const [sessions, setSessions] = useState([]);
+  // Round-2 PR follow-up (2026-08-28, testing_agent finding, MED) —
+  // this legacy sidebar Recent Chats rail had its own delete button
+  // calling deleteSession() directly with no confirm, a second copy
+  // of the exact P0-2 data-loss bug already fixed on SessionSwitcher.
+  // Same themed modal, wired here too.
+  const [pendingDeleteLegacy, setPendingDeleteLegacy] = useState(null);
   const [collapsed, setCollapsedState] = useState(() => {
     // Iter 146 — default is collapsed (compact). Expanded only when
     // user explicitly toggles via the sidebar control.
@@ -905,7 +912,7 @@ export default function Shell({ children, requireAuth, chromeless = false }) {
                       </span>
                       <button
                         data-testid={`delete-session-${s.session_id}`}
-                        onClick={(e) => deleteSession(e, s.session_id)}
+                        onClick={(e) => { e.stopPropagation(); setPendingDeleteLegacy({ id: s.session_id }); }}
                         title="Delete chat"
                         style={{
                           background: "none",
@@ -1116,6 +1123,14 @@ export default function Shell({ children, requireAuth, chromeless = false }) {
           Iter 212m-83 — chromeless suppresses this so Dashboard v2 can
           mount its own AskAdvisorReal SSE panel without doubling up. */}
       {token && !chromeless && <FloatingORAButton />}
+      <DeleteChatConfirmModal
+        open={!!pendingDeleteLegacy}
+        onCancel={() => setPendingDeleteLegacy(null)}
+        onConfirm={() => {
+          if (pendingDeleteLegacy) deleteSession(undefined, pendingDeleteLegacy.id);
+          setPendingDeleteLegacy(null);
+        }}
+      />
     </SessionCtx.Provider>
   );
 }
