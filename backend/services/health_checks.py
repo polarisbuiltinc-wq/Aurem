@@ -541,6 +541,32 @@ register_check("int_firecrawl",    "Firecrawl Web Scrape",    "integration", _ma
 register_check("int_github_oauth", "GitHub OAuth (Sign-in)",  "integration", _make_integration_check("github_oauth"))
 
 
+# P2-F (2026-08-28) — GitHub Webhook Fence alert. The R5c fence tile
+# (AdminSystemHealth.jsx) already reports this live but only when an
+# admin happens to open that page. Registering it here means the
+# EXISTING notifier_loop (health_notifier.py) diffs it every tick and
+# fires a real bell + Resend founder alert on green→red (fence broke)
+# and red→green (fence recovered) — zero new alert plumbing needed.
+async def _check_github_webhook_fence() -> dict:
+    from services.github_app import webhook_fence_status
+    status = await webhook_fence_status()
+    if not status.get("configured"):
+        return result_gray("GitHub App not configured yet")
+    if status.get("error"):
+        return result_gray(f"fence check errored: {status['error']}")
+    if status.get("ok"):
+        return result_green(
+            f"subscribed to {', '.join(status['subscribed_events']) or 'no'} events · "
+            f"0/{len(status['recent_deliveries'])} recent deliveries failing")
+    missing = ", ".join(status.get("missing_subscriptions") or []) or "none"
+    return result_red(
+        f"missing subscriptions: {missing} · "
+        f"{status.get('failing_count', 0)}/{len(status.get('recent_deliveries') or [])} recent deliveries failing")
+
+
+register_check("int_webhook_fence", "GitHub Webhook Fence", "integration", _check_github_webhook_fence)
+
+
 # ═══════════════════════════════════════════════════════════════
 # INFRA ADAPTERS
 # ═══════════════════════════════════════════════════════════════

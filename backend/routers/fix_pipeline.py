@@ -63,6 +63,7 @@ from cto_services.db import get_db
 from services import fix_job_manager as fjm
 from services.finding_fix_applier import apply_finding_fix
 from services import ora_fix_learning
+from services.notifications import emit_notification
 from services.scan_fix_quota import (
     ALL_FIX_TOOLS, assert_can_fix, get_fix_quota, record_scan_fixes,
 )
@@ -570,6 +571,10 @@ async def _run_bulk_job(*, job_id: str, db, user: dict, project_id: str,
                     f"({total_charged} tasks used · "
                     f"{len(batches)} batches of {_BULK_BATCH_SIZE})",
         )
+        # P2-A (2026-08-28) — user-facing bell, "ship_done".
+        await emit_notification(
+            db, user_id=user_id, type="ship_done",
+            text=f"Fixed and shipped {total_ok}/{len(ordered)} findings.")
     except asyncio.CancelledError:
         # Task was cancelled by the runtime (graceful shutdown).
         # Mark as orphaned so the UI offers restart on next page load.
@@ -607,6 +612,10 @@ async def _run_bulk_job(*, job_id: str, db, user: dict, project_id: str,
             db, job_id, ok=False, status="failed",
             message=f"Worker crashed: {type(e).__name__}: {str(e)[:200]}",
         )
+        # P2-A (2026-08-28) — user-facing bell, "ship_failed" (persistent).
+        await emit_notification(
+            db, user_id=user_id, type="ship_failed",
+            text="A fix job crashed and needs your attention — click Restart to retry.")
 
 
 def _interleave_by_severity(findings: list[dict]) -> list[dict]:

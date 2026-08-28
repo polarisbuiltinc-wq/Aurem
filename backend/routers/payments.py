@@ -654,6 +654,11 @@ async def stripe_webhook(request: Request) -> dict:
                 {"stripe_sub_id": sub_id},
                 {"_id": 0, "user_id": 1, "email": 1, "name": 1, "tier": 1},
             ) or {}
+            if user_row.get("user_id"):
+                from services.notifications import emit_notification
+                await emit_notification(
+                    db, user_id=user_row["user_id"], type="payment_failed",
+                    text=f"Your last payment (${amount_due}) failed — update your card to keep your plan active.")
             try:
                 from services.founder_alerts import send_founder_alert
                 await send_founder_alert(

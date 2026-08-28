@@ -3,6 +3,11 @@
 **Live URL**: https://auremcto.com
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
+> This file grew past the 700-line convention; new session entries now go
+> to `/app/memory/CHANGELOG.md` (append-only, newest on top) and backlog
+> items to `/app/memory/ROADMAP.md`. See those files + `LOOP-STATE.md`
+> for anything after 2026-08-28.
+
 ## 2026-08-28 (overnight) — T1-T8 unattended run, full report
 
 Full details: `/app/memory/REPORT-overnight.md`,

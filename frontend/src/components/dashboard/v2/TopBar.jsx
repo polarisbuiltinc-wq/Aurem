@@ -101,6 +101,8 @@ export function TopBar({
   // "what am I looking at right now") — never a second picker
   // elsewhere.
   projectSwitcherSlot = null,
+  // P2-A (2026-08-28) — user-facing notification bell slot.
+  notificationBellSlot = null,
 }) {
   // Iter 212m-93 → 212m-123 — Founder spec: TopBar hides ONLY when
   // the user starts typing in the chat composer (driven by the
@@ -187,6 +189,8 @@ export function TopBar({
         )}
 
         {historySlot}
+
+        {notificationBellSlot}
 
         {hasRepo && (
           <button onClick={onNewRun} data-testid="ds2-new-run"

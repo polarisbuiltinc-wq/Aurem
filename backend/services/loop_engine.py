@@ -2604,6 +2604,15 @@ class LoopEngine:
                     correlation_id="scan:vanguard",
                 )
 
+            # P2-A (2026-08-28) — user-facing bell, "scan_done".
+            from services.notifications import emit_notification
+            await emit_notification(
+                self.db, user_id=self.user_id, type="scan_done",
+                text=(f"Scan found {high} high-priority finding{'s' if high != 1 else ''}."
+                      if high else "Scan complete — no findings."),
+                project_id=self.project_id,
+            )
+
             # ── Iter 212m-190 (Directive Session 2 · Part B) — Full Scan ──
             # Extend the existing Vanguard-only scan with Bug Hunt +
             # HTTP-headers + Docker-CIS on the SAME diff files, gated

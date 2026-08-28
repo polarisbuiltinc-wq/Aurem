@@ -62,6 +62,7 @@ import SidebarV2Bound   from "../components/dashboard/v2/SidebarBound";
 import RailShell        from "../components/nav/RailShell";
 import AskAdvisorReal   from "../components/dashboard/v2/AskAdvisorReal";
 import { ProjectSwitcher } from "../components/dashboard/v2/ProjectSwitcher";
+import { UserNotificationBell } from "../components/dashboard/v2/UserNotificationBell";
 
 const SHARE_MILESTONES = [10, 25, 50, 100, 250];
 
@@ -619,6 +620,7 @@ function DashboardV2Body() {
                 onSelect={setActiveProjectIdGlobal}
               />
             }
+            notificationBellSlot={<UserNotificationBell />}
             hasRepo={!!activeProject}
             healthScore={healthScore}
             healthScoreLoading={healthScoreLoading}

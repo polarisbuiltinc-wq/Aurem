@@ -186,6 +186,25 @@ async def _cascade_project_active(
                 "installation_status_updated_at": _now_utc_epoch(),
             }},
         )
+        if not active:
+            # P2-A (2026-08-28) — user-facing bell, "repo_revoked"
+            # (persistent). One notification per AFFECTED user, not
+            # per project, so a user with 3 projects on one revoked
+            # installation gets one bell item, not three.
+            from services.notifications import emit_notification
+            affected = await db.cto_projects.find(
+                {"installation_id": installation_id},
+                {"user_id": 1, "github_repo": 1},
+            ).to_list(length=200)
+            seen_users = set()
+            for p in affected:
+                uid = p.get("user_id")
+                if not uid or uid in seen_users:
+                    continue
+                seen_users.add(uid)
+                await emit_notification(
+                    db, user_id=uid, type="repo_revoked",
+                    text="GitHub access to one of your connected repos was revoked — reconnect it in Settings.")
     except Exception as e:                                        # noqa: BLE001
         logger.warning(
             "cto_projects installation_active cascade failed for iid=%s: %r",

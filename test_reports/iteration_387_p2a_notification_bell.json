@@ -1,0 +1,28 @@
+{
+  "summary": "P2-A UserNotificationBell E2E frontend verification: ALL 7 acceptance criteria PASS. Logged in as test@aurem.dev on preview URL, landed on /dashboard, bell rendered in TopBar (ds2-topbar) at top-right, badge showed exactly '2' (matches the 2 seeded unread rows — no stale extras). Opened panel, both seeded notifications present newest-first (ship_failed first, scan_done second). ship_failed row: data-persistent='true' + amber AlertTriangle icon. scan_done row: data-persistent='false' + no warning icon. 'Mark all read' button visible; clicking it made badge vanish, items remained (2 still listed) but visually dimmed via opacity-60 class and data-unread flipped to 'false'. Escape closes panel. Page reload: badge stays gone, items still present with data-unread='false' — proves real backend round-trip via GET /notifications + POST /notifications/read-all. Outside click also closes panel. TopBar regression: no layout overlap/breakage, project switcher breadcrumb still renders next to the new bell. Live badge count observed: 2.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/screenshots/p2a_1_bell_badge.png",
+    "/app/test_reports/screenshots/p2a_2_panel_open.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "UserNotificationBell.jsx: markOne error path is silently swallowed (.catch(()=>{})) — consider surfacing a toast on failure so users know their read-click didn't persist. Same for markAll and refresh. Non-blocking for P2-A.",
+    "Amber AlertTriangle icon only renders when `n.persistent && !n.read_at`. After 'Mark all read', persistent items lose their amber flag visually — this matches the spec ('marked read, not removed') and passed testing, but confirm with product whether persistent-but-read items should still keep a subtle amber accent for scannability.",
+    "Polling every 30s + on-open is fine for now, but consider server-sent-events / websocket push in a follow-up so persistent events (payment_failed / ship_failed) surface faster than 30s worst-case.",
+    "Console during dashboard load shows one 401 (unauth request pre-hydration) and later a 403 + 404 from unrelated endpoints — not caused by the bell. Worth a lightweight cleanup in a separate ticket."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md — preview account, tier=founder, is_admin=true, user_id=test_admin_001)",
+  "seed_data_creation": "None created by me. The 2 unread notifications (notif_cb476e45621e ship_failed persistent=true, notif_34761bf82562 scan_done persistent=false) already existed from the founder-run e2e-proof/P2-A/seed_and_verify.py script and were verified live via GET /api/aurem-dev/notifications before UI test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "P2-A UserNotificationBell shipped and verified live on preview. data-testids: user-notification-bell-trigger, user-notification-bell-count, user-notification-bell-panel, user-notification-bell-mark-all-read, user-notification-item-{notif_id}, user-notification-bell-empty. Uses portal — panel is a document.body child, use those testids directly (do not scope to bell wrapper). Poll interval = 30s; also refreshes on open. Persistent types = payment_failed, ship_failed, repo_revoked. Note: there is ALSO an older admin-only NotificationBell in TopBar (separate component, shows a system alert tooltip like 'Your last project frontend is unreachable...') — do not confuse the two; the new user bell is on the right side of the topbar at approx x=1766 (32x32).",
+  "rca of the issue": "N/A — no bugs found. Initial test run had a false failure because my first script clicked the wrong 'Sign in' submit (matched 'Get started' header link first). Fixed by using page.get_by_role('button', name='Sign in', exact=True) — this is a test-script-only fix, not an app bug."
+}

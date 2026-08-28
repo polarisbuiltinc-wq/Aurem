@@ -309,6 +309,12 @@ async def claim_offer(
         )
         raise HTTPException(500, f"failed to record claim: {e!r}")
 
+    # P2-A (2026-08-28) — user-facing bell, "offer_claimed".
+    from services.notifications import emit_notification
+    await emit_notification(
+        db, user_id=user_id, type="offer_claimed",
+        text="You claimed your free SEO fix spot — we're previewing it now.")
+
     # ── Dry-run preview ──────────────────────────────────────────
     try:
         from services.seo.orchestrator import run_seo_fixes, SeoOptions
