@@ -54,7 +54,7 @@ class _Coll:
                 break
         else:
             if upsert:
-                new = dict(filt); 
+                new = dict(filt)
                 if "$set" in ops: new.update(ops["$set"])
                 self.rows.append(new); modified = 1
         class _R: matched_count = modified; modified_count = modified

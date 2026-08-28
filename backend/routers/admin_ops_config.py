@@ -493,10 +493,6 @@ async def db_health(authorization: Optional[str] = Header(None)):
         "indexes_ok": indexes_ok and not missing,
     }
 
-    db = get_db()
-    from services.vanguard_audit import recent_blocks
-    return {"rows": await recent_blocks(db, limit=max(1, min(limit, 200)))}
-
 
 @router.get("/github-app-config")
 async def admin_get_github_app_config(

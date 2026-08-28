@@ -120,7 +120,6 @@ def test_loop_engine_no_longer_hardcodes_council_a():
 # ─── LongCat live probe ─────────────────────────────────────────────────────
 
 def test_longcat_live_flag_exists():
-    import services.llm as llm
     llm = _reload_llm()
     assert hasattr(llm, "LONGCAT_LIVE")
     # Default optimistic — flipped by the boot probe.
@@ -129,7 +128,6 @@ def test_longcat_live_flag_exists():
 
 def test_probe_longcat_availability_skips_when_flag_off(monkeypatch):
     monkeypatch.setenv("LONGCAT_ENABLED", "false")
-    import services.llm as llm
     llm = _reload_llm()
     assert llm.LONGCAT_ENABLED is False
     # When the flag is off the probe must NOT toggle the live flag.
@@ -141,7 +139,6 @@ def test_probe_longcat_availability_skips_when_flag_off(monkeypatch):
 def test_probe_longcat_flips_live_false_on_400(monkeypatch):
     monkeypatch.setenv("LONGCAT_ENABLED", "true")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    import services.llm as llm
     llm = _reload_llm()
 
     class _Resp:
@@ -164,7 +161,6 @@ def test_probe_longcat_flips_live_false_on_400(monkeypatch):
 def test_probe_longcat_keeps_live_true_on_200(monkeypatch):
     monkeypatch.setenv("LONGCAT_ENABLED", "true")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    import services.llm as llm
     llm = _reload_llm()
     # Pretend the flag was already flipped False by a previous boot.
     llm.LONGCAT_LIVE = False
@@ -193,7 +189,6 @@ def test_probe_longcat_keeps_live_true_on_200(monkeypatch):
 
 def test_council_a_primary_falls_back_to_glm_when_live_false(monkeypatch):
     monkeypatch.setenv("LONGCAT_ENABLED", "true")
-    import services.llm as llm
     llm = _reload_llm()
     llm.LONGCAT_LIVE = False
     assert llm.council_a_primary_model() == "z-ai/glm-5.2"
@@ -205,7 +200,6 @@ def test_call_longcat_fast_paths_to_glm_when_dead(monkeypatch):
     """If the boot probe has already flipped LONGCAT_LIVE=False, the
     actual call must NOT hit OpenRouter — it must go straight to GLM."""
     monkeypatch.setenv("LONGCAT_ENABLED", "true")
-    import services.llm as llm
     llm = _reload_llm()
     llm.LONGCAT_LIVE = False
 
@@ -237,7 +231,6 @@ def test_call_longcat_flips_live_false_on_mid_session_empty(monkeypatch):
     must flip so subsequent calls skip the round-trip."""
     monkeypatch.setenv("LONGCAT_ENABLED", "true")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    import services.llm as llm
     llm = _reload_llm()
     llm.LONGCAT_LIVE = True
 

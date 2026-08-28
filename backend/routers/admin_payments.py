@@ -215,15 +215,6 @@ async def admin_run_overage_cron(
     await db.billing_cron_runs.insert_one({**result, "trigger": "manual"})
     return result
 
-    return await compute_financials(db)
-
-    # Also append to history (tiny, last 100 snapshots)
-    await db.integration_health_history.insert_one({
-        **snap,
-        "_id": f"snap_{int(snap['generated_at'])}",
-    })
-    return snap
-
 
 @router.get("/stripe-config")
 async def admin_get_stripe_config(

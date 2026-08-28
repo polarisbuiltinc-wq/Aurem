@@ -134,8 +134,7 @@ _COUNCIL_REPROBE_LAST_AT: float = 0.0
 
 def _bucket_label(ts: float, granularity: str) -> str:
     """Human-readable bucket label for the chart x-axis."""
-    from datetime import datetime, timezone as _tz
-    dt = datetime.fromtimestamp(ts, tz=_tz.utc)
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
     if granularity == "hourly":
         return dt.strftime("%H:00")
     if granularity == "daily":
@@ -170,6 +169,13 @@ def _bucket_label(ts: float, granularity: str) -> str:
 # Direct REST entry points so devs (and pytest) can hit Tavily/Firecrawl
 # without going through the LLM tool-call loop. Mounted at
 # /api/aurem-dev/admin/skills/*. Admin-only — these calls cost money.
+
+
+class _SkillBody(BaseModel):
+    """Iter 79 — permissive body for the direct web-skill smoke
+    endpoints below. No fixed fields: each skill takes different
+    kwargs, so this just needs to survive `.model_dump()`."""
+    model_config = {"extra": "allow"}
 
 
 async def _run_skill(name: str, body: _SkillBody, authorization: Optional[str]):
@@ -853,7 +859,6 @@ async def _compute_activation_funnel() -> dict:
 # the router gate. It lives on a separate un-gated router at the SAME
 # URL (/admin/errors/report), so no frontend change was needed.
 # ─────────────────────────────────────────────────────────────────────
-from datetime import datetime, timezone
 
 
 # ── Iter 212m-24 — House Rules (admin-defined ORA prompt) ───────────

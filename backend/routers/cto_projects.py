@@ -45,7 +45,7 @@ from services.cto_projects_helpers import (
     _task_queues, _emit, _parse_repo, _run_project_indexing,
     _BROWSE_SKIP_DIRS, _BROWSE_SKIP_EXTS, _BROWSE_MAX_FILE_BYTES,
     _browse_keep_path, _classify_phase, _log, _set_status, _sh,
-    _load_design_system, _TRUNCATION_PATTERNS, _looks_truncated,
+    _load_design_system, _TRUNCATION_PATTERNS,
     _retry, _hallucination_reasons,
 )
 
@@ -2295,7 +2295,6 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
     """API-only worker — no `git` binary needed. Reads target files from
     GitHub, asks AUREM to generate edits, then commits everything as ONE
     atomic commit via the Git Data API."""
-    import re
     import httpx
     owner = proj["github_owner"]
     repo = proj["github_repo"]
@@ -3581,7 +3580,6 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
 
 async def _run_task_with_git(task_id, proj, task, files, context, user_token, maxx_mode: bool = False,
                              resume_edits: Optional[dict] = None):
-    import re
 
     def _scrub(s: str) -> str:
         # Defence-in-depth: clone URLs, stderr, and Python tracebacks can

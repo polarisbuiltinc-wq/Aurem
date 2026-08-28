@@ -92,6 +92,7 @@ export default function AdminSystemHealth() {
   // __VITE_BUILD_SHA__ (see vite.config.js define:). Fallback used if
   // not injected so dev preview still renders.
   const frontendBuildSha =
+    // eslint-disable-next-line no-undef
     (typeof __VITE_BUILD_SHA__ !== "undefined" && __VITE_BUILD_SHA__) ||
     "unknown";
 

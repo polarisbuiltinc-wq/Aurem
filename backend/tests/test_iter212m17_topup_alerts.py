@@ -157,16 +157,6 @@ class _FakeColl:
         class R: matched_count = 0
         return R()
 
-    async def update_many(self, query, update):
-        n = 0
-        for d in self.docs:
-            if all(d.get(k) == v for k, v in query.items()):
-                if "$set" in update:
-                    d.update(update["$set"])
-                n += 1
-        class R: matched_count = n
-        return R()
-
     async def insert_one(self, doc):
         self.docs.append(doc)
 

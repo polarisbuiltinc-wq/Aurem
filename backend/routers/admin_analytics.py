@@ -153,7 +153,6 @@ async def business_pulse(authorization: Optional[str] = Header(None)):
     permanently pending request."""
     await _require_admin(authorization)
     db = require_db()
-    import asyncio
     from services.synthetic_filter import synthetic_mongo_filter
     from services.env_context import env_stamp
 
@@ -1743,8 +1742,6 @@ async def admin_seo_run(
         ),
     )
     return result
-
-    return {"timings": timings, "count": len(timings)}
 
 
 @router.get("/loop-metrics")

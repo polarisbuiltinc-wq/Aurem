@@ -317,7 +317,6 @@ async def code_surface(authorization: Optional[str] = Header(None, alias="Author
     on the Architecture page — the frontend reads from here so a new
     file in routers/ or pages/ shows up immediately."""
     await _require_admin(authorization)
-    import os
     base = "/app"
     scan = {
         "routers":    "backend/routers",

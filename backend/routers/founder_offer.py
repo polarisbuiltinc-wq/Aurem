@@ -33,7 +33,13 @@ from pymongo.write_concern import WriteConcern
 
 from cto_services.auth import current_dev
 from cto_services.db import get_db
-from services.seo.orchestrator import run_seo_fixes, SeoOptions
+# Overnight deploy-fix (2026-08-28) — deferred: `services.seo.orchestrator`
+# pulls in `bs4` (BeautifulSoup) at import time (~57ms in profiling,
+# more under a CPU-constrained prod container). This router's SEO-fix
+# calls are rare relative to every other request the process serves, so
+# import cost is paid once on first actual use instead of on every cold
+# boot — every ms shaved off import time reduces the nginx
+# connection-refused window during a prod deploy's cold start.
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/founder-offer", tags=["Founder Offer"])
@@ -305,6 +311,7 @@ async def claim_offer(
 
     # ── Dry-run preview ──────────────────────────────────────────
     try:
+        from services.seo.orchestrator import run_seo_fixes, SeoOptions
         preview = await run_seo_fixes(
             user_id=user_id,
             project_id=body.repo_id,
@@ -425,6 +432,7 @@ async def _run_real_fix(
     if db is None:
         return
     try:
+        from services.seo.orchestrator import run_seo_fixes, SeoOptions
         result = await run_seo_fixes(
             user_id=user_id, project_id=repo_id,
             options=SeoOptions(

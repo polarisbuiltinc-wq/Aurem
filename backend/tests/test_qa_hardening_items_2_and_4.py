@@ -103,7 +103,6 @@ def test_last_github_push_populated_when_creds_present(monkeypatch):
     Iter arch-2a (2026-08-22) — resolver + cache relocated verbatim
     to services/github_last_push.py (was a router→raw-httpx boundary
     violation). Same contract, corrected ownership."""
-    import asyncio
     from services import github_last_push as glp
 
     monkeypatch.setenv("GITHUB_ACTIONS_TOKEN", "gha_fake_token")

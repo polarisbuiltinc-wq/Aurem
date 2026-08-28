@@ -661,7 +661,6 @@ async def vscode_marketplace_status(
     doesn't lie in the other direction (fake-green)."""
     await _require_admin(authorization)
     import time as _time
-    import httpx
 
     now = _time.time()
     if (_VSCODE_MARKETPLACE_CACHE["payload"]

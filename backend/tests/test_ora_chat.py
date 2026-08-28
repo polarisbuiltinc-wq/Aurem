@@ -183,7 +183,6 @@ class TestBuildPrompt:
     def test_anti_fabrication_rule_present(self):
         """The AUREM_CONTEXT must forbid fake verification claims
         (e.g. 'verified against the system clock')."""
-        from services.ora_chat.safety import AUREM_CONTEXT
         assert "NEVER fabricate a verification" in AUREM_CONTEXT
         assert "system clock" in AUREM_CONTEXT.lower()
 
