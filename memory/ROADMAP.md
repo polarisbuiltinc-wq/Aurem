@@ -33,18 +33,37 @@ See PRD.md for original requirements/architecture, CHANGELOG.md for what's shipp
 
 ## FUTURE LEDGER (v2 / PARKED)
 
-**Standing rules (R1-R5):**
-- R1 — Entries here are PARKED, not work items. No agent may build an F-ID without an explicit founder go-ahead to promote it off this ledger.
-- R2 — Any NEW parked item discovered during any session gets a new F-ID appended here (all 6 fields: ID / Name / What / Why parked / Trigger / Effort) before that session's loop ends.
+**Standing rules (R1-R7):**
+- R1 — Entries here are PARKED, not work items. No agent may build an F-ID without an explicit founder go-ahead to promote it off this ledger. (no-block: a parked item never blocks or pauses an active round.)
+- R2 — Any NEW parked item discovered during any session gets a new F-ID appended here (all 6 fields: ID / Name / What / Why parked / Trigger / Effort) before that session's loop ends. (dev-duties: this is every agent's own responsibility, not something to ask the founder to do.)
 - R3 — No renaming, removing, or silently rewording an existing F-ID's fields without a founder ruling — append a dated note instead.
 - R4 — "Trigger" is the exact condition that promotes the item off PARKED — not a date, a fact (e.g. "founder review", "Wave 2 stable 2 weeks").
 - R5 — This section is founder-owned backlog, not a roadmap commitment — presence here is not a promise of when/if it ships.
+- R6 — Reactivation of a parked item requires a fresh spec/message from the founder at that time, not a resurrection of old assumptions — context and constraints may have changed since parking.
+- R7 — Founder does a monthly review pass of this whole ledger (park/promote/drop); agents don't self-initiate that review.
 
-**F1-F15 — BLOCKED, not seeded.** The overnight run (2026-08-28) was instructed to seed F1..F15 verbatim from "the prior ledger prompt". A full search of `/app/memory/*.md` (including `ROADMAP.md`'s own prior revisions, `PRD.md`, and `FUTURE_BUILDS_LEDGER.md`, which uses an unrelated freeform format with no F-numbered/6-field entries) found **no F1-F15 seed text anywhere on disk**. Per the run's own instruction ("if absent from disk, mark BLOCKED, do not invent"), this sub-item is logged BLOCKED, not fabricated. **Needs founder**: re-forward the original F1-F15 list (ID/Name/What/Why parked/Trigger/Effort per item) so it can be seeded verbatim in a follow-up pass. F16/F17 below were fully specified in the overnight run's own instruction and are seeded now.
+**F1-F18** (F1-F15 re-forwarded verbatim by founder 2026-08-29 after the seed text was confirmed absent from disk on 2026-08-28 — used exactly as given, not reworded. F16/F17 were seeded 2026-08-28. F18 added this round.)
 
 | ID | Name | What | Why parked | Trigger | Effort |
 |---|---|---|---|---|---|
-| F16 | Day-1 lighter repo-connect | A lower-friction repo-connect path so a fresh signup can see product value before completing external GitHub OAuth | v2 scope; found overnight (2026-08-28 Session-2 pass) — fresh signups cannot connect a repo without an external OAuth popup, no manual/paste fallback exists, confirmed the #1 quit-risk in the J1 live journey | After UX wave; founder design call | M |
+| F1 | Multi-provider LLM failover | v2 | auto-failover can mask a broken active config (no-silent-failure violation); no value with 1 provider | trigger: a 2nd LLM provider actually in active use | — |
+| F2 | Cloudflare Workers AI fallback | v2 | redundancy deferred until DashScope proven | trigger: before prod launch, after ~30 days stable DashScope | — |
+| F3 | Morning Brief (P7: daily email + bell) | v2 | needs email provider; overlaps kit notifications | trigger: email provider chosen + kit Gate C done | — |
+| F4 | AI Share-of-Voice monitoring (paid) | v2 | highest-value paid add-on | trigger: after Kit Phase B GA + pricing validated | — |
+| F5 | Kit Phase B (apply engine) | next | C7 interlock (after guardrail Waves 1+4) | trigger: founder message "kit green, start B" | — |
+| F6 | Kit Phase C (Readiness score UX) | next | depends on Phase B | trigger: after F5 gate | — |
+| F7 | Admin Kit & SEO Dashboard | next | kit data is file-only today, no admin surface | trigger: with F5 build OR after A7 day-14 — founder's call | — |
+| F8 | Bloat audit (user-facing) | v2 | brand-IP caution (Ponytail-inspired only); needs ladder baseline | trigger: after ladder 2-week baseline report | — |
+| F9 | Delete-chat undo (30s undo toast) | v2 | needs backend tombstone/soft-delete infra | trigger: when chat volume justifies (founder's call) | — |
+| F10 | Ladder Items 2+3 (prompt ladder + preflight gate) | next | needs 2-week lines/ship + cost baseline | trigger: founder message "ladder green, build 2+3" after the baseline report | — |
+| F11 | Personal Track official launch | v2 | founder ruling: future moat, hidden now, code intact | trigger: founder's explicit GO | — |
+| F12 | ChatPanel engine migration (user chat on Qwen v2) | v2 | 6k-line engine migration = future project | trigger: after UX wave + P1 wave stable 2 weeks | — |
+| F13 | Kit v2 (Article/BlogPosting schema, hreflang, CWV code fixes, internal-link/orphan, topical clusters, multilingual llms.txt) | v2 | out of v1 scope | trigger: Kit GA + demand | — |
+| F14 | Ladder prompt in ORA v2 admin copilot | v2 | internal tool, separate decision | trigger: founder's call, maybe never | — |
+| F15 | Housekeeping batch (404 test baseline + 37 lint) | housekeeping | baselined, untouched | trigger: dedicated cleanup day (founder's call) | — |
+| F16 | Day-1 lighter repo-connect | A lower-friction repo-connect path so a fresh signup can see product value before completing external GitHub OAuth | v2 scope; found in Session 2 — fresh signups cannot connect a repo without an external OAuth popup, no manual/paste fallback exists, confirmed the #1 quit-risk in the J1 live journey | After UX wave; founder design call | M |
 | F17 | 3-ship-surface component consolidation | Fold the 3 live ship surfaces (`ShipDialog` inline, `LoopLiveFeed` ShippedRow, `ShipConfirmModal`) into ONE canonical "approve a change" component + status set | Copy is already unified ("Approve the fix" everywhere per N3), but merging 3 live, independently-tested surfaces + the new Wave-2 PR flow in one pass carries real regression risk | After Wave 2 (ship-via-PR) is stable in Preview for 2 weeks | M |
+| F18 | Per-user `/ora` PIN | next | per-account lockout shipped; but the PIN is still ONE shared secret (`ORA_QUICK_PIN`); per-user needs schema + migration | trigger: dedicated auth-harden wave (founder's call) | M |
 
-**Housekeeping index (2026-08-28):** the two standing regression-discipline items are tracked at their own source-of-truth files, not duplicated here — `backend/test-baseline.txt` (404 pre-existing failures/errors) and `lint-baseline.txt` (37 backend + 1 frontend). Both stay untouched per standing rule; a dedicated cleanup day is a founder call, not opportunistic work.
+**Housekeeping index (2026-08-28):** the two standing regression-discipline items are tracked at their own source-of-truth files, not duplicated here — `backend/test-baseline.txt` (404 pre-existing failures/errors) and `lint-baseline.txt` (37 backend errors fixed 2026-08-28 overnight round, count now 0 — see CHANGELOG; 1 frontend suppressed via eslint-disable comment, not removed from source). F15 stays the index pointer regardless of current counts.
+

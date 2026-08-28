@@ -96,6 +96,11 @@ export function TopBar({
   // placed right beside "New run" so past sessions for this project
   // are always visible/switchable, not just the most-recent one.
   historySlot = null,
+  // R3 (2026-08-28) — Repo Quick-Switch. Rendered immediately after
+  // the breadcrumb text (the ONE place founders already look for
+  // "what am I looking at right now") — never a second picker
+  // elsewhere.
+  projectSwitcherSlot = null,
 }) {
   // Iter 212m-93 → 212m-123 — Founder spec: TopBar hides ONLY when
   // the user starts typing in the chat composer (driven by the
@@ -159,6 +164,7 @@ export function TopBar({
               No repo connected
             </span>
           )}
+          {projectSwitcherSlot}
         </nav>
 
         {typeof healthScore === "number" ? (

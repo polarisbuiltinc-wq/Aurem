@@ -61,6 +61,7 @@ import { Menu as MenuIcon } from "lucide-react";
 import SidebarV2Bound   from "../components/dashboard/v2/SidebarBound";
 import RailShell        from "../components/nav/RailShell";
 import AskAdvisorReal   from "../components/dashboard/v2/AskAdvisorReal";
+import { ProjectSwitcher } from "../components/dashboard/v2/ProjectSwitcher";
 
 const SHARE_MILESTONES = [10, 25, 50, 100, 250];
 
@@ -611,6 +612,13 @@ function DashboardV2Body() {
               repo:   activeProject.github_repo  || activeProject.name || "",
               branch: activeProject.branch       || "main",
             } : { owner: "", repo: "", branch: "" }}
+            projectSwitcherSlot={
+              <ProjectSwitcher
+                projects={projects}
+                activeProjectId={activeProject?.project_id}
+                onSelect={setActiveProjectIdGlobal}
+              />
+            }
             hasRepo={!!activeProject}
             healthScore={healthScore}
             healthScoreLoading={healthScoreLoading}

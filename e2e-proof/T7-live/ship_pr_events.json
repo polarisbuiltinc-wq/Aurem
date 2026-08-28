@@ -1,0 +1,6 @@
+{
+  "pr_number_a": 1,
+  "pr_number_b": 2,
+  "events_found_in_db": [],
+  "note": "ship_pr_opened is written by loop_engine.py's own ship-via-PR path (only fires inside a real loop ship, NOT by this raw-API drill harness, which calls open_draft_pr()/add_pr_label() directly). ship_pr_merged/ship_pr_closed are written by dispatch_pull_request_webhook \u2014 see webhook_replay results above."
+}

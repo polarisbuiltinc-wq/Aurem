@@ -1,0 +1,32 @@
+{
+  "drill_a_branch_create": {
+    "branch": "auremcto/ship-t7-drill-merge-1787928165",
+    "ok": true,
+    "err": null
+  },
+  "mark_ready_for_review": {
+    "data": {
+      "markPullRequestReadyForReview": {
+        "pullRequest": {
+          "isDraft": false
+        }
+      }
+    }
+  },
+  "drill_a_branch_delete": {
+    "branch": "auremcto/ship-t7-drill-merge-1787928165",
+    "ok": true,
+    "err": null
+  },
+  "drill_b_branch_create": {
+    "branch": "auremcto/ship-t7-drill-close-1787928175",
+    "ok": true,
+    "err": null
+  },
+  "drill_b_close_and_retract": {
+    "pr_closed": true,
+    "branch_deleted": true,
+    "errors": []
+  },
+  "webhook_replay_against_real_payloads": []
+}
