@@ -893,3 +893,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 - `services/llm_usd_cap.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-28T16:58:12.396433Z] <!-- inv:service:services/llm_usd_cap.py -->
 | `routers/notifications_bell.py` | `/notifications` | 3 | auto-detected new router (verify) (Iter 0, 2026-08-28T20:06:29.794008Z) | <!-- inv:router:routers/notifications_bell.py -->
 - `services/notifications.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-28T20:06:29.794040Z] <!-- inv:service:services/notifications.py -->
+- `GRAPH_MAX_FILES` — auto-detected in backend/services/graph_builder.py (verify) (default: unset) [Iter 0, 2026-08-28T22:51:14.592202Z] <!-- inv:envvar:GRAPH_MAX_FILES -->
