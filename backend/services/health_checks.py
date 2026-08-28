@@ -567,6 +567,32 @@ async def _check_github_webhook_fence() -> dict:
 register_check("int_webhook_fence", "GitHub Webhook Fence", "integration", _check_github_webhook_fence)
 
 
+# Q2 (2026-08-28) — Visibility Kit A7 day-14 recheck reminder. Reuses
+# the SAME existing health_notifier/notifier_loop cron (already ticking
+# every _INTERVAL_S per Feb 2026's proof-of-pattern batch above) — no
+# new scheduler, no new service. Also reuses marketing/kit-citations-
+# day14.md itself as the "done" signal: once the real day-14 numbers
+# are logged there, this check goes green on its own.
+async def _check_kit_day14_reminder() -> dict:
+    import time
+    from pathlib import Path
+    target = time.mktime(time.strptime("2026-09-11", "%Y-%m-%d"))
+    now = time.time()
+    if now < target:
+        days_left = int((target - now) / 86400)
+        return result_gray(f"day-14 recheck due 2026-09-11 ({days_left} days left)")
+    path = Path(__file__).resolve().parents[2] / "marketing" / "kit-citations-day14.md"
+    content = path.read_text() if path.exists() else ""
+    if "Day-14 results" in content or "Day 14 results" in content:
+        return result_green("day-14 recheck logged in marketing/kit-citations-day14.md")
+    return result_red(
+        "day-14 (2026-09-11) has arrived — run the real ChatGPT/Perplexity/"
+        "Gemini citation recheck and update marketing/kit-citations-day14.md")
+
+
+register_check("kit_day14_reminder", "Visibility Kit Day-14 Recheck", "guard", _check_kit_day14_reminder)
+
+
 # ═══════════════════════════════════════════════════════════════
 # INFRA ADAPTERS
 # ═══════════════════════════════════════════════════════════════

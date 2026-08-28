@@ -3375,6 +3375,8 @@ app.include_router(feature_window_router, prefix="/api/aurem-dev")  # Iter 212m-
 app.include_router(mcp_router,            prefix="/api/aurem-dev")  # iter 173 — MCP server
 app.include_router(vercel_router,         prefix="/api/aurem-dev")  # Iter 212m-84 — Vercel tools for ORA
 app.include_router(oauth_router,          prefix="/api/aurem-dev")  # iter 182 — OAuth 2.1 + PKCE for Claude Directory
+from routers.visibility import router as visibility_router          # Phase 3 · Visibility Kit Phase B (2026-08-28)
+app.include_router(visibility_router,     prefix="/api/aurem-dev")
 # Iter 174 — root-level alias for the MCP well-known discovery URL so
 # clients can probe `https://auremcto.com/.well-known/mcp` without
 # knowing our internal /api/aurem-dev prefix.
