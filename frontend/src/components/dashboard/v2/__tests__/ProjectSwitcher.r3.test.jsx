@@ -87,4 +87,23 @@ describe("ProjectSwitcher — R3 Repo Quick-Switch", () => {
     expect(onSelect).not.toHaveBeenCalled();
     expect(toast).not.toHaveBeenCalled();
   });
+
+  it("t_r7_project_name_distinguishes_same_repo_projects: two projects on the same repo render with distinct names", async () => {
+    get.mockResolvedValue({ data: { statuses: [
+      { project_id: "p_x", status: "connected" },
+      { project_id: "p_y", status: "connected" },
+    ] } });
+    const SAME_REPO_PROJECTS = [
+      { project_id: "p_x", github_owner: "acme", github_repo: "monorepo", name: "Staging clone" },
+      { project_id: "p_y", github_owner: "acme", github_repo: "monorepo", name: "Prod mirror" },
+    ];
+    render(<ProjectSwitcher projects={SAME_REPO_PROJECTS} activeProjectId="p_x" onSelect={vi.fn()} />);
+    await waitFor(() => expect(get).toHaveBeenCalled());
+    fireEvent.click(screen.getByTestId("project-switcher-trigger"));
+    const nameX = await screen.findByTestId("project-switcher-item-name-p_x");
+    const nameY = await screen.findByTestId("project-switcher-item-name-p_y");
+    expect(nameX.textContent).toBe("Staging clone");
+    expect(nameY.textContent).toBe("Prod mirror");
+    expect(nameX.textContent).not.toBe(nameY.textContent);
+  });
 });

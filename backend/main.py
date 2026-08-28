@@ -53,6 +53,7 @@ from routers.admin_users import router as admin_users_router  # 2026-02-11 — P
 from routers.admin_projects_brain import router as admin_projects_brain_router  # 2026-02-11 — Phase 2 split: /admin/projects, /project-brain, /architecture
 from routers.admin_ops_config import router as admin_ops_config_router  # 2026-02-11 — Phase 2 split: /admin/cache, /feature-flags, /integrations, /settings, /github-app-config
 from routers.admin_llm_config import router as admin_llm_config_router  # 2026-08-27 — Admin self-serve LLM Settings
+from routers.admin_llm_usd_cap import router as admin_llm_usd_cap_router  # 2026-08-28 — R6 USD cap
 from routers.admin_analytics import router as admin_analytics_router  # 2026-02-11 — Phase 2 split: /admin/dashboard, /audit, /loop-metrics, /council, /skills
 from routers.admin_bi import router as admin_bi_router  # Slice A · BI Cockpit — /admin/bi/{stripe,inference,summary}
 from routers.admin_health_score import router as admin_health_score_router  # 2026-08-23 — Codebase Health Score widget
@@ -3292,6 +3293,7 @@ app.include_router(admin_users_router,          prefix="/api/aurem-dev")  # 2026
 app.include_router(admin_projects_brain_router, prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split
 app.include_router(admin_ops_config_router,     prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split
 app.include_router(admin_llm_config_router,     prefix="/api/aurem-dev")  # 2026-08-27 — Admin self-serve LLM Settings
+app.include_router(admin_llm_usd_cap_router,    prefix="/api/aurem-dev")  # 2026-08-28 — R6 USD cap
 app.include_router(admin_analytics_router,      prefix="/api/aurem-dev")  # 2026-02-11 — Phase 2 split
 app.include_router(admin_bi_router,             prefix="/api/aurem-dev")  # Slice A · BI Cockpit
 app.include_router(admin_health_score_router,   prefix="/api/aurem-dev")  # 2026-08-23 — Codebase Health Score

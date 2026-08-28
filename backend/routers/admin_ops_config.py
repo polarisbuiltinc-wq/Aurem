@@ -830,6 +830,20 @@ async def admin_github_app_diagnostics(
     return result
 
 
+@router.get("/github-webhook-fence")
+async def admin_github_webhook_fence(
+    authorization: Optional[str] = Header(None),
+):
+    """R5c — App Fence Tile. Live read-only check of the GitHub App's
+    webhook pipeline: which content events are actually subscribed on
+    GitHub's side, plus the last 15 real delivery attempts with
+    success/fail. Feeds the "GitHub Webhook Fence" card on
+    AdminSystemHealth. Safe to poll."""
+    await _require_admin(authorization)
+    from services import github_app as _ga
+    return await _ga.webhook_fence_status()
+
+
 class HouseRulesPayload(BaseModel):
     prompt:           str = ""
     enabled_chat:     bool = False

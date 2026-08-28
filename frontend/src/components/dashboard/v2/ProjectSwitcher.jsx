@@ -136,7 +136,8 @@ export function ProjectSwitcher({ projects = [], activeProjectId, onSelect }) {
             projects.map((p) => {
               const active = p.project_id === activeProjectId;
               const unreachable = UNREACHABLE.has(statuses[p.project_id]);
-              const label = p.github_owner ? `${p.github_owner}/${p.github_repo || p.name}` : (p.name || p.github_repo || "untitled");
+              const repoLabel = p.github_owner ? `${p.github_owner}/${p.github_repo || p.name}` : (p.github_repo || "untitled");
+              const projectName = p.name && p.name !== p.github_repo ? p.name : null;
               return (
                 <div
                   key={p.project_id}
@@ -159,7 +160,19 @@ export function ProjectSwitcher({ projects = [], activeProjectId, onSelect }) {
                   }
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="truncate text-[12px] font-mono" title={label}>{label}</div>
+                    {/* R7 — project NAME shown above owner/repo so two
+                        projects pointing at the same repo are still
+                        distinguishable in the list. */}
+                    {projectName && (
+                      <div
+                        data-testid={`project-switcher-item-name-${p.project_id}`}
+                        className="truncate text-[12px] font-medium"
+                        title={projectName}
+                      >
+                        {projectName}
+                      </div>
+                    )}
+                    <div className="truncate text-[11px] font-mono text-muted-foreground/80" title={repoLabel}>{repoLabel}</div>
                     {unreachable && (
                       <div className="flex items-center gap-1 text-[10px] text-amber-500 mt-[2px]">
                         <AlertTriangle className="size-2.5" strokeWidth={2.5} /> repo unreachable

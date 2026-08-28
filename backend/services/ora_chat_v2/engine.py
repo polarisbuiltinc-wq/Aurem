@@ -168,7 +168,8 @@ async def run_turn(db, *, admin_id: str, session: dict, user_message: str,
         round_text = ""
         tool_calls = None
         async for evt in llm_client.stream_chat(
-                messages=messages, tools=tools, reasoning=think_mode, db=db):
+                messages=messages, tools=tools, reasoning=think_mode, db=db,
+                user_id=admin_id):
             if evt["type"] == "resolved":
                 resolved_model = evt.get("model")
                 resolved_label = evt.get("label")
@@ -215,7 +216,7 @@ async def run_turn(db, *, admin_id: str, session: dict, user_message: str,
             async for evt in llm_client.stream_chat(
                     messages=messages + [{"role": "user",
                         "content": "Summarize what you found in plain English now."}],
-                    tools=None, reasoning=False, db=db):
+                    tools=None, reasoning=False, db=db, user_id=admin_id):
                 if evt["type"] == "delta":
                     yield evt
                     final_text_parts.append(evt["content"])

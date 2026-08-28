@@ -82,6 +82,7 @@ export default function AdminSystemHealth() {
   const [learning, setLearning]     = useState(null);
   const [loopMetrics, setLoopMetrics] = useState(null);
   const [tokenMetrics, setTokenMetrics] = useState(null);
+  const [webhookFence, setWebhookFence] = useState(null);
   const [errs, setErrs]             = useState({});
   const [lastRefresh, setLastRefresh] = useState(null);
 
@@ -142,6 +143,13 @@ export default function AdminSystemHealth() {
       const r = await api.get("/admin/loop-token-metrics");
       setTokenMetrics(r.data);
     } catch (e) { nextErrs.token_metrics = e?.response?.data?.detail || e?.message || "loop-token-metrics failed"; }
+
+    // 7) R5c — GitHub Webhook Fence. Live check of the App's webhook
+    // pipeline (subscribed events + last-15 deliveries success/fail).
+    try {
+      const r = await api.get("/admin/github-webhook-fence");
+      setWebhookFence(r.data);
+    } catch (e) { nextErrs.webhook_fence = e?.response?.data?.detail || e?.message || "webhook-fence failed"; }
 
     setErrs(nextErrs);
     setLastRefresh(new Date());
@@ -691,6 +699,89 @@ export default function AdminSystemHealth() {
                   {" · out "}{tokenMetrics.current.avg_per_loop.output_tokens.toLocaleString()}
                   {" · $"}{tokenMetrics.current.avg_per_loop.cost_usd.toFixed(4)}
                 </div>
+              )}
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: C.faint }}>loading…</div>
+          )}
+        </Card>
+
+        {/* 6. R5c — GitHub Webhook Fence. Live subscribed-events +
+            last-15-deliveries check, so a broken webhook pipeline
+            (like the one found in R5a) surfaces here BEFORE it
+            blocks the next live drill. */}
+        <Card
+          testid="card-webhook-fence"
+          title="GitHub Webhook Fence"
+          status={(() => {
+            if (errs.webhook_fence || !webhookFence) return StatusBadge("down");
+            if (!webhookFence.configured) return StatusBadge("down");
+            return StatusBadge(webhookFence.ok ? "ok" : "degraded");
+          })()}
+        >
+          {errs.webhook_fence ? (
+            <div style={{ fontSize: 12, color: C.red }}>{errs.webhook_fence}</div>
+          ) : webhookFence ? (
+            <>
+              <Row
+                label="App configured"
+                value={webhookFence.configured ? "YES" : "NO"}
+                color={webhookFence.configured ? C.green : C.red}
+              />
+              {webhookFence.error && (
+                <div style={{ fontSize: 11, color: C.red, marginTop: 4 }}>{webhookFence.error}</div>
+              )}
+              {webhookFence.configured && (
+                <>
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${C.border}` }}>
+                    <div style={{ fontSize: 10, color: C.dim, marginBottom: 4, fontFamily: C.mono, letterSpacing: "0.08em" }}>
+                      SUBSCRIBED EVENTS
+                    </div>
+                    <div style={{ fontSize: 12, fontFamily: C.mono, color: C.text }}>
+                      {webhookFence.subscribed_events?.length ? webhookFence.subscribed_events.join(", ") : "(none)"}
+                    </div>
+                    {webhookFence.missing_subscriptions?.length > 0 && (
+                      <div data-testid="webhook-fence-missing" style={{ fontSize: 11, color: C.amber, marginTop: 4 }}>
+                        ⚠ missing: {webhookFence.missing_subscriptions.join(", ")}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${C.border}` }}>
+                    <Row
+                      label="Recent deliveries checked"
+                      value={String(webhookFence.recent_deliveries?.length ?? 0)}
+                    />
+                    <Row
+                      label="Failing"
+                      value={String(webhookFence.failing_count ?? 0)}
+                      color={(webhookFence.failing_count ?? 0) > 0 ? C.red : C.green}
+                    />
+                  </div>
+                  {webhookFence.recent_deliveries?.length > 0 && (
+                    <details style={{ marginTop: 8 }}>
+                      <summary
+                        data-testid="webhook-fence-deliveries-expand"
+                        style={{ cursor: "pointer", fontSize: 10, color: C.amber, fontFamily: C.mono, letterSpacing: "0.08em" }}
+                      >
+                        ▶ last {webhookFence.recent_deliveries.length} deliveries
+                      </summary>
+                      <div style={{ marginTop: 6, maxHeight: 180, overflowY: "auto" }}>
+                        {webhookFence.recent_deliveries.map((d) => (
+                          <div
+                            key={d.id}
+                            data-testid={`webhook-delivery-${d.id}`}
+                            style={{ padding: "5px 0", borderBottom: `1px dashed ${C.border}`, fontSize: 10, fontFamily: C.mono, display: "flex", justifyContent: "space-between" }}
+                          >
+                            <span style={{ color: C.text }}>{d.event}{d.action ? `.${d.action}` : ""}</span>
+                            <span style={{ color: d.success ? C.green : C.red }}>
+                              {d.success ? "OK" : `FAIL ${d.status_code ?? ""}`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </>
               )}
             </>
           ) : (

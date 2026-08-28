@@ -513,6 +513,82 @@ def _next_link(link_header: str) -> Optional[str]:
     return None
 
 
+# ═════════════════════════════════════════════════════════════════════
+# R5c — Webhook Fence (live health check for the App's webhook pipeline)
+# ═════════════════════════════════════════════════════════════════════
+
+# The exact event set `routers/github_app.py::install_webhook` dispatches
+# on (kept here, not re-derived, so the fence tile and the handler can
+# never silently drift apart).
+HANDLED_WEBHOOK_EVENTS = ("installation", "installation_repositories", "meta", "pull_request")
+
+# Of the above, `installation` / `installation_repositories` / `meta`
+# are sent to every GitHub App automatically — only these require an
+# explicit checkbox under the App's "Permissions & events" settings.
+SUBSCRIBABLE_WEBHOOK_EVENTS = ("pull_request",)
+
+
+async def webhook_fence_status(recent_limit: int = 15) -> dict:
+    """Live read-only health check for the GitHub App webhook pipeline
+    (R5c "App Fence Tile"). Reports which content events the App is
+    actually subscribed to on GitHub's side right now, the last N real
+    delivery attempts with success/fail, and one overall verdict.
+    Never raises — a broken webhook pipeline must not break the tile
+    that reports it."""
+    if not is_configured():
+        return {
+            "ok": False, "configured": False,
+            "subscribed_events": [], "missing_subscriptions": list(SUBSCRIBABLE_WEBHOOK_EVENTS),
+            "recent_deliveries": [], "failing_count": 0,
+            "error": "GitHub App is not configured — paste credentials in Admin → GitHub App Config first.",
+        }
+    try:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+        ) as client:
+            r_app = await client.get(f"{GITHUB_API}/app", headers=_headers_app())
+            r_app.raise_for_status()
+            subscribed_events = list(r_app.json().get("events") or [])
+
+            r_del = await client.get(
+                f"{GITHUB_API}/app/hook/deliveries?per_page={recent_limit}",
+                headers=_headers_app(),
+            )
+            r_del.raise_for_status()
+            deliveries = r_del.json() or []
+    except Exception as e:                                        # noqa: BLE001
+        return {
+            "ok": False, "configured": True,
+            "subscribed_events": [], "missing_subscriptions": [],
+            "recent_deliveries": [], "failing_count": 0,
+            "error": f"{type(e).__name__}: {e}"[:200],
+        }
+
+    missing = [e for e in SUBSCRIBABLE_WEBHOOK_EVENTS if e not in subscribed_events]
+    recent = [
+        {
+            "id":            d.get("id"),
+            "event":         d.get("event"),
+            "action":        d.get("action"),
+            "delivered_at":  d.get("delivered_at"),
+            "status_code":   d.get("status_code"),
+            "success":       bool(d.get("status_code") and 200 <= d["status_code"] < 300),
+        }
+        for d in deliveries
+    ]
+    failing = [d for d in recent if not d["success"]]
+    return {
+        "ok":                   (not missing) and (not failing),
+        "configured":           True,
+        "subscribed_events":    subscribed_events,
+        "missing_subscriptions": missing,
+        "recent_deliveries":    recent,
+        "failing_count":        len(failing),
+        "checked_at":           time.time(),
+    }
+
+
 __all__ = [
     "GitHubAppNotConfigured",
     "app_jwt",
@@ -524,4 +600,7 @@ __all__ = [
     "revoke_installation",
     "verify_webhook_signature",
     "install_url",
+    "webhook_fence_status",
+    "HANDLED_WEBHOOK_EVENTS",
+    "SUBSCRIBABLE_WEBHOOK_EVENTS",
 ]

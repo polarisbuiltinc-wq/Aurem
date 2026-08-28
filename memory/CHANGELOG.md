@@ -1026,3 +1026,16 @@ Founder-flagged gap from the security triage: `g4_secret_scanner.py` existed but
 **R4 — Billing/cost guard audit (report-only, nothing built)**: Full findings in `/app/memory/R4-BILLING-AUDIT.md`. Pre-call budget checks exist (per-user token/task caps in `services/usage.py` + a global USD safety breaker in `services/llm_cost_breaker.py`), both fire before any LLM call with human-readable 402/429 messages. Free-tier users can reach a real model but are hard-capped at 1,000 tokens/10 tasks per month — not an unmetered leak. Literal per-plan USD cap (audit item #22) is NOT built — existing per-plan caps are token/task-count denominated and hardcoded, not a live admin-editable USD field; the one USD-denominated cap is global/org-wide, not per-plan.
 
 **Stopped per instruction after R4** — awaiting founder review of the full R1-R4 report before any real-model activation round.
+
+
+## 2026-08-28 (continuation) — Focused round R5-R7 (webhook fix + USD cap + switcher polish)
+
+**R5 — GitHub App webhook config fix**: Forensics complete (root cause: production webhook_secret almost certainly mismatched/unset — 15/15 real recent deliveries failing 401, delivery URL confirmed correct, `pull_request` event never subscribed). AUREM-side code confirmed fully correct (signature check, uniform-401 guardrail, label dispatch) — nothing to fix there. New live "GitHub Webhook Fence" tile on AdminSystemHealth (`services/github_app.py::webhook_fence_status()`, `GET /admin/github-webhook-fence`), 6 tests, live-screenshot-verified. Founder checklist produced (4 copy-paste steps, ~10 min) — NOT executed (founder action, next round).
+
+**R6 — Per-plan USD cap for ORA v2/Qwen**: Closes audit #22 for that client. New `services/llm_rate_table.py` (real DashScope rates, cited 2026-08-28) + `services/llm_usd_cap.py` (per-plan + global caps, pre-call enforcement, idempotent backfill), wired into `llm_client.py`'s single choke point before the provider is ever called. New admin API for rate-table/usd-caps/backfill. Live-verified via real backfill (1,211 real usage rows, $0.0132, idempotent re-run confirmed). 5 named tests passing. Existing token/task caps (services/usage.py) and global breaker (llm_cost_breaker.py) untouched, still enforced.
+
+**R7 — Switcher shows project name**: `ProjectSwitcher.jsx` now shows each project's name above owner/repo so same-repo projects are distinguishable. 1 new test.
+
+**Regression**: backend targeted subset 477/489 passing, 11/12 failures pre-existing baseline, 1 investigated+confirmed unrelated pre-existing design gap (ora_chat_v2 audit trail). Frontend 541/541 clean.
+
+**Stopped per instruction after R7** — one founder action required (R5d checklist) before R5e/R8/R9.

@@ -80,7 +80,8 @@ async def _mock_stream(messages: list, tools: Optional[list]) -> AsyncIterator[d
 
 async def stream_chat(*, messages: list, tools: Optional[list] = None,
                        reasoning: bool = False, vision: bool = False,
-                       max_tokens: int = 2000, db=None) -> AsyncIterator[dict]:
+                       max_tokens: int = 2000, db=None,
+                       user_id: Optional[str] = None) -> AsyncIterator[dict]:
     """Yields {"type": "resolved"|"delta"|"tool_calls"|"usage"|"done"|"error", ...}.
 
     `resolved` is always the first event (model/label/source that will
@@ -91,6 +92,14 @@ async def stream_chat(*, messages: list, tools: Optional[list] = None,
     fragments; they're accumulated internally and only surfaced once
     complete, as one `{"type": "tool_calls", "calls": [...]}` event
     right before `done`.
+
+    `user_id` (R6, 2026-08-28): when provided (and MOCK_LLM is off),
+    a real per-plan USD cap is checked HERE, right after resolution
+    and BEFORE the provider is ever called — zero tokens are spent
+    past the cap. Founder/admin accounts are unlimited (matches every
+    other cap in this codebase). Real spend is logged after a
+    successful call regardless, so the cap stays accurate turn over
+    turn. See services/llm_usd_cap.py.
     """
     role = "vision" if vision else "chat"
 
@@ -106,6 +115,19 @@ async def stream_chat(*, messages: list, tools: Optional[list] = None,
         return
     yield {"type": "resolved", "model": resolved["model"],
            "label": resolved["label"] or resolved["model"], "source": resolved["source"]}
+
+    rates = None
+    if user_id and db is not None:
+        from services.llm_rate_table import get_rate_table, cost_usd as _cost_usd
+        from services.llm_usd_cap import assert_within_usd_cap, LLMUsdCapExceeded
+        rates = await get_rate_table(db)
+        est_input_tokens = max(1, len(str(messages)) // 4)
+        est_cost = _cost_usd(rates, resolved["model"], est_input_tokens, max_tokens)
+        try:
+            await assert_within_usd_cap(db, user_id=user_id, est_cost_usd=est_cost)
+        except LLMUsdCapExceeded as e:
+            yield {"type": "error", "error": "monthly_limit_reached", "detail": e.message}
+            return
 
     from openai import AsyncOpenAI
     client = AsyncOpenAI(base_url=resolved["base_url"], api_key=resolved["api_key"],
@@ -161,5 +183,19 @@ async def stream_chat(*, messages: list, tools: Optional[list] = None,
             calls.append({"id": slot["id"], "name": slot["name"], "arguments": args})
         yield {"type": "tool_calls", "calls": calls}
     if usage:
+        if user_id and db is not None:
+            from services.llm_rate_table import get_rate_table, cost_usd as _cost_usd
+            from services.llm_usd_cap import record_usd_spend
+            try:
+                if rates is None:
+                    rates = await get_rate_table(db)
+                real_cost = _cost_usd(rates, resolved["model"],
+                                       usage["input_tokens"], usage["output_tokens"])
+                await record_usd_spend(
+                    db, user_id=user_id, model=resolved["model"],
+                    input_tokens=usage["input_tokens"], output_tokens=usage["output_tokens"],
+                    cost_usd=real_cost)
+            except Exception as e:                              # noqa: BLE001
+                logger.warning("llm_usd_cap: record_usd_spend failed: %r", e)
         yield {"type": "usage", **usage}
     yield {"type": "done"}
