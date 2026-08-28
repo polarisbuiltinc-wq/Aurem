@@ -75,6 +75,28 @@ export function trackPurchase(value = 9.0, currency = "CAD", txnId = null) {
   return _fire(PURCHASE_LABEL, value, currency, extras);
 }
 
+// ----------------------------------------------------------------
+// Visibility Kit Phase A (2026-08-28) — Preferred Sources button.
+// Product-analytics events (not Google Ads conversions), so these
+// go through gtag's plain custom-event path, not the conversion
+// wrapper above. Same silent-fail-safe discipline: never throw.
+// ----------------------------------------------------------------
+export function trackPreferredSourceClicked() {
+  try {
+    if (typeof window !== "undefined" && typeof window.gtag === "function") {
+      window.gtag("event", "ps_button_clicked");
+    }
+  } catch (_) { /* analytics must never break product flows */ }
+}
+
+export function trackPreferredSourceDeeplinkFallback() {
+  try {
+    if (typeof window !== "undefined" && typeof window.gtag === "function") {
+      window.gtag("event", "ps_deeplink_fallback_clicked");
+    }
+  } catch (_) { /* analytics must never break product flows */ }
+}
+
 // ================================================================
 // Meta Pixel conversion helpers — Iter 389
 // ----------------------------------------------------------------

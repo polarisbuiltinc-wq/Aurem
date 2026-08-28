@@ -199,7 +199,22 @@ export function ShippedRow({ loopId, ship, onDone, onRollbackStarted }) {
     : phase === "failed"    ? "Retry rollback"
     : "Rollback";
 
+  // Visibility Kit Phase A / A5 (2026-08-28) — "moment of delight" nudge.
+  // Ship only fires after scan passes, so a successful ShippedRow render
+  // IS "a completed scan" per spec. Shown once ever per browser (R9 —
+  // thin implementation, no new backend schema for a marketing nudge).
+  const [showPreferredSource] = useState(() => {
+    try {
+      if (localStorage.getItem("aurem_ps_shown_v1")) return false;
+      localStorage.setItem("aurem_ps_shown_v1", "1");
+      return true;
+    } catch (_) {
+      return false;
+    }
+  });
+
   return (
+    <>
     <div
       data-testid={`loop-shipped-row-${ship.shortSha}`}
       data-rollback-phase={phase}
@@ -332,6 +347,8 @@ export function ShippedRow({ loopId, ship, onDone, onRollbackStarted }) {
         onCancel={() => setConfirmOpen(false)}
       />
     </div>
+    {showPreferredSource && <PreferredSourceButton dark />}
+    </>
   );
 }
 
@@ -381,6 +398,7 @@ import {
 import { rollbackLoop } from "../lib/loopApi";
 import OperationHistory from "./OperationHistory";
 import RollbackConfirmModal from "./RollbackConfirmModal";
+import { PreferredSourceButton } from "./PreferredSourceButton";
 
 // ── Tone → icon + colour ────────────────────────────────────────────
 const TONE_STYLES = {
