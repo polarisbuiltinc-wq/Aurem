@@ -891,3 +891,5 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 | `routers/admin_llm_usd_cap.py` | `/admin/llm` | 6 | auto-detected new router (verify) (Iter 0, 2026-08-28T16:58:12.396360Z) | <!-- inv:router:routers/admin_llm_usd_cap.py -->
 - `services/llm_rate_table.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-28T16:58:12.396399Z] <!-- inv:service:services/llm_rate_table.py -->
 - `services/llm_usd_cap.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-28T16:58:12.396433Z] <!-- inv:service:services/llm_usd_cap.py -->
+| `routers/notifications_bell.py` | `/notifications` | 3 | auto-detected new router (verify) (Iter 0, 2026-08-28T20:06:29.794008Z) | <!-- inv:router:routers/notifications_bell.py -->
+- `services/notifications.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-28T20:06:29.794040Z] <!-- inv:service:services/notifications.py -->

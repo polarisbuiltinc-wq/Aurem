@@ -3886,20 +3886,38 @@ class LoopEngine:
         # trailing narration was lost — stepTones.ship stayed
         # "pending" and the LoopStepBar SHIP node stayed orange
         # forever. Reorder: narrate green FIRST, then emit terminal.
+        # P2-C (2026-08-28) — canonical-status accuracy fix. When
+        # ship_via_pr landed the commit on a throwaway branch + opened
+        # a PR (not yet merged), the narration/terminal frame used to
+        # unconditionally say "Shipped {sha}" and link to the commit on
+        # that unmerged branch — which reads as "live" when it is not.
+        # This was a real, confirmed gap (the app has no auto-merge
+        # anywhere; the PR stays open until a human merges it on
+        # GitHub). Only fires when pr_url is actually set — zero change
+        # to the always-on direct-commit path everyone currently uses.
+        if pr_url:
+            ship_text = f"PR opened for {short_sha} — merge it on GitHub to make it live"
+        else:
+            ship_text = f"Shipped {short_sha}"
         await self._narrate(
             step="ship", tone="success",
-            text=f"Shipped {short_sha}",
+            text=ship_text,
             correlation_id="ship:commit_1",
-            extra={"commit_sha": short_sha, "html_url": html_url},
+            extra={"commit_sha": short_sha, "html_url": html_url,
+                   "pr_url": pr_url, "pr_number": pr_number},
         )
         await self._emit(LoopState.COMPLETED, "ship",
                          step=5, total_steps=5,
-                         message=f"Shipped {short_sha} → {owner}/{repo}@{branch}",
+                         message=(f"PR opened for {short_sha} → {owner}/{repo}@{branch}"
+                                  if pr_url else
+                                  f"Shipped {short_sha} → {owner}/{repo}@{branch}"),
                          data={
                              "commit_message": commit_message,
                              "commit_sha":     short_sha,
                              "full_sha":       full_sha,
                              "html_url":       html_url,
+                             "pr_url":         pr_url,
+                             "pr_number":      pr_number,
                              "repo":           f"{owner}/{repo}",
                              "branch":         branch,
                              "files_changed":  list(files_dict.keys()),

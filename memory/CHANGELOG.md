@@ -1,5 +1,11 @@
 # AUREM CTO — Changelog (append-only)
 
+- **Phase 2 continuation, "CONTINUE ALL ONE BY ONE" (2026-08-28, same fork)** — full detail in `/app/memory/LOOP-STATE.md`'s "PHASE 2 continuation" section.
+  - **Ship-status truthfulness fix (P2-C/P2-E narrow slice)**: when `ship_via_pr` is ON, the app had no auto-merge anywhere (confirmed by grep) yet the UI said "Shipped {sha}" and linked to an unmerged commit. Fixed in the existing `ShippedRow`/`extractShipInfo` (`LoopLiveFeed.jsx`) + `loop_engine.py::_do_ship` — now says "PR opened for {sha}", links to the PR, shows an accurate 3-step mini-guide (no fake "Approve here" button). Zero change to the direct-commit path. 6 new tests + 25 + 12 regression, all pass.
+  - **Notification bell poll 30s → 10s** (`UserNotificationBell.jsx`) per testing_agent's own P2-A review note.
+  - **R5e re-checked**: still red (`subscribed_events:[]`, 15/15 failing) — founder's GitHub-side fix not yet reflected; no further agent action possible.
+  - **New gap flagged, not fixed**: `loop_rollback.py` has zero PR-awareness for `ship_via_pr` ships — rollback would target the base branch, not the actual throwaway ship branch. Needs its own investigation before `ship_via_pr` goes to real traffic.
+
 - **Phase 2 GO'd — P2-A + P2-F shipped+verified; P2-B/C/E correctly held (missing prerequisite found); R5e correctly held (fence still red) (2026-08-28, continuation fork)** — founder confirmed "CONTINUE ALL" = "GO PHASE 2". Full detail in `/app/memory/LOOP-STATE.md`'s "PHASE 2" section.
   - **P2-A notification bell**: shipped, `testing_agent`-verified live (100% frontend, 0 issues, `/app/test_reports/iteration_387_p2a_notification_bell.json`), 2 screenshots. `services/notifications.py` + `routers/notifications_bell.py` + `UserNotificationBell.jsx`, 5 real emit sites. Real backend round-trip proven (reload persists read-state).
   - **P2-F webhook fence alerts**: shipped by registering a new `int_webhook_fence` check (`services/health_checks.py`) into the pre-existing `health_registry`/`health_notifier` pipeline — reuses ALL existing debounce/cooldown/bell/Resend-alert logic, ~20 new lines, 4 new tests. Live-curl-confirmed showing the real broken state (`status=red, "missing subscriptions: pull_request · 15/15 recent deliveries failing"`).

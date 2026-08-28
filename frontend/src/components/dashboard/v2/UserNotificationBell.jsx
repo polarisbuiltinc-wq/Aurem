@@ -51,9 +51,13 @@ export function UserNotificationBell() {
 
   useEffect(() => {
     refresh();
+    // P2-F follow-up (2026-08-28) — testing_agent review note: 30s was
+    // too slow for persistent alerts (payment_failed/ship_failed/
+    // repo_revoked). 10s keeps this a plain poll (no new SSE/websocket
+    // infra) while cutting worst-case bell latency to a third.
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") refresh();
-    }, 30000);
+    }, 10000);
     return () => clearInterval(timer);
   }, [refresh]);
 

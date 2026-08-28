@@ -26,6 +26,10 @@ export function extractShipInfo(events) {
         htmlUrl:     d.html_url || null,
         files:       d.files_changed || [],
         commitMsg:   d.commit_message || null,
+        // P2-C (2026-08-28) — present only when the ship_via_pr flag
+        // landed this ship as an open PR (not yet merged/live).
+        prUrl:       d.pr_url || null,
+        prNumber:    d.pr_number || null,
       };
     }
   }
@@ -215,7 +219,7 @@ export function ShippedRow({ loopId, ship, onDone, onRollbackStarted }) {
         data-testid={`loop-shipped-label-${ship.shortSha}`}
         style={{ color: "#e6ebf3" }}
       >
-        Shipped{" "}
+        {ship.prUrl ? "PR opened for" : "Shipped"}{" "}
         <span style={{
           color: "#22C55E",
           fontFamily: "'JetBrains Mono', ui-monospace, monospace",
@@ -223,7 +227,36 @@ export function ShippedRow({ loopId, ship, onDone, onRollbackStarted }) {
           {ship.shortSha}
         </span>
       </span>
-      {ship.htmlUrl && (
+      {/* P2-E (2026-08-28) — mini-guide, only when this ship went via
+          an open PR (ship_via_pr flag). No fake "Approve here" button —
+          the app has no auto-merge path today, so the copy only
+          promises what's actually true: review + merge on GitHub. */}
+      {ship.prUrl && (
+        <span
+          data-testid={`loop-shipped-pr-guide-${ship.shortSha}`}
+          title={"(1) ORA opened a Pull Request on GitHub — a proposed change, nothing is live yet. "
+               + "(2) Review the diff on GitHub. "
+               + "(3) Merging it there makes it live on your branch."}
+          style={{ color: "#9aa0a8", cursor: "help", display: "inline-flex" }}
+        >
+          <Info size={12} strokeWidth={2.5} />
+        </span>
+      )}
+      {ship.prUrl ? (
+        <a
+          data-testid={`loop-shipped-pr-link-${ship.shortSha}`}
+          href={ship.prUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: "#9aa0a8", textDecoration: "none",
+            display: "inline-flex", alignItems: "center", gap: 4,
+            fontSize: 11,
+          }}
+        >
+          <GitPullRequest size={10} strokeWidth={2.5} /> Review PR on GitHub <ExternalLink size={10} strokeWidth={2.5} />
+        </a>
+      ) : ship.htmlUrl && (
         <a
           data-testid={`loop-shipped-github-${ship.shortSha}`}
           href={ship.htmlUrl}
@@ -343,7 +376,7 @@ import React, {
 } from "react";
 import {
   Check, AlertTriangle, AlertOctagon, Loader2, ExternalLink, RotateCcw,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, GitPullRequest, Info,
 } from "lucide-react";
 import { rollbackLoop } from "../lib/loopApi";
 import OperationHistory from "./OperationHistory";
