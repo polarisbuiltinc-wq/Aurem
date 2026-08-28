@@ -38,7 +38,7 @@ function ShipModal({ onClose }) {
         <div className="flex items-center justify-between px-6 pt-5 pb-4">
           <div className="flex items-center gap-2.5">
             <Rocket className="size-5 text-primary" strokeWidth={2} />
-            <h2 className="text-[18px] font-bold tracking-tight text-foreground">Ship via CTO</h2>
+            <h2 className="text-[18px] font-bold tracking-tight text-foreground">Approve the fix</h2>
           </div>
           <button onClick={onClose} aria-label="Close modal"
             data-testid="ds2-ship-close"

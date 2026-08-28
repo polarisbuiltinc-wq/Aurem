@@ -108,6 +108,11 @@ export function UserActionCard({ phase, message, errors,
                                   gateType, testsTouched, expiresAt }) {
   const [feedback, setFeedback] = useState("");
   const secondsLeft = useExpiryCountdown(expiresAt);
+  // Round-2 PR (P0-3) — same ~65s race-window guard as ShipPendingCard
+  // / PlanApprovalCard, applied to every action button in this card
+  // (both the ship_human_review gate branch and the generic
+  // retry/skip/abort branch below).
+  const expired = secondsLeft != null && secondsLeft <= 0;
   // Iter 332 — dedicated SHIP human-review gate. Test files were
   // modified, so the engine paused for explicit approval. Generic
   // retry/skip buttons here soft-locked the engine; the ONLY valid
@@ -147,7 +152,7 @@ export function UserActionCard({ phase, message, errors,
               }}
             >
               <Clock size={11} />
-              {formatCountdown(secondsLeft)}
+              {expired ? "Waiting to expire…" : formatCountdown(secondsLeft)}
             </span>
           )}
         </div>
@@ -175,13 +180,13 @@ export function UserActionCard({ phase, message, errors,
           <ActionBtn
             testid="loop-approve-ship-btn"
             Icon={Rocket} label="Approve & Ship"
-            tone="primary" disabled={busy}
+            tone="primary" disabled={busy || expired}
             onClick={() => onAction?.("approve_ship")}
           />
           <ActionBtn
             testid="loop-cancel-ship-btn"
             Icon={X} label="Cancel ship"
-            tone="danger" disabled={busy}
+            tone="danger" disabled={busy || expired}
             onClick={() => onAction?.("cancel_ship")}
           />
         </div>
@@ -222,7 +227,7 @@ export function UserActionCard({ phase, message, errors,
             }}
           >
             <Clock size={11} />
-            {formatCountdown(secondsLeft)}
+            {expired ? "Waiting to expire…" : formatCountdown(secondsLeft)}
           </span>
         )}
       </div>
@@ -269,19 +274,19 @@ export function UserActionCard({ phase, message, errors,
         <ActionBtn
           testid="loop-retry-btn"
           Icon={Play} label="Try a different approach"
-          tone="primary" disabled={busy}
+          tone="primary" disabled={busy || expired}
           onClick={() => onAction?.("retry", feedback || undefined)}
         />
         <ActionBtn
           testid="loop-skip-btn"
           Icon={SkipForward} label="Skip this step"
-          tone="warn" disabled={busy}
+          tone="warn" disabled={busy || expired}
           onClick={() => onAction?.("skip", feedback || undefined)}
         />
         <ActionBtn
           testid="loop-abort-btn"
           Icon={X} label="Abort loop"
-          tone="danger" disabled={busy}
+          tone="danger" disabled={busy || expired}
           onClick={() => onAction?.("abort", feedback || undefined)}
         />
       </div>

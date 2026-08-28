@@ -50,9 +50,13 @@ def test_mode_d_diagnosis_emits_handoff_fence() -> None:
         "diagnosis reply when can_auto_fix is True."
     )
     # The Ship-button CTA copy must be present.
-    assert re.search(r"Ship via CTO.*button", src), (
-        "Confirm line must direct the user to click the Ship via CTO "
-        "button — not auto-fire on 'yes'."
+    # 2026-08 · Naming & Identity Canon PR — button copy renamed from
+    # "Ship via CTO" to "Approve the fix" (N3). Assertion updated to
+    # match; the behavior under test (manual-click-only, no auto-ship)
+    # is unchanged.
+    assert re.search(r"Approve the fix.*button", src), (
+        "Confirm line must direct the user to click the Approve the "
+        "fix button — not auto-fire on 'yes'."
     )
 
 

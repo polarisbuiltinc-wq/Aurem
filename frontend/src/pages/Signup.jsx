@@ -385,6 +385,13 @@ export default function Signup() {
             Already have an account?{" "}
             <Link to="/login" data-testid="signup-to-login">Sign in →</Link>
           </div>
+
+          <div
+            data-testid="signup-legal-line"
+            style={{ marginTop: 12, textAlign: "center", fontSize: 10.5, color: "var(--text-faint)" }}
+          >
+            © 2026 Polaris Built Inc. — ORA by Aurem, made by AUREM
+          </div>
         </div>
       </section>
     </AuthShell>

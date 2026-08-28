@@ -565,7 +565,7 @@ async def chat_send(
     # services/response_confidence.py. A response that proposes an
     # unsolicited code-ship for a message with zero fix/bug intent is
     # swapped for a friendly fallback BEFORE the user ever sees it —
-    # this also strips the aurem-handoff fence so Ship via CTO can
+    # this also strips the aurem-handoff fence so Approve the fix can
     # never render for it. 2026-08-22 — hardened with a quiet auto-
     # retry (layer d) and verbose real-log observation (founder ask)
     # before falling back to the canned message.
@@ -875,7 +875,7 @@ async def available_modes(authorization: Optional[str] = Header(None)) -> dict:
 # silently shipped commits to GitHub.
 #
 # The clarify-short-fix guard depended on the same keyword set and is
-# also gone. The user must now click the "🚀 Ship via CTO" button to
+# also gone. The user must now click the "🚀 Approve the fix" button to
 # ship. Short "yes"/"ok"/"fix" replies flow into the normal
 # orchestrator and get a conversational answer.
 #
@@ -1272,7 +1272,7 @@ async def chat_stream(
     # auto-fired a CTO task whenever the user typed a short confirma-
     # tion ("yes", "ok", "fix", "go") after an assistant turn with an
     # aurem-handoff fence. That bypassed the user's manual click on
-    # the "🚀 Ship via CTO" button (MessageBubble.jsx → ShipDialog).
+    # the "🚀 Approve the fix" button (MessageBubble.jsx → ShipDialog).
     #
     # The sibling `_maybe_clarify_short_fix` guard depended on the
     # same keyword detection and is also gone. Shipping now ONLY
@@ -1638,7 +1638,7 @@ async def chat_stream(
                             await q.put({"type": "mode", "mode": "D"})
                             reply = (
                                 "👆 Scroll up to my diagnosis bubble and click "
-                                "the **🚀 Ship via CTO** button — that's the "
+                                "the **🚀 Approve the fix** button — that's the "
                                 "only path that commits the fix. I never "
                                 "auto-ship; every commit needs your explicit "
                                 "click so you stay in control."
@@ -3548,7 +3548,7 @@ async def chat_turn_shipped(
     body: TurnShippedBody,
     authorization: Optional[str] = Header(None),
 ) -> dict:
-    """Record that an assistant turn was shipped via CTO so the Ship button
+    """Record that an assistant turn was shipped so the Ship button
     doesn't re-appear on refresh/rejoin. Stores `task_id` on the turn doc.
 
     Iter 34 — defensive validation: refuse to write past the end of the

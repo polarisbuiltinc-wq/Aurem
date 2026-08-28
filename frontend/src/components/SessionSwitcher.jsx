@@ -15,6 +15,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { History, Plus, Trash2, MessageSquare } from "lucide-react";
 import { useChatSession } from "./Shell";
+import DeleteChatConfirmModal from "./DeleteChatConfirmModal";
 
 function timeAgo(ts) {
   if (!ts) return "";
@@ -33,6 +34,9 @@ export default function SessionSwitcher() {
     useChatSession();
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState({ top: 0, right: 0 });
+  // Round-2 PR (P0-2) — trash icon opens a themed confirm dialog
+  // instead of deleting immediately (was: zero confirm, zero undo).
+  const [pendingDelete, setPendingDelete] = useState(null);
   const rootRef = useRef(null);
   const btnRef = useRef(null);
   const panelRef = useRef(null);
@@ -134,7 +138,7 @@ export default function SessionSwitcher() {
                   </div>
                   <button
                     data-testid={`session-switcher-delete-${s.session_id}`}
-                    onClick={(e) => deleteSession(e, s.session_id)}
+                    onClick={(e) => { e.stopPropagation(); setPendingDelete({ id: s.session_id, label: display }); }}
                     title="Delete chat"
                     className="opacity-40 hover:opacity-100 hover:text-red-400 shrink-0"
                   >
@@ -147,6 +151,15 @@ export default function SessionSwitcher() {
         </div>,
         document.body
       )}
+
+      <DeleteChatConfirmModal
+        open={!!pendingDelete}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (pendingDelete) deleteSession(undefined, pendingDelete.id);
+          setPendingDelete(null);
+        }}
+      />
     </div>
   );
 }

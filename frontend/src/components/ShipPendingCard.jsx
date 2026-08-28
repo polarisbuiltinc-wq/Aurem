@@ -143,6 +143,12 @@ function FileDiffChip({ row }) {
 export default function ShipPendingCard({ pending, busy, onConfirm, expiresAt }) {
   const [expanded, setExpanded] = useState(false);
   const secondsLeft = useExpiryCountdown(expiresAt);
+  // Round-2 PR (P0-3) — client-side guard for the ~65s race window
+  // where the countdown reads 0:00 but the backend cron sweep hasn't
+  // flipped the loop to expired yet. Server cron stays source of
+  // truth; this just stops the button from being clickable in that
+  // window. LoopExpiredCard swap on the real backend flip is unchanged.
+  const expired = secondsLeft != null && secondsLeft <= 0;
   if (!pending) return null;
   const {
     owner, repo, branch, files = [], file_count, commit_message,
@@ -212,7 +218,7 @@ export default function ShipPendingCard({ pending, busy, onConfirm, expiresAt })
             }}
           >
             <Clock size={11} />
-            {formatCountdown(secondsLeft)}
+            {expired ? "Waiting to expire…" : formatCountdown(secondsLeft)}
           </span>
         )}
       </div>
@@ -295,7 +301,7 @@ export default function ShipPendingCard({ pending, busy, onConfirm, expiresAt })
         <button
           type="button"
           data-testid="ship-to-github-btn"
-          disabled={busy}
+          disabled={busy || expired}
           onClick={() => onConfirm?.(true)}
           style={{
             flex: 1, minWidth: 180,
@@ -307,8 +313,8 @@ export default function ShipPendingCard({ pending, busy, onConfirm, expiresAt })
             borderRadius: 8,
             fontSize: 12.5, fontWeight: 800,
             letterSpacing: 0.3,
-            cursor: busy ? "not-allowed" : "pointer",
-            opacity: busy ? 0.55 : 1,
+            cursor: (busy || expired) ? "not-allowed" : "pointer",
+            opacity: (busy || expired) ? 0.55 : 1,
             boxShadow: "0 8px 24px -10px rgba(255,102,8,0.7)",
             fontFamily: "inherit",
           }}
@@ -319,7 +325,7 @@ export default function ShipPendingCard({ pending, busy, onConfirm, expiresAt })
         <button
           type="button"
           data-testid="ship-cancel-btn"
-          disabled={busy}
+          disabled={busy || expired}
           onClick={() => onConfirm?.(false)}
           style={{
             display: "inline-flex", alignItems: "center", gap: 6,
@@ -329,8 +335,8 @@ export default function ShipPendingCard({ pending, busy, onConfirm, expiresAt })
             border: "1px solid rgba(255,255,255,0.12)",
             borderRadius: 8,
             fontSize: 12, fontWeight: 600,
-            cursor: busy ? "not-allowed" : "pointer",
-            opacity: busy ? 0.55 : 1,
+            cursor: (busy || expired) ? "not-allowed" : "pointer",
+            opacity: (busy || expired) ? 0.55 : 1,
             fontFamily: "inherit",
           }}
         >

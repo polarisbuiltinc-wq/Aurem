@@ -743,7 +743,7 @@ const StepShip = ({ tick }) => (
         </div>
       </div>
       <div style={{ padding: "6px 14px", background: C.greenSoft, border: `1px solid ${C.green}`, borderRadius: 999, fontSize: 11, color: C.green, fontFamily: C.mono, letterSpacing: "0.06em" }}>
-        SHIPPED VIA CTO
+        APPROVED &amp; SHIPPED
       </div>
     </div>
 

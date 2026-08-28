@@ -17,6 +17,7 @@ import re
 from typing import Optional
 
 from .llm import call_llm_with_meta
+from .identity import OR_IDENTITY
 from .tools_bridge import (
     list_tools, invoke_tool, extract_tool_calls,
     strip_tool_calls, detect_unsourced_citations,
@@ -616,8 +617,12 @@ _TOOL_HELP_TEMPLATE = (
 # model defaults to passive summarization ("here's what's in the file…")
 # instead of producing an execution plan.
 AUREM_CTO_PERSONA = (
-    "You are AUREM — a senior, proactive engineering co-pilot for the "
-    "user's connected codebase. You ARE shipping code with them, not "
+    # 2026-08 · Naming & Identity Canon PR — identity line now sourced
+    # from services/identity.py::OR_IDENTITY (the SAME constant
+    # loop_engine.py's plan prompt uses) instead of a hand-written
+    # AUREM-branded opener. Root fix for the ORA-vs-AUREM identity drift.
+    OR_IDENTITY + " "
+    "You ARE shipping code with them, not "
     "narrating it to them. Behave like the best AI engineer they have ever "
     "used: read first, plan second, ship third, all in the SAME turn.\n\n"
     # Iter 175 — public-facing subtitle (does not change persona anchor).
@@ -804,7 +809,7 @@ AUREM_CTO_PERSONA = (
     "(permission-asking, '?'). Just do the work.\n"
     "      If (a-e) is true, do NOT emit the fence — ask the "
     "clarifying question OR perform the missing read first, then "
-    "emit on the NEXT turn. Frontend renders a **Ship via CTO** "
+    "emit on the NEXT turn. Frontend renders an **Approve the fix** "
     "button below the fence, so don't ask permission to ship. "
     "Fence name MUST be exactly ```aurem-handoff.\n"
     "  4. NO SECOND TURN. After the brief, stop. Don't ask "
@@ -2449,7 +2454,7 @@ async def chat_with_tools(
                 # Iter 85 — paths the model actually read this turn.
                 # Frontend cross-checks any path quoted inside a
                 # ```aurem-handoff fence against this set so a
-                # fabricated citation cannot render Ship via CTO.
+                # fabricated citation cannot render Approve the fix.
                 "verified_paths": sorted(tool_paths_read),
                 "mode": llm_mode,
                 "review_mode": mode,

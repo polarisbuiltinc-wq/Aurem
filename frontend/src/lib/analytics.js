@@ -156,3 +156,29 @@ export function metaPurchase(value, currency, sid = null) {
   if (sid) params.content_ids = [sid];
   return _fbq("Purchase", params, sid || undefined);
 }
+
+// ================================================================
+// Product analytics (non-ads) — Round-2 PR (2026-08)
+// ----------------------------------------------------------------
+// chat_ship_render_failed is the first event on this path: logs when
+// a chat bubble described a ship/approve action but MessageBubble's
+// extractHandoffBrief() could not produce a usable fence, so the K1
+// fallback UI rendered instead of the real Approve-the-fix button.
+// Silent no-op when gtag is unavailable, matching the rest of this
+// file's degrade-safely convention.
+// ================================================================
+export function trackShipRenderFailed({ message_id, model, has_fence } = {}) {
+  try {
+    if (typeof window === "undefined" || typeof window.gtag !== "function") {
+      return false;
+    }
+    window.gtag("event", "chat_ship_render_failed", {
+      message_id: message_id || "",
+      model: model || "unknown",
+      has_fence: !!has_fence,
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}

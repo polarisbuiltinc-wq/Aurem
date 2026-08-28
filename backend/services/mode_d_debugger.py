@@ -782,7 +782,7 @@ async def run_debug_session(
     if can_auto_fix:
         # Iter 212m-46 — embed a proper aurem-handoff fence in the
         # diagnosis reply so the frontend's MessageBubble renders the
-        # manual "🚀 Ship via CTO" button on this very bubble. NO
+        # manual "🚀 Approve the fix" button on this very bubble. NO
         # auto-ship anywhere — the user MUST click to commit.
         #
         # The brief is sanitised so it passes the seven extraction
@@ -816,7 +816,7 @@ async def run_debug_session(
         )
         confirm_line = (
             "\n\nI can fix this automatically. Click the "
-            "**🚀 Ship via CTO** button below to commit the fix to your repo."
+            "**🚀 Approve the fix** button below to commit the fix to your repo."
         )
     else:
         confirm_line = "\n\nThis fix doesn't require a code change — you can apply it manually."

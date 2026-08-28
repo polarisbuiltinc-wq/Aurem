@@ -3,6 +3,137 @@
 **Live URL**: https://auremcto.com
 **Job ID**: `73df9f0d-7149-4a95-89d4-c9972e2b0c6d`
 
+## 2026-08-28 — Naming & Identity Canon + UX Wave 1 / Round-2 consolidated PR (8 items: N1-N4, P0-1..P0-4) — testing_agent verified, 43/43 new + 523/523 frontend + 20/20 new/regressed backend green
+
+Founder locked 3 naming/identity decisions (D-NAMING: product = "ORA by
+Aurem" everywhere, in-app voice always "ORA" never "AUREM", legal entity
+Polaris Built Inc. only on legal surfaces; D-ADVISOR: AskAdvisor screen
+capture stays as-is, comment-only; D-TRACK: hide Personal Track switcher,
+keep backend/routes intact) and shipped ONE consolidated PR after a prior
+read-only Session-1 UI/UX audit (see that audit's own C1-C6 report,
+delivered earlier this fork, for the full source-level findings this PR
+fixes).
+
+**N1 — Identity unification (root fix).** New `backend/services/identity.py::OR_IDENTITY`
+shared constant, consumed by BOTH `orchestrator.py`'s `AUREM_CTO_PERSONA`
+(was "You are AUREM — a senior, proactive...") and `loop_engine.py`'s plan
+prompt (was "You are ORA, an AI CTO..."). Guardrail tests lock this:
+`tests/guardrails/test_identity_canon.py::test_identity_constant_used_by_both`
++ `test_no_you_are_aurem` (grep-guard, parametrized over both files).
+
+**N2 — Marketing surfaces.** Landing title/meta/hero already said "ORA by
+Aurem" (no change needed there); added the founder's exact legal line
+"© 2026 Polaris Built Inc. — ORA by Aurem, made by AUREM" to Landing's
+footer, and to Login.jsx/Signup.jsx (new one-line footer, `data-testid=
+"login-legal-line"` / `"signup-legal-line"`, neither page had a footer
+before).
+
+**N3 — "Ship via CTO" → "Approve the fix" copy swap.** Fixed everywhere
+real users see it: `ShipDialog.jsx` (button label + 2 disabled hints),
+`ShipConfirmModal.jsx` (confirm-phase title), `ChatPanel.jsx` (a hover
+tooltip), `DashboardPreviewV2.jsx`, `demo/demoSteps.jsx` ("SHIPPED VIA
+CTO" → "APPROVED & SHIPPED"), plus backend chat-reply text the assistant
+actually sends (`routers/chat.py`, `services/mode_d_debugger.py`'s
+confirm_line) and the orchestrator persona's own fence-explanation line.
+Also cleaned every now-stale dev *comment* referencing the old phrase in
+these same files (not historical "Iter NNN" changelog entries elsewhere,
+which were deliberately left as accurate history). New copy-gate test
+`tests/test_copy_gate_no_via_cto.py` (parametrized over 8 user-facing
+files) blocks regressions. Updated 1 pre-existing test's assertion
+(`test_iter212m46_mode_d_no_autoship.py`) to match the new copy —
+behavior under test (manual-click-only, no auto-ship) unchanged.
+Deliberately did NOT touch the `test_intent_gateway_*`/banned-tokens
+guardrail suite (uses "ship it via CTO" as example user-input phrasing
+for an unrelated LLM-behavior guardrail, not button-copy assertions) or
+historical iter-log comments elsewhere (e.g. Dashboard.jsx) — scoping
+call documented in the PR body per founder's own "don't over-engineer"
+instruction.
+
+**N4 — AskAdvisor ruling comment.** One code comment added at
+`dashboard/v2/AskAdvisorReal.jsx` (~:259-266) recording the founder
+ruling (always-on screen capture is by-design) so a future dev doesn't
+"fix" it away. Zero behavior change — verified by full regression.
+
+**P0-1 — K1 ship-button fallback.** `MessageBubble.jsx` now exports
+`detectShipCtaFallback(content)` — fires when the assistant's prose
+mentions a ship/approve CTA (or attempted an `aurem-handoff` fence) but
+`extractHandoffBrief()` returned null, rendering an explicit inline
+warning ("I described a fix but the approve button didn't load — please
+ask me again.") instead of a silent null. Logs `chat_ship_render_failed`
+via new `lib/analytics.js::trackShipRenderFailed({message_id, model,
+has_fence})` (gtag-based, silent no-op if unavailable — first non-ads
+analytics event in this file). Guarded by a ref so it only fires once
+per message; short-circuits entirely once `handoffBrief` or
+`shipped_task_id` is truthy (old bug — re-render after shipped — stays
+dead).
+
+**P0-2 — Delete-chat confirm (real fix for a real bug).** `SessionSwitcher.jsx`'s
+trash icon previously called `Shell.jsx::deleteSession` directly — zero
+confirm, zero undo, one misclick = permanent chat-history loss (found in
+the prior audit's C3 section). New `DeleteChatConfirmModal.jsx` (themed,
+NOT `window.confirm`, matches `RollbackConfirmModal`'s visual language)
+now gates the delete. Scope is confirm-only per founder — no undo/
+snapshot this round (needs backend tombstone infra; logged as a future
+ROADMAP item). `Shell.jsx::deleteSession`'s `e.stopPropagation()` made
+optional (`e?.stopPropagation?.()`) since the modal's confirm button has
+no native click event to pass through.
+
+**P0-3 — Countdown 0:00 button-disable race guard.** `ShipPendingCard.jsx`,
+`PlanApprovalCard.jsx`, `LoopActionCards.jsx`'s `UserActionCard` (both the
+`ship_human_review` gate branch and the generic retry/skip/abort branch)
+all now compute `expired = secondsLeft != null && secondsLeft <= 0` and
+disable every action button + show "Waiting to expire…" in place of the
+countdown text once expired. Purely client-side; backend cron stays
+source of truth; `LoopExpiredCard` swap on the real backend flip is
+unchanged.
+
+**P0-4 — Personal Track hidden (not deleted).** `Settings.jsx` gates the
+`<TrackSwitcher>` render behind `TRACK_SWITCHER_ENABLED = false` — the
+component, the `POST /auth/set-track` endpoint, and all `/build*` routes
+stay fully intact (existing personal-track users unaffected; re-enable
+later by flipping one constant). Backend aliveness locked by new
+`tests/test_p0_track_switcher_endpoint_alive.py`.
+
+**Regression discipline.** A line-drift snapshot test
+(`test_session5_item2_orchestrator_silent_catch_lock.py`) tripped after
+N1's identity-import edit shifted 7 pre-existing silent-catch line
+numbers by +5 — re-verified all 7 sites are still the same legit
+UI-hook fail-opens (not new hygiene targets) and re-snapshotted per that
+test's own documented protocol. Full backend pytest run (excluding 2
+pre-existing broken test-collection files and legacy/flaky/llm_judge/
+known_fail markers) showed ~295 pre-existing failures — confirmed via
+`git stash` A/B on a representative sample (unrelated areas: GitHub App
+dispatch, Stripe, vscode marketplace, synthetic checks, intent-gateway
+LLM guardrails referencing a missing `services/llm.py`) to be identical
+on baseline, NOT caused by this PR. Full frontend vitest run: 523/523
+passed (89 files), 0 failures.
+
+**testing_agent verification** (`/app/test_reports/iteration_384.json`,
+frontend-only per scope): 7/7 testable items PASS live — Landing/Login/
+Signup branding+footer, ShipDialog/ShipConfirmModal copy (code+DOM),
+delete-chat confirm flow end-to-end (open→cancel keeps row→confirm
+removes row, confirmed NO native `window.confirm` fired), Track Switcher
+absent from Settings DOM. N1 (live chat persona identity) is BLOCKED —
+this preview pod runs `MOCK_LLM=true`, so the system prompt's real effect
+on assistant self-identification cannot be observed live; source-level
+proof (OR_IDENTITY imported + used by both files, "You are AUREM" absent)
+is confirmed via the guardrail test suite instead. Flagged **NEEDS
+REAL-MODEL RE-TEST** once a real provider is wired. P0-1/P0-3 covered by
+unit tests only (K1 needs rare LLM output to trigger live; countdown-zero
+needs a real loop timer expiry) — both skipped live per test scope, no
+gaps.
+
+**Not done / explicitly out of scope this PR** (per founder's own
+DEFERRED list): `/ora` per-account lockout + per-user PIN, "Run in
+background" tracking/label fix, `FixProgressDrawer` X-label rename,
+unified ship-UI design (Wave 2), Part D jargon sweep (MAXX tooltip,
+"test files", "Council A", logo cache-tooltip, icon-only buttons), Part
+E/F canon (notification center, canonical statuses), Session 2 (J1-J4)
+journeys, A7 Kit day-0 citation baseline (no action taken — outside this
+session's visibility/tooling; founder should capture this separately if
+the 14-day clock is still running).
+
+
 ## 2026-08-27 (latest) — Journey Watch build round: Funnel instrumentation + Signup UI fix + Graph Coverage fix + Journey Watch 5-min watchdog — testing_agent verified, 100% pass
 See `/app/memory/CHANGELOG.md` (same date, top entry) for full detail. Summary:
 Phase 0 standardized the funnel-event schema (added `github_auth_started`,

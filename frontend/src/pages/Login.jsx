@@ -546,6 +546,13 @@ export default function Login() {
             No account yet?{" "}
             <Link to="/signup" data-testid="login-to-signup">Claim 1000 tokens →</Link>
           </div>
+
+          <div
+            data-testid="login-legal-line"
+            style={{ marginTop: 12, textAlign: "center", fontSize: 10.5, color: "var(--text-faint)" }}
+          >
+            © 2026 Polaris Built Inc. — ORA by Aurem, made by AUREM
+          </div>
         </div>
       </section>
     </AuthShell>

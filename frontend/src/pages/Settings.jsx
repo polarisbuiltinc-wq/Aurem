@@ -28,6 +28,13 @@ import ChangePasswordCard from "../components/ChangePasswordCard";
 import PhoneNumberCard from "../components/PhoneNumberCard";
 import ShipWallOptInCard from "../components/ShipWallOptInCard";
 
+// 2026-08 · Round-2 PR (P0-4, founder ruling D-TRACK) — Personal
+// Track switching is hidden from new users. Component, the
+// /auth/set-track endpoint, and /build* routes all stay fully intact
+// (existing personal-track users are unaffected; re-enable later by
+// flipping this one constant).
+const TRACK_SWITCHER_ENABLED = false;
+
 const TABS = [
   { id: "profile",      label: "Profile",       icon: User },
   { id: "plans",        label: "Plans & Usage", icon: Receipt },
@@ -371,8 +378,13 @@ export default function Settings() {
               )}
             </section>
 
-            {/* Iter 212m-235 — Switch between Personal and Developer Track.  */}
-            <TrackSwitcher currentTrack={me?.track || "developer"} onSwitched={(t) => setMe((m) => m ? { ...m, track: t } : m)} />
+            {/* Iter 212m-235 — Switch between Personal and Developer Track.
+                2026-08 · Round-2 PR (P0-4) — hidden per founder ruling
+                D-TRACK. TrackSwitcher component + /auth/set-track +
+                /build* routes stay intact; only this render is gated. */}
+            {TRACK_SWITCHER_ENABLED && (
+              <TrackSwitcher currentTrack={me?.track || "developer"} onSwitched={(t) => setMe((m) => m ? { ...m, track: t } : m)} />
+            )}
 
             <PhoneNumberCard me={me} onChange={(phone) => setMe((m) => m ? { ...m, phone } : m)} />
             {me?.has_password && <ChangePasswordCard />}

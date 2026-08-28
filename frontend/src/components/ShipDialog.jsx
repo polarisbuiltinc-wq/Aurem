@@ -1,9 +1,9 @@
 /**
- * ShipDialog.jsx — Inline "Ship via CTO" action row rendered below an
+ * ShipDialog.jsx — Inline "Approve the fix" action row rendered below an
  * assistant message that contains an `aurem-handoff` brief.
  *
  * Renders one of:
- *   • Idle      — 🚀 Ship via CTO button (+ Maxx chip + ShipLintBadge)
+ *   • Idle      — 🚀 Approve the fix button (+ Maxx chip + ShipLintBadge)
  *   • Shipping  — disabled button with spinner
  *   • Shipped   — TaskProgressCard (live progress / commit / rollback)
  *   • Disabled  — italic hint (tokens exhausted / no active project)
@@ -57,8 +57,8 @@ export default function ShipDialog({
       {!canShip ? (
         <div style={{ fontSize: 11, color: "var(--text-faint)", fontStyle: "italic" }}>
           {exhausted
-            ? "🚫 Tokens exhausted — upgrade your plan to ship via CTO."
-            : "Switch to a connected project to enable Ship via CTO."}
+            ? "🚫 Tokens exhausted — upgrade your plan to approve fixes."
+            : "Switch to a connected project to approve fixes."}
         </div>
       ) : shipState.status === "shipped" ? (
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -97,7 +97,7 @@ export default function ShipDialog({
           >
             {shipState.status === "shipping"
               ? (<><Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} /> shipping…</>)
-              : (<>🚀 Ship via CTO</>)}
+              : (<>🚀 Approve the fix</>)}
           </button>
           {/* Iter 47 — Maxx mode chip + brief lint preview */}
           {msg.maxxMode && (

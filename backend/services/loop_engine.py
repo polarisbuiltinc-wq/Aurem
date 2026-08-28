@@ -4418,8 +4418,13 @@ async def _generate_plan(user_id: str, project_id: Optional[str],
     except Exception as e:                              # noqa: BLE001
         logger.debug("[plan] repo map injection skipped: %r", e)
 
+    from services.identity import OR_IDENTITY
     sys_msg = (
-        "You are ORA, an AI CTO.  The user is in Loop Mode and needs a "
+        # 2026-08 · Naming & Identity Canon PR — identity line now
+        # sourced from services/identity.py::OR_IDENTITY (the SAME
+        # constant orchestrator.py's chat persona uses) instead of a
+        # hand-written "You are ORA, an AI CTO" opener.
+        OR_IDENTITY + "  The user is in Loop Mode and needs a "
         "PLAN ONLY (no code).  Respond with strict JSON:\n"
         '{\n'
         '  "title": str (3-7 words),\n'

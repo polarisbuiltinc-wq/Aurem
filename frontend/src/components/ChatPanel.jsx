@@ -2397,7 +2397,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
               ...(m?.low_confidence ? { lowConfidence: true } : {}),
               // 2026-08-22 — Ship-suppressed note: narrower than
               // lowConfidence — only true when a REAL ```aurem-handoff
-              // fence (the thing that renders "Ship via CTO") was the
+              // fence (the thing that renders "Approve the fix") was the
               // thing suppressed, not just a bare "Root cause:" text.
               ...(m?.ship_suppressed ? { shipSuppressed: true } : {}),
             };
@@ -4827,7 +4827,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
               )}
               {/* 2026-08-22 — Ship-suppressed note. Narrower than the
                   badge above: only fires when a REAL ```aurem-handoff
-                  fence (the one thing that renders a "Ship via CTO"
+                  fence (the one thing that renders a "Approve the fix"
                   button, see MessageBubble.jsx) was suppressed by the
                   confidence gate — never for a normal Q&A turn like
                   "what is 5+5?" (no fence was ever going to appear). */}
@@ -4850,7 +4850,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                     borderRadius: 999,
                     letterSpacing: 0.2,
                   }}
-                  title="A Ship via CTO suggestion was withheld because ORA wasn't confident enough in it"
+                  title="An Approve-the-fix suggestion was withheld because ORA wasn't confident enough in it"
                 >
                   I'm not confident enough in this response to suggest a code change — try rephrasing or asking again.
                 </div>

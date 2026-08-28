@@ -423,7 +423,10 @@ export default function Shell({ children, requireAuth, chromeless = false }) {
 
   const deleteSession = useCallback(
     async (e, id) => {
-      e.stopPropagation();
+      // 2026-08 · Round-2 PR (P0-2) — now called from the themed
+      // DeleteChatConfirmModal's confirm button too, which has no
+      // native DOM event to stop-propagate. `e` is optional.
+      e?.stopPropagation?.();
       try {
         await api.delete(`/chat/sessions/${id}`);
         if (id === sessionId) {

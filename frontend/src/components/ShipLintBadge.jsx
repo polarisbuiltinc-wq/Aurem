@@ -1,7 +1,7 @@
 /**
  * components/ShipLintBadge.jsx — Iter 47
  *
- * Pre-flight lint indicator next to "Ship via CTO" button. Calls a
+ * Pre-flight lint indicator next to "Approve the fix" button. Calls a
  * cheap backend endpoint that runs design_linter + Vanguard 007 scanner
  * on the handoff BRIEF text itself (not the generated code — that's
  * checked again server-side at commit time).

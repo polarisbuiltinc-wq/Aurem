@@ -262,7 +262,7 @@ export default function ShipConfirmModal() {
               <Loader2 size={16} className="animate-spin"
                 style={{ color: "#FF6608", animation: "spin 1s linear infinite" }} />
             )}
-            {phase === "confirm"  && "Ship via CTO"}
+            {phase === "confirm"  && "Approve the fix"}
             {phase === "shipping" && "Shipping…"}
             {phase === "shipped"  && "Shipped"}
             {phase === "reverted" && "Reverted"}

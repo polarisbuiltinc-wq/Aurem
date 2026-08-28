@@ -1,0 +1,39 @@
+{
+  "summary": "Frontend-only verification of the 8-item Round-2 ONE-PR (N1..N4, P0-1..P0-4). Verified marketing surfaces (Landing hero/title/footer show 'ORA by Aurem' + legal line), Login and Signup one-line legal footer (data-testid='login-legal-line' / 'signup-legal-line'), Settings page has NO Track Switcher UI (TRACK_SWITCHER_ENABLED=false gate verified — 0 elements with track-switcher testid, no 'Personal Track / Developer Track' toggle text; the read-only 'TRACK: developer' info row in Profile is a separate read-only display, not a switcher), and the DeleteChatConfirmModal delete-chat flow end-to-end from SessionSwitcher (open → Cancel keeps row → Delete removes row 19→18, no native window.confirm dialog fired). Ship button copy verified via code + DOM: ShipDialog renders '🚀 Approve the fix' and disabled-state hint says 'approve fixes' (not 'Ship via CTO'); ShipConfirmModal title is 'Approve the fix'. Remaining 'Ship via CTO' occurrences in source are code comments + a detector regex (non-user-facing). Chat-persona identity check on /ora returned MOCK_LLM canned reply — cannot verify assistant self-identifies as ORA vs AUREM live; flagged NEEDS REAL-MODEL RE-TEST.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_items": [
+    {"item": "N2 Landing 'ORA by Aurem' branding + footer legal line", "status": "PASS", "evidence": "body contains 'ORA by Aurem' and '© 2026 Polaris Built Inc. ... ORA by Aurem, made by AUREM'"},
+    {"item": "N2 Login legal footer", "status": "PASS", "evidence": "[data-testid=login-legal-line] text: '© 2026 Polaris Built Inc. — ORA by Aurem, made by AUREM'"},
+    {"item": "N2 Signup legal footer", "status": "PASS", "evidence": "[data-testid=signup-legal-line] text: '© 2026 Polaris Built Inc. — ORA by Aurem, made by AUREM'"},
+    {"item": "N3 ShipDialog copy 'Approve the fix'", "status": "PASS (code+DOM)", "evidence": "ShipDialog.jsx line 100 renders '🚀 Approve the fix'; disabled hints at lines 60-61 say 'approve fixes'"},
+    {"item": "N3 ShipConfirmModal title 'Approve the fix'", "status": "PASS (code)", "evidence": "ShipConfirmModal.jsx line 265: {phase === 'confirm' && 'Approve the fix'}"},
+    {"item": "P0-2 Delete-chat confirm modal (themed, not native)", "status": "PASS (live e2e)", "evidence": "delete-chat-confirm-modal shows 'DELETE THIS CHAT? / This can't be undone.' with Cancel + Delete testids. Cancel preserves session; Delete removed target session (19→18). No page.on('dialog') fired — window.confirm() NOT used."},
+    {"item": "P0-4 Track Switcher hidden from Settings", "status": "PASS", "evidence": "TRACK_SWITCHER_ENABLED=false constant; 0 [data-testid*=track-switcher] elements on /settings; no 'Personal Track / Developer Track' toggle text in DOM. (Read-only 'TRACK: developer' row in Profile is separate info, not a switcher.)"},
+    {"item": "N1 Chat persona says ORA, never AUREM", "status": "BLOCKED — MOCK_LLM active", "evidence": "/ora reply prefixed '[MOCK_LLM — no active model yet]' — canned mock, does not exercise system prompt with OR_IDENTITY. Cannot verify live."},
+    {"item": "N4 AskAdvisor comment-only", "status": "SKIPPED per request", "evidence": "no UI change to test"},
+    {"item": "P0-1 K1 fallback", "status": "SKIPPED per request", "evidence": "covered by frontend vitest unit tests"},
+    {"item": "P0-3 countdown 0:00 button-disable", "status": "NOT TESTED (would need live loop expiration)", "evidence": "requires real loop timer expiry; covered by unit tests per main-agent note"}
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "REAL-MODEL RE-TEST NEEDED: preview pod is in MOCK_LLM mode; ORA vs AUREM self-identity of the chat assistant (N1) cannot be verified until a real provider is wired (Settings → Models & LLM) and MOCK_LLM=false. The OR_IDENTITY shared constant is correctly imported in backend/services/orchestrator.py and loop_engine.py per source review, but its live effect is not observable on this pod.",
+    "Optional: consider suppressing/relabelling the '[MOCK_LLM — no active model yet]' banner in preview so QA agents can more clearly distinguish this from a real regression."
+  ],
+  "critical_code_review_comments": [
+    "DeleteChatConfirmModal focus/keyboard: verified aria-labelledby is set; consider verifying focus-trap and Escape-to-cancel behavior in a follow-up (not blocking).",
+    "MessageBubble.jsx SHIP_CTA_MENTION regex intentionally still matches legacy 'ship via cto' phrasing for detector robustness — this is correct behavior (detects mixed old/new LLM output), not a copy leak.",
+    "SessionSwitcher pendingDelete state is cleared on both Cancel and Confirm — no leak observed."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (frontend-only per request)", "frontend": "7/7 testable items PASS · 1 blocked by MOCK_LLM · 3 items intentionally skipped per request" },
+  "test_credentials": "Preview: test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Deleted 1 existing chat session (session_id=e2e-collapse-339d) on test@aurem.dev's aurem-demo/frontend project as part of the delete-flow e2e. Sessions on that project went 19 → 18. All other data untouched.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "MOCK_LLM is active on this preview pod (banner '[MOCK_LLM — no active model yet]' appears in every assistant reply on /ora). Any test that depends on real LLM behavior (chat persona identity, ship-suggestion detection, K1 fallback trigger, loop plan output) will get a canned mock and cannot be validated live here. Flip MOCK_LLM=false and configure a provider before retesting N1 (persona) end-to-end. The main chat with SessionSwitcher lives at /dashboard (v2 TopBar historySlot uses SessionSwitcher), NOT /ora — /ora is OraDirect, a simpler chat with its own testids (ora-input, ora-send, ora-history, ora-settings, ora-logout, suggestion-*)."
+}

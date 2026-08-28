@@ -256,6 +256,14 @@ export default function AskAdvisorReal({ collapsed = false, onCollapse, projectI
     // Fire capture in parallel — never block send() on it.  A
     // failure here just means the LLM gets a text-only turn; user
     // never sees the failure UI (silent by design).
+    //
+    // 2026-08 · Round-2 PR (N4, founder ruling D-ADVISOR) — this
+    // always-on, no-toggle, no-opt-out screen capture is BY DESIGN:
+    // the advisor reads the user's screen to diagnose issues. Do NOT
+    // add a consent step / opt-out here without explicit founder
+    // approval. The one-line notice ("Advisor sees your screen.")
+    // rendered near the composer is the intended disclosure — keep
+    // it as-is.
     (async () => {
       let screenshotB64 = null;
       try {

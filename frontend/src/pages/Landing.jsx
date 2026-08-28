@@ -1595,7 +1595,7 @@ export default function Landing() {
           }}
         >
           <div>
-            © 2026 <strong style={{ color: "var(--text-dim)" }}>Polaris Built Inc</strong> · Incorporated in Canada · All rights reserved.
+            © 2026 <strong style={{ color: "var(--text-dim)" }}>Polaris Built Inc</strong> — ORA by Aurem, made by AUREM · Incorporated in Canada · All rights reserved.
           </div>
           <div
             data-testid="footer-trademark-notice"

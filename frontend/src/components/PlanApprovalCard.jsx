@@ -16,6 +16,9 @@ import { useExpiryCountdown, formatCountdown } from "../hooks/useExpiryCountdown
 
 export default function PlanApprovalCard({ onApprove, onCancel, disabled, expiresAt }) {
   const secondsLeft = useExpiryCountdown(expiresAt);
+  // Round-2 PR (P0-3) — same ~65s race-window guard as ShipPendingCard.
+  const expired = secondsLeft != null && secondsLeft <= 0;
+  const isDisabled = disabled || expired;
   return (
     <div
       data-testid="plan-approval-card"
@@ -48,7 +51,7 @@ export default function PlanApprovalCard({ onApprove, onCancel, disabled, expire
             }}
           >
             <Clock size={11} />
-            {formatCountdown(secondsLeft)}
+            {expired ? "Waiting to expire…" : formatCountdown(secondsLeft)}
           </span>
         )}
       </div>
@@ -62,23 +65,23 @@ export default function PlanApprovalCard({ onApprove, onCancel, disabled, expire
         <button
           type="button"
           data-testid="plan-approve-btn"
-          disabled={disabled}
+          disabled={isDisabled}
           onClick={onApprove}
           style={{
             display: "inline-flex", alignItems: "center", gap: 6,
             padding: "7px 14px",
-            background: disabled
+            background: isDisabled
               ? "rgba(134,239,172,0.18)"
               : "linear-gradient(135deg, #22c55e, #16a34a)",
-            color: disabled ? "#86efac" : "#0a0a0a",
+            color: isDisabled ? "#86efac" : "#0a0a0a",
             border: "none", borderRadius: 8,
             fontSize: 11.5, fontWeight: 700,
-            cursor: disabled ? "not-allowed" : "pointer",
-            opacity: disabled ? 0.7 : 1,
-            boxShadow: disabled ? "none" : "0 6px 16px -8px rgba(34,197,94,0.6)",
+            cursor: isDisabled ? "not-allowed" : "pointer",
+            opacity: isDisabled ? 0.7 : 1,
+            boxShadow: isDisabled ? "none" : "0 6px 16px -8px rgba(34,197,94,0.6)",
             transition: "transform 120ms ease",
           }}
-          onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.transform = "translateY(-1px)"; }}
+          onMouseEnter={(e) => { if (!isDisabled) e.currentTarget.style.transform = "translateY(-1px)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
         >
           <Check size={12} />
@@ -87,19 +90,19 @@ export default function PlanApprovalCard({ onApprove, onCancel, disabled, expire
         <button
           type="button"
           data-testid="plan-cancel-btn"
-          disabled={disabled}
+          disabled={isDisabled}
           onClick={onCancel}
           style={{
             display: "inline-flex", alignItems: "center", gap: 6,
             padding: "7px 14px",
             background: "transparent",
-            color: disabled ? "var(--text-dim, #9aa3b2)" : "#fda4af",
-            border: `1px solid ${disabled
+            color: isDisabled ? "var(--text-dim, #9aa3b2)" : "#fda4af",
+            border: `1px solid ${isDisabled
               ? "var(--border, rgba(255,255,255,0.12))"
               : "rgba(244,63,94,0.45)"}`,
             borderRadius: 8,
             fontSize: 11.5, fontWeight: 600,
-            cursor: disabled ? "not-allowed" : "pointer",
+            cursor: isDisabled ? "not-allowed" : "pointer",
           }}
         >
           <X size={12} />

@@ -34,6 +34,24 @@ import SystemSignalBanner from "./SystemSignalBanner";
 import StepCards from "./StepCards";   // Iter 212m-19 — live step cards
 import { brandProvider } from "../lib/providerLabel";
 import { useFriendlyStatusPhrase } from "../hooks/useFriendlyStatusPhrase";
+import { trackShipRenderFailed } from "../lib/analytics";
+
+// ---- Round-2 PR (P0-1, K1 ship-button fallback) ---------------------------
+// Detects the case extractHandoffBrief() rejects a fence (or finds none)
+// while the assistant's prose still described a ship/approve action —
+// see detectShipCtaFallback usage below. Exported for direct unit
+// testing (same convention as stripHandoffFenceForDisplay).
+const SHIP_FENCE_MARKER = /```aurem-handoff/i;
+const SHIP_CTA_MENTION = /(ship via cto|approve the fix|ship (it|this|the)\s*(fix|code)?|click[^.]{0,40}(ship|approve)[^.]{0,20}button)/i;
+
+export function detectShipCtaFallback(content) {
+  if (typeof content !== "string" || !content) {
+    return { shouldFallback: false, hasFence: false };
+  }
+  const hasFence = SHIP_FENCE_MARKER.test(content);
+  const mentionsCta = SHIP_CTA_MENTION.test(content);
+  return { shouldFallback: hasFence || mentionsCta, hasFence };
+}
 
 // ---- Helpers (only used here) ----------------------------------------------
 
@@ -563,6 +581,30 @@ export default function MessageBubble({
     ? extractHandoffBrief(m.content, m.verifiedPaths)
     : null;
   const canShip = !!(handoffBrief && activeProject?.project_id && !exhausted);
+
+  // Round-2 PR (P0-1, K1) — extractHandoffBrief() legitimately returns
+  // null both when there is no fence at all AND when a fence was
+  // attempted but rejected by one of its 7 sanity gates. Either way,
+  // ShipDialog silently renders nothing (ShipDialog.jsx:37). If the
+  // assistant's prose actually described a ship/approve action, that
+  // silent null reads as a broken app to the user. Detect that case
+  // and render an explicit fallback instead — NEVER a silent null.
+  const shipCtaCheck = (m.role === "assistant" && showActions
+      && !m.shipped_task_id && !handoffBrief)
+    ? detectShipCtaFallback(m.content)
+    : { shouldFallback: false, hasFence: false };
+  const shipCtaFallback = shipCtaCheck.shouldFallback;
+  const loggedShipFallbackRef = useRef(false);
+  useEffect(() => {
+    if (shipCtaFallback && !loggedShipFallbackRef.current) {
+      loggedShipFallbackRef.current = true;
+      trackShipRenderFailed({
+        message_id: m.id || m.message_id || `turn-${idx}`,
+        model: m.provider || m.model || "unknown",
+        has_fence: shipCtaCheck.hasFence,
+      });
+    }
+  }, [shipCtaFallback, shipCtaCheck.hasFence]);
 
   async function shipViaCTO() {
     if (!canShip || shipState.status === "shipping" || shipState.status === "shipped") return;
@@ -1124,6 +1166,23 @@ export default function MessageBubble({
         })()}
 
         {/* Ship via CTO row — only when an aurem-handoff brief is present */}
+        {shipCtaFallback && (
+          <div
+            data-testid={`ship-cta-fallback-${idx}`}
+            role="alert"
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              marginTop: 10, marginLeft: 4,
+              padding: "8px 12px", fontSize: 11.5, color: "#fda4af",
+              background: "rgba(239,68,68,0.08)",
+              border: "1px solid rgba(239,68,68,0.25)",
+              borderRadius: 8,
+            }}
+          >
+            <AlertTriangle size={13} strokeWidth={2.5} />
+            I described a fix but the approve button didn&apos;t load — please ask me again.
+          </div>
+        )}
         <ShipDialog
           idx={idx}
           msg={m}
