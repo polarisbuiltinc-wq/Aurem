@@ -888,3 +888,6 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 
 - `services/write_guard.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-28T00:09:57.979446Z] <!-- inv:service:services/write_guard.py -->
 - `services/ship_meter.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-28T13:47:17.057454Z] <!-- inv:service:services/ship_meter.py -->
+| `routers/admin_llm_usd_cap.py` | `/admin/llm` | 6 | auto-detected new router (verify) (Iter 0, 2026-08-28T16:58:12.396360Z) | <!-- inv:router:routers/admin_llm_usd_cap.py -->
+- `services/llm_rate_table.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-28T16:58:12.396399Z] <!-- inv:service:services/llm_rate_table.py -->
+- `services/llm_usd_cap.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-28T16:58:12.396433Z] <!-- inv:service:services/llm_usd_cap.py -->

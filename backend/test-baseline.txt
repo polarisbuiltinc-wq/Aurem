@@ -33,6 +33,16 @@
 #
 # 37+1 lint baseline (lint-baseline.txt) is separate and untouched.
 #
+# 2026-08-28 (R5-R7 round) — added below: investigated and confirmed
+# pre-existing/unrelated to that round's changes (R5 webhook fence,
+# R6 USD cap, R7 switcher name). Root cause: /ora-chat/actions/recent
+# (routers/ora_chat.py:406-412) deliberately calls
+# audit.recent_proposals() (ONE merged row per proposal_id, per its
+# own docstring — "so the founder sees one line per decision"), but
+# the test asserts it returns separate proposed/approved/executed
+# rows. Design/test mismatch predating R5-R7; last touched in the
+# prior overnight round (per-account /ora lockout), not this one.
+#
 ERROR tests/test_anti_fabrication_regen_admin.py::test_regen_on_fabrication_rewrites_before_reaching_client
 ERROR tests/test_aurem_p0_bugs.py::test_bug1_add_project_returns_ok
 ERROR tests/test_aurem_p0_bugs.py::test_bug1_list_excludes_github_token
@@ -221,6 +231,7 @@ FAILED tests/test_iter212m211_advisor_tool_leak.py::test_advisor_house_rules_rou
 FAILED tests/test_iter212m211_advisor_tool_leak.py::test_advisor_source_level_guardrails
 FAILED tests/test_iter212m221_council_and_dockerfile.py::test_council_reprobe_endpoint_registered
 FAILED tests/test_iter212m221_council_and_dockerfile.py::test_council_reprobe_is_throttled
+FAILED tests/test_iter2026_08_28_ora_chat_v2_e2e.py::TestActionFlow::test_approve_reversible_action
 FAILED tests/test_iter212m222_signup_created_at.py::test_admin_list_users_tolerates_both_types
 FAILED tests/test_iter212m225_boundary_hardening.py::test_pat_vault_delegates_to_router
 FAILED tests/test_iter212m230_phase7.py::test_backend_has_zero_circular_imports

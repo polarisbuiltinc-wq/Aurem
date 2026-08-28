@@ -1039,3 +1039,12 @@ Founder-flagged gap from the security triage: `g4_secret_scanner.py` existed but
 **Regression**: backend targeted subset 477/489 passing, 11/12 failures pre-existing baseline, 1 investigated+confirmed unrelated pre-existing design gap (ora_chat_v2 audit trail). Frontend 541/541 clean.
 
 **Stopped per instruction after R7** — one founder action required (R5d checklist) before R5e/R8/R9.
+
+
+## 2026-08-28 (continuation) — MASTER BUILD LOOP: Phase 0 + Phase 1 prep
+
+**Phase 0**: Added 1 entry to test-baseline.txt (R5-R7's found pre-existing, unrelated ora_chat_v2 audit-trail test/design mismatch) so it stops being re-investigated. Baseline now 405 documented entries. Confirmed MOCK_LLM=true.
+
+**Phase 1 (Real Model + Safe-Ship) — prep complete, execution gated on founder actions**: Built a full USD-cap cost simulation (P1-a, real choke-point call with provider mocked to explode if ever constructed — proves zero real spend, human message, GW_BLOCK_COST logged; 10/10 steps pass). Wrote the exact R5e re-drill plan (P1-b, `/app/memory/R5e-VERIFY-PLAN.md`) and the R9 prod-flip checklist (P1-c, `/app/memory/R9-PROD-FLIP-CHECKLIST.md`) — both copy-paste ready the moment their founder-gated triggers land. Documented the full 3-step unblock chain (P1-d).
+
+**Nothing flipped, no real tokens spent, no prod changes.** R5e/R8/R9 all PENDING-FOUNDER — full detail in `/app/memory/PHASE1-RESULTS.md`. Stopped per the go-gate contract, awaiting "GO PHASE 2."

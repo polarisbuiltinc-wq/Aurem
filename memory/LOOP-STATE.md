@@ -18,7 +18,11 @@
 
 ---
 
-# R5-R7 focused round (2026-08-28, continuation same day)
+# MASTER BUILD LOOP P1/P2/P3 (2026-08-28, continuation same day)
+
+- PHASE 0 setup: DONE. Added 1 new entry to `backend/test-baseline.txt` (the R5-R7-found `test_iter2026_08_28_ora_chat_v2_e2e.py::TestActionFlow::test_approve_reversible_action`, unrelated pre-existing design gap, reason documented inline). Baseline now 404+1=405 documented entries. `lint-baseline.txt` (37+1) untouched. MOCK_LLM confirmed `true`.
+- PHASE 1 (Real Model + Safe-Ship): PREP DONE, full report `/app/memory/PHASE1-RESULTS.md`. P1-a (USD-cap cost simulation, 10/10 PASS, `/app/e2e-proof/P1-a/usd-cap-sim.log`), P1-b (`/app/memory/R5e-VERIFY-PLAN.md`), P1-c (`/app/memory/R9-PROD-FLIP-CHECKLIST.md`), P1-d (gate chain documented) all DONE. R5e/R8/R9 execution: **PENDING-FOUNDER** (GitHub webhook checklist not yet run; no real-model round started; no R9 GO given) — none attempted, per phase contract.
+- STATUS: **STOPPED after Phase 1 per the go-gate contract.** Awaiting founder's "GO PHASE 2" (UX Fix Wave: notification bell, unified ship-UI/F17, canonical status chips, jargon sweep, PR mini-guide tooltip, fence alerts) before any Phase 2 work begins. Phase 3 (Kit B+C+admin dashboard/F7) not started.
 
 - R5 GitHub App webhook fix: DONE (forensics + AUREM-side verify + fence tile + founder checklist). Full detail `/app/memory/R5-WEBHOOK-FIX.md`. Root cause: production's `webhook_secret` almost certainly mismatched/unset (15/15 recent real deliveries failing 401, URL confirmed correct, `pull_request` not subscribed at all). AUREM-side code confirmed fully correct (signature check, uniform-401 guardrail, label dispatch) — nothing to fix there. New live "GitHub Webhook Fence" tile on AdminSystemHealth (`services/github_app.py::webhook_fence_status()` + `GET /admin/github-webhook-fence` + new card), 6 tests (3 backend incl. 1 live, 3 frontend), live-screenshot-verified showing the real broken state. Founder checklist produced (R5d, 4 copy-paste steps, ~10 min) — NOT executed (founder action, next round). R5e revert-check done early: R2's drill marker file was already cleaned up in the same R2 round — `ora-grounding` confirmed still exactly `["main"]` branch, no stray files. No revert needed.
 - R7 Switcher shows project NAME: DONE. `ProjectSwitcher.jsx` now renders each project's `name` above the owner/repo line when it differs from the repo name, so same-repo projects are distinguishable. 1 new named test (`t_r7_project_name_distinguishes_same_repo_projects`), full ProjectSwitcher suite 5/5 passing.
