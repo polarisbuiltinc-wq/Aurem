@@ -887,3 +887,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 ### Iter 0 · 2026-08-28
 
 - `services/write_guard.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-28T00:09:57.979446Z] <!-- inv:service:services/write_guard.py -->
+- `services/ship_meter.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-28T13:47:17.057454Z] <!-- inv:service:services/ship_meter.py -->
