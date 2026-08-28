@@ -98,11 +98,16 @@ const MAX_BRIEF_LINES = 12;
 // validate / render / configure / set up), AND excludes verbs that
 // are usually conversational rather than file-changing
 // (import / export / mount / swap / extract).
-const MUTATION_VERBS = new RegExp(
+// 2026-08-28 · P0 hotfix — added revert/rollback/undo/restore so this
+// stays in sync with the backend persona's mutation-verb whitelist
+// (services/orchestrator.py AUREM_CTO_PERSONA). Without these, a
+// backend-emitted revert fence gets rejected here and the Approve
+// button never renders (the exact P0 symptom this was meant to fix).
+export const MUTATION_VERBS = new RegExp(
   "\\b(create|add|fix|write|edit|rewrite|refactor|replace|implement" +
     "|scaffold|wire|install|patch|delete|remove|migrate|generate" +
     "|integrate|ship|introduce|inject|deprecate|rename|move|append" +
-    "|prepend|register)\\b",
+    "|prepend|register|revert|rollback|undo|restore)\\b",
   "i",
 );
 
@@ -1073,7 +1078,7 @@ export default function MessageBubble({
               );
             })()
           )}
-          {!m.streaming && (m.council || m.provider === "mode-b-council") && (
+          {!m.streaming && m.content && (m.council || m.provider === "mode-b-council") && (
             <div data-testid={`council-badge-${idx}`} style={{
               marginTop: 8, fontSize: 10,
               fontFamily: "'JetBrains Mono', monospace",

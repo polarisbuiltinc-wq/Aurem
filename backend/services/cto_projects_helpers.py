@@ -224,12 +224,30 @@ async def _set_status(task_id: str, **fields):
         # raw error string is being set.
         if fields.get("status") == "failed" and fields.get("error"):
             try:
-                from services.error_translator import translate
-                friendly = await translate(fields["error"])
-                fields["error_plain"]      = friendly.get("plain") or ""
-                fields["error_steps"]      = friendly.get("steps") or []
-                fields["error_suggestion"] = friendly.get("suggestion") or ""
-                fields["error_source"]     = friendly.get("source") or "unknown"
+                # 2026-08-28 · P0 hotfix — an INTERNAL_CALL_ERROR (a bug
+                # in AUREM's own calling code, e.g. a missing-argument
+                # TypeError) must NEVER go through the LLM rewrite below.
+                # The raw text often contains words that happen to look
+                # like user-data field names (e.g. "author_email",
+                # "author_name"), and the LLM has been observed
+                # confidently inventing "update your profile" guidance
+                # from that — blaming the user for AUREM's own bug. Use
+                # the already-correct, human-reviewed catalog message
+                # instead, same one loop_engine.py's _fail_ship() uses.
+                if fields.get("error_code") == "INTERNAL_CALL_ERROR":
+                    from core.errors import translate_error, ErrorCode
+                    catalog = translate_error(ErrorCode.INTERNAL_CALL_ERROR)
+                    fields["error_plain"]      = catalog["what_happened"]
+                    fields["error_steps"]      = catalog["what_to_try"]
+                    fields["error_suggestion"] = ""
+                    fields["error_source"]     = "internal_call_error_catalog"
+                else:
+                    from services.error_translator import translate
+                    friendly = await translate(fields["error"])
+                    fields["error_plain"]      = friendly.get("plain") or ""
+                    fields["error_steps"]      = friendly.get("steps") or []
+                    fields["error_suggestion"] = friendly.get("suggestion") or ""
+                    fields["error_source"]     = friendly.get("source") or "unknown"
             except Exception as _e:                  # noqa: BLE001
                 # Translator must never block the failure write —
                 # fall back to leaving only `error` populated.

@@ -3308,12 +3308,24 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
         async def _prog(step: str, status: str = "info"):
             await _log(task_id, step, status)
 
+        # 2026-08-28 · P0 hotfix (root cause of the production
+        # "commit_files() missing 2 required positional arguments:
+        # 'author_email' and 'author_name'" crash). This is the ONLY
+        # commit_files() call site in the repo that never resolved a
+        # real developer identity first — every other caller (rollback,
+        # loop_engine, visibility kit, local_tools) does this same
+        # resolve_git_identity() call before committing.
+        from services.git_identity import resolve_git_identity
+        _author_name, _author_email = await resolve_git_identity(
+            _db_plan, proj.get("user_id") or "",
+        )
         try:
             result = await _retry(
                 lambda: gh_api_commit(
                     owner=owner, repo=repo, branch=branch, token=user_token,
                     files=edits,
                     commit_message=f"AUREM: {task[:60]}",
+                    author_name=_author_name, author_email=_author_email,
                     progress=_prog,
                 ),
                 what="GitHub commit", task_id=task_id, attempts=4, base_sleep=2.0,

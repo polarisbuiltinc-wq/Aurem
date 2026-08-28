@@ -1,0 +1,44 @@
+{
+  "summary": "P0 hotfix verification for (1) commit_files() missing author identity TypeError on API-engine ship path, (2) LLM-based error translator hallucinating 'update your profile' for internal bugs, (3) LLM persona not emitting aurem-handoff fence for rollback/revert/undo requests, and (4) frontend council trust-badge appearing on empty streaming content. Backend pytest for all 3 root causes: 6/6 PASS. Backend code inspection confirms all 3 fixes present at exact call sites listed in review request. Frontend MessageBubble.jsx line 1076 correctly gates council badge on `!m.streaming && m.content && (...)` (verified via source read). NO real end-to-end GitHub ship+revert was performed in this run — this preview pod has NO CTO project seeded with a working GitHub App install (test@aurem.dev returns 43 projects but none carry github_installation_id / github_token — the funnel-repro fixture noted in test_credentials.md is not persisted on this pod's ephemeral Mongo). Verified only backend-unit + source-inspection + UI smoke (login + chat page load).\n\nCRITICAL NEW GAP FOUND: the backend orchestrator prompt was updated to emit the aurem-handoff fence for rollback/revert/undo requests (verified in source and pytest), but the FRONTEND MUTATION_VERBS regex in /app/frontend/src/components/MessageBubble.jsx lines 101-107 was NOT updated in parallel — it still whitelists only 27 forward-mutation verbs (create/add/fix/…/register) and does NOT include revert / rollback / undo / restore. `extractHandoffBrief` calls `MUTATION_VERBS.test(brief)` on line 195 and returns null when the regex fails, so `handoffBrief` is null → the ShipDialog Approve button never renders → the user instead sees the red `ship-cta-fallback-{idx}` alert 'I described a fix but the approve button didn't load — please ask me again.' This means Bug fix 2 is only *partially* fixed: the fence is now emitted, but the approve button will still fail to render whenever the LLM's revert-fence prose does not happen to also mention one of the whitelisted verbs. Empirical test with 5 plausible LLM rollback briefs → only 2/5 pass MUTATION_VERBS (and one of those passes only coincidentally because it uses the word 'ship' as a noun). Reproduced with node one-liner using the exact source regex; see rca_of_the_issue below.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "MessageBubble.jsx",
+        "issue": "MUTATION_VERBS regex (lines 101-107) not updated to include revert / rollback / undo / restore. Backend orchestrator now emits a ```aurem-handoff fence for these intents (verified), but extractHandoffBrief rejects them on line 195 unless the brief prose incidentally contains one of the 27 whitelisted verbs. Users will still see the red 'approve button didn't load' fallback alert for many phrasings of a rollback. This is the SAME user-visible symptom the P0 was supposed to fix.",
+        "selector": "MUTATION_VERBS in MessageBubble.jsx:101 ; test failure surfaces as data-testid=`ship-cta-fallback-${idx}`",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_p0_2026_08_28_commit_files_missing_author_fix.py",
+    "/app/test_reports/pytest/p0_2026_08_28.xml"
+  ],
+  "action_items": [
+    "Update /app/frontend/src/components/MessageBubble.jsx MUTATION_VERBS regex (lines 101-107) to add: revert, rollback, undo, restore. One-line change; the persona prompt already tells the LLM to use 'revert' explicitly. Without this, Bug fix 2's user-visible symptom (Approve button doesn't render for rollback) can still occur despite the backend fence now being emitted.",
+    "Perform a REAL end-to-end GitHub ship + revert on a safe test repo once (a) MUTATION_VERBS is patched and (b) a project with a working GitHub App install can be seeded on the preview pod (funnel-repro / polarisbuiltinc-wq/aurem-rollback-testbed fixture per test_credentials.md). This is still needed as final proof for the P0 — nothing here has been LIVE-verified against a real repo.",
+    "Consider adding a Playwright test that mounts a MessageBubble with a mocked rollback assistant message (content ending in ```aurem-handoff\\nIn README.md revert to previous state\\n``` and verifiedPaths=['README.md']) and asserts the Ship/Approve button renders — this would have caught the frontend regex gap in unit tests."
+  ],
+  "critical_code_review_comments": [
+    "The backend fix in orchestrator.py explicitly instructs the LLM to 'Use the mutation verb revert explicitly so the fence isn't mistaken for a read-only summary' (line 838-839). This coordination assumption is broken because the frontend MUTATION_VERBS whitelist does not include revert. Backend + frontend fence-verb whitelists must be kept in sync — consider extracting to a single shared constant (e.g. served from /api/config) or at minimum add a comment in both files pointing at the other.",
+    "test_p0_2026_08_28_commit_files_missing_author_fix.py::TestRollbackPersonaRecognizesRevertIntent only asserts the backend prompt contains the verbs — it does NOT assert that the frontend can accept the resulting fence. A cross-cutting test (either a JS unit test on extractHandoffBrief, or an integration test that runs the LLM output through the frontend regex) would have caught this gap.",
+    "MessageBubble.jsx is 1312 lines — well past the >700 line split threshold in the code review guidelines. The fence-detection helpers (SHIP_FENCE_MARKER, MUTATION_VERBS, extractHandoffBrief, detectShipCtaFallback, stripHandoffFenceForDisplay) should be extracted to a dedicated module (e.g. src/lib/handoff.js) with unit tests, especially given they're already exported for testing per line 42-43 comment."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (6/6 P0 pytest)",
+    "frontend": "50% (council-badge gating fix verified; MUTATION_VERBS gap unfixed)"
+  },
+  "test_credentials": "Preview: test@aurem.dev / AuremTest2026! (works — 43 CTO projects visible, none with working GH App install on this pod)",
+  "seed_data_creation": "None — did not seed any CTO project or perform any GitHub write.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend hotfix is solid (pytest 6/6, source verified at all 3 call sites). The remaining unfixed issue is a one-line regex in /app/frontend/src/components/MessageBubble.jsx lines 101-107 — MUTATION_VERBS needs revert/rollback/undo/restore added. Once patched, a live E2E rollback via chat should be attempted against polarisbuiltinc-wq/aurem-rollback-testbed (or whatever safe testbed the founder is willing to write to). The preview pod's Mongo is ephemeral so a CTO project + GitHub App install must be re-seeded first (see /app/memory/test_credentials.md 'Preview — Ship-flow test project (2026-08-24)' row).",
+  "rca_of_the_issue": "Backend fix in services/orchestrator.py added revert/rollback/undo to the persona's mutation-verb whitelist for emitting the aurem-handoff fence AND added a dedicated ROLLBACK/REVERT/UNDO REQUESTS section telling the LLM to use 'revert' explicitly. But there are TWO independent mutation-verb whitelists in this codebase — one in the backend persona prompt, one in frontend MessageBubble.jsx line 101 MUTATION_VERBS — and only the backend one was updated. Result: LLM correctly emits the fence, backend forwards it, frontend's extractHandoffBrief() reads the fence, applies its 7 sanity gates, and rejects on gate #5 (MUTATION_VERBS.test failure) because 'revert'/'rollback'/'undo' are not in the frontend whitelist. handoffBrief becomes null → ShipDialog silently renders nothing → shipCtaFallback (fence present but brief rejected) fires and renders the red 'approve button didn't load' alert. Reproduction (executed): copied the exact frontend MUTATION_VERBS regex to a node one-liner and ran it against 5 realistic LLM rollback briefs; 3/5 fail. Mitigation: add 'revert|rollback|undo|restore' to the MUTATION_VERBS alternation in MessageBubble.jsx:101-105."
+}
