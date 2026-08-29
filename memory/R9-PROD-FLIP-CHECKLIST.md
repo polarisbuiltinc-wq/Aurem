@@ -1,9 +1,16 @@
 # R9 — ship_via_pr Production Flip Checklist (copy-paste executable)
 
 **STOP GATE — do not run any of this until ALL FIVE are true:**
-1. R5e passed (real webhook delivered live, `ship_pr_merged`/`ship_pr_closed`
-   written by the real route, not the replay fallback — see
-   `R5e-VERIFY-PLAN.md`).
+1. **R5e — CLOSED (2026-08-30, founder-verified in GitHub's own UI).**
+   Redeliver test → 200. Real throwaway PR (#385) → `pull_request.opened`
+   delivery → 200. Cleanup done (PR closed, branch deleted). NOTE: this
+   was verified by the founder directly reading GitHub's Recent
+   Deliveries page, NOT independently re-confirmed by the agent's own
+   API call — this preview pod's own stored GitHub App private key is
+   stale/invalid (401 against `GET /app`) and the founder declined to
+   also update preview's copy. If a fully agent-verified re-check is
+   ever needed, preview's `/admin/settings` → GitHub App card needs
+   the same current credentials saved there too.
 2. **R8 — NOW COMPLETE (2026-08-30, M1/M2 round).** Fence-emit rate
    2/5 raw / 67% effective (excl. 1 correct no-fix + 1 infra-timeout);
    low-confidence retest not-suppressed with honest infra caveat;
