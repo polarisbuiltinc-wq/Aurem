@@ -696,14 +696,18 @@ async def chat_send(
     _output_guard_ref_id = None
     if content and "aurem-handoff" not in content:
         try:
-            from services.output_guard import strip_machinery_leak, enforce_length_cap
+            from services.output_guard import strip_machinery_leak, enforce_length_cap, extract_named_files
             from core.errors import new_ref_id
             # universal_only=True unless the explain-mode contract is
             # active this turn — otherwise the explain-only tier (file
             # paths, DB collection names, framework jargon) would strip
             # legitimate scan/dev content for every user (the P6 regression).
+            # M3 (2026-08-30) — a file the user named THIS turn (e.g. "ship
+            # a fix to README.md") is exempted from the bare-file-path
+            # redaction; every other path is still redacted, unchanged.
             content, _leak_stripped = strip_machinery_leak(
-                content, universal_only=not _plain_english_active
+                content, universal_only=not _plain_english_active,
+                user_named_files=extract_named_files(body.prompt),
             )
             if _plain_english_active:
                 content, _length_capped = await enforce_length_cap(content)
@@ -3191,12 +3195,14 @@ async def chat_stream(
         _output_guard_ref_id = None
         if content and "aurem-handoff" not in content:
             try:
-                from services.output_guard import strip_machinery_leak, enforce_length_cap
+                from services.output_guard import strip_machinery_leak, enforce_length_cap, extract_named_files
                 from core.errors import new_ref_id
                 # universal_only=True unless explain-mode is active this
                 # turn — see identical comment on chat/send above.
+                # M3 (2026-08-30): same user-named-file exemption.
                 content, _leak_stripped = strip_machinery_leak(
-                    content, universal_only=not _plain_english_active
+                    content, universal_only=not _plain_english_active,
+                    user_named_files=extract_named_files(body.prompt),
                 )
                 if _plain_english_active:
                     content, _length_capped = await enforce_length_cap(content)

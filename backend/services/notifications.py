@@ -14,7 +14,10 @@ from typing import Optional
 
 logger = logging.getLogger("aurem.notifications")
 
-PERSISTENT_TYPES = {"payment_failed", "ship_failed", "repo_revoked"}
+# V1d (2026-08-30) — a failed server-side deploy-verify run (V1) is a
+# real, actionable problem (site broke, went stale, or is unreachable)
+# — stays PERSISTENT like the other 3, unread until the user acts.
+PERSISTENT_TYPES = {"payment_failed", "ship_failed", "repo_revoked", "verify_failed"}
 VALID_TYPES = PERSISTENT_TYPES | {"scan_done", "ship_done", "offer_claimed", "kit_live"}
 
 

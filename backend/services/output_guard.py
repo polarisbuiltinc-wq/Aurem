@@ -27,8 +27,8 @@ LENGTH_CAP_TOKENS = 500
 #
 # 2026-08-27 · P5 split this into TWO tiers (Journey/Intent-Grounding
 # build round). The ORIGINAL list below (adviser-council jargon, DB
-# collection names, framework names, bare file paths) is INTENTIONALLY
-# still explain-mode-only (`plain_english_contract_active`) — for a
+# collection names, framework names) is INTENTIONALLY still
+# explain-mode-only (`plain_english_contract_active`) — for a
 # developer-facing reply, "backend/services/orchestrator.py" is
 # exactly the useful information, not a leak. Redacting it universally
 # was tried mid-round and immediately regressed real chat replies
@@ -38,24 +38,12 @@ LENGTH_CAP_TOKENS = 500
 # the genuinely-always-a-bug tier (raw iteration counters, mode
 # letters, raw tracebacks, raw booleans-as-status) that applies to
 # EVERY user regardless of the explain-mode flag.
-_MACHINERY_LEAK_PATTERNS = [
-    # internal review-process jargon
-    (re.compile(r"\b\d+[- ]adviser council\b", re.IGNORECASE), "internal review process"),
-    (re.compile(r"\bchairman\b", re.IGNORECASE), "lead reviewer"),
-    (re.compile(r"\btool[_ ]calls?\b|\bfunction[_ ]call\b", re.IGNORECASE), ""),
-    # known DB collection names
-    (re.compile(r"\b(?:ora_council_logs|loop_sessions|loop_locks|"
-                r"loop_backups|loop_plans|loop_failures|cto_projects|"
-                r"dev_users|feature_flags|ora_hallucination_log)\b"),
-     "the database"),
-    # framework/technical jargon
-    (re.compile(r"\bpydantic\b|\bFastAPI\b|\basyncio\b|\bJWT\b|\bOODA\b|"
-                r"\bsupervisorctl\b|\bMongoDB\b|\bmotor\b|\buvicorn\b",
-                re.IGNORECASE), "the system"),
-    # bare file paths / module paths (e.g. backend/services/x.py, x.py:42)
-    (re.compile(r"\b[\w\-]+(?:/[\w\-]+)+\.\w{1,5}\b(?::\d+)?"
-                r"|\b[\w\-]+\.(?:py|jsx?|tsx?)\b(?::\d+)?"), "a project file"),
-]
+#
+# 2026-08-30 · M3 — the bare-file-path entry that used to live in this
+# list moved to its own `_FILE_PATH_PATTERN` below (still applied on
+# every path through `strip_machinery_leak`, unconditionally — the
+# ONLY thing that changed is it now has a per-match, user-named-file
+# exemption instead of being a blanket strip).
 
 # 2026-08-27 · P5 — genuinely-always-a-bug leaks, confirmed from a live
 # transcript, that apply to EVERY user (not gated behind
@@ -73,10 +61,68 @@ _UNIVERSAL_LEAK_PATTERNS = [
     (re.compile(r"\be2b\b", re.IGNORECASE), "the sandbox"),
     (re.compile(r"\bTraceback \(most recent call last\)[\s\S]*", re.IGNORECASE), ""),
     (re.compile(r"\b[A-Z][a-zA-Z0-9]*(?:Error|Exception)\b:\s*.*"), "an internal error"),
+    # M3 (2026-08-30) — secret/token-shaped strings, ALWAYS redacted
+    # regardless of the M3 user-named-file relaxation below (a value
+    # that merely LOOKS like a token/secret/credential is never safe
+    # to echo just because a filename elsewhere in the same reply was
+    # user-named — these are two independent checks). Same shapes the
+    # persona (AUREM_CTO_PERSONA rule 4) already tells the model to
+    # self-censor; this is the mechanical net behind that instruction,
+    # which previously didn't exist in this module at all.
+    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "[redacted credential]"),
+    (re.compile(r"\bghp_[A-Za-z0-9]{30,}\b"), "[redacted credential]"),
+    (re.compile(r"\bsk_live_[A-Za-z0-9]{20,}\b"), "[redacted credential]"),
+    (re.compile(r"\bmongodb(?:\+srv)?://[^\s\"'<>]+"), "[redacted connection string]"),
+]
+
+# M3 fix (2026-08-30, founder-directed) — the bare-file-path pattern
+# used to be a blanket strip (see the 2026-08-27 comment above this
+# module documenting the P5 regression it already caused once). Split
+# out to its own named pattern so `strip_machinery_leak` can apply a
+# context-aware exemption: a file the USER explicitly named earlier in
+# THIS conversation is not a leak — ORA is allowed to call it by that
+# exact name back. Any OTHER path (one the model surfaces on its own,
+# never mentioned by the user) is still redacted, unchanged.
+_FILE_PATH_PATTERN = (
+    re.compile(r"\b[\w\-]+(?:/[\w\-]+)+\.\w{1,5}\b(?::\d+)?"
+               r"|\b[\w\-]+\.(?:py|jsx?|tsx?|md|txt|json|ya?ml|toml|"
+               r"cfg|ini|env|lock)\b(?::\d+)?"
+               r"|\B\.[a-zA-Z][\w\-]*\b"),
+    "a project file",
+)
+
+_MACHINERY_LEAK_PATTERNS = [
+    # internal review-process jargon
+    (re.compile(r"\b\d+[- ]adviser council\b", re.IGNORECASE), "internal review process"),
+    (re.compile(r"\bchairman\b", re.IGNORECASE), "lead reviewer"),
+    (re.compile(r"\btool[_ ]calls?\b|\bfunction[_ ]call\b", re.IGNORECASE), ""),
+    # known DB collection names
+    (re.compile(r"\b(?:ora_council_logs|loop_sessions|loop_locks|"
+                r"loop_backups|loop_plans|loop_failures|cto_projects|"
+                r"dev_users|feature_flags|ora_hallucination_log)\b"),
+     "the database"),
+    # framework/technical jargon
+    (re.compile(r"\bpydantic\b|\bFastAPI\b|\basyncio\b|\bJWT\b|\bOODA\b|"
+                r"\bsupervisorctl\b|\bMongoDB\b|\bmotor\b|\buvicorn\b",
+                re.IGNORECASE), "the system"),
 ]
 
 
-def strip_machinery_leak(text: str, *, universal_only: bool = False) -> tuple[str, bool]:
+def extract_named_files(text: str) -> set[str]:
+    """M3 fix — pull every file-path-looking token out of the USER'S
+    OWN message this turn. Used to build the exemption set so ORA's
+    reply can call a user-named file by its real name instead of the
+    generic 'a project file' placeholder. Same shape as
+    `_FILE_PATH_PATTERN` (reused, not a second regex to drift)."""
+    if not text:
+        return set()
+    return {m.group(0).split(":")[0] for m in _FILE_PATH_PATTERN[0].finditer(text)}
+
+
+def strip_machinery_leak(
+    text: str, *, universal_only: bool = False,
+    user_named_files: set[str] | None = None,
+) -> tuple[str, bool]:
     """Returns (clean_text, was_stripped).
 
     `universal_only=True` (routers/chat.py's default, all-users path)
@@ -84,8 +130,28 @@ def strip_machinery_leak(text: str, *, universal_only: bool = False) -> tuple[st
     `universal_only=False` (explain-mode path) applies BOTH tiers —
     the original "hide internal machinery from a non-technical
     explain-mode reply" behavior, unchanged.
-    """
+
+    `user_named_files` (M3, 2026-08-30) — a set of exact file-path
+    strings the USER already named this turn. Only relevant when
+    `universal_only=False` (the bare-file-path redaction was, and
+    still is, explain-mode-only — unchanged scope, M3 only adds the
+    exemption within that same existing scope). The redaction is
+    skipped for any match equal to one of these (case-insensitive) —
+    ORA may reference a file the user themselves already brought up
+    by its real name. Every OTHER path (anything NOT in this set) is
+    still redacted, unchanged."""
     original = text
+    user_named_lower = {f.lower() for f in (user_named_files or set())}
+
+    def _file_path_sub(m: re.Match) -> str:
+        matched = m.group(0)
+        base = matched.split(":")[0]
+        if base.lower() in user_named_lower:
+            return matched  # user already named this file — keep it real
+        return _FILE_PATH_PATTERN[1]
+
+    if not universal_only:
+        text = _FILE_PATH_PATTERN[0].sub(_file_path_sub, text)
     patterns = _UNIVERSAL_LEAK_PATTERNS if universal_only else (
         _MACHINERY_LEAK_PATTERNS + _UNIVERSAL_LEAK_PATTERNS
     )

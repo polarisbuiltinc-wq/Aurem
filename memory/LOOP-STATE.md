@@ -419,3 +419,59 @@ M2's R8 acceptance numbers, BEFORE V1 (which still awaits a separate
 
 **STOP. V1 starts only on founder's separate "GO V1", per explicit
 instruction.**
+
+## M3 + V1 round (2026-08-30, founder follow-up after M1/M2 acceptance)
+
+Founder accepted M1/M2, gave 2 decisions + a GO: (0) stated the exact
+R5e webhook config location (no env var — Mongo-only, Admin UI card;
+secret never requested/accepted, standing no-secret-in-chat rule
+honored); (1) M3 (output_guard.py context-aware fix, own PR, before
+V1); (2) GO V1 (server-side deploy-verify, revised v2 spec).
+
+**M3 DONE** — full detail `/app/e2e-proof/M3/M3_SUMMARY.md`. Fixed the
+blanket file-path redaction (now exempts user-named files), fixed a
+latent 2nd bug (bare-root-file regex never matched at all), added
+missing secret/token redaction. 4/4 new tests, 0 new regressions
+(investigated one false-alarm via direct git-checkout A/B — a
+`/chat/stream` history-persistence bug, confirmed pre-existing,
+flagged not fixed).
+
+**Next: V1 (server-side deploy-verify, revised v2 spec)** — starts now.
+
+## M3 E2E close-out + V1 (a/c/d/e) round (2026-08-30, founder follow-up)
+
+Founder ran a parallel webhook-handling correction (read-only, no
+secret — see `/app/e2e-proof/V1/V1_SUMMARY.md` §8 for the Q-NAME/
+Q-TARGET/Q-VERIFY answers) alongside confirming M3 E2E fix → V1
+completion → regression + report → STOP.
+
+**M3 CLOSED for real this time** — the prior "E2E" check was a false
+signal (mock reply had no filename/secret to prove anything either
+way). New deterministic combined test
+(`test_t_output_guard_m3_e2e_combined_no_llm_no_network`) proves all 3
+guarantees together in one constructed reply. M3 suite 5/5.
+
+**V1 CLOSED for this round's scope** — full report
+`/app/e2e-proof/V1/V1_SUMMARY.md`. Fixed the 2 real test bugs found
+(0-byte fixture PNG causing false breakage failures; a code comment
+literally containing "storage_state" tripping its own source-scan
+test) — 22/22 V1 tests now pass, up from 8 failed at last handoff.
+Added a genuine mid-run DNS re-verify for changed-route navigation
+(V1c rule 3, was source-scan-only before). V1b (LLM judgment) left as
+a genuine no-op stub per founder's explicit override this round — zero
+model calls in mock or real mode. V1d wired the engine additively into
+the existing deploy-receipt row, trust events, bell (new PERSISTENT
+`verify_failed` type), and the admin monitor's meter line — live-curl-
+verified on this pod's real admin account. Explicitly not built:
+DeployPanel/AdminSystemHealth frontend visual cards for the new data
+(backend-only wiring this round, per the founder's own framing that
+V1 isn't a user-facing feature yet). V1e's 6 scenarios all pass against
+the local disposable fixture only. F29 (cloud fallback) ledgered,
+flag-only. Full new-work suite 29/29; targeted regression sweep found
+0 new failures vs `test-baseline.txt`.
+
+R9 verdict unchanged: NOT READY TO FLIP (R5e founder-action pending,
+48h warn-window unreviewed, R1a gap#4 open).
+
+**STOP per founder's explicit instruction — no work started after
+this report.**

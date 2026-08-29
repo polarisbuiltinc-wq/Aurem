@@ -40,6 +40,11 @@ EVENT_KINDS = {
     # pushed but its landing on the base branch could not be verified
     # within the bounded poll window. Never fired on a real success.
     "ship_rollback_failed",
+    # V1d (2026-08-30) — deploy-verify (V1) run lifecycle. verify_passed/
+    # failed carry the deterministic engine's verdict; never fired for
+    # the pre-existing shallow httpx-reachability check alone (that one
+    # keeps its own verified/verify_note fields, unchanged by V1).
+    "verify_started", "verify_passed", "verify_failed",
 }
 
 

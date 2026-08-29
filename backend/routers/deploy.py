@@ -269,7 +269,13 @@ async def _verify_and_capture(user_id: str, run_id: str, project_id: str | None,
     the live URL AFTER the deploy already reported "ok", capture a
     fresh screenshot, and only THEN mark the run `verified`. Never
     flips a failed capture into a fake pass — sets `verified: False`
-    with an honest `verify_note` instead (L13)."""
+    with an honest `verify_note` instead (L13).
+
+    V1d (2026-08-30) — additionally runs the deterministic server-side
+    deploy-verify engine (`services/deploy_verify.run_verify`, its own
+    security-fenced check suite) against the same URL, storing the
+    richer verdict alongside this endpoint's existing shallow check —
+    extends, never replaces, the shallow httpx result above."""
     db = require_db()
     url = (cfg.get("verify_url") or "").strip()
     if not url and project_id:
@@ -314,6 +320,49 @@ async def _verify_and_capture(user_id: str, run_id: str, project_id: str | None,
         from services.trust_surface_events import log_trust_event
         await log_trust_event(db, "receipt_captured", user_id=user_id,
                                project_id=project_id, run_id=run_id, verified=status_ok)
+
+    # ── V1d — deterministic deploy-verify engine, additive ──────────
+    from services.trust_surface_events import log_trust_event
+    from services.notifications import emit_notification
+    import services.deploy_verify as dv
+    await log_trust_event(db, "verify_started", user_id=user_id,
+                           project_id=project_id, run_id=run_id, url=url)
+    engine_result = await dv.run_verify(url, db=db, user_id=user_id,
+                                         project_id=project_id or "", run_trace=False)
+    engine_shots = engine_result.pop("_raw_screenshots", None) or {}
+    engine_receipt_key = None
+    mobile_bytes = engine_shots.get("mobile_375")
+    if mobile_bytes:
+        engine_receipt_key = await upload_receipt(
+            mobile_bytes, f"deploy-runs/{run_id}-verify-engine.jpg")
+    ttfb_check = next((c for c in engine_result["checks"] if c["name"] == "reachability"), None)
+    await db.aurem_cto_deploy_runs.update_one(
+        {"run_id": run_id},
+        {"$set": {
+            "verify_engine": {
+                "verdict":          engine_result["verdict"],
+                "what_happened":    engine_result.get("what_happened"),
+                "fail_reason":      engine_result.get("fail_reason"),
+                "checks":           engine_result["checks"],
+                "console_errors":   engine_result.get("console_errors") or [],
+                "ttfb_evidence":    (ttfb_check or {}).get("evidence"),
+                "duration_ms":      engine_result.get("duration_ms"),
+                "receipt_key":      engine_receipt_key,
+                "browser_mode":     dv.VERIFY_BROWSER_MODE,
+            },
+        }},
+    )
+    if engine_result["verdict"] == "pass":
+        await log_trust_event(db, "verify_passed", user_id=user_id,
+                               project_id=project_id, run_id=run_id, url=url)
+    else:
+        await log_trust_event(db, "verify_failed", user_id=user_id,
+                               project_id=project_id, run_id=run_id, url=url,
+                               fail_reason=engine_result.get("fail_reason"))
+        await emit_notification(
+            db, user_id=user_id, type="verify_failed", project_id=project_id,
+            text=f"Deploy verify failed — {engine_result.get('what_happened') or 'see run details'}",
+        )
 
 
 async def _run_deploy_remote(user_id: str, run_id: str,
@@ -643,6 +692,7 @@ async def get_log(run_id: str,
         "verify_note": doc.get("verify_note"),
         "verify_url":  doc.get("verify_url"),
         "receipt_key": doc.get("receipt_key"),
+        "verify_engine": doc.get("verify_engine"),
         "since":       since,
         "next_cursor": len(full),
         "lines":       full[since:],

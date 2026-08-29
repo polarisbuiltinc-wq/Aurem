@@ -2127,10 +2127,26 @@ async def preview_deploy_monitor(
         "started_at": {"$gte": since_30d}, "verified": True,
     })
     capture_success_pct = round(100 * capture_success_30d / capture_attempts_30d) if capture_attempts_30d else None
+
+    # V1d — deploy-verify engine (V1) success rate + last-fail-reason,
+    # same 30d window, same tile (extends, no second card).
+    verify_runs_30d = await db.aurem_cto_deploy_runs.find(
+        {"started_at": {"$gte": since_30d}, "verify_engine": {"$exists": True}},
+        {"_id": 0, "verify_engine.verdict": 1, "verify_engine.fail_reason": 1, "started_at": 1},
+    ).sort("started_at", -1).to_list(500)
+    verify_engine_total_30d = len(verify_runs_30d)
+    verify_engine_pass_30d = sum(1 for r in verify_runs_30d if r.get("verify_engine", {}).get("verdict") == "pass")
+    verify_engine_pass_pct = (round(100 * verify_engine_pass_30d / verify_engine_total_30d)
+                               if verify_engine_total_30d else None)
+    last_fail = next((r["verify_engine"].get("fail_reason") for r in verify_runs_30d
+                       if r.get("verify_engine", {}).get("verdict") == "fail"), None)
+
     meter_line = (
         f"last 30d: {previews_30d} previews · {deploys_30d} deploys "
         f"({deploys_failed_30d} failed) · {receipts_30d} receipts · "
-        f"capture success {capture_success_pct if capture_success_pct is not None else '—'}%"
+        f"capture success {capture_success_pct if capture_success_pct is not None else '—'}% · "
+        f"deploy-verify {verify_engine_pass_pct if verify_engine_pass_pct is not None else '—'}%"
+        f"{f' (last fail: {last_fail})' if last_fail else ''}"
     )
 
     return {
@@ -2147,11 +2163,16 @@ async def preview_deploy_monitor(
             "retention_days": 30,
         },
         "per_project_deploy_history": per_project,
+        "verify_engine_30d": {
+            "total": verify_engine_total_30d, "passed": verify_engine_pass_30d,
+            "pass_pct": verify_engine_pass_pct, "last_fail_reason": last_fail,
+        },
         "meter_line": meter_line,
         "meter": {
             "previews_30d": previews_30d, "deploys_30d": deploys_30d,
             "deploys_failed_30d": deploys_failed_30d, "receipts_30d": receipts_30d,
             "capture_success_pct_30d": capture_success_pct,
+            "verify_engine_pass_pct_30d": verify_engine_pass_pct,
         },
     }
 
