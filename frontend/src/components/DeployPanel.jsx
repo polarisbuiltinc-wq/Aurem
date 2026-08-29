@@ -440,12 +440,13 @@ function LastLookModal({ host, verifyUrl, onCancel, onConfirm }) {
 // D4 — receipts: only ever claims success AFTER post-deploy
 // verification. Three honest states: verified / unreachable / capture
 // unavailable. Never renders a blank "success" with nothing to back it.
-function ReceiptCard({ verified, verifyNote, verifyUrl, receiptKey, runId }) {
+export function ReceiptCard({ verified, verifyNote, verifyUrl, receiptKey, fullpageReceiptKey, runId }) {
   const [imgSrc, setImgSrc] = useState(null);
+  const [fullpageSrc, setFullpageSrc] = useState(null);
   useEffect(() => {
     let revoke = null;
     if (verified === true && receiptKey) {
-      api.get(`/deploy/runs/${runId}/receipt`, { responseType: "blob" })
+      api.get(`/deploy/runs/${runId}/receipt`, { params: { variant: "viewport" }, responseType: "blob" })
         .then((r) => {
           const url = URL.createObjectURL(r.data);
           revoke = url;
@@ -455,6 +456,20 @@ function ReceiptCard({ verified, verifyNote, verifyUrl, receiptKey, runId }) {
     }
     return () => { if (revoke) URL.revokeObjectURL(revoke); };
   }, [verified, receiptKey, runId]);
+
+  useEffect(() => {
+    let revoke = null;
+    if (verified === true && fullpageReceiptKey) {
+      api.get(`/deploy/runs/${runId}/receipt`, { params: { variant: "fullpage" }, responseType: "blob" })
+        .then((r) => {
+          const url = URL.createObjectURL(r.data);
+          revoke = url;
+          setFullpageSrc(url);
+        })
+        .catch(() => setFullpageSrc(null));
+    }
+    return () => { if (revoke) URL.revokeObjectURL(revoke); };
+  }, [verified, fullpageReceiptKey, runId]);
 
   if (verified === null || verified === undefined) {
     return (
@@ -474,13 +489,31 @@ function ReceiptCard({ verified, verifyNote, verifyUrl, receiptKey, runId }) {
         padding: 14, borderBottom: "1px solid var(--border)",
         display: "flex", gap: 12,
       }}>
-        {receiptKey && (
-          <img
-            data-testid="deploy-receipt-screenshot"
-            src={imgSrc || undefined}
-            alt="Fresh screenshot of your live site"
-            style={{ width: 96, borderRadius: 4, border: "1px solid var(--border)", flexShrink: 0, background: "var(--panel-2)" }}
-          />
+        {(receiptKey || fullpageReceiptKey) && (
+          <div data-testid="deploy-receipt-shots" style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            {receiptKey && (
+              <div data-testid="deploy-receipt-shot-viewport" style={{ textAlign: "center" }}>
+                <img
+                  data-testid="deploy-receipt-screenshot"
+                  src={imgSrc || undefined}
+                  alt="Viewport screenshot of your live site"
+                  style={{ width: 96, borderRadius: 4, border: "1px solid var(--border)", background: "var(--panel-2)", display: "block" }}
+                />
+                <div style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 3 }}>Viewport</div>
+              </div>
+            )}
+            {fullpageReceiptKey && (
+              <div data-testid="deploy-receipt-shot-fullpage" style={{ textAlign: "center" }}>
+                <img
+                  data-testid="deploy-receipt-screenshot-fullpage"
+                  src={fullpageSrc || undefined}
+                  alt="Full page screenshot of your live site"
+                  style={{ width: 96, borderRadius: 4, border: "1px solid var(--border)", background: "var(--panel-2)", display: "block" }}
+                />
+                <div style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 3 }}>Full page</div>
+              </div>
+            )}
+          </div>
         )}
         <div style={{ fontSize: 12, color: "var(--text)", lineHeight: 1.6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--accent-2)", fontWeight: 600, marginBottom: 4 }}>
@@ -535,6 +568,7 @@ export default function DeployPanel({ activeProject }) {
   const [verifyNote, setVerifyNote] = useState(null);
   const [verifyUrlChecked, setVerifyUrlChecked] = useState(null);
   const [receiptKey, setReceiptKey] = useState(null);
+  const [fullpageReceiptKey, setFullpageReceiptKey] = useState(null);
   const [showLastLook, setShowLastLook] = useState(false);
   const pollRef = useRef(null);
 
@@ -619,6 +653,7 @@ export default function DeployPanel({ activeProject }) {
             setVerifyNote(r.data?.verify_note ?? null);
             setVerifyUrlChecked(r.data?.verify_url ?? null);
             setReceiptKey(r.data?.receipt_key ?? null);
+            setFullpageReceiptKey(r.data?.fullpage_receipt_key ?? null);
             if (r.data?.verified === null || r.data?.verified === undefined) {
               // Verification is still running server-side — keep
               // polling a few more times instead of stopping cold,
@@ -650,6 +685,7 @@ export default function DeployPanel({ activeProject }) {
     setVerified(null);
     setVerifyNote(null);
     setReceiptKey(null);
+    setFullpageReceiptKey(null);
     setShowLastLook(false);
     try {
       const r = await api.post(`/deploy/run`, {
@@ -676,6 +712,7 @@ export default function DeployPanel({ activeProject }) {
     setVerified(null);
     setVerifyNote(null);
     setReceiptKey(null);
+    setFullpageReceiptKey(null);
     setRunStatus("running"); // optimistic until first poll returns real status
     setPhase("deploying");
   };
@@ -883,6 +920,7 @@ export default function DeployPanel({ activeProject }) {
             verifyNote={verifyNote}
             verifyUrl={verifyUrlChecked}
             receiptKey={receiptKey}
+            fullpageReceiptKey={fullpageReceiptKey}
             runId={activeRunId}
           />
         )}

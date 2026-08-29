@@ -204,7 +204,8 @@ async def run_turn(db, *, admin_id: str, session: dict, user_message: str,
                                 "note": "Proposal captured; will render as an approval card."}
             else:
                 yield {"type": "tool_call", "name": call["name"], "args": call["arguments"]}
-                tool_result = await tools_mod.execute_tool(db, call["name"], call["arguments"])
+                tool_result = await tools_mod.execute_tool(db, call["name"], call["arguments"],
+                                                            user_id=admin_id)
                 yield {"type": "tool_result", "name": call["name"],
                        "summary": str(tool_result)[:300]}
             messages.append({"role": "tool", "tool_call_id": call["id"],

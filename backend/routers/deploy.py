@@ -703,6 +703,7 @@ async def get_log(run_id: str,
         "verify_note": doc.get("verify_note"),
         "verify_url":  doc.get("verify_url"),
         "receipt_key": doc.get("receipt_key"),
+        "fullpage_receipt_key": (doc.get("verify_engine") or {}).get("fullpage_receipt_key"),
         "verify_engine": doc.get("verify_engine"),
         "since":       since,
         "next_cursor": len(full),
@@ -795,19 +796,29 @@ async def verify_summary(project_id: str = "",
 
 @router.get("/runs/{run_id}/receipt")
 async def get_run_receipt(run_id: str,
+                          variant: str = "viewport",
                           authorization: str = Header(None)) -> StreamingResponse:
     """S3-D4 — stream the post-deploy verification screenshot back.
     Same authenticated-proxy pattern as
-    `cto_projects.get_preview_receipt` (never a public/presigned URL)."""
+    `cto_projects.get_preview_receipt` (never a public/presigned URL).
+    Receipt UI polish (2026-08-30) — `variant=fullpage` streams the V1
+    engine's full-page shot (`verify_engine.fullpage_receipt_key`)
+    instead of the default viewport shot, so the panel can show both
+    side by side."""
     me = await current_dev(authorization)
     db = require_db()
     doc = await db.aurem_cto_deploy_runs.find_one(
-        {"run_id": run_id, "user_id": me["user_id"]}, {"_id": 0, "receipt_key": 1},
+        {"run_id": run_id, "user_id": me["user_id"]},
+        {"_id": 0, "receipt_key": 1, "verify_engine": 1},
     )
-    if not doc or not doc.get("receipt_key"):
+    if not doc:
+        raise HTTPException(404, "receipt_not_found")
+    key = ((doc.get("verify_engine") or {}).get("fullpage_receipt_key")
+           if variant == "fullpage" else doc.get("receipt_key"))
+    if not key:
         raise HTTPException(404, "receipt_not_found")
     from services.preview_capture import fetch_receipt
-    data = await fetch_receipt(doc["receipt_key"])
+    data = await fetch_receipt(key)
     if not data:
         raise HTTPException(404, "Receipt not found or expired")
     import io as _io

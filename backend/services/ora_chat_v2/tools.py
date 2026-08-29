@@ -1,10 +1,16 @@
 """
 services/ora_chat_v2/tools.py — Admin ORA Chat rebuild, P5.
 
-The ONLY 6 read-only tools exposed to the model (function calling).
+The ONLY 8 read-only tools exposed to the model (function calling).
 They double as the READ risk-tier of the P4 action catalog — no
 approval needed, they execute instantly. A model attempt to call
 anything not in TOOL_SCHEMAS is rejected here and logged.
+
+web_verify / web_inspect (2026-08-30) — the 2 web-inspect tools,
+wrapping services.web_inspect (itself a thin wrapper over the
+existing V1 verify engine, L17 reuse-first). Target: ANY external
+http/https URL, no per-project lock. The SSRF/loopback/sandbox fence
+in services.deploy_verify holds even for the admin's own request.
 """
 from __future__ import annotations
 
@@ -47,6 +53,17 @@ TOOL_SCHEMAS = [
         "description": "Count + last error class of failed fix-loops in the window.",
         "parameters": {"type": "object", "properties": {
             "days": {"type": "integer", "default": 7}}}}},
+    {"type": "function", "function": {
+        "name": "web_verify",
+        "description": "Deterministic (zero-LLM) deploy-verify engine against ANY external http/https URL — version/TTFB/runtime/breakage/geometry checks + screenshots. Use for 'check if <url> deployed OK' / 'run deploy-verify on <url>' / 'is the pricing page good?'.",
+        "parameters": {"type": "object", "properties": {
+            "url": {"type": "string"}}, "required": ["url"]}}},
+    {"type": "function", "function": {
+        "name": "web_inspect",
+        "description": "Fetch a pruned snapshot of ANY external http/https URL and get a plain-English, ADVISORY-ONLY answer (via an LLM) to a specific question about it — e.g. 'why is this page showing X?', 'summarize this page', 'does this layout look broken?'. Never proposes fixes or takes actions.",
+        "parameters": {"type": "object", "properties": {
+            "url": {"type": "string"}, "question": {"type": "string"}},
+            "required": ["url", "question"]}}},
 ]
 
 _KNOWN_TOOLS = {s["function"]["name"] for s in TOOL_SCHEMAS}
@@ -117,6 +134,16 @@ async def get_recent_loop_failures(db, days: int = 7) -> dict:
             "last_error_class": rows[0].get("error_code") if rows else None}
 
 
+async def web_verify(db, url: str, user_id: str = "") -> dict:
+    from services.web_inspect import run_web_verify
+    return await run_web_verify(url, db=db, user_id=user_id)
+
+
+async def web_inspect(db, url: str, question: str, user_id: str = "") -> dict:
+    from services.web_inspect import run_web_inspect
+    return await run_web_inspect(url, question, db=db, user_id=user_id)
+
+
 _DISPATCH = {
     "get_funnel_stats": get_funnel_stats,
     "get_alerts": get_alerts,
@@ -124,10 +151,13 @@ _DISPATCH = {
     "get_production_status": get_production_status,
     "read_investigation": read_investigation,
     "get_recent_loop_failures": get_recent_loop_failures,
+    "web_verify": web_verify,
+    "web_inspect": web_inspect,
 }
+_USER_ID_TOOLS = {"web_verify", "web_inspect"}
 
 
-async def execute_tool(db, name: str, args: dict) -> dict:
+async def execute_tool(db, name: str, args: dict, *, user_id: str = "") -> dict:
     """Dispatch a model tool-call. Anything not in TOOL_SCHEMAS is
     rejected + logged — the model cannot call an undefined tool."""
     if name not in _KNOWN_TOOLS:
@@ -136,7 +166,9 @@ async def execute_tool(db, name: str, args: dict) -> dict:
     fn = _DISPATCH[name]
     try:
         kwargs = {k: v for k, v in (args or {}).items()
-                  if k in ("days", "name")}
+                  if k in ("days", "name", "url", "question")}
+        if name in _USER_ID_TOOLS:
+            kwargs["user_id"] = user_id
         return await fn(db, **kwargs)
     except Exception as e:  # noqa: BLE001
         logger.warning("ora_chat_v2 tool %s failed: %r", name, e)
