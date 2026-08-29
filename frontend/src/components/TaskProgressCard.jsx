@@ -449,7 +449,7 @@ export default function TaskProgressCard({ taskId, task, project, onRollback, on
               color: "var(--danger)",
             }}
           >
-            <Undo2 size={11} /> Rollback
+            <Undo2 size={11} /> {rbStatus === "failed" ? "Try rollback again" : "Rollback"}
           </button>
         )}
         {rbRunning && (
@@ -459,6 +459,24 @@ export default function TaskProgressCard({ taskId, task, project, onRollback, on
           </span>
         )}
       </div>
+      {/* 2026-08-28 · First-Experience Wave B6/P2-B — visible
+          rollback_failed state. Was silent before (button just
+          re-appeared with no explanation) — the exact "revert
+          silently never happened" P0 symptom, now surfaced. R1a
+          (R10) will replace this with the real verified-landed
+          state name; this is the pre-R1a stub. */}
+      {rbStatus === "failed" && (
+        <div
+          data-testid={`ship-rollback-failed-${taskId}`}
+          style={{
+            marginTop: 8, fontSize: 11, color: "var(--danger)",
+            fontFamily: "inherit", lineHeight: 1.5,
+          }}
+        >
+          Rollback didn&apos;t go through — the original commit is
+          still live. Try again above, or check the repo directly.
+        </div>
+      )}
     </div>
   );
 }

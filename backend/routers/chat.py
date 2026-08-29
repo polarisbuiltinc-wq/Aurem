@@ -515,29 +515,56 @@ async def chat_send(
     # the full budget. On any failure this falls through to the
     # original unconditional chat_with_tools call — never blank-screens.
     from core.intent_gateway import classify as _classify_intent_send
-    _intent_result = await _classify_intent_send(body.prompt or "", history=[])
+    from services.response_confidence import prior_turn_had_fix_signal as _ptfs_send
+    _prior_fix_signal = await _ptfs_send(_db, body.session_id, user["user_id"])
+    _intent_result = await _classify_intent_send(
+        body.prompt or "", history=[], pending_fix=_prior_fix_signal,
+    )
     _tier = _intent_result.get("tier") or "agentic"
     result = None
     if _tier in ("casual", "clarify") and not body.ora_panel:
-        try:
-            from services.intent_gateway_casual_reply import casual_direct_reply
-            _casual_reply_text = await casual_direct_reply(body.prompt)
+        from services.response_confidence import is_confirmation_reply, NO_PENDING_FIX_MESSAGE
+        if is_confirmation_reply(body.prompt or "") and not _prior_fix_signal:
+            # 2026-08-28 · NEW P0 Task 2 — a bare confirmation with
+            # NOTHING pending must never hit the free-form casual LLM,
+            # which can improvise a false "Approved!"/"Shipped!" reply
+            # with zero real action behind it (the exact founder
+            # repro). Deterministic, honest, zero LLM spend.
             result = {
                 "ok": True,
-                "content": _casual_reply_text,
-                "provider": "intent-gateway-casual",
-                "iterations": 1,
+                "content": NO_PENDING_FIX_MESSAGE,
+                "provider": "intent-gateway-no-pending-fix",
+                "iterations": 0,
                 "tool_calls_run": 0,
                 "meta": {},
                 "council": None,
                 "task_type": None,
                 "findings_saved_this_turn": [],
             }
-        except Exception as _ce:
-            logger.warning(
-                "intent_gateway %s path failed (%r) — falling through "
-                "to chat_with_tools (chat_send)", _tier, _ce,
-            )
+        else:
+            try:
+                from services.intent_gateway_casual_reply import casual_direct_reply
+                from services.response_confidence import apply_no_false_success_guard
+                _casual_reply_text = await casual_direct_reply(body.prompt)
+                _casual_reply_text = apply_no_false_success_guard(
+                    body.prompt or "", _casual_reply_text, _prior_fix_signal,
+                )
+                result = {
+                    "ok": True,
+                    "content": _casual_reply_text,
+                    "provider": "intent-gateway-casual",
+                    "iterations": 1,
+                    "tool_calls_run": 0,
+                    "meta": {},
+                    "council": None,
+                    "task_type": None,
+                    "findings_saved_this_turn": [],
+                }
+            except Exception as _ce:
+                logger.warning(
+                    "intent_gateway %s path failed (%r) — falling through "
+                    "to chat_with_tools (chat_send)", _tier, _ce,
+                )
     if result is None:
         _max_iters_eff = 3 if _tier == "query" else min(body.max_tool_iters, 4)
         result = await chat_with_tools(
@@ -575,7 +602,7 @@ async def chat_send(
         from services.response_confidence import (
             response_seems_mismatched, has_ship_suggestion, FALLBACK_MESSAGE,
         )
-        _mismatch = response_seems_mismatched(body.prompt or "", content)
+        _mismatch = response_seems_mismatched(body.prompt or "", content, _prior_fix_signal)
         logger.info(
             "chat.confidence_check surface=chat_send turn=1 prompt=%r "
             "council_recalled=%s mismatch=%s content_preview=%r",
@@ -606,7 +633,7 @@ async def chat_send(
                 task_type=body.task_type or _infer_task_type(body.prompt),
                 is_founder=_is_fnd, bin_ctx=bin_ctx,
             )
-            _retry_mismatch = response_seems_mismatched(body.prompt or "", _retry_content)
+            _retry_mismatch = response_seems_mismatched(body.prompt or "", _retry_content, _prior_fix_signal)
             logger.info(
                 "chat.confidence_check surface=chat_send turn=2(retry) "
                 "prompt=%r mismatch=%s content_preview=%r",
@@ -640,6 +667,17 @@ async def chat_send(
                 )
     except Exception as _rce:
         logger.debug("response_confidence gate skipped (chat_send): %r", _rce)
+
+    # 2026-08-28 · NEW P0 Task 2 — final defense-in-depth: no reply to
+    # a bare confirmation may claim a ship/approve action already
+    # happened unless it also carries a real aurem-handoff fence.
+    # Runs after the retry logic above so a hallucination on either
+    # draft is still caught.
+    try:
+        from services.response_confidence import apply_no_false_success_guard
+        content = apply_no_false_success_guard(body.prompt or "", content, _prior_fix_signal)
+    except Exception as _gce:
+        logger.debug("no_false_success guard skipped (chat_send): %r", _gce)
 
     # 2026-08-27 · Output Guard (Phase 1 net, "Show the Outcome, Never
     # the Engine"). Runs AFTER the mismatch/retry/fallback resolution
@@ -2224,6 +2262,8 @@ async def chat_stream(
                 _intent_probe_text = re.sub(
                     r"^LOOP_PHASE:\w+\s*\n", "", body.prompt or "", count=1,
                 )
+                from services.response_confidence import prior_turn_had_fix_signal as _ptfs_stream
+                _prior_fix_signal = await _ptfs_stream(get_db(), body.session_id, user_id)
                 _intent_result = await _classify_intent(
                     _intent_probe_text,
                     history=[],   # full conversation context is heavy
@@ -2232,6 +2272,7 @@ async def chat_stream(
                     db=get_db(),
                     user_id=user_id,
                     project_id=body.project_id,
+                    pending_fix=_prior_fix_signal,
                 )
                 # Emit an SSE `intent` frame so the chat UI can render
                 # the tier dot + clarifying probe inline.
@@ -2261,10 +2302,34 @@ async def chat_stream(
                 # separate path — uncertain must never mean "give it
                 # tools," it should mean "answer carefully, no risk."
                 if _tier in ("casual", "clarify") and not body.ora_panel:
+                    from services.response_confidence import is_confirmation_reply, NO_PENDING_FIX_MESSAGE
+                    if is_confirmation_reply(body.prompt or "") and not _prior_fix_signal:
+                        # 2026-08-28 · NEW P0 Task 2 — bare confirmation
+                        # with NOTHING pending: never let the free-form
+                        # casual LLM improvise a false "Approved!"/
+                        # "Shipped!" reply. Deterministic, honest.
+                        result = {
+                            "ok":               True,
+                            "content":          NO_PENDING_FIX_MESSAGE,
+                            "provider":         "intent-gateway-no-pending-fix",
+                            "fallback_chain":   ["intent_casual_no_pending_fix"],
+                            "iterations":       0,
+                            "tool_calls_run":   0,
+                            "tool_invocations": [],
+                            "intent":           _intent_result,
+                            "tier":             _tier,
+                            "mode":             "chat",
+                        }
+                        await q.put({"type": "result", "result": result})
+                        return
                     # Direct LLM reply path — no tool calls, fast.
                     try:
                         from services.intent_gateway_casual_reply import casual_direct_reply
+                        from services.response_confidence import apply_no_false_success_guard
                         _casual_reply_text = await casual_direct_reply(body.prompt)
+                        _casual_reply_text = apply_no_false_success_guard(
+                            body.prompt or "", _casual_reply_text, _prior_fix_signal,
+                        )
                         # Iter 212m-155 — BUG FIX: previously set `reply`
                         # here, but the SSE worker downstream reads
                         # `result["content"]` (line ~2081) to stream
@@ -2998,8 +3063,12 @@ async def chat_stream(
         try:
             from services.response_confidence import (
                 response_seems_mismatched, has_ship_suggestion, FALLBACK_MESSAGE,
+                prior_turn_had_fix_signal,
             )
-            _mismatch = response_seems_mismatched(body.prompt or "", content)
+            _prior_fix_signal = await prior_turn_had_fix_signal(
+                get_db(), body.session_id, (user or {}).get("user_id")
+            )
+            _mismatch = response_seems_mismatched(body.prompt or "", content, _prior_fix_signal)
             logger.info(
                 "chat.confidence_check surface=chat_stream turn=1 prompt=%r "
                 "council_recalled=%s mismatch=%s content_preview=%r",
@@ -3039,7 +3108,7 @@ async def chat_stream(
                     task_type=body.task_type or _infer_task_type(body.prompt),
                     is_founder=_is_fnd_retry, bin_ctx=bin_ctx,
                 )
-                _retry_mismatch = response_seems_mismatched(body.prompt or "", _retry_content)
+                _retry_mismatch = response_seems_mismatched(body.prompt or "", _retry_content, _prior_fix_signal)
                 logger.info(
                     "chat.confidence_check surface=chat_stream turn=2(retry) "
                     "prompt=%r mismatch=%s content_preview=%r",
@@ -3073,6 +3142,19 @@ async def chat_stream(
                     )
         except Exception as _rce:
             logger.debug("response_confidence gate skipped (chat_stream): %r", _rce)
+
+        # 2026-08-28 · NEW P0 Task 2 — final defense-in-depth: no
+        # reply to a bare confirmation may claim a ship/approve action
+        # already happened unless it also carries a real
+        # aurem-handoff fence. Runs after the retry logic above so a
+        # hallucination on either draft is still caught, and BEFORE
+        # the token-streaming loop below so nothing false is ever
+        # streamed to the user.
+        try:
+            from services.response_confidence import apply_no_false_success_guard
+            content = apply_no_false_success_guard(body.prompt or "", content, _prior_fix_signal)
+        except Exception as _gce:
+            logger.debug("no_false_success guard skipped (chat_stream): %r", _gce)
 
         # 2026-08-27 · Output Guard (Phase 1 net) — runs AFTER the
         # mismatch/fallback resolution above (so it nets whatever text

@@ -35,6 +35,7 @@ export default function ToolButton({
       type="button"
       data-testid={testid}
       title={title}
+      aria-label={title}
       onClick={onClick}
       className={className}
       style={{

@@ -23,6 +23,7 @@ import DOMPurify from "dompurify";
 import AddProjectWizard from "../components/AddProjectWizard";
 import FounderOfferPill from "../components/FounderOfferPill";
 import ConfirmModal from "../components/ConfirmModal";
+import RollbackConfirmModal from "../components/RollbackConfirmModal";
 
 export default function Projects() {
   return (
@@ -1867,6 +1868,7 @@ function ProjectDetail({ project, onRemoved, onChanged }) {
 
 function TaskRow({ t, onRollback }) {
   const [open, setOpen] = useState(["pulling", "reading", "fixing", "pushing"].includes(t.status));
+  const [rbConfirmOpen, setRbConfirmOpen] = useState(false);
   const STATUS_COLOR = {
     queued: "var(--text-faint)", pulling: "#60a5fa", reading: "#60a5fa",
     fixing: "var(--accent-2)", pushing: "var(--accent-2)",
@@ -1886,19 +1888,16 @@ function TaskRow({ t, onRollback }) {
 
   async function handleRollback(e) {
     e.stopPropagation();
-    // Two-step confirmation — guard against accidental clicks
-    const ok1 = window.confirm(
-      `Rollback commit ${t.commit_sha}?\n\n` +
-      `This will create a new "Revert" commit on the project repo. ` +
-      `Original history is preserved (no force-push).`
-    );
-    if (!ok1) return;
-    const ok2 = window.confirm(
-      `Are you sure?\n\n` +
-      `AUREM will push a revert of ${t.commit_sha} to the remote branch right now. ` +
-      `Click OK to proceed.`
-    );
-    if (!ok2) return;
+    setRbConfirmOpen(true);
+  }
+
+  // 2026-08-28 · First-Experience Wave P2-B/F17 — themed confirm
+  // replaces the last two native window.confirm() calls (was
+  // explicitly parked here per Overnight T6/P1e's sweep, ROADMAP F17,
+  // now unified with the same RollbackConfirmModal used by ShippedRow/
+  // ShipConfirmModal/MessageBubble's "Approve the fix" flow).
+  function confirmRollback() {
+    setRbConfirmOpen(false);
     onRollback?.(t);
   }
 
@@ -2049,6 +2048,12 @@ function TaskRow({ t, onRollback }) {
           {t.rollback_error && <div style={{ marginTop: 8, color: "var(--danger)" }}>✗ rollback: {t.rollback_error}</div>}
         </div>
       )}
+      <RollbackConfirmModal
+        open={rbConfirmOpen}
+        shortLabel={t.commit_sha ? `commit ${t.commit_sha.slice(0, 7)}` : "this shipped commit"}
+        onConfirm={confirmRollback}
+        onCancel={() => setRbConfirmOpen(false)}
+      />
     </div>
   );
 }

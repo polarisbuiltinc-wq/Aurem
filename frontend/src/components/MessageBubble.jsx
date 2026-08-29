@@ -32,6 +32,7 @@ import MermaidBlock from "./MermaidBlock";       // Iter 212m-61 /diagram
 import PatRequiredCTA from "./PatRequiredCTA";
 import SystemSignalBanner from "./SystemSignalBanner";
 import StepCards from "./StepCards";   // Iter 212m-19 — live step cards
+import RollbackConfirmModal from "./RollbackConfirmModal";
 import { brandProvider } from "../lib/providerLabel";
 import { useFriendlyStatusPhrase } from "../hooks/useFriendlyStatusPhrase";
 import { trackShipRenderFailed } from "../lib/analytics";
@@ -386,7 +387,7 @@ function WatchdogPanel({ idx, wd, onRegenerate }) {
 // ---- Main component --------------------------------------------------------
 
 export default function MessageBubble({
-  idx, dbTurnIndex, m, onRegenerate, sessionId,
+  idx, dbTurnIndex, m, onRegenerate, onRetryFix, sessionId,
   activeProject, exhausted, onTaskCompleted,
   onOpenDeployTab, collapseDefault = false, onOpenLivePopup,
 }) {
@@ -400,6 +401,12 @@ export default function MessageBubble({
   });
   // Live task progress (polled while shipped task is in-flight)
   const [taskInfo, setTaskInfo] = useState(null);
+  // 2026-08-28 · First-Experience Wave P2-B — themed confirm replaces
+  // the last native window.confirm() pair in the primary "Approve the
+  // fix" → rollback path (ShippedRow/OperationHistory were already
+  // themed at Iter 362; ShipConfirmModal's separate rollback button
+  // fixed same day).
+  const [rbConfirmOpen, setRbConfirmOpen] = useState(false);
 
   // Iter 135 — Client-side fallback elapsed counter.
   // Backend emits `tick` SSE frames every 0.5-0.6s with the canonical
@@ -516,13 +523,13 @@ export default function MessageBubble({
   async function rollbackShipped() {
     const tid = shipState.taskId;
     if (!tid) return;
-    const ok1 = window.confirm(
-      "Rollback this commit?\nA new revert commit will be pushed " +
-      "(history preserved, no force-push)."
-    );
-    if (!ok1) return;
-    const ok2 = window.confirm("Are you sure? This pushes to your repo right now.");
-    if (!ok2) return;
+    setRbConfirmOpen(true);
+  }
+
+  async function confirmRollbackShipped() {
+    setRbConfirmOpen(false);
+    const tid = shipState.taskId;
+    if (!tid) return;
     try {
       await api.post(`/cto/tasks/${tid}/rollback`, { confirm: "ROLLBACK" });
       toast({ message: "Rollback queued", kind: "info" });
@@ -594,8 +601,17 @@ export default function MessageBubble({
   // assistant's prose actually described a ship/approve action, that
   // silent null reads as a broken app to the user. Detect that case
   // and render an explicit fallback instead — NEVER a silent null.
+  //
+  // 2026-08-28 · First-Experience Wave B7 — false-positive fix.
+  // SHIP_CTA_MENTION matches generic prose like "...plan a change,
+  // and ship it to GitHub..." when ORA is just DESCRIBING its own
+  // capability (e.g. answering "what can you do before I connect a
+  // repo?"), not proposing a real action. A ship/approve/revert can
+  // never actually happen with no project connected, so the warning
+  // is nonsensical there — gate on activeProject to match the same
+  // precondition `canShip` already requires for a real ship.
   const shipCtaCheck = (m.role === "assistant" && showActions
-      && !m.shipped_task_id && !handoffBrief)
+      && !m.shipped_task_id && !handoffBrief && !!activeProject?.project_id)
     ? detectShipCtaFallback(m.content)
     : { shouldFallback: false, hasFence: false };
   const shipCtaFallback = shipCtaCheck.shouldFallback;
@@ -1114,18 +1130,14 @@ export default function MessageBubble({
                     : null}
                 </span>
               )}
-              {(m.council || m.provider) && (
-                <span>
-                  {/* 2026-08-27 · P5 — defensive guard: only ever
-                      interpolate m.council when it's a real label
-                      (string), never a stray boolean (legacy data
-                      could still have `true`) — the literal fix is
-                      upstream (routers/chat.py) but this stops a
-                      "Council true" leak even from old cached state. */}
-                  via {(m.council && typeof m.council === "string") ? `Council ${m.council}` : ""}
-                  {m.council && typeof m.council === "string" && m.provider ? " · " : ""}
-                  {m.provider ? brandProvider(m.provider) : ""}
-                </span>
+              {/* 2026-08-28 · First-Experience Wave P2-D — dropped the
+                  raw internal "Council A/B" letter (jargon with no
+                  meaning to the user); the "double-checked by a
+                  second reviewer" badge above already communicates
+                  this. Provider name alone is informative, not
+                  jargon. */}
+              {m.provider && (
+                <span>via {brandProvider(m.provider)}</span>
               )}
             </div>
           )}
@@ -1182,10 +1194,33 @@ export default function MessageBubble({
               background: "rgba(239,68,68,0.08)",
               border: "1px solid rgba(239,68,68,0.25)",
               borderRadius: 8,
+              flexWrap: "wrap",
             }}
           >
             <AlertTriangle size={13} strokeWidth={2.5} />
-            I described a fix but the approve button didn&apos;t load — please ask me again.
+            {/* 2026-08-28 · NEW P0 Task 1d — "please ask me again" used
+                to be a dead end: a text-only instruction with no
+                button ("no instruction that leads nowhere" per
+                founder). Now paired with a REAL, working, one-click
+                retry (`onRetryFix` → resends the same last message
+                via `send()`'s promptOverride) instead of asking the
+                user to retype anything. */}
+            <span>The approve button didn&apos;t load for that fix —</span>
+            <button
+              type="button"
+              data-testid={`ship-cta-fallback-retry-${idx}`}
+              onClick={() => onRetryFix?.()}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 4,
+                padding: "3px 10px", fontSize: 11.5, fontWeight: 600,
+                color: "#fef2f2", background: "rgba(239,68,68,0.55)",
+                border: "1px solid rgba(239,68,68,0.7)",
+                borderRadius: 999, cursor: "pointer",
+              }}
+            >
+              <RefreshCw size={11} strokeWidth={2.5} />
+              Retry this fix
+            </button>
           </div>
         )}
         <ShipDialog
@@ -1311,6 +1346,12 @@ export default function MessageBubble({
           </div>
         )}
       </div>
+      <RollbackConfirmModal
+        open={rbConfirmOpen}
+        shortLabel={shipState.taskId ? `shipped commit for this fix` : "this shipped commit"}
+        onConfirm={confirmRollbackShipped}
+        onCancel={() => setRbConfirmOpen(false)}
+      />
     </div>
   );
 }

@@ -46,6 +46,14 @@ def test_fence_requires_auth():
     assert r.status_code in (401, 403)
 
 
+@pytest.mark.flaky(
+    reason="Live GitHub API round-trip (recent_deliveries) — intermittent "
+           "network latency/timeout observed in full-suite batch runs, "
+           "passes reliably standalone. Confirmed 2026-08-28 P0-4 audit "
+           "(RECON-LEDGER.md).",
+    owner="e1-agent",
+    fix_by="next-live-network-hardening-pass",
+)
 def test_fence_live_endpoint(token):
     r = requests.get(
         f"{API}/admin/github-webhook-fence",

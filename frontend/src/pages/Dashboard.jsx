@@ -43,7 +43,6 @@ import {
 import NewUserWizard from "../components/NewUserWizard";
 import ConnectRepoBanner from "../components/ConnectRepoBanner";
 import RepoCleanupBanner from "../components/RepoCleanupBanner";
-import FinishSetupBanner from "../components/tour/FinishSetupBanner"; // Iter 212m-200
 import ConnectRepoTour from "../components/tour/ConnectRepoTour";     // Iter 212m-200
 import AddLiveSiteModal from "../components/AddLiveSiteModal";        // Iter 212m-203
 import ShipConfirmModal from "../components/ShipConfirmModal";
@@ -82,16 +81,14 @@ function DashboardV2Body() {
   const [showWizard, setShowWizard] = useState(false);
   const [projectCount, setProjectCount] = useState(null);
 
-  // Iter 212m-200 — Interactive Connect-Repo tour state. Two entry
-  // points: (1) FinishSetupBanner "Show me how" button, (2) email
-  // deep-link with ?tour=connect-repo. Dismissed banner state is
-  // per-session (sessionStorage) so we don't nag users who intend to
-  // finish setup later.
+  // Iter 212m-200 — Interactive Connect-Repo tour state. Reachable via
+  // the email deep-link `?tour=connect-repo` (2026-08-28 · First-
+  // Experience Wave B1/B7: the OTHER entry point, FinishSetupBanner's
+  // "Show me how" button, was imported but never rendered anywhere in
+  // this file — dead code, removed. ConnectRepoBanner is the single
+  // hero CTA for a fresh, repo-less dashboard; it already opens the
+  // same NewUserWizard this tour complements).
   const [tourOpen, setTourOpen] = useState(false);
-  const [finishBannerDismissed, setFinishBannerDismissed] = useState(() => {
-    try { return sessionStorage.getItem("aurem_finish_setup_dismissed") === "1"; }
-    catch { return false; }
-  });
   useEffect(() => {
     if (searchParams.get("tour") === "connect-repo") {
       setTourOpen(true);

@@ -2,10 +2,14 @@
  * Overnight T6/P1e (2026-08-28) — native window.confirm() sweep.
  *
  * Non-ship-flow confirms (Projects "Remove project", Integrations
- * "Reveal API key") replaced with the themed ConfirmModal. Ship/
- * rollback confirms (MessageBubble, ShipConfirmModal, Projects
- * task-rollback) are explicitly OUT of scope — parked under
- * ROADMAP F17 pending the Phase-7 ship-UI unification.
+ * "Reveal API key") replaced with the themed ConfirmModal.
+ *
+ * 2026-08-28 · First-Experience Wave P2-B/F17 update — ship/rollback
+ * confirms (MessageBubble's "Approve the fix" flow, ShipConfirmModal,
+ * Projects task-rollback) are now ALSO themed via the shared
+ * RollbackConfirmModal (see test_p2b_unified_rollback_ui.test.jsx).
+ * This file keeps the non-ship-flow assertions; the "task-rollback
+ * unchanged" assertion below is updated to confirm F17 landed.
  */
 import { readFileSync } from "fs";
 import path from "path";
@@ -28,9 +32,9 @@ describe("P1e — Projects.jsx remove-project uses themed confirm", () => {
   it("still calls the real DELETE endpoint on confirm (doRemove)", () => {
     expect(projectsSrc).toMatch(/await api\.delete\(`\/cto\/projects\/\$\{project\.project_id\}`\)/);
   });
-  it("task-rollback double-confirm is UNCHANGED (parked, ship-flow, F17)", () => {
-    // sanity: we did not touch the rollback window.confirm calls
-    expect(projectsSrc).toContain("Two-step confirmation");
+  it("task-rollback now uses the themed RollbackConfirmModal (F17, 2026-08-28)", () => {
+    expect(projectsSrc).toContain("RollbackConfirmModal");
+    expect(projectsSrc).not.toMatch(/window\.confirm\(\s*\n\s*`Rollback commit/);
   });
 });
 

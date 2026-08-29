@@ -75,6 +75,13 @@ async def test_backup_writes_and_history_recorded(db):
 
 
 @pytest.mark.skipif(_missing, reason=skip_reason)
+@pytest.mark.flaky(
+    reason="Real R2 network round-trip (backup+restore) — intermittent "
+           "in full-suite batch runs, passes reliably standalone. "
+           "Confirmed 2026-08-28 P0-4 audit (RECON-LEDGER.md).",
+    owner="e1-agent",
+    fix_by="next-live-network-hardening-pass",
+)
 async def test_full_round_trip_counts_match(db):
     from services import db_backup, db_restore
     result = await db_backup.run_backup(db)

@@ -43,7 +43,13 @@ def test_casual_branch_uses_content_key():
     )]
     assert len(call_sites) >= 2, "expected both chat_send and chat_stream call sites"
     for idx in call_sites:
-        block = chat_text[idx:idx + 1200]
+        # 2026-08-28 NEW P0 — widened 1200->1800: the false-success
+        # guard call (apply_no_false_success_guard) now sits between
+        # the import and the result dict at both call sites, pushing
+        # the provider tag further out. The invariant itself
+        # (content key, no reply key, correct provider tag) is
+        # unchanged — only the window needed to grow to still see it.
+        block = chat_text[idx:idx + 1800]
         assert '"content":' in block, block
         assert '"reply":' not in block, block
         assert '"intent-gateway-casual"' in block

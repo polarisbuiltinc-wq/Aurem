@@ -1,0 +1,56 @@
+data: {"meta": true, "session_id": "e2e-p0-stream-1787969111", "provider": "aurem-cto", "thinking_s": 0.0, "tool_calls_run": 0}
+
+data: {"type": "mode", "mode": "A"}
+
+data: {"type": "step", "text": "\ud83e\udd14 Thinking\u2026", "done": false}
+
+data: {"type": "intent", "intent": {"tier": "casual", "raw_tier": "casual", "confidence": 0.86, "method": "heuristic", "reasoning": "Short message (1 words) with no action / query signal", "signals": ["short_no_intent"], "was_ambiguous": false, "clarify": null, "gateway_ms": 0.0}}
+
+data: {"meta": true, "session_id": "e2e-p0-stream-1787969111", "provider": "intent-gateway-no-pending-fix", "mode": "chat", "temperature": 0.7, "thinking_s": 0.0, "tool_calls_run": 0, "low_confidence": false, "ship_suppressed": false}
+
+data: {"token": "There'"}
+
+data: {"token": "s noth"}
+
+data: {"token": "ing pe"}
+
+data: {"token": "nding "}
+
+data: {"token": "for me"}
+
+data: {"token": " to ap"}
+
+data: {"token": "prove "}
+
+data: {"token": "right "}
+
+data: {"token": "now \u2014 "}
+
+data: {"token": "descri"}
+
+data: {"token": "be the"}
+
+data: {"token": " fix y"}
+
+data: {"token": "ou'd l"}
+
+data: {"token": "ike (e"}
+
+data: {"token": ".g. \"f"}
+
+data: {"token": "ix the"}
+
+data: {"token": " READM"}
+
+data: {"token": "E typo"}
+
+data: {"token": "\") and"}
+
+data: {"token": " I'll "}
+
+data: {"token": "take a"}
+
+data: {"token": " look."}
+
+data: {"done": true, "provider": "intent-gateway-no-pending-fix", "session_id": "e2e-p0-stream-1787969111", "tokens_remaining": 871565, "council": null, "low_confidence": false, "ship_suppressed": false, "repo_owner": null, "repo_name": null, "branch": null, "llm_provenance": {"provider": "openrouter", "model": "", "is_emergency": false}, "verified_paths": [], "web_sources": [], "system_signals": [], "citation_guard_triggered": false, "council_recalled": 0, "plain_english_contract_active": true, "leak_stripped": false, "length_capped": false, "output_guard_ref_id": null, "findings_saved": []}
+

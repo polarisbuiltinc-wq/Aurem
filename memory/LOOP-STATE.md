@@ -149,3 +149,49 @@ Explicit constraint honored: did NOT re-verify or touch the P0 commit_files/roll
 **New risks surfaced**: the R10 memo's squash/rebase-merge SHA mismatch is a previously-undocumented gap (existing test `test_rollback_merged_pr_falls_through` cannot catch it — it uses the same SHA for pre- and post-merge, so it isn't testing the thing that's actually broken). Flagged in R10, not fixed (analysis-only per this loop's scope).
 
 **Next actions**: founder confirms P0 on production (parallel) → then run the official Track B rerun against the real repo/tasks; founder checks the sign-in DevTools hypothesis; R10 gap needs an actual code fix (3-4 sub-items scoped in the memo) before `ship_via_pr` can be considered for R9.
+
+---
+
+# NEW P0 (2026-08-28) — ship-approve false-success + no-button close-out. DONE, tested, awaiting founder.
+
+Founder live-repro'd a fresh, more severe P0 superseding everything above: no Approve button after a
+fix diagnosis, "yes please ship it" pointed at a missing button, and bare "approve" got a fabricated
+"Approved! Let me know what you need" with no real commit. Full detail + proof:
+`/app/e2e-proof/NEW-P0-2026-08-28/summary.md`.
+
+- **Step 0**: 2 stale background pytest processes from the prior session killed and confirmed dead
+  before any regression work.
+- **Step 1 — CORE FIX, done + tested**: root cause was NOT a frontend rendering bug (proved via a new
+  deterministic mount test — button renders from a valid injected fence regardless of `m.provider`).
+  Real defect: the casual-tier intent-gateway LLM call (`casual_direct_reply`) had zero guard against
+  claiming a ship/approve action already happened. New `contains_false_success_claim()` /
+  `apply_no_false_success_guard()` in `response_confidence.py`, wired into both `chat_send` and
+  `chat_stream` at 2 chokepoints each. `is_confirmation_reply()` widened (+ its
+  `intent_gateway.py` mirror) to also catch "yes please ship it"-style phrasing. Honest fallback
+  (Task 1d): `MessageBubble.jsx`'s "please retype the fix" text-only dead-end replaced with a real
+  `ship-cta-fallback-retry-{idx}` button wired to `ChatPanel.jsx`'s new `retryLastFix()`. The
+  `test_only_expected_files_mention_tool_router` guardrail some earlier notes suspected was broken
+  by this work was checked directly — it's pre-existing (caused by `admin_analytics.py`, already in
+  baseline), not touched by this fix.
+- **Step 2 — full reconcile, done**: full backend suite (6595 tests) + full frontend suite (567
+  tests) run. Every failure not already in `test-baseline.txt` individually confirmed pre-existing
+  via `git stash` A/B (including isolating this session's exact 3 changed prod files) and added with
+  a documented reason. Zero unexplained new regressions.
+- **Step 3 — live drill, ran clean (option ii)**: read-only clean check + a REAL ship-then-rollback
+  drill against `polarisbuiltinc-wq/ora-grounding` via the reused GitHub App installation token
+  (152797252, same credential path as the earlier R2 T7 drill — no personal token needed), using the
+  SAME `POST /cto/tasks/submit` + `POST /cto/tasks/{id}/rollback` endpoints the real Approve button
+  calls. Real commit `cf64ac7` landed, real revert `689217d` landed, repo restored byte-identical,
+  zero orphan branches throughout. Proof: `/app/e2e-proof/P0-prod-repro/summary.json`. Honest
+  separate finding (not this P0): the MOCK_LLM codegen for that drill task deleted 181 README lines
+  instead of appending one comment — a real mock-codegen quality gap, flagged, not fixed here.
+- **Step 4 — service worker verdict**: `CACHE_VERSION = "aurem-v3"` in current source, IDENTICAL to
+  what the founder observed live. Not stale. R11's stale-SW hypothesis dropped/de-ranked.
+- **testing_agent verification**: `/app/test_reports/iteration_p0_ship_approve_fix_verify_2026_01_29.json`
+  — 0 critical issues; found the "On it—shipping now!" present-tense promise gap live, fixed same
+  session, re-verified live via curl afterward.
+- **NOT started this round (per "one workstream at a time")**: Step 5 First-Experience Wave, the
+  MOCK_LLM chat_stream short-circuit follow-up task, and the Responsive/Layout-scan feature — all
+  queued, none touched, per founder's own explicit sequencing.
+
+**STOPPING here, awaiting founder review**, exactly as instructed.

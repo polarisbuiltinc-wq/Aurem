@@ -103,7 +103,7 @@ export default function ShipDialog({
           {msg.maxxMode && (
             <span
               data-testid={`ship-maxx-chip-${idx}`}
-              title="Maxx mode ON — Claude reviews DeepSeek output before commit"
+              title="Maxx mode — a second AI double-checks this fix before it ships"
               style={{
                 padding: "3px 8px", borderRadius: 4,
                 fontSize: 10, fontWeight: 700,

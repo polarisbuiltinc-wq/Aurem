@@ -1,6 +1,6 @@
 # R9 — ship_via_pr Production Flip Checklist (copy-paste executable)
 
-**STOP GATE — do not run any of this until ALL THREE are true:**
+**STOP GATE — do not run any of this until ALL FOUR are true:**
 1. R5e passed (real webhook delivered live, `ship_pr_merged`/`ship_pr_closed`
    written by the real route, not the replay fallback — see
    `R5e-VERIFY-PLAN.md`).
@@ -11,8 +11,13 @@
    founder (Preview `ship_via_pr` stayed ON, R2's drill + any organic
    Preview ships during that window logged no unexpected WARN-mode
    `write_guard` trips).
+4. **R1a (rollback-on-PR fix) has landed and passed** — see
+   `R1a-READINESS.md` for scope; `R10-ROLLBACK-PR-GAP.md` found the
+   PR rollback path NOT SAFE for squash/rebase merges as of
+   2026-08-28. Do not flip this flag until R1a's own fixes + tests are
+   green (a separate, smaller PR from R9 itself).
 
-If any of the 3 is missing, **do not proceed** — log
+If any of the 4 is missing, **do not proceed** — log
 `R9 PENDING-FOUNDER` with the exact missing item and stop.
 
 ## Pre-flight (2 min)

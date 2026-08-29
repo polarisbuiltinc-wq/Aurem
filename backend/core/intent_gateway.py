@@ -88,6 +88,21 @@ _CASUAL_THANKS = {
 }
 
 
+# 2026-08-28 NEW P0 — broader than `_CASUAL_ACK` (which is single
+# word/set-membership only): matches the WHOLE message for common
+# multi-word confirmation phrasings ("go ahead", "do it", "ship it")
+# that `_CASUAL_ACK` never covered. Kept local to this module (mirrors
+# services/response_confidence.py's own copy) rather than imported,
+# to avoid coupling the two gates together.
+_CONFIRMATION_PHRASE_RE = re.compile(
+    r"^\s*(?:yes[,]?\s+)?(?:please\s+)?"
+    r"(yes|yeah|yep|yup|sure|ok|okay|please|go ahead|go for it|"
+    r"do it|ship it|ship that|approve|approved|approve it|confirm|"
+    r"confirmed|proceed|sounds good|do that|go)\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
+
+
 #  Concrete resource/data nouns — presence of one of these alongside a
 #  query-lead word means the user wants a real lookup (their tasks,
 #  their repo, their bill, etc.) and genuinely needs tool access.
@@ -150,11 +165,23 @@ def _first_meaningful_token(tokens: list[str]) -> str:
 #  Heuristic classifier — returns (tier, confidence, signals).
 # ─────────────────────────────────────────────────────────────────────
 
-def _classify_heuristic(message: str) -> dict[str, Any]:
+def _classify_heuristic(message: str, pending_fix: bool = False) -> dict[str, Any]:
     """Pure heuristic pass.  Returns a dict with:
         {tier, confidence, method:"heuristic", signals: [...]}
     Confidence is intentionally calibrated so that mixed-signal inputs
-    fall below the 0.75 LLM-fallback threshold."""
+    fall below the 0.75 LLM-fallback threshold.
+
+    `pending_fix` — 2026-08-28 NEW P0 fix. True when the immediately
+    preceding assistant turn already proposed a fix/ship action (a
+    cheap, single-row DB check — NOT full history, which stays
+    deliberately excluded here for the 2s latency budget). Without
+    this, a bare "yes"/"go ahead"/"ship it" confirming a real pending
+    fix hits `_CASUAL_ACK` below and gets classified TIER_CASUAL with
+    0.94 confidence — high enough to NEVER escalate to the LLM
+    fallback — so the confirmation never reaches the agentic pipeline
+    at all and the fix silently never continues. Live-reproduced by
+    the founder: "yes"/"approve" after a real ship proposal got a
+    generic "what can I help with?" casual reply, no ship ever ran."""
     text = (message or "").strip()
     if not text:
         return {
@@ -202,6 +229,25 @@ def _classify_heuristic(message: str) -> dict[str, Any]:
         and not has_question_mark
         and (casual_seed or word_count <= 3)
     ):
+        # 2026-08-28 NEW P0 — a bare ack ("yes"/"go ahead"/"do it")
+        # confirming a real pending fix is NOT chit-chat; route it to
+        # the agentic pipeline so the fix actually continues, instead
+        # of hard-classifying it casual before it ever gets a chance.
+        # Greetings/thanks are excluded — "thanks" after a fix ships
+        # should stay casual, only the ACK vocabulary is overridden.
+        _first_is_ack = bool(_CONFIRMATION_PHRASE_RE.match(message or ""))
+        if pending_fix and _first_is_ack:
+            signals.append("pending_fix_ack_override")
+            return {
+                "tier":       TIER_AGENTIC,
+                "confidence": 0.90,
+                "method":     "heuristic",
+                "signals":    signals,
+                "reasoning":  (
+                    "Bare confirmation word with a pending fix from the "
+                    "prior turn — continuing the fix, not chit-chat."
+                ),
+            }
         if casual_seed:
             signals.append("casual_seed")
             confidence = 0.94 if word_count <= 5 else 0.88
@@ -459,6 +505,7 @@ async def classify(
     user_id: str | None = None,
     project_id: str | None = None,
     escalate_to_llm: bool = True,
+    pending_fix: bool = False,
 ) -> dict[str, Any]:
     """Classify `message` into one of the 3 intent tiers.
 
@@ -476,9 +523,13 @@ async def classify(
         }
 
     Pass `db` to enable Mongo logging.  Returns immediately on db=None.
-    """
+
+    `pending_fix` — 2026-08-28 NEW P0. Pass True when the prior
+    assistant turn already proposed a fix/ship action, so a bare
+    confirmation reply isn't misclassified as casual chit-chat (see
+    `_classify_heuristic`'s docstring for the full root-cause)."""
     t0 = time.monotonic()
-    result = _classify_heuristic(message)
+    result = _classify_heuristic(message, pending_fix=pending_fix)
 
     # ── LLM escalation when heuristic is uncertain ────────────────
     if escalate_to_llm and result["confidence"] < 0.75:

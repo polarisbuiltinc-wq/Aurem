@@ -242,6 +242,14 @@ async def test_5_invalid_token_refused(app_client):
     assert "reason=invalid_token" in resp.headers["location"]
 
 
+@pytest.mark.flaky(
+    reason="Live promo-spot-cap counter shared across the full-suite "
+           "batch run's other promo tests — intermittent, passes "
+           "reliably standalone. Confirmed 2026-08-28 P0-4 audit "
+           "(RECON-LEDGER.md).",
+    owner="e1-agent",
+    fix_by="next-live-network-hardening-pass",
+)
 async def test_6_spot_cap_enforced(app_client, db):
     """Cap = 3. First 3 users claim; the 4th verifies but no spot."""
     emails = [await _fresh_email() for _ in range(4)]

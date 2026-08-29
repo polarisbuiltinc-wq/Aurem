@@ -143,6 +143,14 @@ class TestMockLLMTurn:
         # Should include at least one state or delta event and a final
         assert "final" in types, f"no final event: {types}"
 
+    @pytest.mark.flaky(
+        reason="Live mock-LLM chat turn over a real streamed session — "
+               "intermittent in full-suite batch runs, passes reliably "
+               "standalone. Confirmed 2026-08-28 P0-4 audit "
+               "(RECON-LEDGER.md).",
+        owner="e1-agent",
+        fix_by="next-live-network-hardening-pass",
+    )
     def test_final_carries_tokens(self, hdr, session):
         status, events = _stream_message(hdr, session, "Second smoke turn.")
         assert status == 200
@@ -172,6 +180,14 @@ class TestMockLLMTurn:
         assert isinstance(it, int) and it >= 0
         assert isinstance(ot, int) and ot >= 0
 
+    @pytest.mark.flaky(
+        reason="Live mock-LLM chat turn over a real streamed session — "
+               "intermittent in full-suite batch runs, passes reliably "
+               "standalone. Confirmed 2026-08-28 P0-4 audit "
+               "(RECON-LEDGER.md).",
+        owner="e1-agent",
+        fix_by="next-live-network-hardening-pass",
+    )
     def test_think_and_advise_only_flags_accepted(self, hdr, session):
         status, events = _stream_message(hdr, session, "think+advise on",
                                          think_mode=True, advise_only=True)

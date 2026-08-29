@@ -60,8 +60,8 @@ export function SelfHealIndicator({ visible, attempt = 1, max = 2,
     >
       <Wrench size={13} className="anim-spin" />
       <span style={{ flex: 1, minWidth: 0 }}>
-        Self-heal — attempt <strong>{attempt}/{max}</strong>: ORA is
-        rewriting failing file{errorPreview ? "…" : ""}
+        Retrying automatically — attempt <strong>{attempt}/{max}</strong>: ORA is
+        rewriting the file that failed{errorPreview ? "…" : ""}
       </span>
       {startedAt && (
         <span data-testid="self-heal-timer" style={{
@@ -138,7 +138,7 @@ export function UserActionCard({ phase, message, errors,
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <ShieldCheck size={14} color="#86efac" />
           <strong style={{ fontSize: 12, color: "#86efac", letterSpacing: 0.4 }}>
-            Human review required — test files modified
+            Paused for your review — this change touches test files
           </strong>
           {secondsLeft != null && (
             <span

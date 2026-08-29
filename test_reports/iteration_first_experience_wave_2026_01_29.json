@@ -1,0 +1,52 @@
+{
+  "summary": "First-Experience Wave frontend regression test on preview. Ran fresh signup → dashboard → first-chat → day-2 return, plus admin sidebar & notification bell verifications, plus code-level verification of all 3 rollback surfaces, copy/jargon changes, and TaskProgressCard rollback_failed state. All primary acceptance criteria PASS. No native window.confirm() remains in the 3 rollback surfaces. Non-admin fresh signup correctly hides Tools/Developer-tools section. The specific 'approve button didn't load' false-positive warning does NOT appear on a plain first-chat Q&A. Chat history persists across logout/login. Notification bell shows unread count (5), SHIP FAILED (error-severity) items in dropdown.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "middleware/rate_limit_guard", "issue": "One-off RuntimeError('No response returned.') seen for GET /api/aurem-dev/loop/active during test — Starlette BaseHTTPMiddleware ended stream. Pre-existing, unrelated to today's changes."},
+      {"endpoint": "chat streaming (MOCK_LLM=true)", "issue": "backend/.env has MOCK_LLM=true but backend logs show real LiteLLM/OpenRouter/DeepSeek calls during chat_stream (e.g., '🟠 Root cause: missing authorization header' first-attempt mismatch triggered a low-confidence suppression fallback). Not blocking (chat still returns a canned fallback), but MOCK_LLM does not appear to actually short-circuit /chat/stream. Worth confirming this env flag is wired into the stream path."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Fresh first-chat reply on preview", "issue": "The first assistant reply after fresh signup came back as the low-confidence fallback: '⚠ low confidence — response suppressed / I couldn't find a confident answer to that — try rephrasing, or ask again. · via ORA'. Content is expanded (good) and no false 'approve button didn't load' banner (good — the fix works). But the founder-facing 'clean, helpful' first-reply target isn't actually met because the mismatch-retry path in routers/chat.py silently converted a normal Q&A into 'low confidence' suppression. Recommend either (a) fixing MOCK_LLM to actually deterministic-mock the first-turn reply, or (b) softening the mismatch-detection threshold on the very first chat_stream turn for a brand-new user (no repo yet, no council recall — it should never trigger a mismatch).", "affected_selectors": ["[data-testid='chat-msg-assistant-2']"]}
+    ],
+    "design_issues": [
+      {"screen": "Sidebar (admin)", "issues": ["On desktop (1920) and mobile (390) viewports, the sidebar renders as an icon-only rail (RailShell — rail-icon-chat/ship/insights/settings/admin). The full expanded sidebar variant with the 'Tools / Developer tools' accordion (SidebarBound.jsx lines 515-590) was NOT reachable via any interactive button (rail-autohide-toggle just toggles autohide, doesn't expand). So we could NOT visually confirm the admin-positive case ('admin/founder SHOULD still see Tools'). Code review confirms the isAdminOrFounder(user) gate is correct, and the non-admin negative case is confirmed hidden. Main agent should verify how/where admins are supposed to see the Tools accordion in the actual DS2 shell."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/.screenshots/03_signup_form.png",
+    "/app/.screenshots/04_after_signup.png",
+    "/app/.screenshots/09_reply_complete.png",
+    "/app/.screenshots/10_day2_return.png",
+    "/app/.screenshots/11_admin_dashboard.png",
+    "/app/.screenshots/12_bell_dropdown.png",
+    "/app/.screenshots/13_projects.png"
+  ],
+  "action_items": [
+    "Investigate why MOCK_LLM=true is not actually mocking chat_stream — real DeepSeek/LiteLLM calls fire and the mismatch-retry logic can suppress the first reply into a 'low confidence' fallback for a brand-new user with no repo. This makes the first-chat experience feel broken even though technically no fix was proposed.",
+    "Clarify (or add a screenshot spec) for where the admin sidebar 'Tools' accordion is supposed to render in the DS2 shell. Non-admin hide is correct; admin visibility path was not manually verifiable in this run.",
+    "P2-A notification bell verified live: 5-badge, dropdown shows SHIP FAILED (error severity) plus SHIPPED/SCAN — matches design. No live action needed."
+  ],
+  "critical_code_review_comments": [
+    "SidebarBound.jsx line 523: isAdminOrFounder(user) gate correctly wraps the Tools section — non-admin regression fix is solid.",
+    "MessageBubble.jsx shipCtaFallback: verified in code (imports RollbackConfirmModal at line 35, renders <RollbackConfirmModal /> at line 1326). No window.confirm() calls remain (only historical comments).",
+    "ShipConfirmModal.jsx line 570 + Projects.jsx line 2051 both render <RollbackConfirmModal /> — all 3 surfaces unified.",
+    "TaskProgressCard.jsx lines 468-478: rbStatus === 'failed' correctly surfaces the visible red 'Rollback didn't go through — the original commit is still live. Try again above, or check the repo directly.' with data-testid={`ship-rollback-failed-${taskId}`}.",
+    "ShipDialog.jsx line 106: 'Maxx mode — a second AI double-checks this fix before it ships' — no Claude/DeepSeek naming. ✓",
+    "LoopActionCards.jsx line 63: 'Retrying automatically — attempt {N}/{max}' ✓. Line 141: 'Paused for your review — this change touches test files' ✓.",
+    "Shell.jsx line 613: 'Click to refresh — you'll stay signed in' ✓.",
+    "chat/ToolButton.jsx line 38: aria-label={title} added for icon-only buttons ✓.",
+    "Chat collapse (Iter 339m): verified live — after the 2nd user message, the initial ORA greeting and prior user message both collapse to a '1 line' preview with a data-testid='collapsed-reply-toggle' chevron. Multiple such entries visible in day-2 return."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "9/10 features verified pass; 1 partial (admin-sidebar-visible not reachable via UI in current DS2 shell)"},
+  "test_credentials": "Fresh signup created: fresh507888@auremtest.dev / AuremTest2026! (day-2 verified). Admin: test@aurem.dev / AuremTest2026! (per /app/memory/test_credentials.md).",
+  "seed_data_creation": "Created 2 disposable signup accounts (test932630@auremtest.dev, fresh507888@auremtest.dev) via the real signup form. Neither is connected to a repo. The second was reused for day-2 return persistence verification.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Preview URL: https://bin-context-pat.preview.emergentagent.com. Non-admin Tools hide fix is confirmed live. All 3 rollback surfaces use the themed RollbackConfirmModal (verified in code; no window.confirm remains). The one soft finding is the first-chat reply landing on a 'low confidence — response suppressed / I couldn't find a confident answer' fallback instead of a clean helpful reply — root cause: MOCK_LLM=true in backend/.env but chat_stream still hits the real LLM + mismatch-retry path, which suppresses the first turn. If main agent wires MOCK_LLM into routers/chat.py chat_stream, this first-experience issue would fully resolve. Notification bell fully working. Day-2 chat history persistence works.",
+  "rca of the issue": "First-chat 'low confidence — response suppressed' RCA: routers/chat.py chat_stream mismatch-detection fires on the very first turn for a brand-new user with no project connected. Reproduction: fresh signup → send 'What can you do for me?' as first message → reply comes back as the low-confidence fallback template. Mitigation: gate the mismatch retry/suppression path so it only runs when (a) a project is connected AND (b) council_recalled > 0, OR make MOCK_LLM=true actually deterministically mock the chat_stream response (currently it appears to only affect other LLM entrypoints)."
+}

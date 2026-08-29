@@ -1,0 +1,21 @@
+{
+  "note": "NEW P0 (2026-08-28) Step 3 -- live ship-then-rollback drill against the SAME production-shaped flow the founder used (POST /cto/tasks/submit -- the exact call MessageBubble.jsx shipViaCTO() makes -- then POST /cto/tasks/{id}/rollback -- the exact call confirmRollbackShipped() makes). Run against polarisbuiltinc-wq/ora-grounding via the reused GitHub App installation token (152797252, same credential path as the R2 T7 live drill and Track-B dry-run -- no personal GITHUB_TOKEN used or needed).",
+  "project_id": "p_6d0be78cdd",
+  "repo": "polarisbuiltinc-wq/ora-grounding",
+  "installation_id": 152797252,
+  "pre_drill_default_branch_sha": "bad8bdcb460552c52126bf72099bf94f6fce3fb9",
+  "pre_drill_branch_count": 1,
+  "pre_drill_orphan_auremcto_branches": 0,
+  "task_id": "t_c8782fa883ed",
+  "ship_commit_sha": "cf64ac7c04ad69079c2a80f8e02e4147172631f2",
+  "ship_task_status": "done",
+  "rollback_status": "done",
+  "rollback_sha": "689217d0ca134e5ac6952171acaefb67d065ac0c",
+  "post_drill_default_branch_sha": "689217d0ca134e5ac6952171acaefb67d065ac0c",
+  "post_drill_branch_count": 1,
+  "post_drill_orphan_auremcto_branches": 0,
+  "post_drill_readme_content_restored": true,
+  "readme_length_after_rollback": 7722,
+  "honest_finding_not_in_scope_of_this_p0": "The MOCK_LLM codegen for this task deleted 181 lines of README.md instead of appending the requested single comment line -- a real, separate mock-codegen quality issue, NOT the ship-approve/false-success bug this P0 targets. Flagged for a future session (does not block this P0's proof: the ship->rollback mechanism itself worked correctly and left the repo clean).",
+  "conclusion": "Step 3(ii) -- live drill ran clean. Real commit landed (cf64ac7), real revert landed (689217d), repo restored to identical content, zero orphan branches, single branch (main) throughout. This is the SAME plain-ship (non-loop, non-PR) engine the founder's original repro used."
+}

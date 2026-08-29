@@ -35,6 +35,25 @@ if _env_file.is_file():
             os.environ[k] = v
 
 
+# ── 2026-08-28 · P0-4/P2-A fix — export REACT_APP_BACKEND_URL for tests ──
+# Backend .env doesn't have this key (it's a frontend-only var), but
+# ~20 test files do `os.environ.get("REACT_APP_BACKEND_URL", "")`
+# expecting it to be set to the running preview's own URL, to hit the
+# live server for e2e checks. Without it, standalone/CI runs of these
+# files hit `MissingSchema`/`KeyError` — NOT a real bug in the feature
+# under test (root-caused via test_p2a_notification_bell.py: all 4
+# tests pass once this is set — confirmed the bell itself is correct,
+# only the test harness's env was incomplete).
+if "REACT_APP_BACKEND_URL" not in os.environ:
+    _frontend_env = Path("/app/frontend/.env")
+    if _frontend_env.is_file():
+        for _line in _frontend_env.read_text().splitlines():
+            _line = _line.strip()
+            if _line.startswith("REACT_APP_BACKEND_URL="):
+                os.environ["REACT_APP_BACKEND_URL"] = _line.split("=", 1)[1].strip()
+                break
+
+
 # ── Iter 345 — legacy quarantine (founder ruling 2026-07-29) ─────────
 # The pre-existing failures across iter36–iter267-era files are
 # DEFERRED, not fixed and not deleted. Exact nodeids live in three

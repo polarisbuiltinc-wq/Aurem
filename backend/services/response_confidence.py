@@ -112,6 +112,32 @@ FALLBACK_MESSAGE = (
 )
 
 
+async def prior_turn_had_fix_signal(db, session_id: str, user_id: str) -> bool:
+    """Fetch the last stored assistant turn for this session (BEFORE
+    the current turn is appended) and check whether IT already
+    carried a fix/ship signal. Used to exempt a short confirmation
+    reply ("yes"/"ship it"/"approve") from being treated as a fresh,
+    out-of-context mismatch — see `response_seems_mismatched` above.
+    Fail-open (returns False) on any DB hiccup — same posture as
+    every other passive-audit read in this codebase."""
+    if db is None or not session_id:
+        return False
+    try:
+        doc = await db.chat_sessions.find_one(
+            {"session_id": session_id, "user_id": user_id},
+            {"_id": 0, "turns": {"$slice": -1}},
+        )
+        turns = (doc or {}).get("turns") or []
+        if not turns:
+            return False
+        last = turns[-1]
+        if not isinstance(last, dict) or last.get("role") != "assistant":
+            return False
+        return response_has_fix_signal(last.get("content") or "")
+    except Exception:
+        return False
+
+
 async def persist_confidence_check(db, **fields) -> None:
     """2026-08-25 — passive audit trail for `chat.confidence_check`.
     Founder has no raw log access to Preview/Production; this makes
@@ -182,14 +208,139 @@ def is_definitional_mismatch(user_message: str, final_output: str) -> bool:
     return _response_has_fix_signal(final_output)
 
 
-def response_seems_mismatched(user_message: str, final_output: str) -> bool:
+def response_has_fix_signal(final_output: str) -> bool:
+    """Public alias of `_response_has_fix_signal` — lets callers check
+    whether a PRIOR turn's content already carried fix intent, so a
+    short confirmatory reply to it isn't wrongly treated as an
+    out-of-context question (see `is_confirmation_reply` below,
+    2026-08-28 First-Experience Wave NEW-P0 fix)."""
+    return _response_has_fix_signal(final_output)
+
+
+# 2026-08-28 · NEW P0 (Ship-Approve false-success + no-button) —
+# `response_seems_mismatched` only ever saw the CURRENT user message
+# in isolation. A real, live repro: turn 1 ("ship a trivial README
+# edit") legitimately gets a fence back. Turn 2, the user just
+# confirms — "yes" / "go ahead" / "approve" / "ship it" — with no
+# `_FIX_INTENT_TOKENS` word of its own. The model, seeing full
+# conversation history, correctly re-describes/re-emits the SAME fix
+# with a fresh fence. But this gate, seeing only "yes" (no fix
+# intent, no code signal) + a response with a fix signal, flagged it
+# as a fresh unsolicited mismatch and swapped the REAL fence for
+# FALLBACK_MESSAGE — the fence never reached the user, so no Approve
+# button ever rendered, and the P0-1 fallback banner ("approve button
+# didn't load") fired on every retry because retrying hits the exact
+# same gate again. This is the root cause of the "no button" bug.
+_CONFIRMATION_RE = re.compile(
+    r"^\s*(?:yes[,]?\s+)?(?:please\s+)?"
+    r"(yes|yeah|yep|yup|sure|ok|okay|please|go ahead|go for it|"
+    r"do it|ship it|ship that|approve|approved|approve it|confirm|"
+    r"confirmed|proceed|sounds good|do that|go)\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
+
+
+def is_confirmation_reply(user_message: str) -> bool:
+    """True iff the ENTIRE message is a short affirmative continuation
+    ("yes", "go ahead", "ship it", "approve", ...) with nothing else —
+    deliberately whole-message-anchored so a real, longer question
+    that happens to contain "ok" or "confirm" is never matched."""
+    return bool(_CONFIRMATION_RE.match(user_message or ""))
+
+
+def response_seems_mismatched(
+    user_message: str,
+    final_output: str,
+    prior_turn_had_fix_signal: bool = False,
+) -> bool:
     """True iff this turn should NEVER be shown to the user as-is —
     combines the hard short-message rule with the broader fix-intent
-    heuristic for longer messages."""
+    heuristic for longer messages.
+
+    `prior_turn_had_fix_signal` — pass True when the immediately
+    preceding assistant turn in this session already carried a fix/
+    ship signal (fence, "Root cause:", or ship-action prose). A short
+    confirmation reply to THAT turn is legitimate continuation, not a
+    fresh out-of-context mismatch, even though it has no
+    `_FIX_INTENT_TOKENS` word of its own."""
     if not final_output:
+        return False
+    if prior_turn_had_fix_signal and is_confirmation_reply(user_message):
         return False
     if is_definitional_mismatch(user_message, final_output):
         return True
     if not _response_has_fix_signal(final_output):
         return False
     return not is_fix_intent(user_message)
+
+
+# 2026-08-28 · NEW P0 Task 2 — "false success" close-out. A bare
+# confirmation reply ("approve"/"yes"/"ship it") can NEVER
+# legitimately be followed by a reply that CLAIMS a ship/approve
+# action already happened: real execution is a separate, explicit,
+# button-triggered async flow (POST /cto/tasks/submit, polled to
+# completion — see MessageBubble.jsx `shipViaCTO`/`TaskProgressCard`).
+# A chat TEXT reply is generated and returned before the user has
+# clicked anything, so any "Approved!"/"Shipped!"/"Done!" claim in
+# THAT reply is false by construction. Live-reproduced by the
+# founder: typing "approve" got "Approved! Let me know what you
+# need" (free-form LLM prose from `casual_direct_reply`, which has
+# no such guard) while GitHub stayed at the pre-turn SHA — no commit
+# ever landed.
+NO_PENDING_FIX_MESSAGE = (
+    "There's nothing pending for me to approve right now — describe "
+    "the fix you'd like (e.g. \"fix the README typo\") and I'll take "
+    "a look."
+)
+RETRY_FIX_MESSAGE = (
+    "I wasn't able to re-confirm that fix cleanly. Please restate what "
+    "you'd like fixed in one sentence (e.g. \"fix the README typo\") "
+    "and I'll set it up again."
+)
+
+_FALSE_SUCCESS_TOKENS_RE = re.compile(
+    r"\b(approved|shipped|committed|merged|deployed)\b|"
+    r"\ball set\b|\ball done\b|\bi'?ve done (it|that)\b|"
+    # 2026-08-28 · testing_agent finding (iteration_p0_ship_approve_
+    # fix_verify) — fresh-session "yes please ship it" got back a
+    # present-tense promise ("On it—shipping now!") from the SAME
+    # unguarded casual LLM call. No commit lands, but it still reads
+    # as work-in-progress on a request that has nothing pending.
+    r"\bon it\b|\bshipping now\b|\bkicking off\b|\bworking on it\b",
+    re.IGNORECASE,
+)
+
+
+def contains_false_success_claim(content: str) -> bool:
+    """True iff `content` uses past-tense completion language
+    (approved/shipped/committed/merged/deployed/all set/all done) or a
+    present-tense in-progress promise (on it/shipping now/kicking off/
+    working on it) — used ONLY to guard bare-confirmation replies (see
+    `is_confirmation_reply`), where a chat TEXT reply can never
+    legitimately claim a ship/approve action already happened OR is
+    happening right now (real execution only starts once the user
+    clicks the real Approve button)."""
+    return bool(_FALSE_SUCCESS_TOKENS_RE.search(content or ""))
+
+
+def apply_no_false_success_guard(
+    user_message: str,
+    content: str,
+    prior_turn_had_fix_signal: bool = False,
+) -> str:
+    """Final defense-in-depth safety net, applied to the FINAL content
+    right before it reaches the user on both chat_send and
+    chat_stream. Only two honest outcomes for a bare confirmation
+    reply:
+      - a real ```aurem-handoff fence is present → left untouched,
+        the Approve button renders from it (the one real path).
+      - no fence + a false completion claim → swapped for an honest,
+        actionable message — never a silent "looks fine" pass-through
+        of a fabricated success claim."""
+    if not is_confirmation_reply(user_message):
+        return content
+    if has_ship_suggestion(content or ""):
+        return content
+    if not contains_false_success_claim(content or ""):
+        return content
+    return RETRY_FIX_MESSAGE if prior_turn_had_fix_signal else NO_PENDING_FIX_MESSAGE

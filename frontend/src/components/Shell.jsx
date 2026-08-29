@@ -610,7 +610,7 @@ export default function Shell({ children, requireAuth, chromeless = false }) {
                 textAlign: "left",
               }}
               data-testid="brand-link"
-              title="Click to clear cache and refresh (you stay signed in)"
+              title="Click to refresh — you'll stay signed in"
             >
               <Zap size={20} style={{ color: "var(--accent)", flexShrink: 0 }} />
               {!collapsed && (

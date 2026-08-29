@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { api } from "../lib/api";
 import useModalA11y from "../hooks/useModalA11y";
+import RollbackConfirmModal from "./RollbackConfirmModal";
 
 const POLL_MS = 1500;
 const TERMINAL = new Set(["done", "failed"]);
@@ -54,6 +55,7 @@ export default function ShipConfirmModal() {
   const [taskId, setTaskId]     = useState(null);
   const [scan, setScan]         = useState(null);
   const [rbBusy, setRbBusy]     = useState(false);
+  const [rbConfirmOpen, setRbConfirmOpen] = useState(false);
   const [err, setErr]           = useState("");
   const pollRef = useRef(null);
 
@@ -179,8 +181,15 @@ export default function ShipConfirmModal() {
 
   async function handleRollback() {
     if (!taskId || rbBusy) return;
-    const ok = window.confirm("Rollback this ship? This reverts the commit on GitHub.");
-    if (!ok) return;
+    setRbConfirmOpen(true);
+  }
+
+  // 2026-08-28 · First-Experience Wave P2-B — themed confirm replaces
+  // the last native window.confirm() in the rollback flow (was here,
+  // ShippedRow's and OperationHistory's were already themed at Iter
+  // 362). Actual rollback POST unchanged.
+  async function confirmRollback() {
+    setRbConfirmOpen(false);
     setRbBusy(true);
     try {
       await api.post(`/cto/tasks/${taskId}/rollback`, {});
@@ -558,6 +567,12 @@ export default function ShipConfirmModal() {
           )}
         </div>
       </div>
+      <RollbackConfirmModal
+        open={rbConfirmOpen}
+        shortLabel={sha ? `commit ${sha.slice(0, 7)}` : "this shipped commit"}
+        onConfirm={confirmRollback}
+        onCancel={() => setRbConfirmOpen(false)}
+      />
     </div>
   );
 }

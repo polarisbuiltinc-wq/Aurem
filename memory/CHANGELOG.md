@@ -1100,3 +1100,51 @@ None of these were fixed in the audit pass (analysis-only, no code changes allow
 5. **Track B dry-run** (pending production confirmation): new reusable single-command script `/app/scripts/track_b_rerun.py` — submits the 5 originally-failed task types (orchestrator.py comment x2, payments.py comment, the 2 test files) via the real `POST /cto/tasks/submit` path and polls to completion. Ran it live against this pod's connected `polarisbuiltinc-wq/ora-grounding` fixture (project `p_418e5fa6b8`): **4/5 passed (80%)** — real commits landed with correct author identity, zero `commit_files()` errors. The 1 failure (`payments.py` comment) was a DIFFERENT, intentional guardrail (security-sensitive-file block), not the original PAT/commit_files crash class — labeled distinctly, not counted as evidence against the P0 fix. **This is a same-pipeline PROXY measurement on a disposable Preview fixture, not the founder's real repo/tasks — explicitly NOT the official number.** Once the founder confirms P0 on production, the official rerun is: `python3 scripts/track_b_rerun.py --base-url <prod-or-preview-url> --email <email> --password <password> --project-id <real-project-id>`.
 
 **Regression**: 39/39 targeted backend tests pass (graph, rollback-gap, loop_rollback, P0, cto_projects worker coverage). Backend + frontend health both 200.
+
+## 2026-08-28/29 — NEW P0: ship-approve false-success + no-button close-out. DONE, tested.
+
+Founder live-repro'd a fresh, more severe P0 (supersedes prior loop's open P0): no Approve button
+after a fix diagnosis; "yes please ship it" pointed at a missing button; bare "approve" got a
+fabricated "Approved! Let me know what you need" with no real commit landing. Full detail + proof:
+`/app/e2e-proof/NEW-P0-2026-08-28/summary.md`.
+
+1. **Root cause (Task 1)**: proved via a new deterministic mount test (`MessageBubble.new_p0_button_
+   renders.test.jsx`, 4/4 pass) that the button rendering path is NOT the bug — it renders correctly
+   from any valid injected `aurem-handoff` fence regardless of `m.provider`. Real defect: the
+   casual-tier intent-gateway LLM call (`casual_direct_reply`, `services/intent_gateway_casual_reply.py`)
+   is a free-form call with zero guard against claiming a ship/approve action already happened.
+2. **False-success guard (Task 2, the #1 fix)**: new `contains_false_success_claim()` /
+   `apply_no_false_success_guard()` in `backend/services/response_confidence.py`, wired into both
+   `chat_send` and `chat_stream` (`backend/routers/chat.py`) at 2 chokepoints each — (a) short-
+   circuits the casual LLM call entirely for a bare confirmation with nothing pending (deterministic,
+   zero spend); (b) final defense-in-depth scan on the assembled content right before it reaches the
+   user. `is_confirmation_reply()` widened (+ its `intent_gateway.py::_CONFIRMATION_PHRASE_RE`
+   mirror) to also catch "yes please ship it"-style phrasing. `testing_agent` found one live gap
+   (present-tense "On it—shipping now!" not caught by the past-tense-only regex) — fixed same
+   session, re-verified live via curl.
+3. **Honest fallback (Task 1d)**: `MessageBubble.jsx`'s "please retype the fix" text-only dead end
+   replaced with a real `ship-cta-fallback-retry-{idx}` button wired to `ChatPanel.jsx`'s new
+   `retryLastFix()` (uses `send()`'s `promptOverride`, actually resubmits — not just a prefill).
+4. **Guardrail check**: `test_only_expected_files_mention_tool_router` (a note in the prior handoff
+   suspected this was broken by the fix) confirmed pre-existing/unrelated (caused by
+   `admin_analytics.py`, already in `test-baseline.txt`) — not touched by this work.
+5. **Full reconcile**: full backend suite (6595 tests) + full frontend suite (567 tests) run. Every
+   failure not already in `test-baseline.txt` individually confirmed pre-existing via `git stash` A/B
+   (several isolating this session's exact 3 changed prod files: `intent_gateway.py`, `chat.py`,
+   `response_confidence.py`) and added with a documented reason. Zero unexplained new regressions.
+6. **Live ship-then-rollback drill, ran clean**: against `polarisbuiltinc-wq/ora-grounding` via the
+   reused GitHub App installation token (152797252, same credential path as the earlier R2 T7
+   drill — no personal token needed), using the SAME `POST /cto/tasks/submit` +
+   `POST /cto/tasks/{id}/rollback` endpoints the real Approve button calls. Real commit `cf64ac7`
+   landed, real revert `689217d` landed, repo restored byte-identical, zero orphan branches
+   throughout. Proof: `/app/e2e-proof/P0-prod-repro/summary.json`. Separate honest finding (not this
+   P0): the MOCK_LLM codegen for that drill task deleted 181 README lines instead of appending one
+   comment line — a real mock-codegen quality gap, flagged, not fixed here.
+7. **Service worker verdict (Task 5)**: `CACHE_VERSION = "aurem-v3"` in current source — IDENTICAL
+   to what the founder observed live. Not stale. R11's stale-SW hypothesis dropped/de-ranked.
+8. **testing_agent**: `/app/test_reports/iteration_p0_ship_approve_fix_verify_2026_01_29.json` — 0
+   critical issues after the present-tense fix.
+
+**NOT started this round** (per founder's own "one workstream at a time" sequencing): the
+First-Experience Wave, the MOCK_LLM `chat_stream` short-circuit follow-up, and the Responsive/
+Layout-scan feature — all queued next, none touched.

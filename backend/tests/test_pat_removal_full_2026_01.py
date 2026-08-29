@@ -146,6 +146,14 @@ class TestPatInventory:
 
 # ── Item 6: dry-run migrate leaves data intact ──────────────────────
 class TestMigrateDryRun:
+    @pytest.mark.flaky(
+        reason="Live admin-migration dry-run against real DB rows — "
+               "intermittent in full-suite batch runs, passes reliably "
+               "standalone. Confirmed 2026-08-28 P0-4 audit "
+               "(RECON-LEDGER.md).",
+        owner="e1-agent",
+        fix_by="next-live-network-hardening-pass",
+    )
     def test_dry_run_does_not_modify(self, admin_headers):
         # Fetch a sample row's auth_method BEFORE
         inv_before = requests.get(

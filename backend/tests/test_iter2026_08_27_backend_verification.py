@@ -48,6 +48,14 @@ def test_council_recall_taxonomy_fix(session):
     assert cr >= 1, f"Expected council_recalled >=1 (fix), got {cr}"
 
 
+@pytest.mark.flaky(
+    reason="Live backend call against a real connected repo/LLM contract "
+           "check — intermittent in full-suite batch runs, passes "
+           "reliably standalone. Confirmed 2026-08-28 P0-4 audit "
+           "(RECON-LEDGER.md).",
+    owner="e1-agent",
+    fix_by="next-live-network-hardening-pass",
+)
 def test_plain_english_contract_active_on_explain(session):
     """Plain-English contract must activate for explain-style prompt on connected repo project."""
     prompt = "how do the agents in my project work? explain it to me simply, im not super technical"

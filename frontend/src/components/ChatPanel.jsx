@@ -893,7 +893,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                 phase: doc?.phase,
                 gateType: "ship_human_review",
                 message: doc?.message
-                  || "Test files were modified — human review required to ship.",
+                  || "This edit touches test files, so it's paused for your review before shipping.",
                 errors: [],
                 testsTouched: Array.isArray(ctx.tests_touched) ? ctx.tests_touched : [],
               });
@@ -2750,6 +2750,18 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
     setTimeout(() => taRef.current?.focus(), 50);
   }
 
+  // 2026-08-28 · NEW P0 Task 1d — the ship-cta-fallback banner used to
+  // just TELL the user to retype the fix ("no instruction that leads
+  // nowhere" per founder). This is the real, one-click action: it
+  // resends the SAME last user message that produced the missing
+  // button, via `send()`'s `promptOverride` (no reliance on `input`
+  // state / a second manual send click).
+  function retryLastFix() {
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (!lastUser || busy) return;
+    send(null, { promptOverride: lastUser.content });
+  }
+
   function onKeyDown(e) {
     // Iter 212m-190 · Session 3 — Slash-menu key handling. When the
     // menu is open the arrow keys navigate matches, Enter/Tab picks
@@ -3820,7 +3832,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           phase,
           gateType: "ship_human_review",
           message: ev.message
-            || "Test files were modified — human review required to ship.",
+            || "This edit touches test files, so it's paused for your review before shipping.",
           errors: [],
           testsTouched: Array.isArray(data.tests_touched)
             ? data.tests_touched : [],
@@ -4860,6 +4872,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                 dbTurnIndex={dbTurnIndex}
                 m={m}
                 onRegenerate={regenerate}
+                onRetryFix={retryLastFix}
                 sessionId={sessionId}
                 activeProject={activeProject}
                 exhausted={exhausted}

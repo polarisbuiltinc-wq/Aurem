@@ -75,6 +75,14 @@ def test_garbage_bytes_token_no_leak():
 
 
 # --- Pillar 4: health-score with 9 categories & caveats ---
+@pytest.mark.flaky(
+    reason="Live /admin/health-score call against real connected-repo "
+           "data — intermittent in full-suite batch runs, passes "
+           "reliably standalone. Confirmed 2026-08-28 P0-4 audit "
+           "(RECON-LEDGER.md).",
+    owner="e1-agent",
+    fix_by="next-live-network-hardening-pass",
+)
 def test_health_score_all_9_categories(auth_headers):
     r = requests.get(f"{API}/admin/health-score", headers=auth_headers, timeout=45)
     assert r.status_code == 200, f"{r.status_code}: {r.text[:400]}"

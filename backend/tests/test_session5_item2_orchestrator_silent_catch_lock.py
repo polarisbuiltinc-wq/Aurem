@@ -36,7 +36,7 @@ ORCHESTRATOR = BACKEND / "services" / "orchestrator.py"
 # all 7 sites verified still-hooks, only line numbers shifted). If a
 # real hygiene target ever slips into orchestrator.py, it will NOT be
 # in this set and the test below will fail.
-LEGIT_UI_HOOK_LINES = {2072, 2077, 2179, 2444, 2495, 2526, 2535}
+LEGIT_UI_HOOK_LINES = {2081, 2086, 2188, 2453, 2504, 2535, 2544}
 # 2026-08-23 audit fix — the last 3 of these 7 line numbers drifted
 # (+4) after this session's findings-to-fix-bridge edits added lines
 # earlier in orchestrator.py (capturing `findings_saved_this_turn`),
@@ -48,6 +48,10 @@ LEGIT_UI_HOOK_LINES = {2072, 2077, 2179, 2444, 2495, 2526, 2535}
 # the OR_IDENTITY import + persona-comment lines were added near the
 # top of the file. Re-verified: same 7 sites, still all UI-hook
 # fail-opens, purely a line-drift re-snapshot.
+# 2026-08-28 · P0-4 fix — shifted +7 lines after the ROLLBACK persona
+# section (P0-3) landed then got trimmed for the persona char budget
+# (net effect: +7 lines vs the pre-P0-3 snapshot). Re-verified: same
+# 7 sites, still all UI-hook fail-opens.
 
 
 def _is_truly_empty_return(s: ast.stmt) -> bool:

@@ -1,0 +1,47 @@
+{
+  "summary": "Verified the P0 ship-approve false-success fix on live Preview backend + UI. Backend deterministic guard confirmed: fresh-session bare 'approve' and 'yes' return honest 'nothing pending' message via provider 'intent-gateway-no-pending-fix' (no 'Approved!'/'Shipped!' past-tense claim). Frontend live UI confirmed the ship-cta-fallback banner renders a REAL clickable Retry button with the exact data-testid 'ship-cta-fallback-retry-{idx}' when the model fails to emit a valid aurem-handoff fence. Normal chat regression (2+2=4) still works. One separate model-quality finding: under MOCK_LLM=true the mock does NOT reliably emit a valid handoff fence for a realistic fix request, so the primary UI path we observed for 'add a comment line to README.md ...' was the fallback banner + Retry button, not the green 'Approve the fix' CTA. This is the exact scenario the P0 fix was designed to handle gracefully, and it does — but it means the ship-cto-btn-{idx} success path itself was not observed live in this pass. One potential guard gap: 'yes please ship it' as a fresh-session bare message returns 'On it—shipping now!' via intent-gateway-casual — this is a present-tense promise that the current false-success guard (past-tense regex only: approved/shipped/committed/merged/deployed/all set/all done) does NOT catch. No real commit lands, but the wording is misleading.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/aurem-dev/chat/send",
+        "issue": "Fresh-session bare 'yes please ship it' returns 'On it—shipping now! 🚀' from intent-gateway-casual. No commit actually happens (safe), but the reply implies work is in progress. The apply_no_false_success_guard only catches PAST-tense success words (approved/shipped/committed/merged/deployed/all set/all done/i've done). A present-participle promise like 'shipping now' bypasses it. Consider extending _FALSE_SUCCESS_TOKENS_RE to include present-tense promise phrases ('shipping now', 'on it', 'working on it', 'kicking off') when there is nothing pending."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Fix-request → Approve button render (MOCK_LLM=true)",
+        "issue": "For the realistic prompt 'add a comment line to README.md explaining what this repo does' against project funnel-repro (polarisbuiltinc-wq/ora-grounding), the mock model did not emit a valid ```aurem-handoff fence. The fallback banner ('The approve button didn't load for that fix — Retry this fix') rendered correctly with data-testid=ship-cta-fallback-5 + ship-cta-fallback-retry-5, exactly as the P0 fix intends. This is a MODEL-QUALITY issue (mock, not a regression of the fixed code path) as main agent already flagged. To positively observe the green 'Approve the fix' (ship-cto-btn-{idx}) CTA end-to-end in the live UI, either (a) run with a real LLM, or (b) improve the mock to reliably emit a valid aurem-handoff fence for straightforward file-edit prompts.",
+        "affected_selectors": ["ship-cto-btn-{idx}", "ship-cta-fallback-{idx}", "ship-cta-fallback-retry-{idx}"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/screenshots/p0_verify_chat_page.png",
+    "/app/test_reports/screenshots/p0_test1_bare_approve.png",
+    "/app/test_reports/screenshots/p0_test2_fix_request.png"
+  ],
+  "action_items": [
+    "Optional: extend false-success guard regex to include present-tense promise phrases (e.g. 'shipping now', 'on it—shipping', 'kicking off', 'working on it') so fresh-session 'yes please ship it' also routes to the honest NO_PENDING_FIX_MESSAGE instead of intent-gateway-casual's cheerful 'On it—shipping now!' reply. Low priority — no false commit lands, but wording is misleading.",
+    "For future live-UI verification of ship-cto-btn render, either use a real LLM run or teach the mock to emit a valid ```aurem-handoff fence for straightforward edit prompts. Unit-mount test already proves the code path; the mock is the only reason we couldn't observe it end-to-end in the browser."
+  ],
+  "critical_code_review_comments": [
+    "backend/services/response_confidence.py `_FALSE_SUCCESS_TOKENS_RE` is intentionally past-tense only per its own docstring; that is a reasonable minimal-surface choice. However the exact quote from the founder's original P0 was 'Approved! Let me know what you need' — a past-tense claim, which IS caught. The related failure mode 'On it—shipping now!' (present tense) is still a possible false promise for a fresh-session confirmation. Consider a follow-up to broaden the regex only when is_confirmation_reply(user_message) is True AND prior_turn_had_fix_signal is False (fresh-session bare confirmation), so normal in-flight shipping messages are unaffected.",
+    "The `_classify_heuristic` path in intent_gateway.py correctly overrides bare-ack to TIER_AGENTIC when pending_fix is True, but there is no symmetric guardrail for bare-ack when pending_fix is False — those still go to TIER_CASUAL, which is fine for 'yes'/'approve' alone but potentially misleading for 'yes please ship it' (contains the intent verb 'ship' but is 4 words so still hits the short-casual branch). Consider bumping any short message containing an _AGENTIC_VERBS token to at least clarify tier."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (all 4 bare-confirmation variants tested + normal chat regression: guard behavior matches spec)",
+    "frontend": "100% for the P0 code-path (fallback banner + real retry button render correctly); ship-cto-btn green CTA path not observed live due to mock model limitation (separate lower-priority finding, already documented by main agent)"
+  },
+  "test_credentials": "test@aurem.dev / AuremTest2026! (founder/admin, project funnel-repro / polarisbuiltinc-wq/ora-grounding)",
+  "seed_data_creation": "None. Did NOT click any real Approve button; no commits landed on ora-grounding this session (backend curl only sent a POST /chat/send with prompt='approve' which correctly returned the honest no-pending message and did NOT invoke /cto/tasks/submit).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Chat page is at /dashboard (React SPA, not /chat or /app). Login flow: fill inputs, click button with exact text 'Sign in' (not 'Continue with Google/GitHub'). Chat testids: chat-input, chat-send, chat-clear-btn, chat-msg-assistant-{n}, chat-msg-user-{n}. Ship CTA testids: ship-cto-btn-{idx} (green approve button, requires a valid ```aurem-handoff fence in the assistant reply), ship-cta-fallback-{idx} (red-ish banner), ship-cta-fallback-retry-{idx} (the P0-added Retry button). Note that under MOCK_LLM=true the mock model does NOT reliably emit a valid handoff fence, so most realistic fix prompts trigger the fallback path — that IS the P0 fix in action. Backend guard proof: curl POST /api/aurem-dev/chat/send with {'prompt':'approve'} in a fresh session returns provider='intent-gateway-no-pending-fix' + content starting 'There's nothing pending for me to approve right now'.",
+  "rca of the issue": "P0 was originally caused by bare confirmation words ('approve'/'yes'/'ship it') routing to intent_gateway TIER_CASUAL (heuristic _CASUAL_ACK match, confidence 0.94 >= LLM-fallback threshold 0.75). The casual free-form LLM path had no guard, so it emitted 'Approved! Let me know what you need' — a fabricated past-tense success claim, while GitHub SHA never moved. Fix (verified live): (1) intent_gateway._classify_heuristic now accepts pending_fix flag; when True + first token is ack → TIER_AGENTIC (real pipeline). (2) response_confidence.apply_no_false_success_guard is applied as final defense on both /chat/send and /chat/stream — if the reply to a bare-confirmation contains a past-tense success token (approved/shipped/committed/merged/deployed/all set/all done) AND no ship-handoff fence exists, replace with NO_PENDING_FIX_MESSAGE (or RETRY_FIX_MESSAGE when prior turn had a fix signal). (3) MessageBubble.jsx ship-cta-fallback banner now has a real ship-cta-fallback-retry-{idx} button wired via ChatPanel.jsx `retryLastFix()`. All three layers verified live in this pass."
+}

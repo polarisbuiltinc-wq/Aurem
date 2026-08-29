@@ -512,7 +512,15 @@ export default function SidebarBound({
           </ul>
         </div>
 
-        {/* Tools */}
+        {/* Tools — 2026-08-28 · First-Experience Wave B2. Every sub-item
+            a regular (non-admin/founder) user could see here is either
+            hard-"soon" or admin-route-gated (bounces to /dashboard) —
+            they can't actually use any of them. Showing 4 "soon" tools
+            to a brand-new user reads as "product unfinished" and is a
+            real bounce risk, so the whole accordion is founder/admin-
+            only. No capability lost: regular users never had a working
+            path through this list. */}
+        {isAdminOrFounder(user) && (
         <div>
           {!isCollapsed && (
             <p className="mb-1.5 px-4 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Tools</p>
@@ -585,6 +593,7 @@ export default function SidebarBound({
             })}
           </ul>
         </div>
+        )}
       </div>
 
       {/* User footer */}

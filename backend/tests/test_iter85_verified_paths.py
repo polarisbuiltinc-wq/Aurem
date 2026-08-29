@@ -107,11 +107,20 @@ def test_messagebubble_path_extraction_is_global_for_gate7():
     assert "brief.match(FILE_PATH_TOKEN_GLOBAL)" in src
 
 
-# ── Sharp-list lock — 27 mutation verbs exactly ───────────────────────
+# ── Sharp-list lock — 31 mutation verbs exactly ───────────────────────
+# 2026-08-28 · P0-4 — was locked at 27. The P0-3 hotfix (same day)
+# added revert/rollback/undo/restore so a backend-emitted rollback
+# fence (see orchestrator.py's ROLLBACK section) actually renders an
+# Approve button — without them Gate 5 in extractHandoffBrief() would
+# reject every rollback brief and silently drop the revert. That's a
+# real, load-bearing, intentional addition (not conversational drift),
+# so the snapshot below is updated to 31 rather than reverting the
+# fix. Re-verify this count if the P0-3 fix is ever superseded.
 
-def test_mutation_verbs_list_is_sharp_27_no_conversational_drift():
-    """The list must contain EXACTLY the 27 sharp verbs and none of
-    the 13 banned ones (5 conversational + 8 soft)."""
+def test_mutation_verbs_list_is_sharp_31_no_conversational_drift():
+    """The list must contain EXACTLY the 31 sharp verbs (27 original +
+    4 rollback-family verbs from P0-3) and none of the 13 banned ones
+    (5 conversational + 8 soft)."""
     src = _read("frontend/src/components/MessageBubble.jsx")
     m = re.search(
         r"const MUTATION_VERBS = new RegExp\(([\s\S]*?)\)\s*;",
@@ -124,6 +133,11 @@ def test_mutation_verbs_list_is_sharp_27_no_conversational_drift():
     inner = re.search(r"\\\\b\((.*?)\)\\\\b", block.replace("\n", "").replace(" ", "").replace('"+"', ""))
     assert inner, f"could not parse verb list from block: {block[:200]}"
     verbs = inner.group(1).split("|")
-    assert len(verbs) == 27, (
-        f"expected exactly 27 mutation verbs, found {len(verbs)}: {verbs}"
+    assert len(verbs) == 31, (
+        f"expected exactly 31 mutation verbs, found {len(verbs)}: {verbs}"
     )
+    for required in ("revert", "rollback", "undo", "restore"):
+        assert required in verbs, (
+            f"P0-3's rollback-approve-button fix requires '{required}' "
+            f"in MUTATION_VERBS — it is missing"
+        )
