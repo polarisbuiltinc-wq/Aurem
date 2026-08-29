@@ -164,6 +164,16 @@
   --danger-soft: rgba(255, 107, 107, 0.12);
   --warn: #ffc560;
   --info: #7da4ff;
+  /* 2026-08-30 · P2 fix — inline-code / tool-name badge contrast.
+     Single source of truth for EVERY inline `code` span + tool-name
+     token rendered inside `.ora-md` (ORA Chat drawer + full page).
+     Root cause: `.ora-md code` only set an opaque light background
+     with no matching foreground, so it inherited whatever ambient
+     text color the surface happened to use — fine on light surfaces,
+     invisible (pale-on-pale) on dark ones like the ORA Chat drawer.
+     Verified >=4.5:1 (WCAG AA) — see contrastRatio.test.js. */
+  --code-fg: #e6edf3;
+  --code-bg: #161b22;
 }
 
 /* Iter 212m-52 — Day-mode tokens. Toggled by <html data-theme="light">
@@ -186,6 +196,10 @@ html[data-theme="light"] {
   /* Amber accents stay the same in both modes (intentional brand
      constant — buttons, pills, focus rings read identically). */
   --accent-soft:  rgba(255, 138, 42, 0.14);
+  /* 2026-08-30 · P2 fix — light-theme counterpart of --code-fg/bg.
+     Verified >=4.5:1 (WCAG AA) — see contrastRatio.test.js. */
+  --code-fg: #111827;
+  --code-bg: #f3f4f6;
 }
 
 html[data-theme="light"] body {
@@ -1211,9 +1225,13 @@ table { max-width: 100%; }
 .ora-md em     { font-style: italic; }
 .ora-md a      { color: #C15A3F; text-decoration: underline;
                   text-underline-offset: 2px; }
+/* 2026-08-30 · P2 fix — single fg/bg source for every inline code
+   span AND tool-name reference (both are plain `<code>` here; the
+   fenced-block override below deliberately omits `color` so it
+   inherits this same foreground — one pair, cannot diverge). */
 .ora-md code   { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
                   font-size: 0.92em; padding: 1px 5px; border-radius: 4px;
-                  background: #F4F3EE; }
+                  color: var(--code-fg); background: var(--code-bg); }
 .ora-md pre    { margin: 0.9em 0; }
 .ora-md pre code { background: transparent; padding: 0; }
 .ora-md table  { border-collapse: collapse; margin: 0.8em 0;
