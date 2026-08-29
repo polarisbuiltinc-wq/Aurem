@@ -17,8 +17,8 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
-  Loader2, RefreshCw, Trash2, ServerCog, Play, RotateCcw, CheckCircle2,
-  XCircle, Clock, ChevronRight,
+  Loader2, RefreshCw, Trash2, ServerCog, RotateCcw, CheckCircle2,
+  XCircle, Clock, ChevronRight, Rocket, AlertTriangle,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { toast } from "./Toast";
@@ -57,7 +57,7 @@ function StatusPill({ status, size = 11 }) {
   );
 }
 
-function ConfigForm({ projectId, existing, onSaved, onCancel }) {
+function ConfigForm({ projectId, existing, onSaved, onCancel, derivedUrl }) {
   const [host, setHost] = useState(existing?.host || "");
   const [port, setPort] = useState(existing?.port || 22);
   const [username, setUsername] = useState(existing?.username || "root");
@@ -65,6 +65,7 @@ function ConfigForm({ projectId, existing, onSaved, onCancel }) {
   const [repoPath, setRepoPath] = useState(existing?.repo_path || "");
   const [branch, setBranch] = useState(existing?.branch || "main");
   const [composeFile, setComposeFile] = useState(existing?.compose_file || "docker-compose.yml");
+  const [verifyUrl, setVerifyUrl] = useState(existing?.verify_url || derivedUrl || "");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -85,6 +86,7 @@ function ConfigForm({ projectId, existing, onSaved, onCancel }) {
         branch: branch.trim() || "main",
         compose_file: composeFile.trim() || "docker-compose.yml",
         project_id: projectId || "",
+        verify_url: verifyUrl.trim(),
       });
       toast({ message: "SSH config saved.", kind: "success" });
       onSaved?.();
@@ -196,6 +198,21 @@ function ConfigForm({ projectId, existing, onSaved, onCancel }) {
             placeholder="docker-compose.yml" style={inputStyle}
           />
         </div>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={labelStyle}>
+          Site URL to verify after deploy{derivedUrl ? " (auto-filled from your live site)" : " (optional)"}
+        </label>
+        <input
+          data-testid="deploy-cfg-verify-url"
+          value={verifyUrl} onChange={(e) => setVerifyUrl(e.target.value)}
+          placeholder="https://your-site.example.com" style={inputStyle}
+        />
+        <p style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 4 }}>
+          After a deploy, ORA checks this URL and captures a fresh screenshot
+          before calling it &quot;live&quot; — never claims success blind.
+        </p>
       </div>
 
       {err && (
@@ -359,6 +376,148 @@ function HistoryList({ runs, onSelect, selectedRunId }) {
   );
 }
 
+// D2 — last look before "Go live": an honest, explicit confirmation
+// step so nothing ships silently. Cancel = no-op, Confirm = deploy.
+function LastLookModal({ host, verifyUrl, onCancel, onConfirm }) {
+  return (
+    <div
+      data-testid="deploy-last-look-modal"
+      style={{
+        position: "fixed", inset: 0, zIndex: 200,
+        background: "rgba(0,0,0,0.6)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+      onClick={onCancel}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 420, maxWidth: "92vw", background: "var(--bg-elev)",
+          border: "1px solid var(--border)", borderRadius: 8, padding: 20,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <Rocket size={15} color="var(--accent-2)" />
+          <h3 style={{
+            margin: 0, fontSize: 13, color: "var(--text)",
+            letterSpacing: "0.08em", textTransform: "uppercase",
+            fontFamily: "'JetBrains Mono', monospace",
+          }}>
+            One last look
+          </h3>
+        </div>
+        <p data-testid="deploy-last-look-goes-live-on" style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.6, marginBottom: 8 }}>
+          This goes live on <b style={{ color: "var(--text)" }}>{host || "your server"}</b>
+          {verifyUrl ? <> — and ORA will re-check <b style={{ color: "var(--text)" }}>{verifyUrl}</b> right after, with a fresh screenshot, before calling it live.</>
+            : <> — no site URL is set to verify afterwards, so ORA can only report the deploy command's own exit status.</>}
+        </p>
+        <p style={{ fontSize: 11, color: "var(--text-faint)", marginBottom: 16 }}>
+          Nothing changes on your live site until you confirm below.
+        </p>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button data-testid="deploy-last-look-cancel" onClick={onCancel} className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12 }}>
+            Cancel
+          </button>
+          <button
+            data-testid="deploy-last-look-confirm"
+            onClick={onConfirm}
+            style={{
+              padding: "8px 16px", fontSize: 12, fontWeight: 600,
+              background: "var(--accent-2)", color: "var(--bg)",
+              border: "1px solid var(--accent-2)", borderRadius: 4,
+              cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
+            }}
+          >
+            Confirm — go live
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// D4 — receipts: only ever claims success AFTER post-deploy
+// verification. Three honest states: verified / unreachable / capture
+// unavailable. Never renders a blank "success" with nothing to back it.
+function ReceiptCard({ verified, verifyNote, verifyUrl, receiptKey, runId }) {
+  const [imgSrc, setImgSrc] = useState(null);
+  useEffect(() => {
+    let revoke = null;
+    if (verified === true && receiptKey) {
+      api.get(`/deploy/runs/${runId}/receipt`, { responseType: "blob" })
+        .then((r) => {
+          const url = URL.createObjectURL(r.data);
+          revoke = url;
+          setImgSrc(url);
+        })
+        .catch(() => setImgSrc(null));
+    }
+    return () => { if (revoke) URL.revokeObjectURL(revoke); };
+  }, [verified, receiptKey, runId]);
+
+  if (verified === null || verified === undefined) {
+    return (
+      <div data-testid="deploy-receipt-pending" style={{
+        padding: 14, borderBottom: "1px solid var(--border)",
+        display: "flex", alignItems: "center", gap: 8,
+        fontSize: 12, color: "var(--text-faint)",
+      }}>
+        <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
+        Checking your live site before calling this a success…
+      </div>
+    );
+  }
+  if (verified === true) {
+    return (
+      <div data-testid="deploy-receipt-success" style={{
+        padding: 14, borderBottom: "1px solid var(--border)",
+        display: "flex", gap: 12,
+      }}>
+        {receiptKey && (
+          <img
+            data-testid="deploy-receipt-screenshot"
+            src={imgSrc || undefined}
+            alt="Fresh screenshot of your live site"
+            style={{ width: 96, borderRadius: 4, border: "1px solid var(--border)", flexShrink: 0, background: "var(--panel-2)" }}
+          />
+        )}
+        <div style={{ fontSize: 12, color: "var(--text)", lineHeight: 1.6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--accent-2)", fontWeight: 600, marginBottom: 4 }}>
+            <CheckCircle2 size={13} /> You&apos;re live
+          </div>
+          Your site, right now: <span style={{ color: "var(--text-dim)" }}>{verifyUrl}</span>
+          {!receiptKey && (
+            <div data-testid="deploy-receipt-screenshot-unavailable" style={{ color: "var(--text-faint)", fontSize: 11, marginTop: 4 }}>
+              (verification screenshot unavailable — ref: no_capture)
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  // verified === false — always honest about why, never silent.
+  const unreachable = (verifyNote || "").startsWith("site_unreachable") || (verifyNote || "").startsWith("http_");
+  return (
+    <div data-testid="deploy-receipt-failed" style={{
+      padding: 14, borderBottom: "1px solid var(--border)",
+      background: "rgba(239,68,68,0.06)",
+      display: "flex", alignItems: "flex-start", gap: 8,
+      fontSize: 12, color: "var(--danger)", lineHeight: 1.6,
+    }}>
+      <AlertTriangle size={14} style={{ marginTop: 1, flexShrink: 0 }} />
+      <div>
+        {verifyNote === "no_url_to_verify" ? (
+          <>Deploy command finished, but no site URL is set to verify — set one in Edit to get a real receipt next time.</>
+        ) : unreachable ? (
+          <>Deployed, but <b>{verifyUrl || "your site"}</b> isn&apos;t responding — <span style={{ textDecoration: "underline", cursor: "pointer" }} data-testid="deploy-receipt-check-again">Check again</span>.</>
+        ) : (
+          <>Deployed, but verification failed ({verifyNote || "unknown"}).</>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function DeployPanel({ activeProject }) {
   const projectId = activeProject?.project_id || "";
   const [phase, setPhase] = useState("loading"); // loading|no_config|idle|deploying|done|editing
@@ -371,6 +530,11 @@ export default function DeployPanel({ activeProject }) {
   const [cursor, setCursor] = useState(0);
   const [kickoffErr, setKickoffErr] = useState("");
   const [busyMode, setBusyMode] = useState(null); // deploy|dry_run|rollback|null
+  const [verified, setVerified] = useState(null); // null=not yet checked, true/false=checked
+  const [verifyNote, setVerifyNote] = useState(null);
+  const [verifyUrlChecked, setVerifyUrlChecked] = useState(null);
+  const [receiptKey, setReceiptKey] = useState(null);
+  const [showLastLook, setShowLastLook] = useState(false);
   const pollRef = useRef(null);
 
   const stopPoll = () => {
@@ -446,6 +610,22 @@ export default function DeployPanel({ activeProject }) {
         if (r.data?.head_sha) setHeadSha(r.data.head_sha);
         if (FINISHED.has(st)) {
           setPhase(st === "ok" ? "done" : "failed");
+          // D4 — receipts: only meaningful once the run itself is
+          // "ok"; verified/receipt fields land slightly after (the
+          // backend runs post-deploy verification as its own step).
+          if (st === "ok") {
+            setVerified(r.data?.verified ?? null);
+            setVerifyNote(r.data?.verify_note ?? null);
+            setVerifyUrlChecked(r.data?.verify_url ?? null);
+            setReceiptKey(r.data?.receipt_key ?? null);
+            if (r.data?.verified === null || r.data?.verified === undefined) {
+              // Verification is still running server-side — keep
+              // polling a few more times instead of stopping cold,
+              // so the receipt card doesn't silently never appear.
+              if (!cancelled) pollRef.current = setTimeout(tick, POLL_INTERVAL_MS);
+              return;
+            }
+          }
           refreshRuns();
           return; // stop polling
         }
@@ -466,6 +646,10 @@ export default function DeployPanel({ activeProject }) {
     setLogs([]);
     setCursor(0);
     setHeadSha(null);
+    setVerified(null);
+    setVerifyNote(null);
+    setReceiptKey(null);
+    setShowLastLook(false);
     try {
       const r = await api.post(`/deploy/run`, {
         mode,
@@ -488,6 +672,9 @@ export default function DeployPanel({ activeProject }) {
     setLogs([]);
     setCursor(0);
     setHeadSha(null);
+    setVerified(null);
+    setVerifyNote(null);
+    setReceiptKey(null);
     setRunStatus("running"); // optimistic until first poll returns real status
     setPhase("deploying");
   };
@@ -526,6 +713,7 @@ export default function DeployPanel({ activeProject }) {
         existing={phase === "editing" ? config : null}
         onSaved={() => { setPhase("idle"); refreshConfig(); }}
         onCancel={phase === "editing" ? () => setPhase("idle") : undefined}
+        derivedUrl={activeProject?.preview_url || ""}
       />
     );
   }
@@ -533,6 +721,10 @@ export default function DeployPanel({ activeProject }) {
   // idle | deploying | done | failed
   const isDeploying = phase === "deploying";
   const scope = config?.scope === "project" ? "project" : "default";
+  // D5 — rollback must be disabled + say so honestly when there is
+  // nothing to roll back to yet.
+  const hasPriorSuccessfulRun = runs.some((r) => r.status === "ok");
+  const verifyTargetUrl = (config?.verify_url || activeProject?.preview_url || "").trim();
 
   return (
     <div data-testid="deploy-panel" style={{
@@ -564,8 +756,11 @@ export default function DeployPanel({ activeProject }) {
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
           <button
-            data-testid="deploy-now-btn"
-            onClick={() => kickoff("deploy")}
+            data-testid="deploy-go-live-btn"
+            onClick={() => {
+              setShowLastLook(true);
+              api.post("/deploy/event", { kind: "deploy_form_shown", project_id: projectId }).catch(() => {});
+            }}
             disabled={isDeploying || busyMode != null}
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
@@ -579,8 +774,8 @@ export default function DeployPanel({ activeProject }) {
             }}
           >
             {busyMode === "deploy"
-              ? <><Loader2 size={11} style={{ animation: "spin 1s linear infinite" }} /> starting…</>
-              : <><Play size={11} /> Deploy now</>}
+              ? <><Loader2 size={11} style={{ animation: "spin 1s linear infinite" }} /> going live…</>
+              : <><Rocket size={11} /> Go live</>}
           </button>
           <button
             data-testid="deploy-dry-run-btn"
@@ -596,15 +791,22 @@ export default function DeployPanel({ activeProject }) {
           <button
             data-testid="deploy-rollback-btn"
             onClick={() => {
+              if (!hasPriorSuccessfulRun) return;
+              api.post("/deploy/event", { kind: "rollback_clicked", project_id: projectId }).catch(() => {});
               if (window.confirm("Rollback last commit on remote and redeploy?")) {
                 kickoff("rollback");
               }
             }}
-            disabled={isDeploying || busyMode != null}
+            disabled={isDeploying || busyMode != null || !hasPriorSuccessfulRun}
             className="btn-ghost"
-            style={{ padding: "6px 10px", fontSize: 11 }}
+            title={hasPriorSuccessfulRun ? "Rollback to the previous successful deploy" : "No previous version to roll back to"}
+            style={{
+              padding: "6px 10px", fontSize: 11,
+              opacity: hasPriorSuccessfulRun ? 1 : 0.45,
+              cursor: hasPriorSuccessfulRun ? "pointer" : "not-allowed",
+            }}
           >
-            <RotateCcw size={11} /> Rollback
+            <RotateCcw size={11} /> {hasPriorSuccessfulRun ? "Rollback" : "No previous version"}
           </button>
           <button
             data-testid="deploy-edit-cfg-btn"
@@ -663,10 +865,19 @@ export default function DeployPanel({ activeProject }) {
             <div style={{ fontSize: 13, color: "var(--text)", marginBottom: 6 }}>
               Ready to ship to <b style={{ color: "var(--accent-2)" }}>{config?.host}</b>.
             </div>
-            Hit <b>Deploy now</b> to <code>git pull && docker compose up -d</code> on
+            Hit <b>Go live</b> to <code>git pull && docker compose up -d</code> on
             your server. Use <b>Dry run</b> first if this is a production project —
             it validates auth + compose without restarting containers.
           </div>
+        )}
+        {activeRunId && runStatus === "ok" && (
+          <ReceiptCard
+            verified={verified}
+            verifyNote={verifyNote}
+            verifyUrl={verifyUrlChecked}
+            receiptKey={receiptKey}
+            runId={activeRunId}
+          />
         )}
         <HistoryList
           runs={runs}
@@ -674,6 +885,15 @@ export default function DeployPanel({ activeProject }) {
           selectedRunId={activeRunId}
         />
       </div>
+
+      {showLastLook && (
+        <LastLookModal
+          host={config?.host}
+          verifyUrl={verifyTargetUrl}
+          onCancel={() => setShowLastLook(false)}
+          onConfirm={() => { setShowLastLook(false); kickoff("deploy"); }}
+        />
+      )}
     </div>
   );
 }

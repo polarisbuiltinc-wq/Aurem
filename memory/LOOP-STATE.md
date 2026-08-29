@@ -195,3 +195,68 @@ fix diagnosis, "yes please ship it" pointed at a missing button, and bare "appro
   queued, none touched, per founder's own explicit sequencing.
 
 **STOPPING here, awaiting founder review**, exactly as instructed.
+
+---
+
+# TRUST SURFACES ROUND (S0-S5), 2026-08-29 — S0 report (read-only, L17 reuse-first)
+
+1. **Preview panel** — EXISTS: `frontend/src/components/PreviewPanel.jsx`. Already has 3 `viewMode`s
+   ("preview"/"code"/"deploy" — this IS the existing 3-surface toggle the round targets). Live-site
+   iframe = `data-testid="preview-iframe-live"`, plain full-width, no device framing today. Already
+   has honest loading/timeout(10s)/retry/"open in new tab" states (L13 partially pre-built) — extend
+   in place, do not replace.
+2. **AddLiveSiteModal** — EXISTS: `frontend/src/components/AddLiveSiteModal.jsx`, rendered from
+   `Dashboard.jsx` (not from inside PreviewPanel). Testids: `add-live-site-overlay/-dialog/-input/
+   -error/-save/-cancel`. Reuse unchanged; P4 auto-detect sits in front of it.
+3. **Live-site URL storage** — EXISTS: `PATCH /cto/projects/{project_id} {preview_url}` (Dashboard.jsx
+   line ~495), read everywhere as `activeProject.preview_url`.
+4. **Code tab** — EXISTS inside PreviewPanel.jsx: `fetchCodebaseTree()` → `GET /cto/projects/{id}/tree`,
+   `fetchFileContent()` → `GET /cto/projects/{id}/file`, rendered as file tabs under `viewMode==="code"`.
+   Reuse as the S2 "All files" tab; do not rebuild the browser.
+5. **Deploy tab** — EXISTS and is MATURE: `frontend/src/components/DeployPanel.jsx` +
+   `backend/routers/deploy.py` — full BYOH SSH deploy (config/deploy/dry_run/rollback), live log
+   polling, run history, `aurem_cto_deploy_runs.head_sha` per run. This is a real, working deploy
+   engine, not a stub — S3 extends this file, it does not build a parallel one.
+6. **Browser service** — PARTIAL: no `services/browser/` directory exists (the earlier "D1 round"
+   referenced in Phase-1-item-4 was never actually built — confirmed absent, contradicts the
+   assumption it already exists). What DOES exist: `services/browser_self_test.py` — Playwright
+   IS an installed dependency, and this file has a working headless-Chromium launch+navigate
+   pattern (`run_smoke`), currently used only for AUREM's own red-flag text smoke tests (no
+   screenshot capture). Decision: EXTEND this file with a new `capture_screenshot()` function
+   reusing its exact Playwright launch pattern — zero new deps (L14), one browser-launch site, not
+   two. Its `classify_frontend_change()` is scoped to AUREM's OWN page routes only and is NOT
+   reusable for arbitrary connected user repos — S1-P3 needs a small new, separate classifier for
+   that (genuinely new logic, not duplicate-drift).
+7. **Media/screenshot storage** — PARTIAL: no dedicated media bucket, but `services/db_backup.py`
+   already has a working, credentialed Cloudflare R2 (S3-compatible boto3) client factory
+   (`_r2_client()`, env: `R2_ENDPOINT`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`) currently used only
+   for DB backup blobs under the `mongo/` prefix. Decision: reuse the SAME client/credentials with a
+   new `deploy-receipts/` key prefix — no new storage system, no new deps.
+8. **Notification bell (P2-A)** — GREEN now: `tests/test_p2a_notification_bell.py` 4/4 pass,
+   `UserNotificationBell.p2a.test.jsx` 3/3 pass. The reconciliation-audit failure was already fixed
+   in an earlier session (conftest.py env fix). S1.0 needs no further fix, just re-confirmed here.
+9. **AdminSystemHealth** — EXISTS: `frontend/src/pages/AdminSystemHealth.jsx`, reusable `Card`
+   component (line 43), Webhook Fence tile at `testid="card-webhook-fence"` (~line 713). S4 inserts a
+   new `Card` (`testid="card-preview-deploy-monitor"`) right after it, same pattern.
+10. **Ship-SHA / rollback tracking** — EXISTS for the deploy surface specifically:
+    `aurem_cto_deploy_runs.head_sha` + `_deploy_command()`'s `mode="rollback"` (`git reset --hard
+    HEAD~1` + redeploy) in `routers/deploy.py`, already wired to `deploy-rollback-btn` in
+    DeployPanel.jsx. S3-D5 reuses this directly — no new revert mechanism.
+
+**Build list (genuinely new, nothing else):** device-frame CSS wrapper + segmented control (S1-P1);
+Live-now/After-fix tabs + affected-pages classifier for arbitrary repos + screenshot capture via
+item 6's extension (S1-P2/P3); URL auto-detect via existing GitHub file-read endpoints (S1-P4);
+"nothing changed yet" line (S1-P5); What-changed/diff summary view + All-files tab reorg (S2);
+context pre-fill + last-look confirm + Go-live receipts (post-deploy re-navigate+screenshot+verify)
+using item 6/7's extensions (S3); admin monitor Card (S4); meter line + zero-LLM spy test + F25
+ledger entry (S5).
+
+---
+
+**2026-08-29 — OVERNIGHT LOOP COMPLETE.** W1 answered, W2 P0-B closed for UI/code
+(real root cause: MessageBubble.jsx Gate 6 slash-requirement bug, blocking any
+fix confined to a repo-root file), W2 Step 2 mock short-circuit shipped +
+zero-spend live-proven, W3 S1-S5 all built + backend-tested, S1/S2/S4
+live-verified by testing_agent (100%/100%, 0 bugs), S3 modal code-complete but
+not live-clicked (missing AUREM_CTO_MASTER_KEY vault secret in this pod).
+Full detail: `/app/memory/REPORT-final-loop.md`. Awaiting founder.

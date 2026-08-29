@@ -11,14 +11,21 @@
  *   onSave        (url) => Promise   Persist the URL upstream.
  *   onCancel      () => void         Close the modal without saving.
  */
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 const RX = /^https?:\/\/[^\s]+$/i;
 
-export default function AddLiveSiteModal({ projectName, onSave, onCancel }) {
+export default function AddLiveSiteModal({ projectName, onSave, onCancel, detectedUrl, detectedSource }) {
   const [url, setUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [detectedDismissed, setDetectedDismissed] = useState(false);
+
+  // S1-P4 — prefill from auto-detection; user can still edit/clear it,
+  // so the manual flow is never actually removed, just pre-filled.
+  useEffect(() => {
+    if (detectedUrl && !url) setUrl(detectedUrl);
+  }, [detectedUrl]);
 
   const submit = async () => {
     const clean = url.trim();
@@ -78,6 +85,28 @@ export default function AddLiveSiteModal({ projectName, onSave, onCancel }) {
           The Preview tab will load it inside an iframe so you can see the
           site next to the chat.
         </div>
+
+        {detectedUrl && !detectedDismissed && url === detectedUrl && (
+          <div
+            data-testid="add-live-site-detected-banner"
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              gap: 10, padding: "8px 10px", marginBottom: 12,
+              background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.4)",
+              borderRadius: 8, fontSize: 11, color: "#86efac",
+            }}
+          >
+            <span>Detected from your repo&apos;s {detectedSource || "config"} — confirm below to use it.</span>
+            <button
+              type="button"
+              data-testid="add-live-site-detected-dismiss"
+              onClick={() => { setDetectedDismissed(true); setUrl(""); }}
+              style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 11, textDecoration: "underline" }}
+            >
+              Not this
+            </button>
+          </div>
+        )}
 
         <label style={{
           display: "block",

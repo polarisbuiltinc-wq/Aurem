@@ -1403,6 +1403,307 @@ async def get_project_file(
     }
 
 
+@router.get("/projects/{project_id}/detect-live-url")
+async def detect_live_url(
+    project_id: str,
+    authorization: str = Header(None),
+) -> dict:
+    """S1-P4 — best-effort, deterministic (0-LLM) auto-detect of the
+    project's live-site URL from repo config, checked BEFORE showing
+    the existing manual AddLiveSiteModal. Tries vercel.json,
+    netlify.toml, then package.json's `homepage` — in that order.
+    Reuses the SAME gh_api_fetch_file() call as /file (L17). Never
+    invents a URL: {"ok": True, "url": ""} means "nothing found,
+    fall back to manual entry", never an error."""
+    me = await current_dev(authorization)
+    db = require_db()
+    proj = await db.cto_projects.find_one(
+        {"project_id": project_id, "user_id": me["user_id"]},
+        {"_id": 0, "repo_index_summary": 0, "brain_text": 0,
+         "repo_index_blocks": 0, "last_commit_diff": 0},
+    )
+    if not proj:
+        raise HTTPException(404, "Project not found")
+    from services.pat_vault import get_repo_token_or_error
+    gh_token, auth_err, _detail = await get_repo_token_or_error(proj)
+    owner = proj.get("github_owner") or ""
+    repo = proj.get("github_repo") or ""
+    branch = proj.get("branch") or "main"
+    if auth_err or not (owner and repo and gh_token):
+        return {"ok": True, "url": "", "source": None}
+
+    from services.preview_capture import detect_live_url_from_config
+    for candidate in ("vercel.json", "netlify.toml", "package.json"):
+        try:
+            content = await gh_api_fetch_file(owner, repo, candidate, branch, gh_token)
+        except Exception:
+            content = None
+        if not content:
+            continue
+        url = detect_live_url_from_config(candidate, content)
+        if url:
+            return {"ok": True, "url": url, "source": candidate}
+    return {"ok": True, "url": "", "source": None}
+
+
+class PreviewSessionBody(BaseModel):
+    device: str = "phone"
+
+
+@router.post("/projects/{project_id}/preview/session")
+async def log_preview_session(
+    project_id: str,
+    body: PreviewSessionBody,
+    authorization: str = Header(None),
+) -> dict:
+    """S4 — fire-and-forget ping so the admin monitor tile can show
+    last-24h preview sessions by device. Never blocks/errors the
+    Preview panel on a logging failure."""
+    me = await current_dev(authorization)
+    db = require_db()
+    device = body.device if body.device in ("phone", "tablet", "desktop") else "phone"
+    from services.trust_surface_events import log_trust_event
+    await log_trust_event(db, "preview_session", user_id=me["user_id"],
+                           project_id=project_id, device=device)
+    return {"ok": True}
+
+
+# ─── Trust Surfaces Round (S0-S5), 2026-08-29 — S1-P3 "After fix" +
+# S3-D4 receipts. See services/preview_capture.py for the reused
+# Playwright-capture / R2-storage helpers (L17 reuse-first).
+
+
+@router.get("/projects/{project_id}/preview/pending-change")
+async def get_pending_change(
+    project_id: str,
+    authorization: str = Header(None),
+) -> dict:
+    """S1-P3/P5 — deterministic (0-LLM) read of whether this project
+    has a change that hasn't gone live yet, and which routes it
+    likely touches. Three honest states only: `pending` (a task is
+    still running), `shipped_not_deployed` (code is on GitHub but a
+    configured BYOH host hasn't been redeployed since), `clean`
+    (nothing to show — matches the honest "No pending changes" copy
+    the Preview panel renders)."""
+    me = await current_dev(authorization)
+    db = require_db()
+    proj = await db.cto_projects.find_one(
+        {"project_id": project_id, "user_id": me["user_id"]}, {"_id": 0},
+    )
+    if not proj:
+        raise HTTPException(404, "Project not found")
+
+    latest = await db.cto_tasks.find(
+        {"project_id": project_id, "user_id": me["user_id"]},
+        {"_id": 0, "task_id": 1, "status": 1, "files_changed_simple": 1,
+         "commit_sha": 1, "completed_at": 1, "created_at": 1},
+    ).sort("created_at", -1).limit(1).to_list(1)
+    if not latest:
+        return {"ok": True, "state": "clean", "routes": [], "files": []}
+    task = latest[0]
+    status = task.get("status")
+
+    if status in ("queued", "planning", "fixing", "running"):
+        return {
+            "ok": True, "state": "pending", "task_id": task.get("task_id"),
+            "routes": [], "files": [],
+        }
+    if status != "done":
+        return {"ok": True, "state": "clean", "routes": [], "files": []}
+
+    files = task.get("files_changed_simple") or []
+    from services.preview_capture import classify_user_repo_change
+    routes = classify_user_repo_change(files)
+
+    cfg = await db.aurem_cto_deploy_configs.find_one(
+        {"user_id": me["user_id"],
+         "$or": [{"project_id": project_id}, {"project_id": None}, {"project_id": ""}]},
+        {"_id": 0, "configured": 1},
+    )
+    if not cfg:
+        # No BYOH host configured for this project — a direct GitHub
+        # commit is the deploy (most host providers auto-deploy from
+        # the branch). Nothing meaningfully "not live" to show.
+        return {"ok": True, "state": "clean", "routes": [], "files": []}
+
+    task_done_at = task.get("completed_at") or 0
+    last_ok_run = await db.aurem_cto_deploy_runs.find(
+        {"user_id": me["user_id"], "project_id": project_id, "status": "ok"},
+        {"_id": 0, "finished_at": 1},
+    ).sort("finished_at", -1).limit(1).to_list(1)
+    if last_ok_run and last_ok_run[0].get("finished_at"):
+        try:
+            run_epoch = datetime.fromisoformat(
+                last_ok_run[0]["finished_at"].replace("Z", "+00:00"),
+            ).timestamp()
+        except Exception:
+            run_epoch = 0
+        if run_epoch >= task_done_at:
+            return {"ok": True, "state": "clean", "routes": [], "files": []}
+
+    return {
+        "ok": True, "state": "shipped_not_deployed",
+        "task_id": task.get("task_id"), "commit_sha": task.get("commit_sha"),
+        "routes": routes, "files": files,
+    }
+
+
+@router.get("/projects/{project_id}/preview/capture")
+async def capture_preview_route(
+    project_id: str,
+    route: str = "/",
+    device: str = "phone",
+    authorization: str = Header(None),
+) -> dict:
+    """S1-P3/S3-D4 — capture a fresh screenshot of the project's live
+    site at `route` for the chosen device, store it as a receipt, and
+    return the R2 key for `/preview/receipt/{key}` to stream back.
+    Honest failure: never a fake success — `ok: False` + `reason`."""
+    me = await current_dev(authorization)
+    db = require_db()
+    proj = await db.cto_projects.find_one(
+        {"project_id": project_id, "user_id": me["user_id"]},
+        {"_id": 0, "preview_url": 1},
+    )
+    if not proj:
+        raise HTTPException(404, "Project not found")
+    base = (proj.get("preview_url") or "").strip().rstrip("/")
+    if not base:
+        return {"ok": False, "reason": "no_live_site_url"}
+    if device not in ("phone", "tablet", "desktop"):
+        device = "phone"
+    target = base + (route if route.startswith("/") else f"/{route}")
+
+    from services.preview_capture import capture_screenshot, upload_receipt
+    image = await capture_screenshot(target, device)
+    if not image:
+        return {"ok": False, "reason": "capture_unavailable", "url": target}
+    key = await upload_receipt(
+        image, f"{project_id}/{uuid.uuid4().hex}.jpg",
+    )
+    if not key:
+        return {"ok": False, "reason": "storage_unavailable", "url": target}
+    return {"ok": True, "receipt_key": key, "url": target, "device": device}
+
+
+@router.get("/projects/{project_id}/preview/receipt/{receipt_key:path}")
+async def get_preview_receipt(
+    project_id: str,
+    receipt_key: str,
+    authorization: str = Header(None),
+) -> StreamingResponse:
+    """Authenticated proxy — stream a stored receipt JPEG back. Never
+    a public/presigned URL (keeps a customer's live-site screenshots
+    behind the SAME auth as the rest of their project)."""
+    me = await current_dev(authorization)
+    db = require_db()
+    proj = await db.cto_projects.find_one(
+        {"project_id": project_id, "user_id": me["user_id"]}, {"_id": 0, "project_id": 1},
+    )
+    if not proj:
+        raise HTTPException(404, "Project not found")
+    if not receipt_key.startswith(f"deploy-receipts/{project_id}/"):
+        raise HTTPException(403, "Receipt does not belong to this project")
+    from services.preview_capture import fetch_receipt
+    data = await fetch_receipt(receipt_key)
+    if not data:
+        raise HTTPException(404, "Receipt not found or expired")
+    import io as _io
+    return StreamingResponse(_io.BytesIO(data), media_type="image/jpeg")
+
+
+@router.get("/projects/{project_id}/what-changed")
+async def get_what_changed(
+    project_id: str,
+    authorization: str = Header(None),
+) -> dict:
+    """S2 — deterministic (0-LLM) "What changed" default view.
+    Reuses the SAME latest-task lookup as /preview/pending-change and
+    the SAME GitHub commit-diff shape as the local_tools.get_commit_diff
+    orchestrator tool (L17), just wired through this router's simpler
+    project-lookup convention (get_project_file's pattern) instead of
+    the chat-only BINContext. Top 5 files with real added/removed
+    counts + a patch snippet; "N more" for the rest; never hides a
+    server-side change."""
+    me = await current_dev(authorization)
+    user_id = me["user_id"]
+    db = require_db()
+    proj = await db.cto_projects.find_one(
+        {"project_id": project_id, "user_id": user_id}, {"_id": 0},
+    )
+    if not proj:
+        raise HTTPException(404, "Project not found")
+
+    latest = await db.cto_tasks.find(
+        {"project_id": project_id, "user_id": user_id, "status": "done"},
+        {"_id": 0, "task_id": 1, "files_changed_simple": 1, "commit_sha": 1,
+         "completed_at": 1},
+    ).sort("completed_at", -1).limit(1).to_list(1)
+
+    from services.preview_capture import summarise_change_classification
+    if not latest or not latest[0].get("commit_sha"):
+        summary = summarise_change_classification([])
+        return {"ok": True, **summary, "files": [], "more": 0, "commit_sha": None}
+
+    task = latest[0]
+    files = task.get("files_changed_simple") or []
+    summary = summarise_change_classification(files)
+    sha = task["commit_sha"]
+
+    from services.pat_vault import get_repo_token_or_error
+    gh_token, auth_err, _detail = await get_repo_token_or_error(proj)
+    owner = proj.get("github_owner") or ""
+    repo = proj.get("github_repo") or ""
+    if auth_err or not (owner and repo and gh_token):
+        # Honest partial: we know WHAT changed (from the task record)
+        # even if we can't reach GitHub right now for the diff detail.
+        return {"ok": True, **summary, "files": [
+            {"path": p, "classification": None, "additions": None,
+             "deletions": None, "patch": None} for p in files[:5]
+        ], "more": max(0, len(files) - 5), "commit_sha": sha,
+            "diff_unavailable": True}
+
+    import httpx
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {gh_token}",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as c:
+            r = await c.get(
+                f"https://api.github.com/repos/{owner}/{repo}/commits/{sha}",
+                headers=headers,
+            )
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        logger.warning(f"[what-changed] GitHub commit fetch failed: {e!r}")
+        return {"ok": True, **summary, "files": [
+            {"path": p, "classification": None, "additions": None,
+             "deletions": None, "patch": None} for p in files[:5]
+        ], "more": max(0, len(files) - 5), "commit_sha": sha,
+            "diff_unavailable": True}
+
+    from services.preview_capture import classify_changed_file
+    gh_files = data.get("files") or []
+    detailed = [
+        {
+            "path": f["filename"],
+            "classification": classify_changed_file(f["filename"]),
+            "additions": f.get("additions", 0),
+            "deletions": f.get("deletions", 0),
+            "patch": (f.get("patch") or "")[:1200],
+        }
+        for f in gh_files[:5]
+    ]
+    return {
+        "ok": True, **summary, "files": detailed,
+        "more": max(0, len(gh_files) - 5), "commit_sha": sha,
+        "diff_unavailable": False,
+    }
+
+
 class UpdateProject(BaseModel):
     github_token: Optional[str] = None
     branch: Optional[str] = None

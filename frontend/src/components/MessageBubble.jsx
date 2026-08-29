@@ -140,10 +140,26 @@ const PERMISSION_PHRASES = new RegExp(
   "i",
 );
 
-// A real file-path token = at least one '/' AND a known extension.
-// Filenames alone (no slash) do NOT qualify.
+// A real file-path token = a filename with a known extension, with
+// an OPTIONAL nested-directory prefix (slash-separated).
+//
+// 2026-08-29 · W2-B (Overnight loop) — REAL BUG FIX. Previously this
+// mandated at least one '/' in the token, so a repo-ROOT file
+// (README.md, package.json, .env, Dockerfile, requirements.txt —
+// every file with no directory prefix) could NEVER satisfy Gate 6,
+// so extractHandoffBrief() rejected the fence and the Approve button
+// never rendered for ANY fix confined to a root file. Decisive
+// zero-LLM diagnostic (see /app/e2e-proof/W2-diag/) traced the
+// backend end-to-end and proved it always returns real, non-empty
+// content with a valid fence for this exact repro shape ("fix the
+// README" — the very example used throughout this codebase's own
+// test fixtures, e.g. tests/test_new_p0_2026_08_28_confirmation_
+// mismatch_fix.py's FENCE_REPLY) — the bug was ALWAYS here, in the
+// frontend gate, not upstream. The slash is now optional; a bare
+// `README.md` still requires the real extension list below, so this
+// doesn't loosen the gate against generic prose.
 const FILE_PATH_TOKEN = new RegExp(
-  "\\b[\\w.\\-/@]+/[\\w.\\-]+" +
+  "\\b(?:[\\w.\\-/@]+/)?[\\w\\-]+" +
     "\\.(py|pyi|js|jsx|ts|tsx|md|mdx|json|ya?ml|css|scss|sass|html?" +
     "|env|toml|sh|sql|graphql|prisma|svelte|vue|rs|go|java|kt|swift)\\b",
   "i",

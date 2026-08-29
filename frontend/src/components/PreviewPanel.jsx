@@ -23,10 +23,19 @@
  * them as intentional.
  */
 import React, { useEffect, useMemo, useState } from "react";
-import { X, Copy, RefreshCw, Code2, Eye, ExternalLink, Loader2, Rocket } from "lucide-react";
+import { X, Copy, RefreshCw, Code2, Eye, ExternalLink, Loader2, Rocket, Smartphone, Tablet, Monitor, Camera } from "lucide-react";
 import { toast } from "./Toast";
 import { api } from "../lib/api";
 import DeployPanel from "./DeployPanel";
+
+// Trust Surfaces Round (S1-P1), 2026-08-29 — device-frame widths.
+// Pure CSS framing of the EXISTING iframe — no new library, no new
+// browser launch (L14/L17).
+const DEVICE_FRAMES = {
+  phone:   { width: 375, label: "Phone" },
+  tablet:  { width: 768, label: "Tablet" },
+  desktop: { width: "100%", label: "Desktop" },
+};
 
 const RENDERABLE = new Set([
   "html", "htm",
@@ -120,6 +129,101 @@ function buildIframeDoc(block) {
 </body></html>`;
 }
 
+// Trust Surfaces Round (S2), 2026-08-29 — "What changed" default
+// Code view. Deterministic summary + top-5 diff, "All files" stays
+// the full read-only browser (unchanged) behind its own sub-tab.
+function WhatChangedView({ data, loading, onOpenAllFiles }) {
+  if (loading || !data) {
+    return (
+      <div data-testid="what-changed-loading" style={{
+        display: "flex", alignItems: "center", gap: 8,
+        padding: 20, color: "var(--text-faint)", fontSize: 12,
+      }}>
+        <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
+        Checking what changed…
+      </div>
+    );
+  }
+  return (
+    <div data-testid="what-changed-view" style={{ padding: 20, overflowY: "auto", height: "100%" }}>
+      <div data-testid="what-changed-headline" style={{ fontSize: 14, color: "var(--text)", marginBottom: 4, fontWeight: 600 }}>
+        {data.headline}
+      </div>
+      {data.commit_sha && (
+        <div style={{ fontSize: 11, color: "var(--text-faint)", marginBottom: 16, fontFamily: "'JetBrains Mono', monospace" }}>
+          @ {data.commit_sha.slice(0, 7)}
+        </div>
+      )}
+      {data.diff_unavailable && data.n_files > 0 && (
+        <div data-testid="what-changed-diff-unavailable" style={{ fontSize: 11, color: "var(--text-faint)", marginBottom: 14 }}>
+          (File list is real — GitHub diff detail isn&apos;t reachable right now.)
+        </div>
+      )}
+      {(data.files || []).map((f, i) => (
+        <div key={f.path} data-testid={`what-changed-file-${i}`} style={{
+          border: "1px solid var(--border)", borderRadius: 8, marginBottom: 10, overflow: "hidden",
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "8px 12px", background: "var(--bg-elev)",
+            fontSize: 12, fontFamily: "'JetBrains Mono', monospace",
+          }}>
+            <span style={{ color: "var(--text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.path}</span>
+            {f.classification === "server" && (
+              <span data-testid={`what-changed-server-badge-${i}`} style={{
+                fontSize: 10, padding: "1px 6px", borderRadius: 4,
+                background: "rgba(239,68,68,0.12)", color: "var(--danger)",
+                border: "1px solid var(--danger)",
+              }}>server &amp; data</span>
+            )}
+            {f.classification === "ui" && (
+              <span style={{
+                fontSize: 10, padding: "1px 6px", borderRadius: 4,
+                background: "rgba(34,197,94,0.12)", color: "var(--accent-2)",
+                border: "1px solid var(--accent-2)",
+              }}>customer-facing</span>
+            )}
+            {typeof f.additions === "number" && (
+              <span style={{ fontSize: 10, color: "#4ade80" }}>+{f.additions}</span>
+            )}
+            {typeof f.deletions === "number" && (
+              <span style={{ fontSize: 10, color: "var(--danger)" }}>-{f.deletions}</span>
+            )}
+          </div>
+          {f.patch && (
+            <pre data-testid={`what-changed-patch-${i}`} style={{
+              margin: 0, padding: 10, fontSize: 11, lineHeight: 1.5,
+              fontFamily: "'JetBrains Mono', monospace",
+              background: "var(--bg)", overflow: "auto", maxHeight: 200,
+              whiteSpace: "pre-wrap", wordBreak: "break-word",
+            }}>
+              {f.patch.split("\n").map((line, li) => (
+                <div key={li} style={{
+                  color: line.startsWith("+") && !line.startsWith("+++") ? "#4ade80"
+                    : line.startsWith("-") && !line.startsWith("---") ? "var(--danger)"
+                    : "var(--text-faint)",
+                }}>{line}</div>
+              ))}
+            </pre>
+          )}
+        </div>
+      ))}
+      {data.more > 0 && (
+        <div data-testid="what-changed-more" style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 6 }}>
+          {data.more} more file{data.more === 1 ? "" : "s"} —{" "}
+          <span
+            data-testid="what-changed-view-all-files-link"
+            onClick={onOpenAllFiles}
+            style={{ color: "var(--accent-2)", cursor: "pointer", textDecoration: "underline" }}
+          >
+            view in All files
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PreviewPanel({ blocks, onClose, activeProject, initialViewMode }) {
   const [activeTab, setActiveTab] = useState(0);
   const [viewMode, setViewMode] = useState(initialViewMode || "preview"); // 'preview' | 'code' | 'deploy'
@@ -145,6 +249,78 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
   const [codebaseLoading, setCodebaseLoading] = useState(false);
   const [codebaseErr, setCodebaseErr] = useState(null);
   const [fileContents, setFileContents] = useState({});
+
+  // Trust Surfaces Round (S2), 2026-08-29 — "What changed" default
+  // view for Code mode. `codeSubTab`: "changed" (default) | "all".
+  const [codeSubTab, setCodeSubTab] = useState("changed");
+  const [whatChanged, setWhatChanged] = useState(null);
+  const [whatChangedLoading, setWhatChangedLoading] = useState(false);
+  const fetchWhatChanged = () => {
+    if (!activeProject?.project_id) return;
+    setWhatChangedLoading(true);
+    api.get(`/cto/projects/${activeProject.project_id}/what-changed`)
+      .then((r) => setWhatChanged(r.data))
+      .catch(() => setWhatChanged({ ok: false, n_files: 0, headline: "Couldn't load what changed.", files: [], more: 0 }))
+      .finally(() => setWhatChangedLoading(false));
+  };
+
+  // Trust Surfaces Round (S1-P1/P2/P3), 2026-08-29 — device toggle +
+  // Live-now/After-fix tabs, remembered per project (localStorage).
+  const projectKey = activeProject?.project_id || "none";
+  const [device, setDevice] = useState(() => {
+    try {
+      return localStorage.getItem(`aurem_preview_device_${projectKey}`) || "phone";
+    } catch { return "phone"; }
+  });
+  const [previewSubTab, setPreviewSubTab] = useState(() => {
+    try {
+      return localStorage.getItem(`aurem_preview_subtab_${projectKey}`) || "live";
+    } catch { return "live"; }
+  });
+  const setDeviceRemembered = (d) => {
+    setDevice(d);
+    try { localStorage.setItem(`aurem_preview_device_${projectKey}`, d); } catch { /* noop */ }
+  };
+  // S4 — fire-and-forget preview-session ping (admin monitor tile:
+  // last-24h sessions by device). Never blocks rendering.
+  useEffect(() => {
+    if (!activeProject?.project_id) return;
+    api.post(`/cto/projects/${activeProject.project_id}/preview/session`, { device }).catch(() => {});
+  }, [activeProject?.project_id, device]);  const setPreviewSubTabRemembered = (t) => {
+    setPreviewSubTab(t);
+    try { localStorage.setItem(`aurem_preview_subtab_${projectKey}`, t); } catch { /* noop */ }
+  };
+  const [pendingChange, setPendingChange] = useState(null); // {state, routes, files}
+  const [pendingChangeLoading, setPendingChangeLoading] = useState(false);
+  const [captures, setCaptures] = useState({}); // route -> {status:'idle'|'loading'|'ok'|'error', key, reason}
+
+  useEffect(() => {
+    if (!activeProject?.project_id) return;
+    let alive = true;
+    setPendingChangeLoading(true);
+    api.get(`/cto/projects/${activeProject.project_id}/preview/pending-change`)
+      .then((r) => { if (alive) setPendingChange(r.data); })
+      .catch(() => { if (alive) setPendingChange({ state: "clean", routes: [], files: [] }); })
+      .finally(() => { if (alive) setPendingChangeLoading(false); });
+    return () => { alive = false; };
+  }, [activeProject?.project_id]);
+
+  const captureRoute = async (route) => {
+    if (!activeProject?.project_id) return;
+    setCaptures((c) => ({ ...c, [route]: { status: "loading" } }));
+    try {
+      const r = await api.get(`/cto/projects/${activeProject.project_id}/preview/capture`, {
+        params: { route, device },
+      });
+      if (r.data?.ok) {
+        setCaptures((c) => ({ ...c, [route]: { status: "ok", key: r.data.receipt_key } }));
+      } else {
+        setCaptures((c) => ({ ...c, [route]: { status: "error", reason: r.data?.reason || "unknown" } }));
+      }
+    } catch (e) {
+      setCaptures((c) => ({ ...c, [route]: { status: "error", reason: e?.message || "request_failed" } }));
+    }
+  };
 
   // Note: We deliberately don't useEffect to reset on project change.
   // ChatPanel passes `key={activeProject?.project_id}` so a project
@@ -336,6 +512,17 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
     [block, isRenderable, isLiveUrl, refreshKey]
   );
 
+  // Trust Surfaces Round (S2) — fetch on-demand per code sub-tab.
+  useEffect(() => {
+    if (viewMode !== "code" || !activeProject?.project_id) return;
+    if (codeSubTab === "changed" && !whatChanged && !whatChangedLoading) {
+      fetchWhatChanged();
+    }
+    if (codeSubTab === "all" && !codebase && !codebaseLoading) {
+      fetchCodebaseTree();
+    }
+  }, [viewMode, codeSubTab, activeProject?.project_id]);
+
   const copyCode = () => {
     if (!effectiveCode) return;
     navigator.clipboard.writeText(effectiveCode);
@@ -389,7 +576,10 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
           </span>
         )}
 
-        {/* File tabs */}
+        {/* File tabs — hidden while Code mode is on the "What
+            changed" default sub-view; shown for chat-block tabs in
+            Preview mode, and for "All files" in Code mode. */}
+        {!(viewMode === "code" && codeSubTab === "changed") && (
         <div style={{
           display: "flex", gap: 4, flex: 1,
           overflowX: "auto", minWidth: 0,
@@ -434,14 +624,48 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
             </span>
           )}
         </div>
-
+        )}
+        {viewMode === "code" && (
+          <div data-testid="code-subtab-toggle" style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+            <button
+              type="button"
+              data-testid="code-subtab-changed"
+              onClick={() => setCodeSubTab("changed")}
+              style={{
+                fontSize: 11, padding: "4px 10px", borderRadius: 6,
+                background: codeSubTab === "changed" ? "var(--accent-2)" : "transparent",
+                color: codeSubTab === "changed" ? "var(--bg)" : "var(--text-dim)",
+                border: `1px solid ${codeSubTab === "changed" ? "var(--accent-2)" : "var(--border)"}`,
+                cursor: "pointer",
+              }}
+            >
+              What changed
+            </button>
+            <button
+              type="button"
+              data-testid="code-subtab-all"
+              onClick={() => setCodeSubTab("all")}
+              style={{
+                fontSize: 11, padding: "4px 10px", borderRadius: 6,
+                background: codeSubTab === "all" ? "var(--accent-2)" : "transparent",
+                color: codeSubTab === "all" ? "var(--bg)" : "var(--text-dim)",
+                border: `1px solid ${codeSubTab === "all" ? "var(--accent-2)" : "var(--border)"}`,
+                cursor: "pointer",
+              }}
+            >
+              All files
+            </button>
+          </div>
+        )}
         {/* preview/code toggle — Iter 169: when toggling FROM the
             Live Site URL block INTO Code mode, auto-jump to the
             first actual code/file block so the user sees real code
             instead of the raw URL string.
-            Iter 170c: if no real code blocks exist but the project
-            has GitHub connected, fetch the repo tree on first toggle
-            so `</> Code` browses the live codebase. */}
+            Trust Surfaces (S2), 2026-08-29 — Code mode now defaults
+            to the "What changed" sub-view (codeSubTab state); the
+            full repo browser moved behind the "All files" sub-tab
+            and is fetched lazily only when that sub-tab is opened
+            (see the effect above), not eagerly on every toggle. */}
         {canShowCodeToggle && (
           <button
             data-testid="preview-view-toggle"
@@ -450,25 +674,15 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
                 // From deploy → return to preview default
                 if (v === "deploy") return "preview";
                 const next = v === "preview" ? "code" : "preview";
-                if (next === "code") {
-                  // Iter 212m-206 — Always fetch the repo tree when
-                  // entering Code mode (if not already cached), even
-                  // when the chat has real code blocks.  The user
-                  // expects `</> Code` to ALWAYS reveal the live repo
-                  // files, not just when the chat is empty.
-                  if (!codebase && activeProject?.project_id) {
-                    fetchCodebaseTree();
-                  }
+                if (next === "code" && isLiveUrl && codeSubTab === "all") {
                   // Jump to the first non-live_url tab if currently on one.
-                  if (isLiveUrl) {
-                    const idx = effectiveBlocks.findIndex(
-                      (b) => (b?.lang || "").toLowerCase() !== "live_url"
-                    );
-                    if (idx >= 0) {
-                      setActiveTab(idx);
-                      const tgt = effectiveBlocks[idx];
-                      if (tgt?.isCodebase && tgt.label) fetchFileContent(tgt.label);
-                    }
+                  const idx = effectiveBlocks.findIndex(
+                    (b) => (b?.lang || "").toLowerCase() !== "live_url"
+                  );
+                  if (idx >= 0) {
+                    setActiveTab(idx);
+                    const tgt = effectiveBlocks[idx];
+                    if (tgt?.isCodebase && tgt.label) fetchFileContent(tgt.label);
                   }
                 }
                 if (next === "preview") {
@@ -522,12 +736,173 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
         </button>
       </div>
 
+      {/* Trust Surfaces Round (S1-P1/P2) — device toggle + Live now /
+          After fix tabs. Only relevant when viewing the live site. */}
+      {viewMode === "preview" && isLiveUrl && (
+        <div
+          data-testid="preview-live-toolbar"
+          style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "6px 12px",
+            borderBottom: "1px solid var(--border)",
+            background: "var(--bg-elev)",
+            flexWrap: "wrap",
+          }}
+        >
+          <div data-testid="preview-device-toggle" style={{ display: "flex", gap: 2 }}>
+            {Object.entries(DEVICE_FRAMES).map(([key, cfg]) => {
+              const Icon = key === "phone" ? Smartphone : key === "tablet" ? Tablet : Monitor;
+              const active = device === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  data-testid={`preview-device-${key}`}
+                  onClick={() => setDeviceRemembered(key)}
+                  title={cfg.label}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                    fontSize: 11, padding: "4px 9px", borderRadius: 999,
+                    background: active ? "var(--accent)" : "transparent",
+                    color: active ? "#0a0a0a" : "var(--text-dim)",
+                    border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
+                    cursor: "pointer",
+                  }}
+                >
+                  <Icon size={11} /> {cfg.label}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ width: 1, height: 16, background: "var(--border)" }} />
+          <div data-testid="preview-subtab-toggle" style={{ display: "flex", gap: 2 }}>
+            <button
+              type="button"
+              data-testid="preview-subtab-live"
+              onClick={() => setPreviewSubTabRemembered("live")}
+              style={{
+                fontSize: 11, padding: "4px 10px", borderRadius: 6,
+                background: previewSubTab === "live" ? "var(--accent-2)" : "transparent",
+                color: previewSubTab === "live" ? "var(--bg)" : "var(--text-dim)",
+                border: `1px solid ${previewSubTab === "live" ? "var(--accent-2)" : "var(--border)"}`,
+                cursor: "pointer",
+              }}
+            >
+              Live now
+            </button>
+            <button
+              type="button"
+              data-testid="preview-subtab-afterfix"
+              onClick={() => setPreviewSubTabRemembered("afterfix")}
+              style={{
+                fontSize: 11, padding: "4px 10px", borderRadius: 6,
+                background: previewSubTab === "afterfix" ? "var(--accent-2)" : "transparent",
+                color: previewSubTab === "afterfix" ? "var(--bg)" : "var(--text-dim)",
+                border: `1px solid ${previewSubTab === "afterfix" ? "var(--accent-2)" : "var(--border)"}`,
+                cursor: "pointer",
+              }}
+            >
+              After fix
+            </button>
+          </div>
+          {previewSubTab === "live" && pendingChange && pendingChange.state !== "clean" && (
+            <span
+              data-testid="preview-nothing-changed-line"
+              style={{ fontSize: 11, color: "var(--text-faint)", marginLeft: "auto" }}
+            >
+              Nothing on your live site has changed yet. It changes only when you choose &quot;Go live&quot;.
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Body */}
       <div style={{ flex: 1, overflow: "hidden", minHeight: 0 }}>
         {viewMode === "deploy" ? (
           <DeployPanel activeProject={activeProject} />
+        ) : viewMode === "code" && codeSubTab === "changed" ? (
+          <WhatChangedView
+            data={whatChanged}
+            loading={whatChangedLoading}
+            onOpenAllFiles={() => setCodeSubTab("all")}
+          />
+        ) : viewMode === "preview" && isLiveUrl && previewSubTab === "afterfix" ? (
+          <div data-testid="preview-afterfix-view" style={{ padding: 20, overflowY: "auto", height: "100%" }}>
+            {pendingChangeLoading ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-faint)", fontSize: 12 }}>
+                <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> Checking for pending changes…
+              </div>
+            ) : pendingChange?.state === "pending" ? (
+              <div data-testid="preview-afterfix-pending" style={{ fontSize: 13, color: "var(--text)" }}>
+                A fix is being worked on right now — check back shortly.
+              </div>
+            ) : pendingChange?.state === "shipped_not_deployed" ? (
+              <div data-testid="preview-afterfix-shipped">
+                <div style={{ fontSize: 13, color: "var(--text)", marginBottom: 4 }}>
+                  Your fix shipped to GitHub but hasn&apos;t gone live yet.
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-faint)", marginBottom: 14 }}>
+                  The full fixed site appears here when you go live.
+                </div>
+                {(pendingChange.routes || []).map((route) => {
+                  const cap = captures[route] || { status: "idle" };
+                  return (
+                    <div key={route} data-testid={`preview-afterfix-route-${route}`} style={{
+                      border: "1px solid var(--border)", borderRadius: 8,
+                      padding: 12, marginBottom: 10,
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{route}</span>
+                        <button
+                          type="button"
+                          data-testid={`preview-afterfix-capture-btn-${route}`}
+                          onClick={() => captureRoute(route)}
+                          disabled={cap.status === "loading"}
+                          className="btn-ghost"
+                          style={{ fontSize: 11, padding: "3px 10px", display: "inline-flex", alignItems: "center", gap: 4 }}
+                        >
+                          {cap.status === "loading"
+                            ? <><Loader2 size={11} style={{ animation: "spin 1s linear infinite" }} /> Capturing…</>
+                            : <><Camera size={11} /> See today&apos;s page</>}
+                        </button>
+                      </div>
+                      {cap.status === "ok" && cap.key && (
+                        <img
+                          data-testid={`preview-afterfix-image-${route}`}
+                          src={`${api.defaults.baseURL}/cto/projects/${activeProject.project_id}/preview/receipt/${cap.key}`}
+                          alt={`Live page at ${route}`}
+                          style={{ maxWidth: "100%", borderRadius: 6, border: "1px solid var(--border)" }}
+                        />
+                      )}
+                      {cap.status === "error" && (
+                        <div data-testid={`preview-afterfix-error-${route}`} style={{ fontSize: 11, color: "var(--danger, #ef4444)" }}>
+                          Couldn&apos;t capture that page right now ({cap.reason}). <a
+                            href={(activeProject?.preview_url || "").replace(/\/$/, "") + route}
+                            target="_blank" rel="noopener noreferrer" style={{ color: "#60a5fa" }}
+                          >Open it directly ↗</a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div data-testid="preview-afterfix-clean" style={{ fontSize: 13, color: "var(--text-faint)" }}>
+                No pending changes — you&apos;re showing the live site.
+              </div>
+            )}
+          </div>
         ) : viewMode === "preview" && isLiveUrl ? (
-          <div style={{ position: "relative", width: "100%", height: "100%" }}>
+          <div
+            data-testid="preview-device-frame"
+            style={{
+              width: "100%", height: "100%",
+              display: "flex", justifyContent: "center",
+              background: device === "desktop" ? "transparent" : "var(--bg-elev)",
+              overflow: "auto",
+            }}
+          >
+          <div style={{ position: "relative", width: DEVICE_FRAMES[device].width, maxWidth: "100%", height: "100%" }}>
             <iframe
               key={`liveurl-${block.code}-${refreshKey}`}
               data-testid="preview-iframe-live"
@@ -537,7 +912,8 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
               style={{
                 width: "100%", height: "100%",
-                border: "none", background: "white",
+                border: device === "desktop" ? "none" : "1px solid var(--border)",
+                background: "white",
               }}
             />
             {liveState !== "loaded" && (
@@ -592,6 +968,7 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
                 )}
               </div>
             )}
+          </div>
           </div>
         ) : viewMode === "preview" && isRenderable && !block?.isCodebase ? (
           <iframe

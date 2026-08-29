@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Header
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from cto_services.auth import current_dev
@@ -73,6 +74,12 @@ class DeployConfigBody(BaseModel):
     # plain FTP if the founder explicitly opted out (creds go in
     # cleartext otherwise, which is a real footgun).
     ftp_tls:      bool = True
+    # Trust Surfaces Round (S3-D4), 2026-08-29 — the public URL to
+    # re-navigate to AFTER a deploy finishes, to prove it's really
+    # live (receipts). Optional: when blank, `_verify_and_capture`
+    # falls back to the project's existing `preview_url` (S1's saved
+    # live-site URL) — D1's "pre-fill everything derivable".
+    verify_url:   str = Field("", max_length=500)
 
 
 def _serialize_cfg(row: dict | None) -> dict[str, Any]:
@@ -95,6 +102,7 @@ def _serialize_cfg(row: dict | None) -> dict[str, Any]:
         "target":        row.get("target", "ssh"),
         "remote_dir":    row.get("remote_dir") or None,
         "ftp_tls":       row.get("ftp_tls", True),
+        "verify_url":    row.get("verify_url") or "",
     }
 
 
@@ -186,6 +194,7 @@ async def save_config(body: DeployConfigBody,
             "target":          body.target,
             "remote_dir":      body.remote_dir.strip(),
             "ftp_tls":         body.ftp_tls,
+            "verify_url":      body.verify_url.strip(),
             "updated_at":      _now_iso(),
         }},
         upsert=True,
@@ -254,8 +263,63 @@ def _deploy_command(cfg: dict, mode: str = "deploy") -> str:
     )
 
 
+async def _verify_and_capture(user_id: str, run_id: str, project_id: str | None,
+                               cfg: dict) -> None:
+    """S3-D4 — verify-before-success, applied to deploy: re-navigate to
+    the live URL AFTER the deploy already reported "ok", capture a
+    fresh screenshot, and only THEN mark the run `verified`. Never
+    flips a failed capture into a fake pass — sets `verified: False`
+    with an honest `verify_note` instead (L13)."""
+    db = require_db()
+    url = (cfg.get("verify_url") or "").strip()
+    if not url and project_id:
+        proj = await db.cto_projects.find_one(
+            {"project_id": project_id, "user_id": user_id}, {"_id": 0, "preview_url": 1},
+        )
+        url = (proj or {}).get("preview_url") or ""
+    if not url:
+        await db.aurem_cto_deploy_runs.update_one(
+            {"run_id": run_id},
+            {"$set": {"verified": False, "verify_note": "no_url_to_verify"}},
+        )
+        return
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            resp = await client.get(url)
+        status_ok = 200 <= resp.status_code < 400
+    except Exception as e:
+        await db.aurem_cto_deploy_runs.update_one(
+            {"run_id": run_id},
+            {"$set": {"verified": False,
+                       "verify_note": f"site_unreachable:{type(e).__name__}"}},
+        )
+        return
+    from services.preview_capture import capture_screenshot, upload_receipt
+    image = await capture_screenshot(url, "phone")
+    receipt_key = None
+    if image:
+        receipt_key = await upload_receipt(image, f"deploy-runs/{run_id}.jpg")
+    await db.aurem_cto_deploy_runs.update_one(
+        {"run_id": run_id},
+        {"$set": {
+            "verified":        status_ok,
+            "verify_url":      url,
+            "verify_status":   resp.status_code if status_ok else None,
+            "receipt_key":     receipt_key,
+            "verify_note":     None if status_ok else f"http_{resp.status_code}",
+        }},
+    )
+    if receipt_key:
+        from services.trust_surface_events import log_trust_event
+        await log_trust_event(db, "receipt_captured", user_id=user_id,
+                               project_id=project_id, run_id=run_id, verified=status_ok)
+
+
 async def _run_deploy_remote(user_id: str, run_id: str,
-                              cfg: dict, command: str) -> None:
+                              cfg: dict, command: str,
+                              mode: str = "deploy",
+                              project_id: str | None = None) -> None:
     import asyncssh
     db = require_db()
 
@@ -312,6 +376,19 @@ async def _run_deploy_remote(user_id: str, run_id: str,
                             "finished_at": _now_iso(),
                         }},
                     )
+                    from services.trust_surface_events import log_trust_event
+                    if rc == 0:
+                        await log_trust_event(db, "deploy_succeeded", user_id=user_id,
+                                               project_id=project_id, mode=mode, run_id=run_id)
+                        if mode == "rollback":
+                            await log_trust_event(db, "rollback_succeeded", user_id=user_id,
+                                                   project_id=project_id, run_id=run_id)
+                    else:
+                        await log_trust_event(db, "deploy_failed", user_id=user_id,
+                                               project_id=project_id, mode=mode, run_id=run_id,
+                                               reason=f"exit_code_{rc}")
+                    if rc == 0 and mode != "dry_run":
+                        await _verify_and_capture(user_id, run_id, project_id, cfg)
     except asyncio.TimeoutError:
         await _append(f"!! deploy timed out after {DEPLOY_TIMEOUT_SECONDS}s")
         await db.aurem_cto_deploy_runs.update_one(
@@ -328,10 +405,11 @@ async def _run_deploy_remote(user_id: str, run_id: str,
 
 
 async def _run_deploy_ftp_or_sftp(
-    user_id:  str,
+    user_id: str,
     run_id:   str,
     cfg:      dict,
     files:    dict,   # {rel_path: bytes|str}
+    project_id: str | None = None,
 ) -> None:
     """Iter 367 (Item B) — runs the FTP or SFTP deploy path via
     services.ftp_ssh_deploy. Decrypts the stored secret (FTP password
@@ -432,6 +510,8 @@ async def _run_deploy_ftp_or_sftp(
                             or None,
         }},
     )
+    if ok:
+        await _verify_and_capture(user_id, run_id, project_id, cfg)
 
 
 class DeployRunBody(BaseModel):
@@ -465,6 +545,9 @@ async def run_deploy(body: DeployRunBody = DeployRunBody(),
     # re-implement the 24h dry-run check here.
 
     target = cfg.get("target", "ssh")
+    from services.trust_surface_events import log_trust_event
+    await log_trust_event(db, "deploy_started", user_id=me["user_id"],
+                           project_id=pid, mode=body.mode, target=target)
 
     # Iter 367 (Item B) — FTP/SFTP branch. Skips the docker-compose
     # command construction entirely and routes to ftp_ssh_deploy.
@@ -501,7 +584,8 @@ async def run_deploy(body: DeployRunBody = DeployRunBody(),
             "finished_at": None,
         })
         asyncio.create_task(
-            _run_deploy_ftp_or_sftp(me["user_id"], run_id, cfg, body.files),
+            _run_deploy_ftp_or_sftp(me["user_id"], run_id, cfg, body.files,
+                                     project_id=body.project_id or None),
             name=f"aurem-cto-deploy-{target}:{run_id}",
         )
         return {"run_id": run_id, "mode": body.mode,
@@ -529,7 +613,9 @@ async def run_deploy(body: DeployRunBody = DeployRunBody(),
         "last_update": _now_iso(),
         "finished_at": None,
     })
-    asyncio.create_task(_run_deploy_remote(me["user_id"], run_id, cfg, cmd),
+    asyncio.create_task(_run_deploy_remote(me["user_id"], run_id, cfg, cmd,
+                                            mode=body.mode,
+                                            project_id=body.project_id or None),
                         name=f"aurem-cto-deploy:{run_id}")
     return {"run_id": run_id, "mode": body.mode,
             "target": "ssh", "status": "running"}
@@ -553,6 +639,10 @@ async def get_log(run_id: str,
         "status":      doc.get("status"),
         "exit_code":   doc.get("exit_code"),
         "head_sha":    doc.get("head_sha"),
+        "verified":    doc.get("verified"),
+        "verify_note": doc.get("verify_note"),
+        "verify_url":  doc.get("verify_url"),
+        "receipt_key": doc.get("receipt_key"),
         "since":       since,
         "next_cursor": len(full),
         "lines":       full[since:],
@@ -601,3 +691,45 @@ async def runs_logs(run_id: str,
     """Iter 212m-9 — alias for /log/{run_id} matching the
     `/deploy/runs/{run_id}/logs` REST shape the UI prompt requested."""
     return await get_log(run_id, since=since, authorization=authorization)
+
+
+@router.get("/runs/{run_id}/receipt")
+async def get_run_receipt(run_id: str,
+                          authorization: str = Header(None)) -> StreamingResponse:
+    """S3-D4 — stream the post-deploy verification screenshot back.
+    Same authenticated-proxy pattern as
+    `cto_projects.get_preview_receipt` (never a public/presigned URL)."""
+    me = await current_dev(authorization)
+    db = require_db()
+    doc = await db.aurem_cto_deploy_runs.find_one(
+        {"run_id": run_id, "user_id": me["user_id"]}, {"_id": 0, "receipt_key": 1},
+    )
+    if not doc or not doc.get("receipt_key"):
+        raise HTTPException(404, "receipt_not_found")
+    from services.preview_capture import fetch_receipt
+    data = await fetch_receipt(doc["receipt_key"])
+    if not data:
+        raise HTTPException(404, "Receipt not found or expired")
+    import io as _io
+    return StreamingResponse(_io.BytesIO(data), media_type="image/jpeg")
+
+
+class DeployEventBody(BaseModel):
+    kind: str
+    project_id: Optional[str] = None
+
+
+@router.post("/event")
+async def post_deploy_event(body: DeployEventBody,
+                            authorization: str = Header(None)) -> dict:
+    """S3/S5 — client-fired events that have no natural server-side
+    hook (the "Go live" last-look modal opening, and the Rollback
+    button click itself — the RESULT of that click is logged
+    server-side as rollback_succeeded/deploy_failed)."""
+    me = await current_dev(authorization)
+    db = require_db()
+    if body.kind not in ("deploy_form_shown", "rollback_clicked"):
+        raise HTTPException(400, "unsupported event kind for this endpoint")
+    from services.trust_surface_events import log_trust_event
+    await log_trust_event(db, body.kind, user_id=me["user_id"], project_id=body.project_id)
+    return {"ok": True}

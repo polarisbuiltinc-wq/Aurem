@@ -1085,6 +1085,30 @@ async def chat_stream(
     """SSE token-streaming chat. Iter 45: rate-limited to 30 req/min per IP.
     Iter 50.1: founders / unlimited accounts bypass the rate-limit."""
     user = await current_dev(authorization)
+    # Overnight loop W2 Step 2 (2026-08-29) — MOCK_LLM short-circuit,
+    # BEFORE any provider routing/tool/repo-context construction. The
+    # live main-chat path (this function) was the one surface
+    # MOCK_LLM=true never actually reached — services/ora_chat_v2's
+    # admin advisor chat already honored it, this one always made a
+    # real paid call. Deliberately NO aurem-handoff fence (never fake
+    # a ship/approve signal) and zero downstream construction, so a
+    # spy provider that raises on construction is never even touched.
+    from services.ora_chat_v2.llm_client import is_mock as _mock_llm_on
+    if _mock_llm_on():
+        async def _mock_gen():
+            yield f"data: {json.dumps({'meta': True, 'session_id': body.session_id, 'provider': 'mock', 'mode': 'A', 'temperature': 0.0, 'thinking_s': 0.0, 'tool_calls_run': 0})}\n\n"
+            _mock_text = (
+                "I'm ORA (mock mode). The live model isn't connected on "
+                "this instance — no real LLM calls are being made. This "
+                "is a placeholder for UX testing."
+            )
+            yield f"data: {json.dumps({'token': _mock_text})}\n\n"
+            yield f"data: {json.dumps({'done': True, 'provider': 'mock', 'session_id': body.session_id, 'tokens_remaining': None})}\n\n"
+        return StreamingResponse(
+            _mock_gen(), media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no",
+                     "Connection": "keep-alive"},
+        )
     # Iter 364 · Phase 3 · Token hard-stop enforcement (streaming path).
     # Same as /chat/send — refuse the request before spending any LLM
     # tokens when the wallet is empty or the monthly task cap is blown.

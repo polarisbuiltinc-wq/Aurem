@@ -490,6 +490,17 @@ function DashboardV2Body() {
   // `preview_url`, PATCHes the value on save, then broadcasts the
   // toggle event so the existing preview panel wiring lights up.
   const [showLiveSiteModal, setShowLiveSiteModal] = useState(false);
+  // Trust Surfaces (S1-P4), 2026-08-29 — auto-detect the live URL
+  // from repo config BEFORE showing the manual modal; one-tap
+  // confirm if found, existing manual entry unchanged if not.
+  const [detectedLiveUrl, setDetectedLiveUrl] = useState({ url: "", source: null, checked: false });
+  useEffect(() => {
+    if (!showLiveSiteModal || !activeProject?.project_id) return;
+    setDetectedLiveUrl({ url: "", source: null, checked: false });
+    api.get(`/cto/projects/${activeProject.project_id}/detect-live-url`)
+      .then((r) => setDetectedLiveUrl({ url: r.data?.url || "", source: r.data?.source || null, checked: true }))
+      .catch(() => setDetectedLiveUrl({ url: "", source: null, checked: true }));
+  }, [showLiveSiteModal, activeProject?.project_id]);
   const handleSaveLiveSite = useCallback(async (url) => {
     if (!activeProject?.project_id) return;
     await api.patch(`/cto/projects/${activeProject.project_id}`, { preview_url: url });
@@ -687,6 +698,8 @@ function DashboardV2Body() {
           projectName={activeProject?.name}
           onSave={handleSaveLiveSite}
           onCancel={() => setShowLiveSiteModal(false)}
+          detectedUrl={detectedLiveUrl.url}
+          detectedSource={detectedLiveUrl.source}
         />
       )}
 

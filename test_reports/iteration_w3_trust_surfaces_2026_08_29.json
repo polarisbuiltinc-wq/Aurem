@@ -1,0 +1,51 @@
+{
+  "summary": "End-to-end UI + light backend verification of W2 (P0-B Approve-button fix + MOCK_LLM chat short-circuit) and W3 Trust Surfaces S0-S5 (Preview device toggle + subtabs, Code What-changed default + All-files sub-tab, Deploy verify-url + Go-live modal wiring, Admin Preview & Deploy Monitor tile). Tested in the Preview pod with test@aurem.dev / AuremTest2026!. MOCK_LLM=true confirmed live: fresh chat returns canned 'I'm ORA (mock mode)...' reply with zero fence and zero real LLM tokens spent. All new data-testid hooks render as expected and no new runtime console errors observed on any of the touched surfaces.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_flows": [
+    "Login via /api/aurem-dev/auth/login -> dashboard load OK (200, JWT returned).",
+    "Chat MOCK_LLM: sent 'Hello ORA, are you the mock?' -> reply bubble contains 'I'm ORA (mock mode). The live model isn't connected on this instance — no real LLM calls are being made.' Response arrived within 1-2s, no aurem-handoff fence in reply body.",
+    "Ship CTA fallback (P0-B): existing chat history renders the red honest-fallback banner 'The approve button didn't load for that fix — Retry this fix' with data-testid ship-cta-fallback-0 and ship-cta-fallback-1 (count=2 on load) and inner Retry button ship-cta-fallback-retry-{idx}. Verified via locator count.",
+    "FILE_PATH_TOKEN regex fix (Gate 6): verified in code at frontend/src/components/MessageBubble.jsx line 161-166 — leading slash now optional so repo-root files like README.md now pass the file-path token check. Main-agent unit tests (/app/e2e-proof/W2-diag) confirm behaviour end-to-end; live UI cannot exercise it under MOCK_LLM (canned reply has no fence).",
+    "Preview panel device toggle: data-testid preview-device-phone / preview-device-tablet / preview-device-desktop all present; clicking each visually changes the iframe width (phone renders a narrow ~375px column with the example.com iframe). Phone default confirmed.",
+    "Preview subtabs: preview-subtab-live and preview-subtab-afterfix both present; clicking After fix shows 'No pending changes — you're showing the live site.' text (preview-nothing-changed-line rendered inside afterfix view).",
+    "AddLiveSiteModal (S1-P4): modal opens on first Preview tab visit for a project without preview_url. Manual URL input + Save & Open still works (regression pass). add-live-site-detected-banner did NOT render for the tested project because backend GET /cto/projects/{id}/detect-live-url returned {ok:true,url:'',source:null} for the demo project (no vercel.json/netlify.toml/homepage detected). Honest fallback to manual input is correct.",
+    "Code tab (viewMode=code via preview-view-toggle): defaults to what-changed-view with headline 'No changes yet.' — NOT the raw file browser. code-subtab-toggle renders both code-subtab-changed (default active) and code-subtab-all. Clicking All files switches to the pre-existing file browser (Live Site, README.md, pyproject.toml, .gitignore, LICENSE, robots.txt tabs render — regression pass). Clicking What changed switches back.",
+    "Deploy tab (viewMode=deploy via preview-deploy-toggle): with no SSH config saved, the config form deploy-config-form renders and includes the new 'Site URL to verify after deploy' field with data-testid deploy-cfg-verify-url (pre-filled with the live-site URL 'https://example.com'). All required cfg fields (host/port/username/private-key/repo-path/branch/compose/verify-url/save) render with their data-testids.",
+    "Admin Preview & Deploy Monitor tile: /admin -> System Health page shows a new 'Preview & Deploy Monitor' card with data-testid card-preview-deploy-monitor placed adjacent to the existing 'GitHub Webhook Fence' card (data-testid card-webhook-fence). Card body shows LAST 24H PREVIEW SESSIONS (Total 7, desktop 1, phone 5, tablet 1), LAST 24H DEPLOYS (Succeeded 0, Failed 0), RECEIPT STORAGE (Captures 0, Total receipts 0, Retention 30d), and meter line data-testid preview-deploy-meter-line text: 'last 30d: 7 previews · 0 deploys (0 failed) · 0 receipts · capture success —%'.",
+    "Backend GET /api/aurem-dev/cto/projects/{pid}/detect-live-url returns 200 with {ok, url, source} shape.",
+    "Backend GET /api/aurem-dev/admin/preview-deploy-monitor returns 200 with expected schema (last_24h.preview_sessions.by_device, deploys.succeeded/failed, captures, receipt_storage, per_project_deploy_history, meter_line, meter)."
+  ],
+  "not_directly_exercised_but_evidence_available": [
+    "deploy-go-live-btn / deploy-last-look-modal / deploy-last-look-cancel / deploy-last-look-confirm — DeployPanel only renders these once a valid SSH config is saved. The tested project (ora-grounding) has no config; the config form is shown instead (correct). Testids exist in DeployPanel.jsx at lines 384, 418, 422, 759, 792 (verified via grep). Per review-request note, do NOT save a real config against a real host. Recommend main agent add a stub 'test SSH config' seed or a unit-test to exercise the modal render path automatically.",
+    "add-live-site-detected-banner — backend detect-live-url returned empty for demo project (no vercel.json/homepage config). Testid exists in AddLiveSiteModal.jsx line 91 and only renders when detectedUrl is non-empty; behaviour is correct.",
+    "Fresh Approve button on a fence-based README.md fix — MOCK_LLM canned response has no aurem-handoff fence, so the live UI cannot regress-verify the Gate 6 fix under MOCK_LLM. Main agent already ran the unit/integration proof at /app/e2e-proof/W2-diag."
+  ],
+  "test_report_links": [
+    "/app/test_reports/screenshots/mock_llm_reply.png",
+    "/app/test_reports/screenshots/preview_with_site.png",
+    "/app/test_reports/screenshots/preview_afterfix.png",
+    "/app/test_reports/screenshots/code_view_v3.png",
+    "/app/test_reports/screenshots/code_all_files_v3.png",
+    "/app/test_reports/screenshots/deploy_view_v3.png",
+    "/app/test_reports/screenshots/admin_sys_health.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "DeployPanel Go-live modal cannot be exercised in Preview until an SSH config is saved. Consider adding a lightweight storybook / mocked-config smoke path so future testing_agents can verify the deploy-last-look-modal render without touching a real host.",
+    "detect-live-url endpoint quietly returns url:'' when nothing detected — good honest fallback; consider surfacing source='none' in the response for tighter frontend logs.",
+    "Historical chat has 2 legacy ship-cta-fallback banners for prior README.md diagnoses — this is the expected S2 fallback for pre-fix messages; no cleanup needed but a note in the ship-cta-fallback tooltip explaining 'this message was from before the Gate 6 fix' could reduce founder confusion."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "test_credentials": "test@aurem.dev / AuremTest2026! (Preview pod admin/founder). Backend .env: MOCK_LLM=true confirmed set.",
+  "seed_data_creation": "None. Reused existing TEST_phaseA_skipped_54122d project and Preview pod state. Set preview_url='https://example.com' on that project through the AddLiveSiteModal UI to unblock the device-toggle/subtab rendering (harmless test-domain URL).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All W2 (P0-B + MOCK_LLM) and W3 S0-S5 UI wiring verified end-to-end in the Preview pod. The only surfaces not directly clicked-through are the deploy Go-live modal (requires a saved SSH config which we intentionally did not create against a real host) and the AddLiveSiteModal detected banner (requires a repo with vercel.json/netlify.toml/homepage — the connected repo doesn't detect one). Both have code-level testid evidence and both backend endpoints (detect-live-url, admin preview-deploy-monitor) return the correct shapes. Console errors observed on every page are the pre-existing background 401/403 resource-fetch polls; no new runtime errors introduced by this batch.",
+  "rca of the issue": "N/A — verification-only run. RCA for the P0-B bug was already produced by main agent: FILE_PATH_TOKEN regex in MessageBubble.jsx required a '/' in the path token, so any fence targeting a repo-root file (README.md) failed Gate 6 and rendered no Approve button. Fix: make the leading directory group optional in the regex. Now verified in code at lines 161-166 of MessageBubble.jsx."
+}

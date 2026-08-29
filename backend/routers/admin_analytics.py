@@ -2020,6 +2020,108 @@ async def loop_metrics(
     }
 
 
+@router.get("/preview-deploy-monitor")
+async def preview_deploy_monitor(
+    authorization: Optional[str] = Header(None),
+):
+    """S4/S5 — Trust Surfaces Round (2026-08-29). Extends the existing
+    AdminSystemHealth page (same admin-only, read-only, 0-LLM pattern
+    as /loop-metrics and /github-webhook-fence) with a Preview & Deploy
+    monitor tile, next to the Webhook Fence tile, plus the S5 30-day
+    meter line's data. Reads services/trust_surface_events.py's new
+    collection + the existing aurem_cto_deploy_runs collection — no
+    new storage system, no LLM calls."""
+    await _require_admin(authorization)
+    db = require_db()
+    now = datetime.now(timezone.utc)
+    since_24h = (now - timedelta(hours=24)).isoformat()
+    since_30d = (now - timedelta(days=30)).isoformat()
+
+    async def _count(kind, since):
+        return await db.trust_surface_events.count_documents(
+            {"kind": kind, "at": {"$gte": since}},
+        )
+
+    device_breakdown: dict = {}
+    async for row in db.trust_surface_events.aggregate([
+        {"$match": {"kind": "preview_session", "at": {"$gte": since_24h}}},
+        {"$group": {"_id": "$device", "n": {"$sum": 1}}},
+    ]):
+        device_breakdown[str(row.get("_id") or "unknown")] = int(row["n"])
+
+    deploy_runs_24h = await db.aurem_cto_deploy_runs.find(
+        {"started_at": {"$gte": since_24h}},
+        {"_id": 0, "status": 1, "error": 1, "exit_code": 1, "verify_note": 1},
+    ).to_list(500)
+    deploy_succeeded = sum(1 for r in deploy_runs_24h if r.get("status") == "ok")
+    deploy_failed_runs = [r for r in deploy_runs_24h if r.get("status") in ("failed", "timeout")]
+    fail_reasons: dict = {}
+    for r in deploy_failed_runs:
+        reason = r.get("error") or r.get("verify_note") or f"exit_{r.get('exit_code')}" or "unknown"
+        fail_reasons[str(reason)[:80]] = fail_reasons.get(str(reason)[:80], 0) + 1
+    top_failure_reasons = sorted(fail_reasons.items(), key=lambda kv: -kv[1])[:5]
+
+    captures_ok = await _count("receipt_captured", since_24h)
+    receipts_total = await db.aurem_cto_deploy_runs.count_documents({"receipt_key": {"$ne": None}})
+    oldest_receipt_run = await db.aurem_cto_deploy_runs.find(
+        {"receipt_key": {"$ne": None}}, {"_id": 0, "started_at": 1},
+    ).sort("started_at", 1).limit(1).to_list(1)
+
+    per_project: dict = {}
+    async for row in db.aurem_cto_deploy_runs.aggregate([
+        {"$match": {"started_at": {"$gte": since_30d}, "project_id": {"$ne": None}}},
+        {"$sort": {"started_at": -1}},
+        {"$group": {"_id": "$project_id", "runs": {"$push": {
+            "run_id": "$run_id", "status": "$status", "started_at": "$started_at",
+            "verified": "$verified", "receipt_key": "$receipt_key",
+        }}}},
+    ]):
+        per_project[str(row["_id"])] = row["runs"][:10]
+
+    # S5 — 30-day meter line data.
+    previews_30d = await _count("preview_session", since_30d)
+    deploys_30d = await db.aurem_cto_deploy_runs.count_documents({"started_at": {"$gte": since_30d}})
+    deploys_failed_30d = await db.aurem_cto_deploy_runs.count_documents({
+        "started_at": {"$gte": since_30d}, "status": {"$in": ["failed", "timeout"]},
+    })
+    receipts_30d = await _count("receipt_captured", since_30d)
+    capture_attempts_30d = await db.aurem_cto_deploy_runs.count_documents({
+        "started_at": {"$gte": since_30d}, "status": "ok", "verified": {"$ne": None},
+    })
+    capture_success_30d = await db.aurem_cto_deploy_runs.count_documents({
+        "started_at": {"$gte": since_30d}, "verified": True,
+    })
+    capture_success_pct = round(100 * capture_success_30d / capture_attempts_30d) if capture_attempts_30d else None
+    meter_line = (
+        f"last 30d: {previews_30d} previews · {deploys_30d} deploys "
+        f"({deploys_failed_30d} failed) · {receipts_30d} receipts · "
+        f"capture success {capture_success_pct if capture_success_pct is not None else '—'}%"
+    )
+
+    return {
+        "last_24h": {
+            "preview_sessions": {"total": sum(device_breakdown.values()), "by_device": device_breakdown},
+            "deploys": {"succeeded": deploy_succeeded, "failed": len(deploy_failed_runs),
+                        "top_failure_reasons": top_failure_reasons},
+            "captures": {"succeeded": captures_ok, "failed": len(deploy_failed_runs) - deploy_succeeded
+                         if False else max(0, deploy_succeeded - captures_ok)},
+        },
+        "receipt_storage": {
+            "count": receipts_total,
+            "oldest_started_at": (oldest_receipt_run[0]["started_at"] if oldest_receipt_run else None),
+            "retention_days": 30,
+        },
+        "per_project_deploy_history": per_project,
+        "meter_line": meter_line,
+        "meter": {
+            "previews_30d": previews_30d, "deploys_30d": deploys_30d,
+            "deploys_failed_30d": deploys_failed_30d, "receipts_30d": receipts_30d,
+            "capture_success_pct_30d": capture_success_pct,
+        },
+    }
+
+
+
 @router.get("/loop-token-metrics")
 async def loop_token_metrics(
     request: Request,

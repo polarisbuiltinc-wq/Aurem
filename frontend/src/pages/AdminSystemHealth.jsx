@@ -83,6 +83,7 @@ export default function AdminSystemHealth() {
   const [loopMetrics, setLoopMetrics] = useState(null);
   const [tokenMetrics, setTokenMetrics] = useState(null);
   const [webhookFence, setWebhookFence] = useState(null);
+  const [previewDeployMonitor, setPreviewDeployMonitor] = useState(null);
   const [errs, setErrs]             = useState({});
   const [lastRefresh, setLastRefresh] = useState(null);
 
@@ -150,6 +151,13 @@ export default function AdminSystemHealth() {
       const r = await api.get("/admin/github-webhook-fence");
       setWebhookFence(r.data);
     } catch (e) { nextErrs.webhook_fence = e?.response?.data?.detail || e?.message || "webhook-fence failed"; }
+
+    // 8) Trust Surfaces Round (S4/S5), 2026-08-29 — Preview & Deploy
+    // monitor tile + the 30-day meter line.
+    try {
+      const r = await api.get("/admin/preview-deploy-monitor");
+      setPreviewDeployMonitor(r.data);
+    } catch (e) { nextErrs.preview_deploy_monitor = e?.response?.data?.detail || e?.message || "preview-deploy-monitor failed"; }
 
     setErrs(nextErrs);
     setLastRefresh(new Date());
@@ -788,6 +796,58 @@ export default function AdminSystemHealth() {
             <div style={{ fontSize: 12, color: C.faint }}>loading…</div>
           )}
         </Card>
+
+        {/* Trust Surfaces Round (S4/S5), 2026-08-29 — Preview & Deploy
+            monitor tile, next to the Webhook Fence tile per spec. */}
+        <Card
+          testid="card-preview-deploy-monitor"
+          title="Preview & Deploy Monitor"
+          status={errs.preview_deploy_monitor ? StatusBadge("down") : (previewDeployMonitor ? StatusBadge("ok") : null)}
+        >
+          {errs.preview_deploy_monitor ? (
+            <div style={{ fontSize: 12, color: C.red }}>{errs.preview_deploy_monitor}</div>
+          ) : previewDeployMonitor ? (
+            <>
+              <div style={{ fontSize: 10, color: C.dim, marginBottom: 4, fontFamily: C.mono, letterSpacing: "0.08em" }}>
+                LAST 24H · PREVIEW SESSIONS
+              </div>
+              <Row label="Total" value={String(previewDeployMonitor.last_24h.preview_sessions.total)} />
+              {Object.entries(previewDeployMonitor.last_24h.preview_sessions.by_device || {}).map(([d, n]) => (
+                <Row key={d} label={`  ${d}`} value={String(n)} />
+              ))}
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${C.border}` }}>
+                <div style={{ fontSize: 10, color: C.dim, marginBottom: 4, fontFamily: C.mono, letterSpacing: "0.08em" }}>
+                  LAST 24H · DEPLOYS
+                </div>
+                <Row label="Succeeded" value={String(previewDeployMonitor.last_24h.deploys.succeeded)} color={C.green} />
+                <Row label="Failed" value={String(previewDeployMonitor.last_24h.deploys.failed)}
+                     color={previewDeployMonitor.last_24h.deploys.failed > 0 ? C.red : C.green} />
+                {previewDeployMonitor.last_24h.deploys.top_failure_reasons?.length > 0 && (
+                  <div data-testid="preview-deploy-top-failure-reasons" style={{ fontSize: 11, color: C.amber, marginTop: 4 }}>
+                    top: {previewDeployMonitor.last_24h.deploys.top_failure_reasons.map(([r, n]) => `${r} (${n})`).join(", ")}
+                  </div>
+                )}
+              </div>
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${C.border}` }}>
+                <div style={{ fontSize: 10, color: C.dim, marginBottom: 4, fontFamily: C.mono, letterSpacing: "0.08em" }}>
+                  RECEIPT STORAGE
+                </div>
+                <Row label="Captures (24h)" value={String(previewDeployMonitor.last_24h.captures.succeeded)} />
+                <Row label="Total receipts" value={String(previewDeployMonitor.receipt_storage.count)} />
+                <Row label="Retention" value={`${previewDeployMonitor.receipt_storage.retention_days}d`} />
+              </div>
+              <div
+                data-testid="preview-deploy-meter-line"
+                style={{ marginTop: 10, paddingTop: 8, borderTop: `1px dashed ${C.border}`, fontSize: 11, color: C.text, fontFamily: C.mono }}
+              >
+                {previewDeployMonitor.meter_line}
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: C.faint }}>loading…</div>
+          )}
+        </Card>
+
       </div>
     </div>
   );
