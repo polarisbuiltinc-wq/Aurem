@@ -71,6 +71,31 @@ if "REACT_APP_BACKEND_URL" not in os.environ:
 # stays green while remediation continues.
 import pytest as _pytest
 
+
+@_pytest.fixture(autouse=True)
+def _x1_mock_llm_boot_deterministic(monkeypatch):
+    """X1 hardening (2026-08-30, overnight-loop-2 P0) — services/llm/_meta.py
+    (the orchestrator/loop/Council gateway) and ora_chat_v2's llm_client now
+    both honour MOCK_LLM, and llm_client reads it ONCE at process import
+    (immutable per-process by design — see REPORT-x1-crossproject.md §X1).
+    That import-order sensitivity made hundreds of pre-existing tests that
+    never anticipated a mock gate on this path flaky/order-dependent
+    (whichever test imports llm_client FIRST in the whole pytest session
+    "wins" the cached value for everyone after it). This autouse fixture
+    forces the cached value to `False` before EVERY test, deterministically,
+    restoring the pre-X1 baseline assumption ("MOCK_LLM has no effect
+    unless a test explicitly asks for it") suite-wide. Tests that want to
+    exercise the mock branch itself call
+    `monkeypatch.setattr(llm_client, "_MOCK_LLM_AT_BOOT", True)` in their
+    own body — that happens strictly AFTER this fixture runs and wins, and
+    monkeypatch's teardown unwinds both cleanly regardless of order."""
+    try:
+        from services.ora_chat_v2 import llm_client
+        monkeypatch.setattr(llm_client, "_MOCK_LLM_AT_BOOT", False, raising=False)
+    except Exception:
+        pass
+    yield
+
 _LEGACY_LISTS = (
     Path(__file__).parent / "legacy_quarantine.txt",
     Path(__file__).parent / "legacy_removed_features.txt",

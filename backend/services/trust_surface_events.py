@@ -23,6 +23,12 @@ EVENT_KINDS = {
     "preview_session",
     "deploy_form_shown", "deploy_started", "deploy_succeeded", "deploy_failed",
     "receipt_captured", "rollback_clicked", "rollback_succeeded",
+    # X1 hardening (2026-08-30, overnight-loop-2 P0) — a durable, queryable
+    # trail of every live request served by MOCK_LLM, across every LLM
+    # entry point (ora_chat_v2 chat_stream + services/llm/_meta.py's
+    # orchestrator/loop/council gateway). Feeds the admin "Live Model
+    # Mode" tile's 24h counter.
+    "mock_detected_in_live",
 }
 
 

@@ -1,0 +1,46 @@
+{
+  "db_name": "aurem_dev",
+  "collection_count": 183,
+  "cto_projects_total": 68,
+  "tjsandhu_owner_projects": [
+    {
+      "project_id": "iter330-history-test-proj",
+      "user_id": "test_admin_001",
+      "branch": "main",
+      "github_owner": "tjsandhu",
+      "github_repo": "aurem",
+      "name": "Iter 330 history test"
+    },
+    {
+      "project_id": "iter330-harness-proj",
+      "user_id": "test_admin_001",
+      "name": "Iter 330 harness",
+      "github_owner": "tjsandhu",
+      "github_repo": "aurem",
+      "branch": "main"
+    }
+  ],
+  "reroots_matches": [],
+  "tjsandhu_github_installations": [],
+  "loop_task_collections": [
+    "loop_backups",
+    "loop_plans",
+    "loop_kill_switch_trips",
+    "loop_locks",
+    "loop_task_specs",
+    "loop_events",
+    "loop_errors",
+    "loop_gate_log",
+    "loop_run_log",
+    "loop_verification_log",
+    "loop_execution_log",
+    "task_failure_signatures",
+    "process_loop_trips",
+    "loop_failures",
+    "loop_outcomes",
+    "loop_intent_stats",
+    "loop_sessions",
+    "cto_tasks"
+  ],
+  "L1_L2_id_matches_across_all_loop_task_collections": {}
+}

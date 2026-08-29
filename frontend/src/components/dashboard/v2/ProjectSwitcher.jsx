@@ -50,31 +50,35 @@ export function ProjectSwitcher({ projects = [], activeProjectId, onSelect }) {
     return () => clearInterval(timer);
   }, [refreshStatuses]);
 
-  // Login-landing guard: if the saved active project is revoked and a
-  // better candidate exists, switch to it once + surface a one-line
-  // notice. Runs only after both projects AND statuses have loaded, and
-  // only once per mount (a later manual switch into a revoked repo is
-  // the user's own choice, never overridden).
+  // H1 (X1/W1 hardening, 2026-08-30, overnight-loop-2 P0) — NEVER
+  // silently switch the active project. This effect used to call
+  // onSelect() automatically whenever the active project's
+  // connection-status read "unreachable" OR "disconnected" — but
+  // "unreachable" is an explicitly TEMPORARY network blip (see
+  // repo_status.py: "a network failure is NOT a revocation"), so a
+  // transient timeout (e.g. during a burst of GitHub API calls) could
+  // silently aim the user — and any live loop started right after —
+  // at a completely different repo with zero action from them. This
+  // is the confirmed root cause of the reported "active project
+  // silently switched mid-session with no user action" incident
+  // (see REPORT-x1-crossproject.md §W1). Fix: the active project may
+  // now change ONLY via an explicit click on an item below (or a
+  // deep-link/account load elsewhere) — this effect only ever shows a
+  // one-line, non-navigating notice for a REAL ("disconnected")
+  // revocation, and says nothing at all for a transient one.
   useEffect(() => {
     if (healedRef.current) return;
     if (!activeProjectId || projects.length === 0) return;
     if (Object.keys(statuses).length === 0) return;
     const current = projects.find((p) => p.project_id === activeProjectId);
-    if (!current || !UNREACHABLE.has(statuses[activeProjectId])) return;
-    const candidate = projects.find(
-      (p) => p.project_id !== activeProjectId && !UNREACHABLE.has(statuses[p.project_id]),
-    );
+    if (!current || statuses[activeProjectId] !== "disconnected") return;
     healedRef.current = true;
-    if (candidate) {
-      const oldLabel = current.github_repo || current.name || "project";
-      const newLabel = candidate.github_repo || candidate.name || "project";
-      onSelect?.(candidate.project_id);
-      toast({
-        message: `Your last project ${oldLabel} is unreachable — showing ${newLabel} instead.`,
-        kind: "info",
-      });
-    }
-  }, [activeProjectId, projects, statuses, onSelect]);
+    const oldLabel = current.github_repo || current.name || "project";
+    toast({
+      message: `${oldLabel} looks disconnected from GitHub — use the switcher above to pick another project, or reconnect it in Settings.`,
+      kind: "info",
+    });
+  }, [activeProjectId, projects, statuses]);
 
   const toggle = useCallback(() => {
     setOpen((o) => {

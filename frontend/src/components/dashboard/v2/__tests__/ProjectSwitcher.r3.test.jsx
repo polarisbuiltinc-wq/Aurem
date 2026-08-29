@@ -63,16 +63,36 @@ describe("ProjectSwitcher — R3 Repo Quick-Switch", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it("t_login_landing_avoids_revoked: saved active project revoked -> auto-switches + notice shown", async () => {
+  // H1 (X1/W1 hardening, 2026-08-30, overnight-loop-2 P0) — this test
+  // used to lock the auto-switch behaviour; that behaviour is the
+  // CONFIRMED root cause of the "active project silently switched
+  // mid-session with no user action" incident (see
+  // REPORT-x1-crossproject.md §W1) and has been removed by design.
+  // Replaced with the two tests below that lock the fixed behaviour.
+  it("t_disconnected_active_project_shows_notice_no_auto_switch: real revocation notifies but NEVER auto-switches", async () => {
     get.mockResolvedValue({ data: { statuses: [
       { project_id: "p_a", status: "disconnected" },
       { project_id: "p_b", status: "connected" },
     ] } });
     const onSelect = vi.fn();
     render(<ProjectSwitcher projects={PROJECTS} activeProjectId="p_a" onSelect={onSelect} />);
-    await waitFor(() => expect(onSelect).toHaveBeenCalledWith("p_b"));
-    expect(toast).toHaveBeenCalledTimes(1);
-    expect(toast.mock.calls[0][0].message).toMatch(/unreachable — showing/i);
+    await waitFor(() => expect(toast).toHaveBeenCalledTimes(1));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(toast.mock.calls[0][0].message).toMatch(/disconnected/i);
+    expect(toast.mock.calls[0][0].message).not.toMatch(/showing/i);
+  });
+
+  it("t_unreachable_active_project_never_switches_or_notifies: a TRANSIENT network blip is silent here (no switch, no toast) — exact regression guard for the reported incident", async () => {
+    get.mockResolvedValue({ data: { statuses: [
+      { project_id: "p_a", status: "unreachable" },
+      { project_id: "p_b", status: "connected" },
+    ] } });
+    const onSelect = vi.fn();
+    render(<ProjectSwitcher projects={PROJECTS} activeProjectId="p_a" onSelect={onSelect} />);
+    await waitFor(() => expect(get).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 10));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(toast).not.toHaveBeenCalled();
   });
 
   it("t_login_landing_noop_when_active_is_healthy: a reachable active project never triggers an auto-switch", async () => {

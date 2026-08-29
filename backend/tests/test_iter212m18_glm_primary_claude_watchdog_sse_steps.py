@@ -22,6 +22,24 @@ from services.llm import call_llm_with_meta, _GLM_MODEL, _CLAUDE_MODEL
 BACKEND = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def _x1_force_mock_off():
+    """X1 hardening (2026-08-30) — this whole file unit-tests
+    call_llm_with_meta's REAL provider-routing logic via monkeypatched
+    _call_glm/_call_claude/_call_deepseek. services/llm/_meta.py now
+    also honours MOCK_LLM (so a real mock-mode incident can never again
+    silently bypass loop/Council calls — see
+    REPORT-x1-crossproject.md §X1/W3); force it off HERE (this file's
+    own scope only) so that gate never intercepts these specific tests,
+    without changing the ambient default every other test relies on."""
+    from services.ora_chat_v2 import llm_client
+    import pytest as _pytest
+    mp = _pytest.MonkeyPatch()
+    mp.setattr(llm_client, "_MOCK_LLM_AT_BOOT", False)
+    yield
+    mp.undo()
+
+
 # ── llm.py: GLM model ID ───────────────────────────────────────────
 
 

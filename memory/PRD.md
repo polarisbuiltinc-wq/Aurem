@@ -7269,3 +7269,41 @@ testing_agent independently re-verified (report: `/app/test_reports/iteration_p3
 
 **Production status**: confirmed live on `auremcto.com` (build `f9c731dcce28`, verified via `/api/health`) — includes the health-probe crash fix and the earlier chip/pill/badge sizing uniformity batch. Does NOT yet include P2, P3, or this chip-polish follow-up (2+ commits ahead in Preview, awaiting next founder deploy).
 
+
+## 2026-08-30 — X1 (session-wide mock-mode incident) + Cross-Project Data-Safety (W0-W4) — INVESTIGATED + PARTIALLY FIXED, Loop-2 T2-T5 remain PAUSED
+
+Founder paused Overnight Master Loop 2 (T2-T5) after their own regression test found a NEW P0: a
+session-wide mock-mode incident (X1) plus a cross-project active-project silent-switch incident (W0-W4).
+Full 10-section report: `/app/memory/REPORT-x1-crossproject.md`.
+
+**X1 root cause (confirmed via source read + this pod's own on-disk history):** `services/llm/_meta.py`
+(the orchestrator/loop-plan/Council gateway) had zero MOCK_LLM awareness before this round; `is_mock()`
+re-read `os.getenv` per call with no boot immutability. Fixed: `is_mock()` now caches at import (F1);
+`call_llm_with_meta` now honours it (F2, zero real provider calls in mock mode); new durable
+`mock_detected_in_live` event trail + dedicated `GET /admin/live-model-mode` + "Live Model Mode" admin
+tile, deliberately separate from the unrelated Codebase Health Score widget (F3). Belt-and-suspenders:
+`loop_engine.py`'s real-ship path now refuses outright when mock is on (locked decision).
+
+**W1 root cause (confirmed via source read + test):** `ProjectSwitcher.jsx`'s auto-heal effect treated
+`"unreachable"` (explicitly transient, per `repo_status.py`'s own comment) identically to real
+`"disconnected"`, silently switching the active project with zero user action. Fixed (H1): silent switch
+removed entirely; real revocation now only shows a toast.
+
+**Honest gaps, NOT done this round (flagged P1, not silently skipped):** H3 (loop repo pin-and-assert-
+before-write; added as a new, unsatisfied stop-gate line 5 in `R9-PROD-FLIP-CHECKLIST.md`), B1/refuse-guard
+extension to `cto_projects.py`'s direct `/tasks/submit` commit path.
+
+**Confirmed standing fact (not new):** this Preview pod's MongoDB has never mirrored Production data —
+corroborated by `PRD.md`'s own `2026-08-25` P0 entry for the same org name (`ReRootsBeauty/ReRoots-`).
+Direct data-level forensics for the founder's specific incident need Production access.
+
+**Regression status:** full backend suite has FEWER FAILED/ERROR lines than the 2026-08-28 baseline
+(360 vs 410). One real test-suite-only import-order issue was found and fixed (`tests/conftest.py`
+autouse fixture). All other apparent regressions proven pre-existing via `git stash` A/B.
+Full method: `/app/e2e-proof/X1/regression_comparison.md`.
+
+**W4 — regression battery restart: NOT MET.** H3 not done -> W2 not all-green -> do not restart the
+5+5 battery yet.
+
+**Loop 2 (T2-T5) status: still PAUSED**, per founder's explicit instruction, pending founder's review of
+this report and an explicit "resume" signal.

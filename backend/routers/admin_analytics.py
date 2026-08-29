@@ -861,6 +861,41 @@ async def learning_health(authorization: Optional[str] = Header(None)):
     }
 
 
+@router.get("/live-model-mode")
+async def live_model_mode(authorization: Optional[str] = Header(None)):
+    """X1 hardening (2026-08-30, overnight-loop-2 P0) — dedicated,
+    honest "is this process actually serving real model calls right
+    now" signal. Deliberately a NEW, separate tile — NOT a repurpose
+    of the Codebase Health Score widget (/admin/health-score), which
+    measures static code quality (security/architecture/etc.) and has
+    nothing to do with live LLM serving state. Conflating the two was
+    the reason the founder's regression test saw the wrong "100"
+    badge stay green through a mock-mode window — that widget was
+    never meant to reflect this."""
+    await _require_admin(authorization)
+    db = require_db()
+    from services.ora_chat_v2.llm_client import is_mock as _mock_llm_on
+    now = datetime.now(timezone.utc)
+    day_ago = now - timedelta(hours=24)
+    recent: list = []
+    count_24h = 0
+    try:
+        count_24h = await db.trust_surface_events.count_documents(
+            {"kind": "mock_detected_in_live", "at": {"$gte": day_ago.isoformat()}})
+        cur = db.trust_surface_events.find(
+            {"kind": "mock_detected_in_live"}, {"_id": 0, "at": 1, "path": 1, "user_id": 1},
+        ).sort("at", -1).limit(10)
+        recent = await cur.to_list(10)
+    except Exception as e:
+        logger.warning("live-model-mode: trust_surface_events read failed: %r", e)
+    return {
+        "mode": "mock" if _mock_llm_on() else "real",
+        "mock_detected_in_live_24h": count_24h,
+        "recent_mock_events": recent,
+        "generated_at": now.isoformat(),
+    }
+
+
 @router.get("/ora/stats")
 async def ora_council_stats(authorization: Optional[str] = Header(None)):
     """Quick summary: total logs, by-mode counts, correction rate,

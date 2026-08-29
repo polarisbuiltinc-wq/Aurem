@@ -101,6 +101,13 @@ async def _async_none(*a, **k):
 
 
 async def test_p0_1_double_confirm_ship_pushes_exactly_once(monkeypatch):
+    # X1 hardening (2026-08-30) — force the mock-ship-refuse guard off
+    # for this test's scope; it exercises the real double-confirm
+    # split-brain guard, independent of MOCK_LLM (see
+    # REPORT-x1-crossproject.md §X1/W3).
+    from services.ora_chat_v2 import llm_client
+    monkeypatch.setattr(llm_client, "_MOCK_LLM_AT_BOOT", False)
+
     db = _ShipDB()
     pushes: list[int] = []
     e1 = await _mk_paused_engine(db, monkeypatch, pushes)

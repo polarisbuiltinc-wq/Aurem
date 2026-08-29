@@ -3539,6 +3539,23 @@ class LoopEngine:
         # Resume — push the commit for real.
         self.state = LoopState.SHIPPING
         self.phase = "ship"
+        # X1/W3 hardening (2026-08-30, overnight-loop-2 P0) — locked
+        # decision: a mock-mode loop REFUSES to write to a real repo,
+        # regardless of how far planning got. Never silently ships
+        # mock/placeholder content to a real GitHub branch. Checked
+        # here (before any token mint / branch create / commit) so a
+        # mock-mode loop makes ZERO real GitHub calls.
+        from services.ora_chat_v2.llm_client import is_mock as _mock_llm_on
+        if _mock_llm_on():
+            logger.warning(
+                "[loop %s] SHIP REFUSED — MOCK_LLM is on; no real GitHub "
+                "write will be made", self.loop_id)
+            await self._fail_ship(
+                "Mock mode is on (MOCK_LLM=true) \u2014 no real model is "
+                "connected, so this loop refuses to write to your real "
+                "repo. Ask an admin to turn mock mode off in Settings, "
+                "then retry.")
+            return
         owner   = pending["owner"]
         repo    = pending["repo"]
         branch  = pending["branch"]
@@ -3669,6 +3686,16 @@ class LoopEngine:
             # the git log another.
             commit_message = final_commit_msg
             logger.info("[loop %s] SHIP RESULT — %r", self.loop_id, res)
+            # B1 hardening (2026-08-30) — a landed commit is hard proof
+            # the connection is fine; drop any stale "disconnected"
+            # cache row so the banner/sidebar dot reflect that on the
+            # very next poll instead of replaying a pre-ship reading.
+            try:
+                from routers.repo_status import invalidate as _invalidate_repo_status
+                _invalidate_repo_status(self.project_id or "")
+            except Exception as _inv_err:                              # noqa: BLE001
+                logger.debug("[loop %s] repo_status invalidate skipped: %r",
+                             self.loop_id, _inv_err)
         except Exception as e:  # network / 401 / 422 / etc.
             logger.exception("[loop %s] SHIP commit_files failed", self.loop_id)
             await _log_error(self.db, self.loop_id, "ship", repr(e))

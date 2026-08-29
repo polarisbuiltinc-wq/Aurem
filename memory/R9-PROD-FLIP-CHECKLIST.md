@@ -1,6 +1,6 @@
 # R9 — ship_via_pr Production Flip Checklist (copy-paste executable)
 
-**STOP GATE — do not run any of this until ALL FOUR are true:**
+**STOP GATE — do not run any of this until ALL FIVE are true:**
 1. R5e passed (real webhook delivered live, `ship_pr_merged`/`ship_pr_closed`
    written by the real route, not the replay fallback — see
    `R5e-VERIFY-PLAN.md`).
@@ -16,8 +16,23 @@
    PR rollback path NOT SAFE for squash/rebase merges as of
    2026-08-28. Do not flip this flag until R1a's own fixes + tests are
    green (a separate, smaller PR from R9 itself).
+5. **H3 — loop repo pinning (added 2026-08-30, W2 hardening) — NOT
+   YET SATISFIED.** Each loop run must pin `{user_id, project_id,
+   repo, branch, installation_id}` at start, and every real GitHub
+   write must assert the live context still matches that pin before
+   writing, aborting with an explicit user-visible error on mismatch
+   (never silently re-target). Today, `LoopPipeline` already captures
+   `project_id` once as an immutable instance attribute (so a mid-run
+   frontend active-project switch can't retarget an in-flight loop's
+   `project_id`) — but there is no explicit re-assert-before-write
+   step against a captured `{repo, branch, installation_id}` pin, and
+   no `t_loop_repos_pinned` drill test exists yet. See
+   `REPORT-x1-crossproject.md` §W2/H3 for the confirmed root cause
+   this defends against (ProjectSwitcher.jsx's removed silent
+   auto-switch). Required before flipping ship-via-PR to production
+   across multiple users/repos.
 
-If any of the 4 is missing, **do not proceed** — log
+If any of the 5 is missing, **do not proceed** — log
 `R9 PENDING-FOUNDER` with the exact missing item and stop.
 
 ## Pre-flight (2 min)

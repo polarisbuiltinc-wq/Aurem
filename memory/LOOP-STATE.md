@@ -260,3 +260,67 @@ zero-spend live-proven, W3 S1-S5 all built + backend-tested, S1/S2/S4
 live-verified by testing_agent (100%/100%, 0 bugs), S3 modal code-complete but
 not live-clicked (missing AUREM_CTO_MASTER_KEY vault secret in this pod).
 Full detail: `/app/memory/REPORT-final-loop.md`. Awaiting founder.
+
+---
+
+# X1 + CROSS-PROJECT DATA-SAFETY ROUND (2026-08-30)
+
+**Trigger:** founder paused Overnight Master Loop 2 (T2-T5) after finding a
+NEW P0 in their own regression test — a session-wide mock-mode incident
+(X1) plus a cross-project active-project silent-switch incident (W0-W4).
+Full detail, all 10 sections, in `/app/memory/REPORT-x1-crossproject.md`.
+
+**X1 root cause (confirmed, evidence-based):** `services/llm/_meta.py`
+(the orchestrator/loop-plan/Council gateway) had zero MOCK_LLM awareness
+before this round — only `chat.py`'s `chat_stream` was gated. `is_mock()`
+also re-read `os.getenv` per-call with no boot-time immutability. This
+pod's own `.env` mtime history (from the PRIOR round's own T1/R8 testing)
+is a real, on-disk example of the exact global-single-process-flip failure
+mode. This pod's DB has zero data for the founder's specific named
+incident projects (`TJSNDHU/Aurem`, `RerootsBeauty/ReRoots-`) — the
+founder's live incident most likely happened on a separately-deployed
+instance this agent cannot directly inspect. NEEDS-FOUNDER logged.
+
+**W1 root cause (confirmed via source read + test, not guessed):**
+`ProjectSwitcher.jsx`'s auto-heal effect conflated `"unreachable"`
+(explicitly transient, per `repo_status.py`'s own comment) with real
+`"disconnected"`, silently switching the active project on a bare network
+blip. Fixed: removed the silent switch entirely (H1); real revocation now
+only shows a toast, user must click the switcher themselves.
+
+**Shipped this round:** X1 F1/F2/F3 (boot-cached mock flag, mock gate
+extended to the whole LLM gateway, new "Live Model Mode" admin tile +
+durable `mock_detected_in_live` event trail), loop-ship mock-refuse guard
+(belt-and-suspenders), ProjectSwitcher H1 fix, `repo_status.invalidate()`
+(B1, partial — loop_engine path only), `R9-PROD-FLIP-CHECKLIST.md` gained
+a 5th, NOT-yet-satisfied stop-gate line for H3 (loop repo pinning).
+
+**Explicitly NOT done this round (honest, in report + ledger, not
+silently skipped):** H3 (loop repo pin-and-assert-before-write),
+`t_loop_repos_pinned`/`t_breadcrumb_matches_active_project` guardrail
+tests, B1/refuse-guard extension to `cto_projects.py`'s direct
+`/tasks/submit` commit path.
+
+**Regression status:** full backend suite (fewer FAILED/ERROR lines than
+the 2026-08-28 baseline: 360 vs 410). A real but test-suite-only
+import-order issue (caused by combining the new boot-cached mock flag with
+the newly-mock-gated LLM gateway) was found and fixed with one new
+autouse fixture in `tests/conftest.py`. All other apparent "new" failures
+proven pre-existing via `git stash` A/B. Full method in
+`/app/e2e-proof/X1/regression_comparison.md`.
+
+**W4 (battery restart conditions): NOT MET.** H3 not done -> W2 not
+all-green -> the 5+5 regression battery must not restart yet, per the
+founder's own explicit gate. Context-pinning rule for whenever it does
+resume is documented in the report §5.
+
+**Loop 2 (T2-T5) handoff note:** still explicitly PAUSED per the founder's
+own instruction ("T2-T5 resume ONLY after X1 + W0 are green AND the
+founder's resume signal"). Not silently merged with this round's work —
+separate workstream, separate proofs (`/app/e2e-proof/T2/` untouched this
+round), separate report file.
+
+**MOCK_LLM state:** `true` in `/app/backend/.env`, confirmed unchanged
+before and after this entire round.
+
+**STOPPING here, per founder's explicit "STOP. Awaiting founder."**

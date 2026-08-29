@@ -84,6 +84,7 @@ export default function AdminSystemHealth() {
   const [tokenMetrics, setTokenMetrics] = useState(null);
   const [webhookFence, setWebhookFence] = useState(null);
   const [previewDeployMonitor, setPreviewDeployMonitor] = useState(null);
+  const [liveModelMode, setLiveModelMode] = useState(null);
   const [errs, setErrs]             = useState({});
   const [lastRefresh, setLastRefresh] = useState(null);
 
@@ -158,6 +159,13 @@ export default function AdminSystemHealth() {
       const r = await api.get("/admin/preview-deploy-monitor");
       setPreviewDeployMonitor(r.data);
     } catch (e) { nextErrs.preview_deploy_monitor = e?.response?.data?.detail || e?.message || "preview-deploy-monitor failed"; }
+
+    // 9) X1 hardening (2026-08-30, overnight-loop-2 P0) — dedicated
+    // "is this process actually serving real model calls" signal.
+    try {
+      const r = await api.get("/admin/live-model-mode");
+      setLiveModelMode(r.data);
+    } catch (e) { nextErrs.live_model_mode = e?.response?.data?.detail || e?.message || "live-model-mode failed"; }
 
     setErrs(nextErrs);
     setLastRefresh(new Date());
@@ -708,6 +716,46 @@ export default function AdminSystemHealth() {
                   {" · $"}{tokenMetrics.current.avg_per_loop.cost_usd.toFixed(4)}
                 </div>
               )}
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: C.faint }}>loading…</div>
+          )}
+        </Card>
+
+        {/* X1 hardening (2026-08-30, overnight-loop-2 P0) — dedicated
+            live-model-mode tile. Deliberately separate from the
+            Codebase Health Score widget (static code quality, not
+            live LLM state) — see admin_analytics.py::live_model_mode
+            docstring for why conflating the two was the actual gap. */}
+        <Card
+          testid="card-live-model-mode"
+          title="Live Model Mode"
+          status={errs.live_model_mode ? StatusBadge("down") : (liveModelMode
+            ? StatusBadge(liveModelMode.mode === "real" ? "ok" : "degraded") : null)}
+        >
+          {errs.live_model_mode ? (
+            <div style={{ fontSize: 12, color: C.red }}>{errs.live_model_mode}</div>
+          ) : liveModelMode ? (
+            <>
+              <div
+                data-testid="live-model-mode-badge"
+                style={{
+                  fontSize: 20, fontWeight: 700, fontFamily: C.mono,
+                  color: liveModelMode.mode === "real" ? C.green : C.amber,
+                }}
+              >
+                {liveModelMode.mode === "real" ? "REAL" : "MOCK"}
+              </div>
+              <div style={{ fontSize: 11, color: C.faint, marginTop: 2 }}>
+                {liveModelMode.mode === "real"
+                  ? "Chat, loops and the Council are calling real providers."
+                  : "MOCK_LLM is on — every path (chat + loops + Council) is serving deterministic mock replies, zero real spend."}
+              </div>
+              <Row
+                label="Mock served (24h)"
+                value={String(liveModelMode.mock_detected_in_live_24h)}
+                color={liveModelMode.mock_detected_in_live_24h > 0 ? C.amber : C.dim}
+              />
             </>
           ) : (
             <div style={{ fontSize: 12, color: C.faint }}>loading…</div>

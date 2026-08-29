@@ -21,9 +21,27 @@ logger = logging.getLogger(__name__)
 
 _TIMEOUT_S = float(os.getenv("LLM_TIMEOUT_S", "45.0"))
 
+# X1 hardening (2026-08-30, overnight-loop-2 P0) — read ONCE at process
+# import, not on every call. Before this fix, `is_mock()` re-read
+# `os.getenv` on every single request, so an in-place `.env` edit +
+# supervisor restart mid-session could silently flip live-serving
+# behaviour for real, in-flight users with zero warning. Reading it
+# once at import time means the only way to change it is a real
+# process restart — a deliberate, logged event (see main.py boot log)
+# — never a value that can drift underneath an already-running
+# request. NOTE (honest limitation, flagged NEEDS-FOUNDER in
+# REPORT-x1-crossproject.md): this pod has exactly ONE running
+# backend process serving all traffic — there is no separate
+# Preview-vs-Production process to isolate. True environment
+# isolation requires a genuinely separate deployment; this fix makes
+# a flip immutable-per-process, it does not create a second process.
+_MOCK_LLM_AT_BOOT = os.getenv("MOCK_LLM", "false").strip().lower() in ("1", "true", "yes", "on")
+logger.warning("llm_client boot: MOCK_LLM=%s (read once, immutable for this process)",
+               _MOCK_LLM_AT_BOOT)
+
 
 def is_mock() -> bool:
-    return os.getenv("MOCK_LLM", "false").strip().lower() in ("1", "true", "yes", "on")
+    return _MOCK_LLM_AT_BOOT
 
 
 async def _resolve(db, role: str) -> dict:
@@ -104,6 +122,18 @@ async def stream_chat(*, messages: list, tools: Optional[list] = None,
     role = "vision" if vision else "chat"
 
     if is_mock():
+        # X1 hardening — every live mock resolution is now a durable,
+        # queryable fact (not just a chat-bubble string a user has to
+        # notice and interpret). Fire-and-forget; never blocks the reply.
+        logger.warning("MOCK_DETECTED_IN_LIVE: chat_stream resolved to mock (user_id=%s)",
+                        user_id)
+        if db is not None:
+            try:
+                from services.trust_surface_events import log_trust_event
+                await log_trust_event(db, "mock_detected_in_live",
+                                       user_id=user_id or "unknown", path="chat_stream")
+            except Exception as e:                                   # noqa: BLE001
+                logger.debug("mock_detected_in_live log skipped: %r", e)
         yield {"type": "resolved", "model": "mock", "label": "MOCK_LLM", "source": "mock"}
         async for evt in _mock_stream(messages, tools):
             yield evt

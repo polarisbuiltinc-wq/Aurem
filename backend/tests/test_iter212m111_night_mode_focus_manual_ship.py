@@ -104,6 +104,13 @@ async def test_confirm_ship_approved_runs_commit_and_emits_completed(monkeypatch
     """The confirm_ship(approved=True) flow must call commit_files()
     and emit a state=completed event with the real commit_sha."""
     from services import loop_engine as le
+    # X1 hardening (2026-08-30) — loop_engine now refuses to ship for
+    # real while MOCK_LLM is on (locked decision, see
+    # REPORT-x1-crossproject.md §X1/W3). This test exercises the real
+    # commit path with a mocked commit_files(), independent of that
+    # guard — force it off for this test's scope only.
+    from services.ora_chat_v2 import llm_client
+    monkeypatch.setattr(llm_client, "_MOCK_LLM_AT_BOOT", False)
 
     emits: list[dict] = []
     persisted: list[dict] = []

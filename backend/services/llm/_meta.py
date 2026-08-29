@@ -88,6 +88,41 @@ async def call_llm_with_meta(system: str, user: str,
     Tracing is silently disabled when LANGFUSE_*_KEY env vars are
     missing; a Langfuse outage never breaks an LLM call.
     """
+    # X1/W3 hardening (2026-08-30, overnight-loop-2 P0) — this is the
+    # ONE shared gateway every orchestrator/loop-plan/Council A/B/C
+    # call goes through. Before this fix, MOCK_LLM only short-circuited
+    # `ora_chat_v2`'s chat_stream — this entire path (used by
+    # loop_engine's planner + council members) called a REAL provider
+    # unconditionally, spending real money and making real decisions
+    # even while chat replied with the canned mock text. Confirmed via
+    # direct source read (no MOCK_LLM reference anywhere in this
+    # package before this change) — see REPORT-x1-crossproject.md §W3.
+    from services.ora_chat_v2.llm_client import is_mock as _mock_llm_on
+    if _mock_llm_on():
+        logger.warning("MOCK_DETECTED_IN_LIVE: call_llm_with_meta resolved to mock "
+                        "(mode=%s, review_mode=%s)", mode, review_mode)
+        try:
+            from cto_services.db import get_db as _get_db
+            from services.trust_surface_events import log_trust_event
+            _db = _get_db()
+            if _db is not None:
+                await log_trust_event(_db, "mock_detected_in_live",
+                                       user_id=user_id or "unknown", path="call_llm_with_meta")
+        except Exception as e:                                       # noqa: BLE001
+            logger.debug("mock_detected_in_live log skipped: %r", e)
+        return {
+            "ok": True, "provider": "mock", "mock": True,
+            "content": (
+                "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call "
+                "was served a deterministic mock response \u2014 no real provider "
+                "was called and no tokens were spent."
+            ),
+            "temperature": 0.0,
+            "mode": mode, "review_mode": review_mode, "model": "mock",
+            "fallback_chain": ["mock"],
+            "maxx_capped": False, "maxx_overage": False, "maxx_remaining": None,
+        }
+
     # Iter 212m-119 — Langfuse observability wrapper.
     from services.langfuse_tracing import trace_llm_call
     # 2026-08 hardening (Task 2 cost audit → Fix 2) — wire the G13 cost

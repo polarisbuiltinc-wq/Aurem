@@ -18,8 +18,16 @@ async def test_mock_short_circuit_live_chat(monkeypatch):
     """With MOCK_LLM on, chat_stream must NEVER construct/call any
     real provider — a spy that raises on construction proves it was
     never touched — and must return exactly one deterministic canned
-    SSE message with ZERO ora_chat_usage rows written."""
-    monkeypatch.setenv("MOCK_LLM", "true")
+    SSE message with ZERO ora_chat_usage rows written.
+
+    X1 hardening (2026-08-30) — is_mock() now reads MOCK_LLM ONCE at
+    process import (cached), so a bare monkeypatch.setenv() only works
+    if this is the very FIRST thing to import
+    services.ora_chat_v2.llm_client in the whole pytest session — not
+    reliable once thousands of other tests run first. Set the cached
+    constant directly instead."""
+    from services.ora_chat_v2 import llm_client
+    monkeypatch.setattr(llm_client, "_MOCK_LLM_AT_BOOT", True)
 
     from routers import chat as chat_router
 
@@ -81,10 +89,17 @@ def test_mock_off_real_path_unchanged(monkeypatch):
     Verified structurally: the guard is an `if` (not an early
     unconditional return), so the function falls through to the
     pre-existing budget/rate-limit/orchestrator code when the check
-    is false."""
-    monkeypatch.delenv("MOCK_LLM", raising=False)
-    from services.ora_chat_v2.llm_client import is_mock
-    assert is_mock() is False
+    is false.
+
+    X1 hardening (2026-08-30) — is_mock() now reads MOCK_LLM ONCE at
+    process import (a cached module-level constant), not per-call, so
+    a bare env delenv/setenv no longer has any effect on an
+    already-imported process — that's the whole point of the fix (see
+    tests/test_x1_mock_incident_2026_08_30.py). Set the cached constant
+    directly instead of the env var to exercise the "mock off" branch."""
+    from services.ora_chat_v2 import llm_client
+    monkeypatch.setattr(llm_client, "_MOCK_LLM_AT_BOOT", False)
+    assert llm_client.is_mock() is False
 
     import inspect
     from routers import chat as chat_router
