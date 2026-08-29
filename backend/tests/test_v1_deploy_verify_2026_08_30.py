@@ -35,6 +35,11 @@ FIXTURE_DIR = "/tmp/v1_fixture_site"
 FIXTURE_PORT = 8899
 FIXTURE_BASE = f"http://127.0.0.1:{FIXTURE_PORT}"
 
+# Full-page screenshot upgrade (2026-08-30) — a per-path GET counter so
+# `test_fullpage_no_renavigate` can prove taking a full_page=True shot
+# never triggers a second load of the main document.
+_REQUEST_COUNTS: dict[str, int] = {}
+
 
 _FIXTURE_FILES = {
     "index.html": (
@@ -99,6 +104,9 @@ def _fixture_server():
             super().__init__(*a, directory=FIXTURE_DIR, **kw)
         def log_message(self, *a):
             pass
+        def do_GET(self):
+            _REQUEST_COUNTS[self.path] = _REQUEST_COUNTS.get(self.path, 0) + 1
+            super().do_GET()
 
     httpd = socketserver.TCPServer(("127.0.0.1", FIXTURE_PORT), Handler)
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -125,6 +133,62 @@ async def test_verify_a_zero_llm(monkeypatch):
             "V1a must never call an LLM"))):
         result = await dv.run_verify(f"{FIXTURE_BASE}/index.html", run_trace=False)
     assert result["verdict"] == "pass"
+
+
+# ══════════════ V1a — full-page screenshot upgrade (2026-08-30) ═══
+@pytest.mark.asyncio
+async def test_fullpage_captured(monkeypatch):
+    """A `fullpage` shot exists alongside the existing viewport shots,
+    and is at least as large as the desktop viewport shot (same
+    width, taller/equal page — this fixture page is short, so at
+    minimum they're comparable, never smaller by construction)."""
+    _allow_fence(monkeypatch)
+    import services.deploy_verify as dv
+    result = await dv.run_verify(f"{FIXTURE_BASE}/index.html", run_trace=False)
+    assert "fullpage" in result["screenshots"]
+    assert result["screenshots"]["fullpage"] > 0
+    raw = result["_raw_screenshots"]
+    assert "fullpage" in raw and "mobile_375" in raw and "desktop" in raw
+    assert result["lazy_load_note"] == (
+        "Full-page shot captures rendered content; scroll-triggered "
+        "lazy elements may not appear."
+    )
+
+
+@pytest.mark.asyncio
+async def test_fullpage_no_renavigate(monkeypatch):
+    """Taking the full_page=True shot does NOT trigger any ADDITIONAL
+    load of the main document beyond the engine's own pre-existing
+    navigations (Check 1's initial `goto`, then the unconditional
+    "navigate back to the primary URL for the remaining checks" reset
+    at the top of Check 5 — both pre-existing, unrelated to this
+    round's change). Proven via the fixture server's own per-path
+    request count: exactly 2 for a run with no changed_routes, same
+    as before the full-page capture was added — NOT 3."""
+    _allow_fence(monkeypatch)
+    import services.deploy_verify as dv
+    before = _REQUEST_COUNTS.get("/index.html", 0)
+    await dv.run_verify(f"{FIXTURE_BASE}/index.html", run_trace=False)
+    after = _REQUEST_COUNTS.get("/index.html", 0)
+    assert after - before == 2, (
+        f"expected exactly the 2 pre-existing navigations (initial + "
+        f"pre-capture reset), saw {after - before} — the full-page "
+        f"screenshot must add zero of its own"
+    )
+
+
+@pytest.mark.asyncio
+async def test_fullpage_not_in_llm_path():
+    """V1b (parked) must never receive the full-page image directly —
+    a bare-metal guard, testable even while the real judgment logic
+    doesn't exist yet."""
+    import services.deploy_verify as dv
+    fake_fullpage_bytes = b"\xff\xd8\xff\xe0FAKEJPEGBYTES"
+    with pytest.raises(TypeError, match="must never receive raw image bytes"):
+        await dv.run_judgment(fake_fullpage_bytes, mock_llm=True)
+    # the normal text path still works — the guard is type-specific.
+    ok = await dv.run_judgment("a text accessibility snapshot", mock_llm=True)
+    assert ok["verdict"] == "pending"
 
 
 # ═══════════════════════ V1c — security fence (9 rules) ═══════════

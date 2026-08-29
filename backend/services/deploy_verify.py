@@ -383,7 +383,24 @@ async def _run_verify_inner(
             await page.wait_for_timeout(200)
             shot_desktop = await page.screenshot(type="jpeg", quality=80)
             result["screenshots"]["desktop"] = len(shot_desktop)
-            result["_raw_screenshots"] = {"mobile_375": shot_mobile, "desktop": shot_desktop}
+            # Full-page shot (2026-08-30 upgrade) — SAME already-loaded
+            # page, desktop viewport, full_page=True. Playwright's
+            # full_page flag captures the current DOM's rendered
+            # height; it does NOT re-navigate/reload (no new `goto`
+            # call here — see `test_fullpage_no_renavigate`). Taken
+            # AFTER Check 6's interaction step, so any content that
+            # mounts on click is included, but this is still not a
+            # guarantee for arbitrary scroll-triggered lazy content —
+            # see `lazy_load_note` below, surfaced on the receipt.
+            shot_fullpage = await page.screenshot(type="jpeg", quality=80, full_page=True)
+            result["screenshots"]["fullpage"] = len(shot_fullpage)
+            result["_raw_screenshots"] = {
+                "mobile_375": shot_mobile, "desktop": shot_desktop, "fullpage": shot_fullpage,
+            }
+            result["lazy_load_note"] = (
+                "Full-page shot captures rendered content; scroll-"
+                "triggered lazy elements may not appear."
+            )
 
             if run_trace:
                 trace_path = f"/tmp/deploy_verify_trace_{result['run_id']}.zip"
@@ -420,6 +437,23 @@ async def run_judgment(accessibility_snapshot: str, *, mock_llm: bool) -> dict:
     constructs an LLM call, in mock OR real mode, so there is zero
     model spend from this function this round. Next round wires the
     real thing (pruned snapshot <=3000 tokens, nonce boundaries, max-
-    3-point advisory-only schema, refuse-in-mock)."""
+    3-point advisory-only schema, refuse-in-mock).
+
+    Full-page screenshot guard (2026-08-30) — this function's ONLY
+    accepted input is a text accessibility snapshot, never an image.
+    If V1b is ever wired for real, the full-page shot from V1a's
+    capture step must NOT be handed to it directly — only a sliced +
+    resized (1568px, ~28px/token) crop would ever be acceptable input,
+    and even that is future scope. This raises loudly right now if
+    anyone ever tries to pass raw image bytes (fullpage or otherwise)
+    into this function, so the guard is enforced even while the real
+    judgment logic doesn't exist yet."""
+    if isinstance(accessibility_snapshot, bytes):
+        raise TypeError(
+            "run_judgment must never receive raw image bytes (fullpage "
+            "or otherwise) — a text-only accessibility snapshot is "
+            "required; a full-page screenshot needs slicing+resizing "
+            "(1568px, ~28px/token) before it could ever be LLM input."
+        )
     logger.info("deploy_verify.run_judgment: V1b pending — not built this round, no model called")
     return {"verdict": "pending", "points": [], "note": "V1b pending — not built this round"}

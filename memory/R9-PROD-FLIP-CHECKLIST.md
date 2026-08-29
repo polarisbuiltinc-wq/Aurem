@@ -33,7 +33,11 @@
    against a real repo (TJSNDHU/Aurem): ship → simulated 3rd-party
    push → drift detected live → acknowledged → EXPECTED commit
    reverted (not the drifted head) → repo left clean. See
-   `/app/e2e-proof/drift/DRIFT_SUMMARY.md`.
+   `/app/e2e-proof/drift/DRIFT_SUMMARY.md`. **Admin visibility added
+   (2026-08-30, follow-up round)**: `GET /admin/drift-alerts` +
+   "Drift-Blocked Rollbacks" tile on `AdminSystemHealth`, read-only,
+   last 24h count + expandable per-event detail. See
+   `/app/e2e-proof/drift-alert/DRIFT_ALERT_SUMMARY.md`.
 5. **H3 — loop repo pinning — SATISFIED (2026-08-30, founder follow-up
    GO).** Both write paths now pin `{owner, repo, branch,
    installation_id}` at start and re-assert the LIVE binding still

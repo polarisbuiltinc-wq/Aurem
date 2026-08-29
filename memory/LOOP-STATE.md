@@ -519,3 +519,41 @@ adjacent component tests green. **Zero new regressions.**
 
 **No R9 flip. No production changes. `MOCK_LLM` unchanged (true). No
 V1b, no cloud fallback, no webhook secret handling this round.**
+
+## Drift alerts + V1 full-page round (2026-08-30, 2 small items)
+
+**Item 1 — Admin Drift Alerts CLOSED.** New `GET /admin/drift-alerts`
+(same `_require_admin` pattern as every other admin tile, 0 new deps)
++ a new "Drift-Blocked Rollbacks" tile on `AdminSystemHealth`, next to
+the Webhook Fence tile. READ-ONLY — admin sees, only the loop owner
+acknowledges. 4 backend tests + 3 frontend tests, all pass. **Live
+E2E**: seeded 1 real `ship_rollback_drift_detected` trust event,
+logged in live as admin, screenshotted the real `/admin/system-health`
+page — tile shows "1", expand reveals the exact loop_id/branch/
+expected/current/timestamp row. Cleaned up after.
+`/app/e2e-proof/drift-alert/DRIFT_ALERT_SUMMARY.md`.
+
+**Item 2 — V1 full-page screenshots CLOSED.** The verify engine now
+takes a `full_page=True` shot (Playwright built-in, no new dep) on the
+SAME already-loaded page, alongside the existing mobile/desktop
+viewport shots — no re-navigation. Persisted as its own receipt key
+in the wiring layer. `run_judgment` (V1b, still pending) hardened with
+a real `TypeError` guard against ever receiving raw image bytes. 3 new
+engine tests + 1 new wiring test, all pass — including a genuine live
+visual proof (a tall test page showing the viewport shot crops
+below-fold content while the full-page shot captures it, saved to
+`/app/e2e-proof/V1-fullpage/`). Found and fixed a stale leftover
+`http.server` process from earlier manual debugging that was masking
+the new navigation-counting test — documented, not a code bug.
+
+**Regression**: targeted sweep (deploy/output_guard/notifications/
+trust_surface/admin_analytics/preview_capture/drift keywords) — same
+3 failed + 1 error as the prior round, all pre-existing baseline
+items, zero new. Frontend 21/21 green across the new + existing
+rollback/verify/webhook-fence component tests.
+
+**R9 re-readiness**: dev-side is now FULLY SATISFIED (drift detection
++ visibility both closed). Remaining: (1) webhook secret — founder's
+own production action, (2) 48h warn-window review — founder. R9 flips
+when founder completes both + main agent's GO. **No R9 flip performed
+this round.**

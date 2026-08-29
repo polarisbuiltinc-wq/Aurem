@@ -84,6 +84,7 @@ export default function AdminSystemHealth() {
   const [tokenMetrics, setTokenMetrics] = useState(null);
   const [webhookFence, setWebhookFence] = useState(null);
   const [previewDeployMonitor, setPreviewDeployMonitor] = useState(null);
+  const [driftAlerts, setDriftAlerts] = useState(null);
   const [liveModelMode, setLiveModelMode] = useState(null);
   const [errs, setErrs]             = useState({});
   const [lastRefresh, setLastRefresh] = useState(null);
@@ -159,6 +160,13 @@ export default function AdminSystemHealth() {
       const r = await api.get("/admin/preview-deploy-monitor");
       setPreviewDeployMonitor(r.data);
     } catch (e) { nextErrs.preview_deploy_monitor = e?.response?.data?.detail || e?.message || "preview-deploy-monitor failed"; }
+
+    // R1a gap#4 admin visibility (2026-08-30) — drift-blocked
+    // rollbacks, last 24h, read-only, next to the Webhook Fence tile.
+    try {
+      const r = await api.get("/admin/drift-alerts");
+      setDriftAlerts(r.data);
+    } catch (e) { nextErrs.drift_alerts = e?.response?.data?.detail || e?.message || "drift-alerts failed"; }
 
     // 9) X1 hardening (2026-08-30, overnight-loop-2 P0) — dedicated
     // "is this process actually serving real model calls" signal.
@@ -838,6 +846,58 @@ export default function AdminSystemHealth() {
                     </details>
                   )}
                 </>
+              )}
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: C.faint }}>loading…</div>
+          )}
+        </Card>
+
+        {/* R1a gap#4 admin visibility (2026-08-30) — Drift-blocked
+            rollbacks, read-only, next to the Webhook Fence tile. */}
+        <Card
+          testid="card-drift-alerts"
+          title="Drift-Blocked Rollbacks"
+          status={StatusBadge((driftAlerts?.count ?? 0) > 0 ? "degraded" : "ok")}
+        >
+          {errs.drift_alerts ? (
+            <div style={{ fontSize: 12, color: C.red }}>{errs.drift_alerts}</div>
+          ) : driftAlerts ? (
+            <>
+              <Row
+                label="Drift-blocked rollbacks (24h)"
+                value={String(driftAlerts.count ?? 0)}
+                color={(driftAlerts.count ?? 0) > 0 ? C.amber : C.green}
+              />
+              <div data-testid="drift-alerts-count" style={{ display: "none" }}>{driftAlerts.count ?? 0}</div>
+              {driftAlerts.count > 0 ? (
+                <details style={{ marginTop: 8 }}>
+                  <summary
+                    data-testid="drift-alerts-expand"
+                    style={{ cursor: "pointer", fontSize: 10, color: C.amber, fontFamily: C.mono, letterSpacing: "0.08em" }}
+                  >
+                    ▶ {driftAlerts.count} drift event{driftAlerts.count === 1 ? "" : "s"}
+                  </summary>
+                  <div style={{ marginTop: 6, maxHeight: 220, overflowY: "auto" }}>
+                    {driftAlerts.events.map((ev, i) => (
+                      <div
+                        key={ev.loop_id ? `${ev.loop_id}-${i}` : i}
+                        data-testid={`drift-alert-row-${ev.loop_id || i}`}
+                        style={{ padding: "6px 0", borderBottom: `1px dashed ${C.border}`, fontSize: 10, fontFamily: C.mono }}
+                      >
+                        <div style={{ color: C.text }}>loop: {ev.loop_id} · branch: {ev.branch}</div>
+                        <div style={{ color: C.faint }}>
+                          expected {String(ev.expected_sha || "").slice(0, 10)} → current {String(ev.current_sha || "").slice(0, 10)}
+                        </div>
+                        <div style={{ color: C.faint }}>{ev.timestamp}</div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ) : (
+                <div style={{ fontSize: 11, color: C.faint, marginTop: 4 }}>
+                  No drift-blocked rollbacks in the last 24h.
+                </div>
               )}
             </>
           ) : (

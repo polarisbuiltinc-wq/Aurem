@@ -2177,6 +2177,35 @@ async def preview_deploy_monitor(
     }
 
 
+@router.get("/drift-alerts")
+async def drift_alerts(authorization: Optional[str] = Header(None)):
+    """R1a gap#4 admin visibility (2026-08-30) — surfaces drift-
+    blocked rollbacks (the `ship_rollback_drift_detected` trust event,
+    already logged by the drift fix), last 24h, next to the Webhook
+    Fence tile. READ-ONLY — the admin can see, not act; only the loop
+    owner acknowledges drift, in their own chat. Same admin-only,
+    0-LLM pattern as /preview-deploy-monitor."""
+    await _require_admin(authorization)
+    db = require_db()
+    since_24h = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    cur = db.trust_surface_events.find(
+        {"kind": "ship_rollback_drift_detected", "at": {"$gte": since_24h}},
+        {"_id": 0, "loop_id": 1, "branch": 1, "expected": 1, "actual": 1, "at": 1},
+    ).sort("at", -1).limit(100)
+    rows = [d async for d in cur]
+    events = [
+        {
+            "loop_id":      r.get("loop_id"),
+            "branch":       r.get("branch"),
+            "expected_sha": r.get("expected"),
+            "current_sha":  r.get("actual"),
+            "timestamp":    r.get("at"),
+        }
+        for r in rows
+    ]
+    return {"count": len(events), "events": events}
+
+
 
 @router.get("/loop-token-metrics")
 async def loop_token_metrics(

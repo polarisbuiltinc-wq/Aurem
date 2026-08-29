@@ -335,6 +335,15 @@ async def _verify_and_capture(user_id: str, run_id: str, project_id: str | None,
     if mobile_bytes:
         engine_receipt_key = await upload_receipt(
             mobile_bytes, f"deploy-runs/{run_id}-verify-engine.jpg")
+    # Full-page screenshot upgrade (2026-08-30) — stored as its OWN
+    # receipt key, separate from the viewport shot, so the receipt UI
+    # can offer both a "full page" (the big one) and a "detail"
+    # (viewport) shot, per spec.
+    fullpage_receipt_key = None
+    fullpage_bytes = engine_shots.get("fullpage")
+    if fullpage_bytes:
+        fullpage_receipt_key = await upload_receipt(
+            fullpage_bytes, f"deploy-runs/{run_id}-verify-engine-fullpage.jpg")
     ttfb_check = next((c for c in engine_result["checks"] if c["name"] == "reachability"), None)
     await db.aurem_cto_deploy_runs.update_one(
         {"run_id": run_id},
@@ -347,7 +356,9 @@ async def _verify_and_capture(user_id: str, run_id: str, project_id: str | None,
                 "console_errors":   engine_result.get("console_errors") or [],
                 "ttfb_evidence":    (ttfb_check or {}).get("evidence"),
                 "duration_ms":      engine_result.get("duration_ms"),
-                "receipt_key":      engine_receipt_key,
+                "receipt_key":            engine_receipt_key,
+                "fullpage_receipt_key":   fullpage_receipt_key,
+                "lazy_load_note":         engine_result.get("lazy_load_note"),
                 "browser_mode":     dv.VERIFY_BROWSER_MODE,
             },
         }},

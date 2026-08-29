@@ -97,6 +97,53 @@ async def test_verify_engine_wired_pass_no_bell(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_verify_engine_wired_persists_fullpage_receipt_key(monkeypatch):
+    """Full-page screenshot upgrade (2026-08-30) — when the engine
+    returns a `fullpage` raw screenshot, it gets its OWN receipt key
+    (separate from the viewport `receipt_key`), plus the lazy-load
+    caveat note, both persisted onto `verify_engine`."""
+    import routers.deploy as deploy_mod
+
+    db = _FakeDB()
+    monkeypatch.setattr(deploy_mod, "require_db", lambda: db)
+
+    upload_calls = []
+
+    async def _fake_upload_receipt(image_bytes, key):
+        upload_calls.append(key)
+        return f"uploaded::{key}"
+
+    async def _fake_httpx_get(self, url):
+        return _FakeHTTPResp()
+
+    async def _fake_run_verify(url, **kw):
+        return {
+            "run_id": "x", "url": url, "verdict": "pass", "build_match": None,
+            "checks": [{"name": "reachability", "pass": True, "evidence": "HTTP 200, TTFB 50ms"}],
+            "console_errors": [], "fail_reason": None, "what_happened": "All checks passed.",
+            "duration_ms": 500,
+            "lazy_load_note": "Full-page shot captures rendered content; scroll-triggered lazy elements may not appear.",
+            "_raw_screenshots": {"mobile_375": b"mobilebytes", "desktop": b"desktopbytes", "fullpage": b"fullpagebytes"},
+        }
+
+    with patch("httpx.AsyncClient.get", new=_fake_httpx_get), \
+         patch("services.preview_capture.capture_screenshot", new=AsyncMock(return_value=None)), \
+         patch("services.preview_capture.upload_receipt", new=_fake_upload_receipt), \
+         patch("services.deploy_verify.run_verify", new=_fake_run_verify):
+        await deploy_mod._verify_and_capture(
+            "u1", "run_fp", "p1", {"verify_url": "https://example.com"},
+        )
+
+    verify_engine_sets = [u["verify_engine"] for u in db.aurem_cto_deploy_runs.updates if "verify_engine" in u]
+    assert len(verify_engine_sets) == 1
+    ve = verify_engine_sets[0]
+    assert ve["receipt_key"] == "uploaded::deploy-runs/run_fp-verify-engine.jpg"
+    assert ve["fullpage_receipt_key"] == "uploaded::deploy-runs/run_fp-verify-engine-fullpage.jpg"
+    assert "scroll-triggered lazy elements" in ve["lazy_load_note"]
+    assert any("fullpage" in k for k in upload_calls)
+
+
+@pytest.mark.asyncio
 async def test_verify_engine_wired_fail_rings_persistent_bell(monkeypatch):
     """A failing engine run fires `verify_failed` and emits a
     PERSISTENT `verify_failed` bell notification (per V1d spec)."""
