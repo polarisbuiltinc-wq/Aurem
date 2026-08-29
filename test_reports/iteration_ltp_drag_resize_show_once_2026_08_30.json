@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend-only verification for LiveTaskPopup show-once fix + drag/resize/persisted-geometry feature (ORA CTO app). Ran the two new vitest suites plus the pre-existing p5 regression suite. All 13/13 tests pass. Also verified the ChatPanel source-level gating is in place at both call sites (history-hydration effect at line 1372-1379 and ora-task-handoff window listener at line 1455-1457), and confirmed LiveTaskPopup.jsx exposes the correct data-testids (live-task-popup, ltp-drag-handle, ltp-close-btn, ltp-resize-handle) with correct geometry math (min 300x160, persisted to localStorage 'ora_ltp_geometry', default fallback left:24/bottom:96).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/frontend/src/components/__tests__/LiveTaskPopup.drag_resize_2026_08_30.test.jsx",
+    "/app/frontend/src/components/__tests__/ChatPanel.ltp_show_once_2026_08_30.test.jsx",
+    "/app/frontend/src/components/__tests__/LiveTaskPopup.p5.test.jsx"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "LiveTaskPopup.jsx is ~624 lines — still under the 700-line threshold but getting close. Consider extracting the drag/resize hook (startDrag/onDragMove/onDragEnd/startResize/onResizeMove/onResizeEnd + _loadGeom/_saveGeom) into a small useDraggableResizable hook if this component grows again.",
+    "Drag/resize listeners are attached to window on mousedown but if the component unmounts mid-drag (e.g., taskId becomes null while user is dragging) the mousemove/mouseup listeners are not cleaned up in a useEffect return. Low-probability edge case since taskId rarely changes mid-drag, but worth a safety cleanup effect.",
+    "Geometry is stored under a single global localStorage key ('ora_ltp_geometry') — shared across all users on the same browser profile. Acceptable for a single-tenant preview but if multi-user on same machine matters later, key it by user id.",
+    "Minor: onDragMove uses cached d.width/d.height captured at mousedown — if the popup is resized while being dragged (not currently possible in the UI, but defensively), the clamp math would drift. Non-blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% (13/13 vitest)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (not used — vitest suite is the primary source of truth per review request; live E2E popup trigger requires an actual ship which is slow/flaky and was listed as nice-to-have not blocker)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Show-once fix is gated at two ChatPanel sites (history-hydration effect + ora-task-handoff listener), both use _isTaskPopupSeen/_markTaskPopupSeen backed by localStorage key 'ora_ltp_seen_ids' (cap 200). Drag/resize live in LiveTaskPopup.jsx with geometry persisted to 'ora_ltp_geometry'. If future rounds touch these, re-run: `cd /app/frontend && npx vitest run src/components/__tests__/LiveTaskPopup.drag_resize_2026_08_30.test.jsx src/components/__tests__/ChatPanel.ltp_show_once_2026_08_30.test.jsx src/components/__tests__/LiveTaskPopup.p5.test.jsx`.",
+  "rca of the issue": "Root cause of the reopen-on-refresh bug: the effect keyed on `latestAssistant?.shipped_task_id` fires whenever chat history rehydrates from the backend on mount, so ANY historical shipped assistant message would re-trigger setLivePopupTaskId on every login/refresh. Fix: gate both surfacing paths with a localStorage-persisted 'seen ids' set, marking seen the moment the popup is surfaced. Verified via source-level assertions in ChatPanel.ltp_show_once_2026_08_30.test.jsx (4 checks pass)."
+}

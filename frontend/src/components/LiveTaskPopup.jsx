@@ -20,6 +20,27 @@ import { api } from "../lib/api";
 const POLL_MS    = 2000;
 const DISMISS_MS = 5000;
 
+// 2026-08-30 — draggable/resizable geometry, persisted per-browser so
+// the user can park this popup wherever they like and it stays put
+// across tasks/sessions. Falls back to the original bottom-left
+// anchor + fixed width until the user first drags/resizes it.
+const _LTP_GEOM_KEY = "ora_ltp_geometry";
+const _LTP_MIN_W = 300;
+const _LTP_MIN_H = 160;
+function _loadGeom() {
+  try {
+    const g = JSON.parse(localStorage.getItem(_LTP_GEOM_KEY) || "null");
+    if (g && typeof g.left === "number" && typeof g.top === "number"
+        && typeof g.width === "number" && typeof g.height === "number") {
+      return g;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+function _saveGeom(g) {
+  try { localStorage.setItem(_LTP_GEOM_KEY, JSON.stringify(g)); } catch { /* ignore */ }
+}
+
 // Iter 168 — phase chip config. Phases come from `step.kind`
 // (`phase_read` / `phase_think` / `phase_write` / `phase_verify` /
 // `phase_commit`) emitted by the backend worker, plus a terminal
@@ -50,6 +71,12 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
   // full chip sequence only on hover/click (progressive disclosure)
   // instead of always showing every distinct phase at once.
   const [chipsExpanded, setChipsExpanded] = useState(false);
+  // 2026-08-30 — draggable/resizable geometry (null = use the default
+  // bottom-left anchor from CSS below).
+  const [geom, setGeom] = useState(_loadGeom);
+  const rootRef = useRef(null);
+  const dragRef = useRef(null);
+  const resizeRef = useRef(null);
   const dismissTimerRef = useRef(null);
   const pollTimerRef    = useRef(null);
   // Iter 388g — fire `onDone(task)` ONCE when the poll first sees a
@@ -116,6 +143,80 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
     };
   }, [taskId, onClose, onDone]);
 
+  // 2026-08-30 — safety net: if the popup unmounts mid-drag/resize
+  // (taskId flips to null while the mouse is still down), the window
+  // listeners added in startDrag/startResize must not leak.
+  useEffect(() => {
+    return () => {
+      window.removeEventListener("mousemove", onDragMove);
+      window.removeEventListener("mouseup", onDragEnd);
+      window.removeEventListener("mousemove", onResizeMove);
+      window.removeEventListener("mouseup", onResizeEnd);
+    };
+  }, [taskId]);
+
+  // ── Drag (header) + resize (corner handle) — 2026-08-30 — defined
+  // unconditionally (above the early return below) so the cleanup
+  // effect above always has a valid closure to reference, regardless
+  // of whether taskId is set on this particular render.
+  const startDrag = (e) => {
+    e.preventDefault();
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    dragRef.current = {
+      startX: e.clientX, startY: e.clientY,
+      startLeft: rect.left, startTop: rect.top,
+      width: rect.width, height: rect.height,
+    };
+    window.addEventListener("mousemove", onDragMove);
+    window.addEventListener("mouseup", onDragEnd);
+  };
+  const onDragMove = (e) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const width = d.width, height = d.height;
+    const maxLeft = window.innerWidth - Math.min(width, 120);
+    const maxTop = window.innerHeight - Math.min(height, 60);
+    const left = Math.max(0, Math.min(maxLeft, d.startLeft + (e.clientX - d.startX)));
+    const top = Math.max(0, Math.min(maxTop, d.startTop + (e.clientY - d.startY)));
+    setGeom({ left, top, width, height });
+  };
+  const onDragEnd = () => {
+    window.removeEventListener("mousemove", onDragMove);
+    window.removeEventListener("mouseup", onDragEnd);
+    dragRef.current = null;
+    setGeom((g) => { if (g) _saveGeom(g); return g; });
+  };
+
+  const startResize = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    resizeRef.current = {
+      startX: e.clientX, startY: e.clientY,
+      startWidth: rect.width, startHeight: rect.height,
+      left: rect.left, top: rect.top,
+    };
+    window.addEventListener("mousemove", onResizeMove);
+    window.addEventListener("mouseup", onResizeEnd);
+  };
+  const onResizeMove = (e) => {
+    const r = resizeRef.current;
+    if (!r) return;
+    const maxW = window.innerWidth - r.left - 8;
+    const maxH = window.innerHeight - r.top - 8;
+    const width = Math.max(_LTP_MIN_W, Math.min(maxW, r.startWidth + (e.clientX - r.startX)));
+    const height = Math.max(_LTP_MIN_H, Math.min(maxH, r.startHeight + (e.clientY - r.startY)));
+    setGeom({ left: r.left, top: r.top, width, height });
+  };
+  const onResizeEnd = () => {
+    window.removeEventListener("mousemove", onResizeMove);
+    window.removeEventListener("mouseup", onResizeEnd);
+    resizeRef.current = null;
+    setGeom((g) => { if (g) _saveGeom(g); return g; });
+  };
+
   if (!taskId) return null;
 
   const status  = task?.status || "starting";
@@ -178,6 +279,7 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
 
   return (
     <div
+      ref={rootRef}
       data-testid="live-task-popup"
       style={{
         position: "fixed",
@@ -190,10 +292,12 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
         // column's own footprint — the Advisor panel is always
         // right-edge-anchored, so this can never overlap it again
         // regardless of whether Advisor is open or collapsed.
-        left: 24,
-        bottom: 96,
-        width: "min(380px, calc(100vw - 48px))",
-        maxHeight: "60vh",
+        // 2026-08-30 — once the user drags/resizes, `geom` (persisted)
+        // takes over with an explicit left/top/width/height; until
+        // then it keeps the original bottom-left-anchored default.
+        ...(geom
+          ? { left: geom.left, top: geom.top, width: geom.width, height: geom.height, maxHeight: "none" }
+          : { left: 24, bottom: 96, width: "min(380px, calc(100vw - 48px))", maxHeight: "60vh" }),
         minHeight: 80,
         background: "rgba(10, 12, 20, 0.72)",
         backdropFilter: "blur(12px)",
@@ -229,11 +333,16 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
         }
       `}</style>
 
-      {/* Header */}
-      <div style={{
-        padding: "9px 12px", borderBottom: `1px solid ${C.border}`,
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-      }}>
+      {/* Header — also the drag handle */}
+      <div
+        data-testid="ltp-drag-handle"
+        onMouseDown={startDrag}
+        title="Drag to move"
+        style={{
+          padding: "9px 12px", borderBottom: `1px solid ${C.border}`,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          cursor: "move", userSelect: "none",
+        }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{
             width: 7, height: 7, borderRadius: 99,
@@ -469,6 +578,21 @@ export default function LiveTaskPopup({ taskId, onClose, onDone }) {
           )}
         </section>
       )}
+      {/* 2026-08-30 — resize grip, bottom-right corner */}
+      <div
+        data-testid="ltp-resize-handle"
+        onMouseDown={startResize}
+        title="Drag to resize"
+        style={{
+          position: "absolute", right: 2, bottom: 2,
+          width: 14, height: 14, cursor: "nwse-resize",
+          background:
+            "linear-gradient(135deg, transparent 0%, transparent 45%, " +
+            "rgba(255,255,255,0.28) 45%, rgba(255,255,255,0.28) 55%, " +
+            "transparent 55%, transparent 65%, rgba(255,255,255,0.28) 65%, " +
+            "rgba(255,255,255,0.28) 75%, transparent 75%)",
+        }}
+      />
     </div>
   );
 }

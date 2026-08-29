@@ -151,6 +151,34 @@ function _clearExpiredMarker() {
   try { localStorage.removeItem(_EXPIRED_MARKER_KEY); } catch { /* ignore */ }
 }
 
+// 2026-08-30 — the floating "ORA done" popup (LiveTaskPopup) must show
+// only ONCE per shipped task, ever. Without this, every fresh
+// login/page refresh re-loads chat history, `latestAssistant` lands
+// on the same already-finished task, and the popup re-opens for a
+// task that finished minutes/hours/days ago. Persisted (not
+// component state) so it survives the refresh/login it's meant to
+// suppress.
+const _LTP_SEEN_KEY = "ora_ltp_seen_ids";
+const _LTP_SEEN_MAX = 200;
+function _loadSeenTaskIds() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(_LTP_SEEN_KEY) || "[]");
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+function _isTaskPopupSeen(taskId) {
+  return !!taskId && _loadSeenTaskIds().includes(taskId);
+}
+function _markTaskPopupSeen(taskId) {
+  if (!taskId) return;
+  try {
+    const seen = _loadSeenTaskIds();
+    if (seen.includes(taskId)) return;
+    seen.push(taskId);
+    localStorage.setItem(_LTP_SEEN_KEY, JSON.stringify(seen.slice(-_LTP_SEEN_MAX)));
+  } catch { /* private mode / quota — silent */ }
+}
+
 export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   // Iter 140 — Phase-1 hook wiring. Each hook is REAL and live:
   //   • useChatMessages — exposes a setMessages-equivalent updater
@@ -1338,11 +1366,16 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   useEffect(() => {
     const taskId = latestAssistant?.shipped_task_id;
     if (!taskId) return;
+    // 2026-08-30 — only ever surface this popup once per task_id; a
+    // page refresh/new login re-runs this effect against the SAME
+    // already-finished task from history, which used to reopen it.
+    if (_isTaskPopupSeen(taskId)) return;
 
     // Immediately surface the popup — same behaviour the chat-handoff
     // path has had since iter 114. The SSE stream below augments this
     // with handoff/done telemetry for any consumers wired off the
     // `ora-task-handoff` window event.
+    _markTaskPopupSeen(taskId);
     setLivePopupTaskId(taskId);
 
     let aborted = false;
@@ -1419,7 +1452,10 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
   useEffect(() => {
     const taskHandoffHandler = (e) => {
       const tid = e?.detail?.task_id;
-      if (tid) setLivePopupTaskId(tid);
+      if (tid && !_isTaskPopupSeen(tid)) {
+        _markTaskPopupSeen(tid);
+        setLivePopupTaskId(tid);
+      }
     };
     window.addEventListener("ora-task-handoff", taskHandoffHandler);
     return () => {
