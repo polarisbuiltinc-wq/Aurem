@@ -888,11 +888,26 @@ async def live_model_mode(authorization: Optional[str] = Header(None)):
         recent = await cur.to_list(10)
     except Exception as e:
         logger.warning("live-model-mode: trust_surface_events read failed: %r", e)
+    # 2026-08-30 — visibility gap close (X1 follow-up, R9 MOCK_LLM
+    # investigation). MOCK_LLM is read ONCE at process boot and cached
+    # (services/ora_chat_v2/llm_client.py::_MOCK_LLM_AT_BOOT) so an
+    # env-file edit alone never takes effect until a real process
+    # restart. Surface BOTH values so a flip is never silently
+    # invisible — a founder editing the env then seeing mock replies
+    # should immediately see "restart pending" here, not have to
+    # rediscover this from scratch.
+    boot_value = _mock_llm_on()
+    current_env_value = os.environ.get("MOCK_LLM", "false").strip().lower() in ("1", "true", "yes", "on")
+    restart_pending = boot_value != current_env_value
     return {
-        "mode": "mock" if _mock_llm_on() else "real",
+        "mode": "mock" if boot_value else "real",
         "mock_detected_in_live_24h": count_24h,
         "recent_mock_events": recent,
         "generated_at": now.isoformat(),
+        "mock_flag_boot_cached": True,
+        "mock_boot_value": boot_value,
+        "mock_current_env_value": current_env_value,
+        "restart_pending": restart_pending,
     }
 
 

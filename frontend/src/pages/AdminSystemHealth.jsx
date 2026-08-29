@@ -759,6 +759,27 @@ export default function AdminSystemHealth() {
                   ? "Chat, loops and the Council are calling real providers."
                   : "MOCK_LLM is on — every path (chat + loops + Council) is serving deterministic mock replies, zero real spend."}
               </div>
+              {/* 2026-08-30 — visibility gap close: MOCK_LLM is
+                  boot-cached (read once at process start), so an env
+                  edit alone never takes effect until a restart. This
+                  makes that fact explicit + flags a pending mismatch
+                  instead of leaving the founder to rediscover it. */}
+              <div data-testid="mock-flag-boot-cached-note"
+                   style={{ fontSize: 10, color: C.dim, marginTop: 6 }}>
+                MOCK flag: boot-cached (env re-read only on restart)
+              </div>
+              {liveModelMode.restart_pending && (
+                <div data-testid="mock-flag-restart-pending"
+                     style={{
+                       fontSize: 11, color: C.amber, marginTop: 6,
+                       padding: "6px 8px", borderRadius: 6,
+                       background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)",
+                     }}>
+                  ⚠ Boot value ({liveModelMode.mock_boot_value ? "MOCK" : "REAL"}) differs from the
+                  current env value ({liveModelMode.mock_current_env_value ? "MOCK" : "REAL"}) —
+                  restart pending, your change will apply on next restart.
+                </div>
+              )}
               <Row
                 label="Mock served (24h)"
                 value={String(liveModelMode.mock_detected_in_live_24h)}
