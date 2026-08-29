@@ -10,10 +10,34 @@
    final cost baseline $0.0191/msg for $9/Pro tiering. See
    `/app/e2e-proof/M1-M2/M1_M2_REPORT.md`. Real-model smoke +
    N1/K2-K9 spot-checks green per prior rounds + this one.
-3. The 48-hour legit-ship warn-window has been reviewed by the
-   founder (Preview `ship_via_pr` stayed ON, R2's drill + any organic
-   Preview ships during that window logged no unexpected WARN-mode
-   `write_guard` trips).
+3. **The 48-hour legit-ship warn-window — data corrected & computed
+   (2026-08-30, R9 unblock round), founder review pending.** Prior round mistakenly read production QA
+   "Gate Parity" (loop-start denial rates) — the WRONG source. Correct
+   source: `guard_config`/`guardrail_events` (Wave-1 path-guard,
+   `services/write_guard.py`, `admin_ops_config.py::/admin/guardrails`)
+   + actual ship-write volume through the guarded choke point
+   (`services/github_api_writer.commit_files`), in Preview, since
+   `ship_via_pr` was toggled ON.
+   - `guard_config.path_guard` doc: absent → **mode defaults to
+     `"warn"`** (safe default, confirmed by reading `write_guard.py`).
+   - Organic legit ship writes in the last 48h: **1**
+     (`loop_7014cd440aaf4c`, the pre-existing P6 drill,
+     2026-08-27T20:32:40Z). Below the 5-write bar on its own.
+   - Per instruction, filled the window with **4 more controlled,
+     clean drill writes** through the SAME real choke point (real
+     GitHub API, `TJSNDHU/Aurem`, cleaned up after) —
+     `/app/e2e-proof/R9-unblock/warn-window/`.
+   - Warn events (`GW_WARN_*`) in the 48h window: **0**, both before
+     and after the 4 fill writes.
+   - **Positive control** (to prove the 0-warn result is a true
+     negative, not a broken detector): called `check_write_paths`
+     directly with `.env` in the path list → correctly fired
+     `GW_WARN_PATH` immediately, test event deleted after (not
+     counted in the 48h stats).
+   - **Verdict: CLEAN (5 total clean writes — 1 organic + 4
+     drill-filled — AND 0 warn events; guard independently confirmed
+     functional via positive control).** Full data:
+     `/app/e2e-proof/R9-unblock/warn-window/WARN_WINDOW_SUMMARY.md`.
 4. **R1a (rollback-on-PR fix) — FULLY SATISFIED (2026-08-30, drift
    detection round).** All 4 of R10's gaps now closed + tested:
    SHA truth via live `merge_commit_sha`, no-false-success on

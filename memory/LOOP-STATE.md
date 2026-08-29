@@ -557,3 +557,46 @@ rollback/verify/webhook-fence component tests.
 own production action, (2) 48h warn-window review — founder. R9 flips
 when founder completes both + main agent's GO. **No R9 flip performed
 this round.**
+
+## R9 unblock round (2026-08-30) — 2 analysis items + 1 channel confirm
+
+**Read-only. No code changed** (confirmed via `git status` — the only
+diff is the pre-existing, unrelated `frontend/.env` pod artifact).
+
+**P1 — warn-window, corrected.** Prior round read the wrong source
+(production Gate Parity ≠ the actual write-guard warn log). Correct
+source: `guard_config`/`guardrail_events` + real ship-write volume
+through `github_api_writer.commit_files`. Organic 48h writes = **1**
+(below the 5-write bar). Per explicit instruction, filled the window
+with **4 more real, clean drill writes** (TJSNDHU/Aurem, cleaned up
+after) → **5 total, 0 warn events**, guard independently confirmed
+live via a positive control. **Verdict: CLEAN.**
+`/app/e2e-proof/R9-unblock/warn-window/WARN_WINDOW_SUMMARY.md`.
+
+**P2 — Fabrication Learning Loop.** Infra confirmed:
+`ora_fix_learning.py` write (`record_fabrication_incident`, wired in
+`chat.py`) + read (`get_recurring_fabrication_patterns`, admin
+endpoint) + recall (`recall_fabrication_caution`, ALREADY wired into
+`orchestrator.py`'s live prompt for `customer_chat`+`chat_stream`).
+Live data: 31 signatures/30d, 1 recurring — but that one
+(`definitely_fake_invoice_engine.py`, 96×) is confirmed a self-seeding
+pytest fixture (`user_id: test-customer-1`), not organic traffic.
+Same failure CLASS as the M2 fence-miss; no pin proposed because the
+generic self-correction mechanism already exists and is already
+firing for this exact scope. One real gap found instead: the
+`admin_ora_chat`/`general` route has NO caution recall wired at all —
+flagged for a future round, not fixed this round.
+`/app/e2e-proof/R9-unblock/FABRICATION_LOOP_ANALYSIS.md`.
+
+**P3 — Webhook channel.** Confirmed: no env var exists; the channel
+is production's own Admin UI form (`POST /admin/github-app-config`),
+a direct browser-to-prod submission that never needs to cross this
+chat. Confirmation via Recent Deliveries/Webhook Fence tile (any event
+type) + one real PR on `TJSNDHU/Aurem` to close the `pull_request`-
+specific R5e gate. `/app/e2e-proof/R9-unblock/P3_WEBHOOK_CHANNEL.md`.
+
+**R9 re-readiness (updated)**: dev-side analysis complete for both
+remaining gates. Still remaining: (a) founder actually sets the prod
+webhook secret via the channel confirmed in P3 and it shows 200, (b)
+founder reviews/accepts P1's CLEAN verdict. **R9 flips when both are
+done + founder GO — not performed this round.**
