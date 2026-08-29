@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { api } from "../lib/api";
 import { toast } from "./Toast";
+import VerifyEngineCard from "./VerifyEngineCard";
 
 const POLL_INTERVAL_MS = 1500;
 const FINISHED = new Set(["ok", "failed", "timeout"]);
@@ -843,6 +844,12 @@ export default function DeployPanel({ activeProject }) {
 
       {/* Body: split — log stream on top (if any), history below */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <VerifyEngineCard
+          projectId={projectId}
+          verifying={!!activeRunId && runStatus === "ok" && verified === null}
+          refreshSignal={runs.length}
+          onViewEvidence={selectRun}
+        />
         {activeRunId ? (
           <div style={{ flex: 1, minHeight: 0, borderBottom: "1px solid var(--border)" }}>
             <LogStream

@@ -40,6 +40,12 @@ EVENT_KINDS = {
     # pushed but its landing on the base branch could not be verified
     # within the bounded poll window. Never fired on a real success.
     "ship_rollback_failed",
+    # R1a gap#4 (2026-08-30) — the ship branch's head moved since the
+    # fix landed (drift), so an auto-rollback/close-and-delete was
+    # blocked pending explicit user acknowledgment. Fired at BLOCK time
+    # (not at the eventual acknowledge+proceed, which just re-enters
+    # the normal ship_rollback_* flow).
+    "ship_rollback_drift_detected",
     # V1d (2026-08-30) — deploy-verify (V1) run lifecycle. verify_passed/
     # failed carry the deterministic engine's verdict; never fired for
     # the pre-existing shallow httpx-reachability check alone (that one

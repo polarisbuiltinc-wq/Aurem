@@ -1254,6 +1254,12 @@ class LoopRollbackBody(BaseModel):
     # this flag is refused (avoids a duplicate revert); the user must
     # check the candidate SHA on GitHub first, then explicitly force.
     force: bool = False
+    # R1a gap#4 (2026-08-30) — the ship branch's head has moved since
+    # the fix landed. A first call with drift present is BLOCKED
+    # (returns rollback_status="drift_detected", no revert/delete
+    # attempted). The caller must resend with acknowledge_drift=true to
+    # proceed anyway, after reviewing the drift detail shown to them.
+    acknowledge_drift: bool = False
 
 
 @router.post("/{loop_id}/rollback")
@@ -1292,6 +1298,11 @@ async def rollback_loop(
     full_sha = commit.get("full_sha") or commit.get("sha")
     if not full_sha:
         raise HTTPException(400, "Loop has no shipped commit to revert")
+    # R1a gap#4 (2026-08-30) — recorded once, right after this ship
+    # landed. Absent on sessions shipped before this feature existed —
+    # drift simply can't be checked for those (nothing to compare
+    # against), so the check is skipped entirely, not blocked.
+    expected_head_sha = commit.get("expected_branch_head_sha")
     # Idempotence — refuse if already rolled back or in flight.
     rb_status = sess.get("rollback_status")
     if sess.get("rollback_sha"):
@@ -1389,6 +1400,51 @@ async def rollback_loop(
             }
 
         if not pr_status.get("merged"):
+            # R1a gap#4 (2026-08-30) — someone pushed to the auremcto/
+            # ship branch itself since the fix landed. Auto-deleting it
+            # now could destroy that push. Block until acknowledged.
+            if expected_head_sha and not body.acknowledge_drift:
+                from services.github_api_writer import check_branch_drift
+                drift = await check_branch_drift(
+                    owner=owner, repo=repo, branch=pr_branch,
+                    expected_sha=expected_head_sha, token=user_token,
+                )
+                if drift["drifted"]:
+                    await db.loop_sessions.update_one(
+                        {"loop_id": loop_id},
+                        {"$set": {
+                            "rollback_status": "drift_detected",
+                            "rollback_drift": {
+                                "branch": pr_branch,
+                                "expected": expected_head_sha,
+                                "current": drift["current_sha"],
+                            },
+                        }},
+                    )
+                    try:
+                        from services.trust_surface_events import log_trust_event
+                        await log_trust_event(
+                            db, "ship_rollback_drift_detected", user_id=user["user_id"],
+                            project_id=project_id, loop_id=loop_id, branch=pr_branch,
+                            expected=expected_head_sha, actual=drift["current_sha"],
+                        )
+                    except Exception:                         # noqa: BLE001
+                        pass
+                    return {
+                        "ok": False, "loop_id": loop_id,
+                        "rollback_status": "drift_detected", "commit_sha": full_sha,
+                        "detail": (
+                            f"Branch has changed since the fix was applied. "
+                            f"Current: {(drift['current_sha'] or 'unknown')[:12]}. "
+                            f"Expected: {expected_head_sha[:12]}. Review and roll "
+                            f"back anyway by resending with acknowledge_drift=true, "
+                            f"or cancel."
+                        ),
+                        "drift": {
+                            "branch": pr_branch, "expected": expected_head_sha,
+                            "current": drift["current_sha"],
+                        },
+                    }
             await db.loop_sessions.update_one(
                 {"loop_id": loop_id},
                 {"$set": {"rollback_status": "running",
@@ -1431,6 +1487,63 @@ async def rollback_loop(
         real_sha = pr_status.get("merge_commit_sha") or full_sha
         full_sha = real_sha
         # Fall through to the unchanged revert-commit path below.
+        # (Merged-PR drift is out of scope this round — the real landed
+        # sha is always re-fetched live above, which already avoids the
+        # stale-throwaway-branch bug; base-branch drift beyond that is
+        # a different, not-yet-requested check.)
+    elif not pr_url:
+        # R1a gap#4 (2026-08-30) — the always-on direct-commit path.
+        # `branch` may have moved (another push landed) since this fix
+        # shipped. A revert of `full_sha` still targets that SPECIFIC
+        # commit's diff regardless of what's now HEAD (git revert is a
+        # targeted operation, not a reset) — but the user must
+        # consciously acknowledge the branch changed before we proceed
+        # blind to it.
+        if expected_head_sha and not body.acknowledge_drift:
+            from services.github_api_writer import check_branch_drift
+            base_owner = proj.get("github_owner") or proj.get("owner")
+            base_repo = proj.get("github_repo") or proj.get("repo")
+            base_branch = proj.get("branch") or "main"
+            drift = await check_branch_drift(
+                owner=base_owner, repo=base_repo, branch=base_branch,
+                expected_sha=expected_head_sha, token=user_token,
+            )
+            if drift["drifted"]:
+                await db.loop_sessions.update_one(
+                    {"loop_id": loop_id},
+                    {"$set": {
+                        "rollback_status": "drift_detected",
+                        "rollback_drift": {
+                            "branch": base_branch,
+                            "expected": expected_head_sha,
+                            "current": drift["current_sha"],
+                        },
+                    }},
+                )
+                try:
+                    from services.trust_surface_events import log_trust_event
+                    await log_trust_event(
+                        db, "ship_rollback_drift_detected", user_id=user["user_id"],
+                        project_id=project_id, loop_id=loop_id, branch=base_branch,
+                        expected=expected_head_sha, actual=drift["current_sha"],
+                    )
+                except Exception:                             # noqa: BLE001
+                    pass
+                return {
+                    "ok": False, "loop_id": loop_id,
+                    "rollback_status": "drift_detected", "commit_sha": full_sha,
+                    "detail": (
+                        f"Branch has changed since the fix was applied. "
+                        f"Current: {(drift['current_sha'] or 'unknown')[:12]}. "
+                        f"Expected: {expected_head_sha[:12]}. Review and roll "
+                        f"back anyway by resending with acknowledge_drift=true, "
+                        f"or cancel."
+                    ),
+                    "drift": {
+                        "branch": base_branch, "expected": expected_head_sha,
+                        "current": drift["current_sha"],
+                    },
+                }
 
     await db.loop_sessions.update_one(
         {"loop_id": loop_id},

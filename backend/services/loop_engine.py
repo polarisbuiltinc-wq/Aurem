@@ -3873,6 +3873,13 @@ class LoopEngine:
             # commit path — zero shape change there.
             "pr_number":  pr_number,
             "pr_branch":  pr_ship_branch if pr_url else None,
+            # R1a gap#4 (2026-08-30) — the branch head immediately after
+            # THIS ship landed (== full_sha, since this push just became
+            # that branch's tip). Rollback re-fetches the LIVE head at
+            # rollback time and compares against this recorded value to
+            # detect drift (someone else pushed to the branch mid-cycle)
+            # before blindly reverting/deleting.
+            "expected_branch_head_sha": full_sha,
         }
         # 2026-08-24 · Pillar 4 — independent, non-blocking read-back
         # verification (services/ship_verification_audit.py). Never

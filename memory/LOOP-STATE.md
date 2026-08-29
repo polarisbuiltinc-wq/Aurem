@@ -475,3 +475,47 @@ R9 verdict unchanged: NOT READY TO FLIP (R5e founder-action pending,
 
 **STOP per founder's explicit instruction — no work started after
 this report.**
+
+## R1a gap#4 + V1-dashboard round (2026-08-30, 2 small items)
+
+**Item 1 — R1a gap#4 (ship-branch drift detection) CLOSED.** Full
+writeup `/app/e2e-proof/drift/DRIFT_SUMMARY.md`. `services/github_api_writer.check_branch_drift`
++ `expected_branch_head_sha` recorded at ship time
+(`services/loop_engine.py`) + drift-gated in BOTH rollback paths
+(`routers/loop.py::rollback_loop`) — direct-commit revert and
+unmerged-PR close+delete. Blocks with `rollback_status="drift_detected"`
+until `acknowledge_drift=true`. 6/6 new tests
+(`test_drift_detection_2026_08_30.py`) + all 7 pre-existing T2 tests
+still green (13/13 together). **Live drill** against real GitHub
+(TJSNDHU/Aurem): shipped a commit, simulated a 3rd-party push landing
+on the branch, `check_branch_drift` correctly detected it live,
+acknowledged, reverted the EXPECTED commit specifically (not the
+drifted head), confirmed drift cleared post-revert, cleaned up both
+markers — repo left genuinely clean (live-verified). R9 checklist
+item 4: PARTIALLY → **FULLY SATISFIED**. R9 remains NOT flip-ready
+(webhook + 48h window, founder-owned, unchanged) — no flip performed.
+
+**Item 2 — V1-dashboard (user-facing Verify card) CLOSED.** Full
+writeup `/app/e2e-proof/V1-dashboard/V1_DASHBOARD_SUMMARY.md`. New
+`GET /deploy/verify-summary` (user+project-scoped, 30d) + new
+`VerifyEngineCard.jsx` wired into `DeployPanel.jsx` — one pass-rate
+number, one last-fail one-liner + evidence link, one current state,
+honest empty state for new users. 5/5 vitest tests pass. Live-curl-
+verified against the real endpoint with realistic seeded data (cleaned
+up after); rendered-component screenshot proven via the existing
+`/dev/visual` hermetic-fixture pattern (same component/styles the real
+panel mounts) — full nested chat-workspace navigation to trigger the
+live panel mount wasn't reachable in this round's scripted pass,
+flagged honestly rather than claimed.
+
+**Regression**: targeted backend sweep (loop/deploy/rollback/drift/
+output_guard/notifications/trust_surface/admin_analytics/preview_capture
+keywords) — 19 failed, all confirmed pre-existing (17 direct
+baseline-file matches + 2 more `test_loop_gate_parity_and_mode_d_2026_01.py`
+tests confirmed failing identically on unmodified code via `git stash`
+A/B, unrelated live-Mongo-state flakiness in chat_stream gate logging,
+untouched by this round's files). Frontend: 27/27 rollback+verify-
+adjacent component tests green. **Zero new regressions.**
+
+**No R9 flip. No production changes. `MOCK_LLM` unchanged (true). No
+V1b, no cloud fallback, no webhook secret handling this round.**

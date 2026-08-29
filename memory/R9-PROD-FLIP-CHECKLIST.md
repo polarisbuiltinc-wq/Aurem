@@ -14,16 +14,26 @@
    founder (Preview `ship_via_pr` stayed ON, R2's drill + any organic
    Preview ships during that window logged no unexpected WARN-mode
    `write_guard` trips).
-4. **R1a (rollback-on-PR fix) — PARTIALLY SATISFIED (2026-08-30, T2
-   round).** 3 of R10's 4 gaps closed + tested (SHA truth via live
-   `merge_commit_sha`, no-false-success on PR-lookup failure,
-   squash/rebase-safe revert via the real landed SHA + a bounded
-   verify-landed poll) — see `/app/e2e-proof/T2/T2_SUMMARY.md`. **Gap
-   #4 (ship-branch drift detection before auto-revert) is NOT built**
-   — not in this round's literal scope, still open in
-   `R10-ROLLBACK-PR-GAP.md` §3 item 4. Do not flip this flag until
-   drift detection also lands (or the founder explicitly accepts the
-   residual risk).
+4. **R1a (rollback-on-PR fix) — FULLY SATISFIED (2026-08-30, drift
+   detection round).** All 4 of R10's gaps now closed + tested:
+   SHA truth via live `merge_commit_sha`, no-false-success on
+   PR-lookup failure, squash/rebase-safe revert via the real landed
+   SHA + a bounded verify-landed poll (T2 round), AND **gap #4 —
+   ship-branch drift detection before auto-revert/auto-delete — now
+   built and live-drilled.** `services/github_api_writer.check_branch_drift`
+   compares the branch's LIVE head against `expected_branch_head_sha`
+   (recorded at ship time, `services/loop_engine.py`) before every
+   rollback (both the always-on direct-commit revert path AND the
+   unmerged-PR close+delete path); a drift blocks with
+   `rollback_status="drift_detected"` until the caller resends with
+   `acknowledge_drift=true`. Tests: `test_t_drift_detected_blocks_rollback`,
+   `test_t_drift_acknowledge_proceeds`, `test_t_drift_unmerged_branch`,
+   `test_t_no_drift_normal_rollback` (+2 more) —
+   `tests/test_drift_detection_2026_08_30.py`, 6/6 pass. Live drill
+   against a real repo (TJSNDHU/Aurem): ship → simulated 3rd-party
+   push → drift detected live → acknowledged → EXPECTED commit
+   reverted (not the drifted head) → repo left clean. See
+   `/app/e2e-proof/drift/DRIFT_SUMMARY.md`.
 5. **H3 — loop repo pinning — SATISFIED (2026-08-30, founder follow-up
    GO).** Both write paths now pin `{owner, repo, branch,
    installation_id}` at start and re-assert the LIVE binding still

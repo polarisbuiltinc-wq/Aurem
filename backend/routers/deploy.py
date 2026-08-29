@@ -14,7 +14,7 @@ import asyncio
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Header
@@ -741,6 +741,45 @@ async def runs_logs(run_id: str,
     """Iter 212m-9 — alias for /log/{run_id} matching the
     `/deploy/runs/{run_id}/logs` REST shape the UI prompt requested."""
     return await get_log(run_id, since=since, authorization=authorization)
+
+
+@router.get("/verify-summary")
+async def verify_summary(project_id: str = "",
+                         authorization: str = Header(None)) -> dict[str, Any]:
+    """V1-dashboard (2026-08-30) — the compact, USER-facing summary of
+    the V1 deploy-verify engine's last 30d for this deploy target: one
+    pass-rate number, the last failure's one-line "what happened" (if
+    any), and the current state. Deliberately NOT the full check list
+    or raw events — that's `/admin/preview-deploy-monitor`'s job; this
+    is the Deploy panel's compact card."""
+    me = await current_dev(authorization)
+    db = require_db()
+    since_iso = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    q: dict[str, Any] = {
+        "user_id": me["user_id"], "verify_engine": {"$exists": True},
+        "started_at": {"$gte": since_iso},
+    }
+    pid = project_id.strip()
+    if pid:
+        q["project_id"] = pid
+    cur = db.aurem_cto_deploy_runs.find(
+        q, {"_id": 0, "run_id": 1, "verify_engine": 1, "started_at": 1},
+    ).sort("started_at", -1).limit(200)
+    rows = [d async for d in cur]
+    total = len(rows)
+    passed = sum(1 for r in rows if (r.get("verify_engine") or {}).get("verdict") == "pass")
+    last_fail = next((r for r in rows if (r.get("verify_engine") or {}).get("verdict") != "pass"), None)
+    last_run = rows[0] if rows else None
+    return {
+        "has_any":       total > 0,
+        "total":         total,
+        "passed":        passed,
+        "pass_pct":      round(100 * passed / total) if total else None,
+        "last_run_at":   (last_run or {}).get("started_at"),
+        "last_fail_what_happened": (last_fail or {}).get("verify_engine", {}).get("what_happened") if last_fail else None,
+        "last_fail_run_id":        (last_fail or {}).get("run_id") if last_fail else None,
+        "last_fail_at":            (last_fail or {}).get("started_at") if last_fail else None,
+    }
 
 
 @router.get("/runs/{run_id}/receipt")

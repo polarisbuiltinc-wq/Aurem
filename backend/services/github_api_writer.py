@@ -332,6 +332,38 @@ async def verify_branch_head(
     return {"verified": False, "attempts": max_attempts, "last_sha": last_sha}
 
 
+async def check_branch_drift(
+    owner: str, repo: str, branch: str, expected_sha: str, token: str,
+) -> dict:
+    """R1a gap#4 (2026-08-30) — a SINGLE, un-polled live head lookup
+    (no retry/wait — this runs BEFORE a rollback even starts, so
+    there's nothing to wait for landing) comparing `branch`'s CURRENT
+    head against `expected_sha` (the head AUREM recorded right after
+    the fix shipped). Detects the case a rollback would otherwise get
+    silently wrong: someone else pushed to the branch mid-cycle, or
+    the branch head moved for any other reason, since the ship.
+
+    Returns {"drifted": bool, "current_sha": str|None,
+    "expected_sha": str}. A lookup failure (network blip, branch
+    deleted, etc.) is treated as `drifted=True` with `current_sha=None`
+    — fail-CLOSED, same discipline as `get_pr_status`'s `ok=False`
+    handling: "couldn't prove no drift" must never be silently treated
+    as "no drift", since that's exactly the case that could revert/
+    delete the wrong thing."""
+    current_sha: Optional[str] = None
+    try:
+        head = await _get_branch_head(owner, repo, branch, token)
+        current_sha = head.get("sha")
+    except Exception as e:                                    # noqa: BLE001
+        logger.warning("check_branch_drift(%s/%s@%s) lookup failed: %r",
+                        owner, repo, branch, e)
+    return {
+        "drifted": current_sha != expected_sha,
+        "current_sha": current_sha,
+        "expected_sha": expected_sha,
+    }
+
+
 async def revert_commit(
     owner: str, repo: str, branch: str, token: str,
     commit_sha: str, commit_message: Optional[str] = None,

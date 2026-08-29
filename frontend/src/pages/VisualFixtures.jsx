@@ -23,6 +23,7 @@ import LoopStepBar from "../components/LoopStepBar";
 import LoopLiveFeed from "../components/LoopLiveFeed";
 import { UserActionCard } from "../components/LoopActionCards";
 import { Chip, ChipRow } from "../components/Chip";
+import VerifyEngineCard from "../components/VerifyEngineCard";
 
 
 // Fixed reference timestamps (Unix epoch millis) so every snapshot
@@ -172,6 +173,8 @@ const FIXTURES = {
   // the width the same way it does in ChatPanel.jsx. Driven by
   // chip_row_width.spec.js at 360/768/1440.
   "chip-row-dense":        ChipRowDenseFixture,
+  "verify-engine-card-with-fail": VerifyEngineCardWithFailure,
+  "verify-engine-card-empty":     VerifyEngineCardEmpty,
 };
 
 // Simulates the densest realistic composer-adjacent chip row: every
@@ -221,6 +224,39 @@ function ShipGateFixture() {
         testsTouched={["tests/test_example.py", "tests/fixtures/data.json"]}
         busy={false}
         onAction={() => {}}
+      />
+    </Stage>
+  );
+}
+
+
+// V1-dashboard (2026-08-30) — the Deploy panel's compact Verify card,
+// driven by `initialSummary` so the fixture is fully hermetic (no
+// backend call, matches this file's own convention).
+function VerifyEngineCardWithFailure() {
+  return (
+    <Stage label="fixture: verify-engine-card / with-last-fail">
+      <VerifyEngineCard
+        projectId="p_demo_a"
+        verifying={false}
+        initialSummary={{
+          has_any: true, total: 15, passed: 14, pass_pct: 93,
+          last_run_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+          last_fail_what_happened: "stale build detected on /pricing",
+          last_fail_run_id: "run_demo_fail_v1dash",
+        }}
+        onViewEvidence={() => {}}
+      />
+    </Stage>
+  );
+}
+function VerifyEngineCardEmpty() {
+  return (
+    <Stage label="fixture: verify-engine-card / empty-state">
+      <VerifyEngineCard
+        projectId="p_demo_a"
+        verifying={false}
+        initialSummary={{ has_any: false, total: 0, passed: 0, pass_pct: null }}
       />
     </Stage>
   );

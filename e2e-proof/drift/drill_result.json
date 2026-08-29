@@ -1,0 +1,50 @@
+{
+  "owner": "TJSNDHU",
+  "repo": "Aurem",
+  "branch": "main",
+  "steps": [],
+  "ship_commit": {
+    "ok": true,
+    "sha": "1e78fb1",
+    "full_sha": "1e78fb116a3c91e68a095f191f9ded405e6f5ac7",
+    "html_url": "https://github.com/TJSNDHU/Aurem/commit/1e78fb116a3c91e68a095f191f9ded405e6f5ac7"
+  },
+  "ship_verify": {
+    "verified": true,
+    "attempts": 1,
+    "last_sha": "1e78fb116a3c91e68a095f191f9ded405e6f5ac7"
+  },
+  "drift_push_commit": {
+    "ok": true,
+    "sha": "198408f",
+    "full_sha": "198408fe574a3797b4184d122350757a994af4a3",
+    "html_url": "https://github.com/TJSNDHU/Aurem/commit/198408fe574a3797b4184d122350757a994af4a3"
+  },
+  "drift_check": {
+    "drifted": true,
+    "current_sha": "198408fe574a3797b4184d122350757a994af4a3",
+    "expected_sha": "1e78fb116a3c91e68a095f191f9ded405e6f5ac7"
+  },
+  "revert_commit": {
+    "ok": true,
+    "sha": "e32cf4d",
+    "full_sha": "e32cf4d10b8d27a718068819f90dcbfda3b4741a"
+  },
+  "revert_verify": {
+    "verified": true,
+    "attempts": 1,
+    "last_sha": "e32cf4d10b8d27a718068819f90dcbfda3b4741a"
+  },
+  "drift_after_revert": {
+    "drifted": false,
+    "current_sha": "e32cf4d10b8d27a718068819f90dcbfda3b4741a",
+    "expected_sha": "e32cf4d10b8d27a718068819f90dcbfda3b4741a"
+  },
+  "drift_marker_still_present_before_cleanup": true,
+  "cleanup_commit_sha": "de7fb191b237f0a53b462b925362fbd5eb268216",
+  "final_verify": {
+    "verified": true,
+    "attempts": 1,
+    "last_sha": "de7fb191b237f0a53b462b925362fbd5eb268216"
+  }
+}
