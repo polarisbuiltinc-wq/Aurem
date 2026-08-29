@@ -7307,3 +7307,18 @@ Full method: `/app/e2e-proof/X1/regression_comparison.md`.
 
 **Loop 2 (T2-T5) status: still PAUSED**, per founder's explicit instruction, pending founder's review of
 this report and an explicit "resume" signal.
+
+## 2026-08-30 — Loop 2 (T2-T5) RESUMED and COMPLETE, per founder's H3→B1-extend→W0-residue→T2-T5 GO
+
+Founder unblocked Loop 2 after H3 landed. Full 10-section report: `/app/memory/REPORT-loop2.md`.
+Headline: H3 (loop repo pin-and-assert-before-write) SATISFIED; W0-residue CLOSED (RerootsBeauty
+confirmed real user, zero residue, no DB mapping in this pod); T2 (rollback-on-merged-PR fix) closed
+3/4 R10 gaps + live-drilled on real GitHub (TJSNDHU/Aurem, since ora-grounding's installation is
+currently unreachable); T3 (First-Experience Wave) ran a bounded real-model window ($0.038668/$3
+spent, 2 new P1 model-quality findings) + a full testing_agent journey pass (12/12 flows PASS, 3
+advisory bounce moments, zero code bugs); T4 confirmed production is running this pod's exact git
+HEAD (zero drift); T5's 5+5 battery found 10/10 chat+loop calls correctly pinned to the same project.
+**R9 verdict: NOT READY TO FLIP** — 2 of 5 stop-gate items (R5e webhook delivery, R8's full acceptance
+numbers) remain open from prior rounds. STOPPED per founder's explicit instruction; PART B (V1 —
+server-side browser deploy-verify) is queued next as its own clean workstream, not started.
+

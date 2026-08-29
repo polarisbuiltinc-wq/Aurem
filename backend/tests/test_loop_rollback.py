@@ -80,9 +80,20 @@ def stub_identity(monkeypatch):
     monkeypatch.setattr(gi, "resolve_git_identity", _fake)
 
 
+@pytest.fixture
+def stub_verify_ok(monkeypatch):
+    """T2/R10 (2026-08-30) — verify_branch_head reports an immediate
+    match so existing success-path tests don't need real network I/O
+    or the 60s poll budget."""
+    from services import github_api_writer as gw
+    async def _fake(owner, repo, branch, expected_sha, token, **kw):
+        return {"verified": True, "attempts": 1, "last_sha": expected_sha}
+    monkeypatch.setattr(gw, "verify_branch_head", _fake)
+
+
 @pytest.mark.asyncio
 async def test_success_path_persists_done_row(
-    fake_db, stub_revert_ok, stub_identity,
+    fake_db, stub_revert_ok, stub_identity, stub_verify_ok,
 ):
     await loop_rollback.run_rollback(
         db=fake_db, loop_id="loop_iter329_ok",
@@ -150,7 +161,7 @@ async def test_worker_never_raises(fake_db, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_steps_mirror_to_loop_run_log(
-    fake_db, stub_revert_ok, stub_identity,
+    fake_db, stub_revert_ok, stub_identity, stub_verify_ok,
 ):
     await loop_rollback.run_rollback(
         db=fake_db, loop_id="loop_iter329_steps",

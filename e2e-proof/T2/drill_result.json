@@ -1,0 +1,95 @@
+{
+  "owner": "TJSNDHU",
+  "repo": "Aurem",
+  "branch": "main",
+  "steps": [
+    {
+      "step": "\ud83d\udce1 Reading branch head (main)\u2026",
+      "status": "info",
+      "ts": 1788019214.6505485
+    },
+    {
+      "step": "\u2705 HEAD @ 6c0ef3f",
+      "status": "success",
+      "ts": 1788019215.0581994
+    },
+    {
+      "step": "\ud83d\udce6 Uploading 1 blob(s) in parallel\u2026",
+      "status": "info",
+      "ts": 1788019215.0582013
+    },
+    {
+      "step": "   blob T2_DRILL_MARKER.md \u2192 789c2fb",
+      "status": "info",
+      "ts": 1788019215.537477
+    },
+    {
+      "step": "\ud83c\udf33 Building tree\u2026",
+      "status": "info",
+      "ts": 1788019215.5374784
+    },
+    {
+      "step": "   tree \u2192 6e6f35d",
+      "status": "success",
+      "ts": 1788019215.9746134
+    },
+    {
+      "step": "\ud83e\uddfe Creating commit\u2026",
+      "status": "info",
+      "ts": 1788019215.9746149
+    },
+    {
+      "step": "\ud83d\ude80 Pushing ref\u2026",
+      "status": "info",
+      "ts": 1788019216.4427974
+    },
+    {
+      "step": "\u2705 a317362",
+      "status": "success",
+      "ts": 1788019216.950708
+    },
+    {
+      "step": "\ud83d\udce1 Loading commit a317362\u2026",
+      "status": "info",
+      "ts": 1788019217.3903558
+    },
+    {
+      "step": "   parent @ 6c0ef3f",
+      "status": "success",
+      "ts": 1788019217.6977293
+    },
+    {
+      "step": "   1 file(s) to restore (parallel)",
+      "status": "success",
+      "ts": 1788019217.6977754
+    },
+    {
+      "step": "\u2705 revert 4cb2c0b",
+      "status": "success",
+      "ts": 1788019219.3406067
+    }
+  ],
+  "ship_commit": {
+    "ok": true,
+    "sha": "a317362",
+    "full_sha": "a317362b4df8ef3e62ddefc3963f618641673535",
+    "html_url": "https://github.com/TJSNDHU/Aurem/commit/a317362b4df8ef3e62ddefc3963f618641673535"
+  },
+  "ship_verify": {
+    "verified": true,
+    "attempts": 1,
+    "last_sha": "a317362b4df8ef3e62ddefc3963f618641673535"
+  },
+  "revert_commit": {
+    "ok": true,
+    "sha": "4cb2c0b",
+    "full_sha": "4cb2c0bcb56636e524273f37d38d10d476f3d2ba"
+  },
+  "revert_verify": {
+    "verified": true,
+    "attempts": 1,
+    "last_sha": "4cb2c0bcb56636e524273f37d38d10d476f3d2ba"
+  },
+  "orphan_auremcto_branches_after": [],
+  "final_head_sha": "4cb2c0bcb56636e524273f37d38d10d476f3d2ba"
+}

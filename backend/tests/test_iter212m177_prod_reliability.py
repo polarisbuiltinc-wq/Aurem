@@ -57,6 +57,16 @@ class _ShipDB:
         # collections the engine touches best-effort
         self.loop_events = SimpleNamespace(insert_one=self._noop)
         self.loop_failures = SimpleNamespace(insert_one=self._noop)
+        # H3 hardening (2026-08-30) — confirm_ship re-fetches the live
+        # repo binding right before the real write; return a record
+        # matching ship_pending's owner/repo/branch so the happy path
+        # is unaffected by the new pin-assert guard.
+        self.cto_projects = SimpleNamespace(find_one=self._find_project)
+        self.trust_surface_events = SimpleNamespace(insert_one=self._noop)
+
+    async def _find_project(self, filt, projection=None, **k):
+        return {"github_owner": "TJSNDHU", "github_repo": "Aurem",
+                "github_branch": "main", "installation_id": None}
 
     async def _noop(self, *a, **k):
         return None

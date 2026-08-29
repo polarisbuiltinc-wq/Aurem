@@ -143,8 +143,18 @@ async def test_confirm_ship_approved_runs_commit_and_emits_completed(monkeypatch
             return {"loop_id": "loop_x", "context": {}}
         async def find_one(self, *a, **k):
             return {"loop_id": "loop_x", "context": {}, "state": "shipping"}
+    class _FakeCtoProjects:
+        # H3 hardening (2026-08-30) — confirm_ship now re-fetches the
+        # live repo binding right before the real write and asserts it
+        # matches what was pinned. Return a record that matches
+        # ship_pending's owner/repo/branch below so the happy path is
+        # unaffected by the new guard.
+        async def find_one(self, *a, **k):
+            return {"github_owner": "o", "github_repo": "r",
+                    "github_branch": "main", "installation_id": None}
     class _FakeDB:
         loop_sessions = _FakeLoopSessions()
+        cto_projects  = _FakeCtoProjects()
     eng.db          = _FakeDB()
     eng.loop_id     = "loop_x"
     eng.user_id     = "u1"

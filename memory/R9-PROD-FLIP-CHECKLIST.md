@@ -11,26 +11,32 @@
    founder (Preview `ship_via_pr` stayed ON, R2's drill + any organic
    Preview ships during that window logged no unexpected WARN-mode
    `write_guard` trips).
-4. **R1a (rollback-on-PR fix) has landed and passed** — see
-   `R1a-READINESS.md` for scope; `R10-ROLLBACK-PR-GAP.md` found the
-   PR rollback path NOT SAFE for squash/rebase merges as of
-   2026-08-28. Do not flip this flag until R1a's own fixes + tests are
-   green (a separate, smaller PR from R9 itself).
-5. **H3 — loop repo pinning (added 2026-08-30, W2 hardening) — NOT
-   YET SATISFIED.** Each loop run must pin `{user_id, project_id,
-   repo, branch, installation_id}` at start, and every real GitHub
-   write must assert the live context still matches that pin before
-   writing, aborting with an explicit user-visible error on mismatch
-   (never silently re-target). Today, `LoopPipeline` already captures
-   `project_id` once as an immutable instance attribute (so a mid-run
-   frontend active-project switch can't retarget an in-flight loop's
-   `project_id`) — but there is no explicit re-assert-before-write
-   step against a captured `{repo, branch, installation_id}` pin, and
-   no `t_loop_repos_pinned` drill test exists yet. See
-   `REPORT-x1-crossproject.md` §W2/H3 for the confirmed root cause
-   this defends against (ProjectSwitcher.jsx's removed silent
-   auto-switch). Required before flipping ship-via-PR to production
-   across multiple users/repos.
+4. **R1a (rollback-on-PR fix) — PARTIALLY SATISFIED (2026-08-30, T2
+   round).** 3 of R10's 4 gaps closed + tested (SHA truth via live
+   `merge_commit_sha`, no-false-success on PR-lookup failure,
+   squash/rebase-safe revert via the real landed SHA + a bounded
+   verify-landed poll) — see `/app/e2e-proof/T2/T2_SUMMARY.md`. **Gap
+   #4 (ship-branch drift detection before auto-revert) is NOT built**
+   — not in this round's literal scope, still open in
+   `R10-ROLLBACK-PR-GAP.md` §3 item 4. Do not flip this flag until
+   drift detection also lands (or the founder explicitly accepts the
+   residual risk).
+5. **H3 — loop repo pinning — SATISFIED (2026-08-30, founder follow-up
+   GO).** Both write paths now pin `{owner, repo, branch,
+   installation_id}` at start and re-assert the LIVE binding still
+   matches right before the real GitHub write, aborting with an
+   explicit user-visible error on mismatch (never silently re-target):
+   `services/loop_engine.py::confirm_ship` (loop pipeline) and
+   `routers/cto_projects.py::_run_task_via_api` (direct task-submit
+   ship path). Tests: `t_loop_repos_pinned`,
+   `t_loop_pin_blocks_stray_write`, `t_loop_pin_matches_context`
+   (`tests/test_h3_loop_repo_pin_2026_08_30.py`, 3/3 pass);
+   `t_direct_ship_pin_mismatch_aborts`,
+   `t_direct_ship_pin_matches_context`,
+   `t_direct_ship_clears_not_connected`
+   (`tests/test_h3_b1_direct_task_pin_2026_08_30.py`, 3/3 pass). Proof:
+   `/app/e2e-proof/H3/`. See `REPORT-x1-crossproject.md` (this
+   round's addendum) for the full writeup.
 
 If any of the 5 is missing, **do not proceed** — log
 `R9 PENDING-FOUNDER` with the exact missing item and stop.

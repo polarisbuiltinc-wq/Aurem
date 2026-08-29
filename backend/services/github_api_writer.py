@@ -298,6 +298,40 @@ async def commit_files(
                 "full_sha": new_commit_sha, "html_url": html_url}
 
 
+async def verify_branch_head(
+    owner: str, repo: str, branch: str, expected_sha: str, token: str,
+    *, max_attempts: int = 10, interval_s: float = 6.0,
+) -> dict:
+    """T2/R10 fix (2026-08-30) — bounded poll to confirm a just-pushed
+    commit actually landed at `branch`'s HEAD before the caller reports
+    success. Total wall-clock bounded to ~`max_attempts * interval_s`
+    (default 10×6s = 60s), matching the founder's exact spec. Never
+    raises — a lookup exception just counts as a non-matching attempt,
+    so a transient GitHub API blip doesn't blow up the whole rollback.
+
+    Returns {"verified": bool, "attempts": int, "last_sha": str|None}.
+    `verified=False` after exhausting attempts means "could not confirm
+    within budget" — NOT "confirmed failed"; callers must report this
+    honestly as an unverified/failed rollback, never as a silent
+    success.
+    """
+    last_sha: Optional[str] = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            head = await _get_branch_head(owner, repo, branch, token)
+            last_sha = head.get("sha")
+            if last_sha == expected_sha:
+                return {"verified": True, "attempts": attempt, "last_sha": last_sha}
+        except Exception as e:                                # noqa: BLE001
+            logger.warning(
+                "verify_branch_head(%s/%s@%s) attempt %s failed: %r",
+                owner, repo, branch, attempt, e,
+            )
+        if attempt < max_attempts:
+            await asyncio.sleep(interval_s)
+    return {"verified": False, "attempts": max_attempts, "last_sha": last_sha}
+
+
 async def revert_commit(
     owner: str, repo: str, branch: str, token: str,
     commit_sha: str, commit_message: Optional[str] = None,

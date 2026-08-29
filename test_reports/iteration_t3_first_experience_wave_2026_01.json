@@ -1,0 +1,88 @@
+{
+  "summary": "T3 First-Experience Wave (frontend only, MOCK_LLM=true preserved). Ran end-to-end journey: fresh signup, empty-state, admin login, project switch to p_6d0be78cdd (polarisbuiltinc-wq/ora-grounding), Preview/Code/Deploy tabs, chat casual/agentic/ship-intent (all mock-refused cleanly, zero real GH write), notification bell, project switcher no-silent-auto-switch smoke, and AdminSystemHealth page (Preview & Deploy Monitor + Webhook Fence). All 8 required flows PASS. No hard crashes, no fake-success paths.",
+  "flows_verdict": {
+    "01_fresh_signup_and_dashboard_land": "PASS — /signup accepted t3-journey-1788020008@aurem.dev, redirected to /dashboard, no fatal console errors (only a benign 401 on optional resource + 2 harmless React Router v7-future warnings).",
+    "02_fresh_user_empty_state_connect_repo_prompt": "PASS — dashboard shows 'No repo connected' chip, 'Connect a repo to unlock your free SEO fix' banner with 'Connect repo →' CTA, ORA guide bubble, and ORA intro message. No dead end.",
+    "03_existing_project_open_p_6d0be78cdd": "PASS — logged in as test@aurem.dev, ProjectSwitcher lists p_6d0be78cdd, clicking switches active project to polarisbuiltinc-wq/ora-grounding (funnel-repro scope) cleanly.",
+    "04_preview_tab_live_site": "PASS — [data-testid=preview-panel] renders, [data-testid=preview-iframe-live] mounts, device toggle (phone/tablet/desktop) + Live/After-fix subtabs all present. iframe loaded example.com placeholder for the project's live_url as expected.",
+    "05_code_tab": "PASS — [data-testid=preview-view-toggle] switches to Code view showing 'What changed / All files' tabs and README.md diff (+0/-181, sha 86017f7). File tree + content render correctly.",
+    "06_deploy_tab": "PASS — [data-testid=preview-deploy-toggle] renders DeployPanel with 'Connect your VPS' form (host/port/username/PEM/repo-path/branch/compose/site-url) pre-populated with example values and 'Save config' button. No crash. Vault-unavailable state pre-existing/known — not exercised (no save attempted).",
+    "07_chat_casual_message": "PASS — 'what does this repo do' returns \"I'm ORA (mock mode). The live model isn't connected on this instance — no real LLM calls are being made. This is a placeholder for UX testing.\" (via ORA). Intent tier chip shows QUERY. UI clean.",
+    "08_chat_agentic_message": "PASS — 'can you check my repo for issues' returns same honest mock response, intent tier chip switches to CLARIFY. No fake tool-call.",
+    "09_chat_ship_intent_mock_refuse": "PASS — 'ship a fix: add a comment at the top of README.md saying t3-journey-ship-test' returns the same mock placeholder response, intent chip switches to AGENTIC, but NO loop kicks off, NO real GitHub write is attempted, no fake success shown. Consistent with H3 guard behaviour.",
+    "10_notification_bell": "PASS — [data-testid=user-notification-bell-trigger] opens notifications panel showing SHIPPED entries with timestamps + 'Mark all read' control. No error.",
+    "11_project_switcher_no_silent_auto_switch": "PASS — Recorded active-project name before + after page reload; both identical ('aurem-demo/frontend'). W1/H1 fix intact for a bare refresh.",
+    "12_admin_system_health": "PASS — /admin/system-health renders all cards: card-deploy-sync (OK), card-council-health (OK), card-ora-learning (OK), card-loop-metrics (OK), card-loop-token-metrics (OK), card-live-model-mode (WARMING/MOCK — expected), card-webhook-fence (WARMING, honest 'missing: pull_request'), and Preview & Deploy Monitor card (OK). No crash."
+  },
+  "top_3_bounce_moments": [
+    {
+      "rank": 1,
+      "moment": "Admin/returning-user dashboard is a red-alert wall of shame",
+      "detail": "On admin login the landing view auto-selects the last-used project 'aurem-demo/frontend' which is marked 'repo unreachable'. The user is greeted by (a) a red 'GitHub access revoked — reconnect to keep chatting' banner, (b) a yellow '12 projects point to deleted or unreachable repos — click to clean up' banner, (c) a floating '2 console errors — SEND TO ORA →' badge, and (d) an 'ORA GUIDE — frontend looks disconnected from GitHub — use the switcher above' tooltip. Four different warnings at once on the very first paint feels broken/abandoned. A real returning user would think the product is down. Suggest: collapse into one 'Reconnect' hero card, or auto-suppress banners when the switcher already shows the project as unreachable.",
+      "evidence": "screenshots/t3_journey_2026_01/04_admin_dashboard.png"
+    },
+    {
+      "rank": 2,
+      "moment": "Fresh user sees an ORA-GUIDE bubble that mislabels the CTA",
+      "detail": "On brand-new-account dashboard, the ORA-GUIDE tooltip says 'Connect your repo to get started — click Connect GitHub above.' But the actual visible button in the banner is labeled 'Connect repo →' (not 'Connect GitHub'). Small label mismatch, but for a first-timer scanning the screen it costs a beat of 'wait, which one?'. Also the tooltip anchors bottom-right and overlaps the Advisor rail, so clicking 'Got it' is fine but the visual competes with the Advisor tab tag.",
+      "evidence": "screenshots/t3_journey_2026_01/03_after_signup.png"
+    },
+    {
+      "rank": 3,
+      "moment": "Two send-looking controls in the chat area — 'SEND TO ORA →' badge vs the real chat-send",
+      "detail": "The composer has the real send button ([data-testid=chat-send], icon-only, bottom-right of textarea). But the top-right of the chat pane has a much more prominent orange text button 'SEND TO ORA →' ([data-testid=f12-badge-send-action]) which actually forwards the on-page console errors to ORA — not the user's typed message. During automated testing this button was picked up first by substring 'send'. A first-time user with a message typed would almost certainly click the prominent 'SEND TO ORA →' first and be confused when their prompt doesn't leave the textarea. Suggest: rename it to 'Report console errors' or move it out of the immediate composer visual zone; put the real chat send in a labelled pill.",
+      "evidence": "screenshots/t3_journey_2026_01/10_chat_casual.png"
+    }
+  ],
+  "additional_ux_notes": [
+    "Project switcher lists 20+ TEST_phaseA_skipped_* projects side-by-side with real ones — noise for anyone poking through it (test data pollution in preview pod, not a code bug).",
+    "Fresh-user mock chat reply reads 'This is a placeholder for UX testing' — developer-toned copy leaks to end users; consider a softer canned line if MOCK_LLM would ever be user-facing.",
+    "Console shows 401 + 403 on some background fetches (billing/notifications-poll) on every page load — silent to the user but adds to the '2 console errors' badge, which itself becomes a distraction."
+  ],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin dashboard (returning user)", "issues": ["Four different warning banners/badges stack on first paint — reads as 'app broken'."]},
+      {"screen": "Fresh dashboard ORA-GUIDE tooltip", "issues": ["Text says 'Connect GitHub' but button is labelled 'Connect repo →' — copy mismatch."]},
+      {"screen": "Chat composer", "issues": ["'SEND TO ORA →' console-errors badge sits in the immediate composer visual zone and outshines the real chat-send button."]}
+    ]
+  },
+  "test_credentials": "Signup: t3-journey-1788020008@aurem.dev / T3Journey2026! (created fresh). Admin: test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md).",
+  "seed_data_creation": "Created one disposable signup account (see test_credentials).",
+  "mock_llm_state": "MOCK_LLM=true preserved throughout — every chat/loop/council response confirmed to be the deterministic mock canned string, provider=mock. Zero real GitHub writes attempted despite three chat sends including a ship-intent phrase.",
+  "test_report_links": ["/app/test_reports/screenshots/t3_journey_2026_01/"],
+  "screenshots_captured": [
+    "01_landing.png",
+    "02_signup_route.png",
+    "03_after_signup.png (fresh dashboard empty state)",
+    "04_admin_dashboard.png",
+    "05_project_switcher_open.png",
+    "06_after_switch.png (ora-grounding open)",
+    "07_preview_tab.png",
+    "08_code_tab.png",
+    "09_deploy_tab.png",
+    "10_chat_casual.png",
+    "11_chat_agentic.png",
+    "12_chat_ship_intent.png",
+    "13_notification_bell.png",
+    "14_admin_system_health.png"
+  ],
+  "action_items": [
+    "Consider consolidating the 4-way warning stack on returning-admin dashboard into one recover-action card.",
+    "Align 'Connect GitHub' tooltip copy with the actual 'Connect repo →' button label.",
+    "Rename/relocate the 'SEND TO ORA →' console-errors badge so it does not compete with the real chat-send.",
+    "Optional: cull TEST_phaseA_skipped_* projects from the preview pod's ProjectSwitcher listing for cleaner journey demos."
+  ],
+  "critical_code_review_comments": [
+    "PreviewPanel view-mode selectors are consistent and testid-tagged (preview-view-toggle, preview-deploy-toggle) — good.",
+    "ProjectSwitcher confirmed to NOT auto-switch on refresh — W1/H1 guard intact.",
+    "DeployPanel renders honestly without a saved config — no crash even though vault key is absent (as expected)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% (12/12 required flows PASS)"},
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "T3 journey pass complete under MOCK_LLM=true. All UI flows in the required list are green. Only follow-ups are the 3 UX bounce-moments (product decisions, not bugs). Do NOT flip MOCK_LLM. If you re-run signup, use a fresh timestamped email; existing accounts are ephemeral in preview pod."
+}

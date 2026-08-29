@@ -294,14 +294,66 @@ async def run_rollback(
             author_name=author_name, author_email=author_email,
         )
         rb_sha = result.get("sha") or ""
+        rb_full_sha = result.get("full_sha") or rb_sha
         rb_html_url = result.get("html_url") or (
             f"https://github.com/{owner}/{repo}/commit/{rb_sha}"
             if rb_sha else None
         )
+
+        # T2/R10 fix (2026-08-30) — the ref-advance PATCH inside
+        # revert_commit() already returned 2xx, but per the founder's
+        # own spec this is not enough: bounded-poll (≤10 attempts /
+        # ~60s) to CONFIRM the new commit is actually reachable at
+        # `branch`'s HEAD before reporting "done". A verification
+        # failure must never be reported as success.
+        await _prog("verifying revert landed on branch head…", "info")
+        from services.github_api_writer import verify_branch_head as _verify_head
+        verify = await _verify_head(owner, repo, branch, rb_full_sha, user_token)
+        if not verify.get("verified"):
+            reason = (
+                f"Revert commit {(rb_sha or '')[:7]} was pushed to GitHub but could "
+                f"not be confirmed as {branch}'s HEAD within 60s (last observed HEAD: "
+                f"{(verify.get('last_sha') or 'unknown')[:7]}). It may still be "
+                f"in-flight — check https://github.com/{owner}/{repo}/commit/{rb_full_sha} "
+                f"before retrying (retrying blindly risks a duplicate revert commit)."
+            )
+            await _set_fields(
+                db, loop_id,
+                rollback_status="failed",
+                rollback_candidate_sha=rb_full_sha,
+                rollback_verified=False,
+                rollback_error=reason,
+                rollback_completed_at=time.time(),
+            )
+            await _prog(f"❌ {reason}", "error")
+            await _ledger_final("failed", failure_reason=reason[:500])
+            try:
+                from services.trust_surface_events import log_trust_event
+                await log_trust_event(
+                    db, "ship_rollback_failed",
+                    user_id=project.get("user_id") or "",
+                    project_id=project.get("project_id"),
+                    loop_id=loop_id, reason="verify_timeout",
+                    candidate_sha=rb_full_sha,
+                )
+            except Exception as e:                          # noqa: BLE001
+                logger.debug("[loop-rollback %s] trust event failed: %r", loop_id, e)
+            _n = _step_ctr["n"]
+            await _emit_rollback_event(
+                db=db, loop_id=loop_id,
+                step=_n, total_steps=_n,
+                message="Rollback failed — could not verify revert landed",
+                data={"error": reason, "status": "error",
+                      "candidate_sha": rb_full_sha},
+                state_str="failed",
+            )
+            return
+
         await _set_fields(
             db, loop_id,
             rollback_status="done",
             rollback_sha=rb_sha,
+            rollback_verified=True,
             rollback_html_url=rb_html_url,
             rollback_completed_at=time.time(),
         )

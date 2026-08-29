@@ -1248,6 +1248,12 @@ async def force_release_lock(
 class LoopRollbackBody(BaseModel):
     """Client must echo 'ROLLBACK' to confirm intent server-side too."""
     confirm: str = Field(..., min_length=8, max_length=16)
+    # T2/R10 fix (2026-08-30) — retry path for a previous rollback that
+    # failed with an UNCONFIRMED candidate revert commit (verify_branch_head
+    # timed out, GitHub might already have the commit). Retrying without
+    # this flag is refused (avoids a duplicate revert); the user must
+    # check the candidate SHA on GitHub first, then explicitly force.
+    force: bool = False
 
 
 @router.post("/{loop_id}/rollback")
@@ -1293,9 +1299,23 @@ async def rollback_loop(
     if rb_status in ("queued", "running"):
         raise HTTPException(409, "Rollback already in progress")
     if rb_status == "failed":
-        raise HTTPException(
-            409, "Previous rollback failed — manual intervention required",
-        )
+        # T2/R10 fix (2026-08-30) — a "failed" rollback may have left an
+        # UNCONFIRMED candidate revert commit on GitHub (verify timed out,
+        # not "confirmed nothing happened"). Retrying blindly risks a
+        # duplicate revert. If there's no candidate at all (e.g. the PR
+        # merge-state lookup itself errored, nothing was pushed), retry
+        # is always safe. If there IS a candidate, require `force=true`
+        # so the caller has to consciously acknowledge the duplicate risk
+        # after checking GitHub themselves.
+        candidate = sess.get("rollback_candidate_sha")
+        if candidate and not body.force:
+            raise HTTPException(
+                409,
+                f"Previous rollback could not be verified — a candidate revert "
+                f"commit {candidate[:7]} may already be on GitHub. Check the "
+                f"repo's commit history before retrying; resend with "
+                f"force=true to retry anyway.",
+            )
 
     project_id = sess.get("project_id")
     if not project_id:
@@ -1324,14 +1344,16 @@ async def rollback_loop(
             403, f"GitHub App auth failed ({_auth_err}): {_auth_detail}",
         )
 
-    # Rollback-gap fix (2026-08-28) — a ship_via_pr commit landed on a
-    # throwaway branch, not `branch`. If that PR never merged, there is
-    # nothing to revert on `branch` — run_rollback's git-revert path
-    # would either no-op or error against a commit not in its history.
-    # Check live PR state and close+delete the branch instead when
-    # unmerged; an already-merged PR falls through to the existing,
-    # unchanged revert-commit path below (same as the always-on
-    # direct-commit ships).
+    # Rollback-gap fix (2026-08-28, hardened 2026-08-30 · T2/R10) — a
+    # ship_via_pr commit landed on a throwaway branch, not `branch`. If
+    # that PR never merged, there is nothing to revert on `branch` —
+    # run_rollback's git-revert path would either no-op or error against
+    # a commit not in its history. Check live PR state and close+delete
+    # the branch instead when unmerged; an already-merged PR falls
+    # through to the existing, unchanged revert-commit path below (same
+    # as the always-on direct-commit ships) — but using the REAL landed
+    # `merge_commit_sha`, not the stale pre-merge `full_sha`, so
+    # squash/rebase merges revert the actual diff that landed.
     pr_url = commit.get("pr_url")
     pr_number = commit.get("pr_number")
     pr_branch = commit.get("pr_branch")
@@ -1340,6 +1362,32 @@ async def rollback_loop(
         repo = proj.get("github_repo") or proj.get("repo")
         from services.loop_safety import get_pr_status, close_and_retract
         pr_status = await get_pr_status(owner=owner, repo=repo, pr_number=pr_number, token=user_token)
+
+        # T2/R10 fix — "couldn't confirm" is NOT the same as "confirmed
+        # unmerged". A network/API blip must never silently push toward
+        # close+retract (which could wrongly close+delete-branch an
+        # ALREADY-MERGED PR's ref) nor toward a stale revert. Report an
+        # honest, retryable failure instead.
+        if not pr_status.get("ok"):
+            reason = "Could not verify the PR's live merge state (GitHub API error) — try again shortly."
+            await db.loop_sessions.update_one(
+                {"loop_id": loop_id},
+                {"$set": {"rollback_status": "failed", "rollback_error": reason,
+                          "rollback_completed_at": time.time()}},
+            )
+            try:
+                from services.trust_surface_events import log_trust_event
+                await log_trust_event(
+                    db, "ship_rollback_failed", user_id=user["user_id"],
+                    project_id=project_id, loop_id=loop_id, reason="pr_status_unconfirmed",
+                )
+            except Exception:                                 # noqa: BLE001
+                pass
+            return {
+                "ok": False, "loop_id": loop_id, "rollback_status": "failed",
+                "commit_sha": full_sha, "detail": reason,
+            }
+
         if not pr_status.get("merged"):
             await db.loop_sessions.update_one(
                 {"loop_id": loop_id},
@@ -1360,6 +1408,15 @@ async def rollback_loop(
                     "rollback_error":        "; ".join(result.get("errors") or []) or None,
                 }},
             )
+            if not ok:
+                try:
+                    from services.trust_surface_events import log_trust_event
+                    await log_trust_event(
+                        db, "ship_rollback_failed", user_id=user["user_id"],
+                        project_id=project_id, loop_id=loop_id, reason="close_and_retract_failed",
+                    )
+                except Exception:                             # noqa: BLE001
+                    pass
             return {
                 "ok":              ok,
                 "loop_id":         loop_id,
@@ -1368,8 +1425,12 @@ async def rollback_loop(
                 "detail":          ("PR was never merged — closed the PR and deleted "
                                      "the ship branch instead of reverting a commit."),
             }
-        # Merged — the commit really is on `branch` now. Fall through
-        # to the unchanged revert-commit path below.
+        # Merged — use the REAL landed sha (merge_commit_sha), which
+        # correctly represents a squash/rebase-merged diff, not the
+        # stale throwaway-branch sha captured at ship time.
+        real_sha = pr_status.get("merge_commit_sha") or full_sha
+        full_sha = real_sha
+        # Fall through to the unchanged revert-commit path below.
 
     await db.loop_sessions.update_one(
         {"loop_id": loop_id},

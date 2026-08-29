@@ -128,6 +128,11 @@ class TestCommitFilesAuthorIdentityFix:
             "task_id": "task_p0", "status": "queued", "started_at": 0,
         })
         await fake_db.dev_users.insert_one({"user_id": "u1", "tier": "pro"})
+        # H3 hardening (2026-08-30) — _run_task_via_api now re-fetches
+        # the project's live GitHub binding right before committing and
+        # asserts it matches the pin captured at worker start. Seed the
+        # fake DB with PROJ itself so that assert passes (happy path).
+        await fake_db.cto_projects.insert_one(dict(PROJ))
 
         resume_edits = {
             "edits": {"README.md": "# widgets\n\nA test comment.\n"},

@@ -464,18 +464,32 @@ async def close_pr(
     return False, f"close_pr_status_{r.status_code}"
 
 
-# Rollback-gap fix (2026-08-28) — live PR merge-state check. The
-# rollback endpoint needs this BEFORE deciding whether to revert a
-# commit on the base branch (already merged — safe, history-preserving)
-# or close+retract the still-open PR (never merged — nothing to revert
-# on the base branch, closing+deleting the throwaway branch is correct).
+# Rollback-gap fix (2026-08-28, hardened 2026-08-30 · T2/R10) — live PR
+# merge-state check. The rollback endpoint needs this BEFORE deciding
+# whether to revert a commit on the base branch (already merged — safe,
+# history-preserving) or close+retract the still-open PR (never merged
+# — nothing to revert on the base branch, closing+deleting the
+# throwaway branch is correct).
+#
+# T2/R10 hardening: two prior gaps closed here —
+#   1. The caller could not tell "confirmed unmerged" apart from
+#      "lookup errored" — both collapsed to `merged: False`, which
+#      pushed an errored lookup toward close+retract (wrong: it might
+#      actually be merged). Now exposes `ok` so the caller can treat
+#      a failed lookup as "couldn't verify", never as a confirmed
+#      state either way.
+#   2. `merge_commit_sha` (the REAL landed commit — required to revert
+#      squash/rebase merges correctly) was fetched from GitHub but
+#      discarded. Now returned.
 async def get_pr_status(
     *, owner: str, repo: str, pr_number: int, token: str,
 ) -> dict:
-    """Returns {"merged": bool, "state": str} for a live PR lookup.
-    Never raises — an unreachable/errored lookup returns merged=False
-    so the caller fails toward the safer close+retract path rather
-    than silently reverting a commit that was never actually applied."""
+    """Returns {"ok": bool, "merged": bool, "state": str,
+    "merge_commit_sha": Optional[str]}.
+
+    `ok=False` means the live lookup itself failed (network blip, non-
+    200) — the caller must treat this as "couldn't verify", NOT as a
+    confirmed "unmerged" result. Never raises."""
     headers = {
         "Authorization": f"token {token}",
         "Accept":        "application/vnd.github+json",
@@ -488,10 +502,17 @@ async def get_pr_status(
         )
         if r.status_code == 200:
             j = r.json() or {}
-            return {"merged": bool(j.get("merged")), "state": j.get("state") or "unknown"}
+            return {
+                "ok": True,
+                "merged": bool(j.get("merged")),
+                "state": j.get("state") or "unknown",
+                "merge_commit_sha": j.get("merge_commit_sha"),
+            }
+        logger.warning("get_pr_status(%s/%s#%s) HTTP %s",
+                        owner, repo, pr_number, r.status_code)
     except Exception as e:                                    # noqa: BLE001
         logger.warning("get_pr_status(%s/%s#%s) failed: %r", owner, repo, pr_number, e)
-    return {"merged": False, "state": "unknown"}
+    return {"ok": False, "merged": False, "state": "unknown", "merge_commit_sha": None}
 
 
 async def delete_ship_branch(
@@ -587,6 +608,25 @@ async def dispatch_pull_request_webhook(db, *, payload: dict, action: str) -> di
             {"ship_branch": head_ref},
             {"$set": {"pr_status": new_status, "pr_status_updated_at": time.time()}},
         )
+        # T2/R10 fix (2026-08-30) — self-heal the STALE pre-merge SHA.
+        # `loop_sessions.context.commit.full_sha` was captured once at
+        # ship time from the throwaway branch commit; it never reflects
+        # what actually landed on the base branch after a squash/rebase
+        # merge. GitHub's own `merge_commit_sha` (present on this
+        # webhook payload for a merged PR) IS the real landed commit —
+        # persist it now so a later rollback reverts the right diff
+        # even without re-querying the PR live.
+        if new_status == "merged":
+            real_merge_sha = pr.get("merge_commit_sha")
+            if real_merge_sha:
+                await db.loop_sessions.update_one(
+                    {"context.commit.pr_branch": head_ref},
+                    {"$set": {
+                        "context.commit.sha": real_merge_sha[:7],
+                        "context.commit.full_sha": real_merge_sha,
+                        "context.commit.merge_commit_sha": real_merge_sha,
+                    }},
+                )
         try:
             await db.ship_pr_events.insert_one({
                 "event": f"ship_pr_{new_status}", "pr_url": pr.get("html_url"),

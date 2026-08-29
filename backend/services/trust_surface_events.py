@@ -29,6 +29,17 @@ EVENT_KINDS = {
     # orchestrator/loop/council gateway). Feeds the admin "Live Model
     # Mode" tile's 24h counter.
     "mock_detected_in_live",
+    # H3 hardening (2026-08-30, overnight-loop-2 P0) — fired when a
+    # paused-for-user ship's live GitHub binding no longer matches what
+    # was pinned when the ship was staged; the loop aborts instead of
+    # writing to a repo/branch/installation the user never approved.
+    "loop_pin_mismatch",
+    # T2 (2026-08-30, R10 rollback-gap fix) — fired whenever a rollback
+    # cannot be honestly reported as "done": either the live PR merge
+    # state itself could not be confirmed, or a revert commit was
+    # pushed but its landing on the base branch could not be verified
+    # within the bounded poll window. Never fired on a real success.
+    "ship_rollback_failed",
 }
 
 

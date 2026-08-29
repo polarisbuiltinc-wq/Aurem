@@ -324,3 +324,64 @@ round), separate report file.
 before and after this entire round.
 
 **STOPPING here, per founder's explicit "STOP. Awaiting founder."**
+
+---
+
+# PART A — H3 → B1-extend → W0-residue → T2 (2026-08-30, founder follow-up GO)
+
+Founder gave explicit sequencing: H3 → B1-extend → W0-residue(GitHub) →
+T2 → T3 → T4 → T5. H3/B1-extend/W0-residue were already executed and
+ledgered by a prior turn this same round (see PROOF-LEDGER.md
+2026-08-30T04:00-04:20Z); this turn:
+
+- **W0 finalize verify step**: founder required checking whether
+  installation `155986962` (RerootsBeauty) maps to a founder-owned
+  fixture in this pod's DB. Scanned all 182 collections — 0 hits. Per
+  founder's own fallback rule, W0 is now **CLOSED**: real-user repo,
+  read-only, no cleanup, root cause fixed via H1+H3, notification to
+  the user is the founder's own call (not made here).
+- **T2 (rollback-on-merged-PR fix)**: DONE, agent-tested, NOT
+  founder-confirmed. Full detail `/app/e2e-proof/T2/T2_SUMMARY.md`.
+  Closes 3 of R10's 4 documented gaps (SHA truth via live
+  `merge_commit_sha`, no-false-success on an unconfirmed PR-state
+  lookup, bounded verify-landed poll before reporting "done" + a new
+  `ship_rollback_failed` trust event on timeout). Ship-branch drift
+  detection (gap #4) explicitly NOT built — outside this round's
+  literal ask, flagged open in R10. Live-drilled against real GitHub
+  (`TJSNDHU/Aurem`, since `ora-grounding`'s installation is currently
+  unreachable — pre-existing gap): real commit + real revert, both
+  bounded-verified, zero orphan branches, repo left clean. 7 new named
+  tests + 2 updated pre-existing test files, 17/17 pass. Targeted
+  regression (`-k "loop or rollback or ship"`): 667 passed, 22
+  pre-existing (baseline+stash-confirmed), 0 new.
+- `ship_via_pr` remains Preview-only / prod flag OFF — T2 makes the
+  path safer for whenever the founder flips it, does not flip anything
+  itself.
+
+**Next**: T3 (First-Experience Wave) → T4 (deployed-build verify,
+read-only) → T5 (final Loop-2 report + 5+5 battery). Per founder: do
+not stop, report at the end.
+
+## PART A COMPLETE — T2/T3/T4/T5 all done, full report written
+
+Full 10-section report: `/app/memory/REPORT-loop2.md`. Summary:
+- T2 (rollback-on-merged-PR fix): 3/4 R10 gaps closed + tested (17/17)
+  + live-drilled on real GitHub (TJSNDHU/Aurem). Gap #4 (drift
+  detection) explicitly open.
+- T3 (First-Experience Wave): B4 real-model window ($0.038668/$3
+  spent, 2 new P1 findings) + testing_agent journey (12/12 PASS, 3
+  advisory bounce moments).
+- T4 (deployed-build verify): production SHA matches this pod's HEAD,
+  zero drift. Authenticated-screen check honestly not performed (no
+  safe credential).
+- T5 (5+5 battery): 10/10 chat+loop calls correctly pinned to the same
+  project across a real regression pass. Final report written.
+- R9 verdict: **NOT READY TO FLIP** — H3 now satisfied, R1a/T2
+  partially satisfied (3/4), but R5e webhook delivery + R8's full
+  acceptance numbers remain open from prior rounds (unchanged by this
+  round's work).
+
+**STOPPING here per founder's explicit "On T5: STOP + full report."**
+PART B (V1 — server-side browser deploy-verify) starts only after
+founder review, as its own clean workstream per the founder's explicit
+sequencing rule.

@@ -1,0 +1,366 @@
+{
+  "chat": [
+    {
+      "n": 1,
+      "prompt": "what does this repo do",
+      "status": 200,
+      "provider": "mock",
+      "repo_owner": "polarisbuiltinc-wq",
+      "repo_name": "ora-grounding",
+      "pinned_correctly": true
+    },
+    {
+      "n": 2,
+      "prompt": "I'm frustrated, please just fix my broken deploy",
+      "status": 200,
+      "provider": "intent-gateway-casual",
+      "repo_owner": "polarisbuiltinc-wq",
+      "repo_name": "ora-grounding",
+      "pinned_correctly": true
+    },
+    {
+      "n": 3,
+      "prompt": "ship a fix: add a comment to README.md",
+      "status": 200,
+      "provider": "mock",
+      "repo_owner": "polarisbuiltinc-wq",
+      "repo_name": "ora-grounding",
+      "pinned_correctly": true
+    },
+    {
+      "n": 4,
+      "prompt": "explain the loop and rollback architecture in detail",
+      "status": 200,
+      "provider": "intent-gateway-casual",
+      "repo_owner": "polarisbuiltinc-wq",
+      "repo_name": "ora-grounding",
+      "pinned_correctly": true
+    },
+    {
+      "n": 5,
+      "prompt": "thanks, that's all",
+      "status": 200,
+      "provider": "intent-gateway-casual",
+      "repo_owner": "polarisbuiltinc-wq",
+      "repo_name": "ora-grounding",
+      "pinned_correctly": true
+    }
+  ],
+  "loop": [
+    {
+      "n": 1,
+      "status": 200,
+      "start_response": {
+        "loop_id": "loop_e8a9bde076d94d",
+        "state": "planning",
+        "phase": "plan",
+        "plan": null,
+        "async_start": true
+      },
+      "status_response": {
+        "loop_id": "loop_e8a9bde076d94d",
+        "context": {
+          "original_request": "T5 battery loop drill #1: add a one-line comment to README.md",
+          "plan": {
+            "title": "Plan",
+            "files_to_change": [],
+            "bullets": [
+              "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+            ],
+            "estimated_time": "?",
+            "raw": "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+          },
+          "files_changed": [],
+          "errors_encountered": [],
+          "self_heals_performed": [],
+          "verification_results": {},
+          "scan_results": {},
+          "commit": null
+        },
+        "created_at": "2026-08-29T16:27:16.889000",
+        "last_event": {
+          "loop_id": "loop_e8a9bde076d94d",
+          "state": "awaiting_confirmation",
+          "phase": "plan",
+          "step": 1,
+          "total_steps": 5,
+          "message": "Plan ready \u2014 awaiting your approval.",
+          "data": {
+            "plan": {
+              "title": "Plan",
+              "files_to_change": [],
+              "bullets": [
+                "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+              ],
+              "estimated_time": "?",
+              "raw": "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+            }
+          },
+          "timestamp": "2026-08-29T16:27:17.325274+00:00",
+          "requires_user_action": true
+        },
+        "phase": "plan",
+        "project_id": "p_6d0be78cdd",
+        "state": "awaiting_confirmation",
+        "updated_at": "2026-08-29T16:27:17.325000",
+        "user_id": "test_admin_001",
+        "expires_at": "2026-08-29T16:37:17.325000+00:00",
+        "workcard_enabled": true
+      },
+      "pinned_project_id_in_status": "p_6d0be78cdd",
+      "pinned_correctly": true
+    },
+    {
+      "n": 2,
+      "status": 200,
+      "start_response": {
+        "loop_id": "loop_0ed42d11dbcf4c",
+        "state": "planning",
+        "phase": "plan",
+        "plan": null,
+        "async_start": true
+      },
+      "status_response": {
+        "loop_id": "loop_0ed42d11dbcf4c",
+        "context": {
+          "original_request": "T5 battery loop drill #2: add a one-line comment to README.md",
+          "plan": {
+            "title": "Plan",
+            "files_to_change": [],
+            "bullets": [
+              "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+            ],
+            "estimated_time": "?",
+            "raw": "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+          },
+          "files_changed": [],
+          "errors_encountered": [],
+          "self_heals_performed": [],
+          "verification_results": {},
+          "scan_results": {},
+          "commit": null
+        },
+        "created_at": "2026-08-29T16:27:20.913000",
+        "last_event": {
+          "loop_id": "loop_0ed42d11dbcf4c",
+          "state": "awaiting_confirmation",
+          "phase": "plan",
+          "step": 1,
+          "total_steps": 5,
+          "message": "Plan ready \u2014 awaiting your approval.",
+          "data": {
+            "plan": {
+              "title": "Plan",
+              "files_to_change": [],
+              "bullets": [
+                "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+              ],
+              "estimated_time": "?",
+              "raw": "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+            }
+          },
+          "timestamp": "2026-08-29T16:27:21.286127+00:00",
+          "requires_user_action": true
+        },
+        "phase": "plan",
+        "project_id": "p_6d0be78cdd",
+        "state": "awaiting_confirmation",
+        "updated_at": "2026-08-29T16:27:21.286000",
+        "user_id": "test_admin_001",
+        "expires_at": "2026-08-29T16:37:21.286000+00:00",
+        "workcard_enabled": true
+      },
+      "pinned_project_id_in_status": "p_6d0be78cdd",
+      "pinned_correctly": true
+    },
+    {
+      "n": 3,
+      "status": 200,
+      "start_response": {
+        "loop_id": "loop_0e860c50d7c24d",
+        "state": "planning",
+        "phase": "plan",
+        "plan": null,
+        "async_start": true
+      },
+      "status_response": {
+        "loop_id": "loop_0e860c50d7c24d",
+        "context": {
+          "original_request": "T5 battery loop drill #3: add a one-line comment to README.md",
+          "plan": {
+            "title": "Plan",
+            "files_to_change": [],
+            "bullets": [
+              "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+            ],
+            "estimated_time": "?",
+            "raw": "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+          },
+          "files_changed": [],
+          "errors_encountered": [],
+          "self_heals_performed": [],
+          "verification_results": {},
+          "scan_results": {},
+          "commit": null
+        },
+        "created_at": "2026-08-29T16:27:24.959000",
+        "last_event": {
+          "loop_id": "loop_0e860c50d7c24d",
+          "state": "awaiting_confirmation",
+          "phase": "plan",
+          "step": 1,
+          "total_steps": 5,
+          "message": "Plan ready \u2014 awaiting your approval.",
+          "data": {
+            "plan": {
+              "title": "Plan",
+              "files_to_change": [],
+              "bullets": [
+                "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+              ],
+              "estimated_time": "?",
+              "raw": "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+            }
+          },
+          "timestamp": "2026-08-29T16:27:25.371260+00:00",
+          "requires_user_action": true
+        },
+        "phase": "plan",
+        "project_id": "p_6d0be78cdd",
+        "state": "awaiting_confirmation",
+        "updated_at": "2026-08-29T16:27:25.371000",
+        "user_id": "test_admin_001",
+        "expires_at": "2026-08-29T16:37:25.371000+00:00",
+        "workcard_enabled": true
+      },
+      "pinned_project_id_in_status": "p_6d0be78cdd",
+      "pinned_correctly": true
+    },
+    {
+      "n": 4,
+      "status": 200,
+      "start_response": {
+        "loop_id": "loop_f2dfa096971d48",
+        "state": "planning",
+        "phase": "plan",
+        "plan": null,
+        "async_start": true
+      },
+      "status_response": {
+        "loop_id": "loop_f2dfa096971d48",
+        "context": {
+          "original_request": "T5 battery loop drill #4: add a one-line comment to README.md",
+          "plan": {
+            "title": "Plan",
+            "files_to_change": [],
+            "bullets": [
+              "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+            ],
+            "estimated_time": "?",
+            "raw": "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+          },
+          "files_changed": [],
+          "errors_encountered": [],
+          "self_heals_performed": [],
+          "verification_results": {},
+          "scan_results": {},
+          "commit": null
+        },
+        "created_at": "2026-08-29T16:27:29.100000",
+        "last_event": {
+          "loop_id": "loop_f2dfa096971d48",
+          "state": "awaiting_confirmation",
+          "phase": "plan",
+          "step": 1,
+          "total_steps": 5,
+          "message": "Plan ready \u2014 awaiting your approval.",
+          "data": {
+            "plan": {
+              "title": "Plan",
+              "files_to_change": [],
+              "bullets": [
+                "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+              ],
+              "estimated_time": "?",
+              "raw": "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+            }
+          },
+          "timestamp": "2026-08-29T16:27:29.431381+00:00",
+          "requires_user_action": true
+        },
+        "phase": "plan",
+        "project_id": "p_6d0be78cdd",
+        "state": "awaiting_confirmation",
+        "updated_at": "2026-08-29T16:27:29.431000",
+        "user_id": "test_admin_001",
+        "expires_at": "2026-08-29T16:37:29.431000+00:00",
+        "workcard_enabled": true
+      },
+      "pinned_project_id_in_status": "p_6d0be78cdd",
+      "pinned_correctly": true
+    },
+    {
+      "n": 5,
+      "status": 200,
+      "start_response": {
+        "loop_id": "loop_afe4e2e7a20240",
+        "state": "planning",
+        "phase": "plan",
+        "plan": null,
+        "async_start": true
+      },
+      "status_response": {
+        "loop_id": "loop_afe4e2e7a20240",
+        "context": {
+          "original_request": "T5 battery loop drill #5: add a one-line comment to README.md",
+          "plan": {
+            "title": "Plan",
+            "files_to_change": [],
+            "bullets": [
+              "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+            ],
+            "estimated_time": "?",
+            "raw": "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+          },
+          "files_changed": [],
+          "errors_encountered": [],
+          "self_heals_performed": [],
+          "verification_results": {},
+          "scan_results": {},
+          "commit": null
+        },
+        "created_at": "2026-08-29T16:27:33.176000",
+        "last_event": {
+          "loop_id": "loop_afe4e2e7a20240",
+          "state": "awaiting_confirmation",
+          "phase": "plan",
+          "step": 1,
+          "total_steps": 5,
+          "message": "Plan ready \u2014 awaiting your approval.",
+          "data": {
+            "plan": {
+              "title": "Plan",
+              "files_to_change": [],
+              "bullets": [
+                "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+              ],
+              "estimated_time": "?",
+              "raw": "[MOCK_LLM \u2014 no active model yet] This orchestrator/loop call was served a deterministic mock response \u2014 no real provider was called and no tokens were spent."
+            }
+          },
+          "timestamp": "2026-08-29T16:27:33.777053+00:00",
+          "requires_user_action": true
+        },
+        "phase": "plan",
+        "project_id": "p_6d0be78cdd",
+        "state": "awaiting_confirmation",
+        "updated_at": "2026-08-29T16:27:33.777000",
+        "user_id": "test_admin_001",
+        "expires_at": "2026-08-29T16:37:33.777000+00:00",
+        "workcard_enabled": true
+      },
+      "pinned_project_id_in_status": "p_6d0be78cdd",
+      "pinned_correctly": true
+    }
+  ]
+}

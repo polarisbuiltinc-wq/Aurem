@@ -36,9 +36,10 @@ class _FakeResp:
 @pytest.mark.asyncio
 async def test_get_pr_status_merged_true():
     with patch("services.loop_safety.github_request_with_retry",
-               new=AsyncMock(return_value=_FakeResp(200, {"merged": True, "state": "closed"}))):
+               new=AsyncMock(return_value=_FakeResp(200, {"merged": True, "state": "closed",
+                                                            "merge_commit_sha": "deadbeef"}))):
         res = await loop_safety.get_pr_status(owner="o", repo="r", pr_number=1, token="t")
-    assert res == {"merged": True, "state": "closed"}
+    assert res == {"ok": True, "merged": True, "state": "closed", "merge_commit_sha": "deadbeef"}
 
 
 @pytest.mark.asyncio
@@ -46,7 +47,7 @@ async def test_get_pr_status_merged_false():
     with patch("services.loop_safety.github_request_with_retry",
                new=AsyncMock(return_value=_FakeResp(200, {"merged": False, "state": "open"}))):
         res = await loop_safety.get_pr_status(owner="o", repo="r", pr_number=1, token="t")
-    assert res == {"merged": False, "state": "open"}
+    assert res == {"ok": True, "merged": False, "state": "open", "merge_commit_sha": None}
 
 
 @pytest.mark.asyncio
@@ -55,6 +56,7 @@ async def test_get_pr_status_error_fails_closed():
                new=AsyncMock(side_effect=RuntimeError("network blip"))):
         res = await loop_safety.get_pr_status(owner="o", repo="r", pr_number=1, token="t")
     assert res["merged"] is False
+    assert res["ok"] is False
 
 
 def _session_doc(*, pr_url=None, pr_number=None, pr_branch=None):
@@ -90,7 +92,7 @@ async def test_rollback_unmerged_pr_closes_and_retracts():
     with patch("routers.loop.current_dev", new=AsyncMock(return_value={"user_id": "u1"})), \
          patch("routers.loop.get_db", return_value=db), \
          patch("services.pat_vault.get_repo_token_or_error", new=AsyncMock(return_value=("tok", None, None))), \
-         patch("services.loop_safety.get_pr_status", new=AsyncMock(return_value={"merged": False, "state": "open"})), \
+         patch("services.loop_safety.get_pr_status", new=AsyncMock(return_value={"ok": True, "merged": False, "state": "open", "merge_commit_sha": None})), \
          patch("services.loop_safety.close_and_retract", new=AsyncMock(return_value={
              "pr_closed": True, "branch_deleted": True, "errors": []})) as mock_close, \
          patch("services.loop_rollback.run_rollback_bg") as mock_run_rollback:
@@ -116,7 +118,7 @@ async def test_rollback_merged_pr_falls_through():
     with patch("routers.loop.current_dev", new=AsyncMock(return_value={"user_id": "u1"})), \
          patch("routers.loop.get_db", return_value=db), \
          patch("services.pat_vault.get_repo_token_or_error", new=AsyncMock(return_value=("tok", None, None))), \
-         patch("services.loop_safety.get_pr_status", new=AsyncMock(return_value={"merged": True, "state": "closed"})), \
+         patch("services.loop_safety.get_pr_status", new=AsyncMock(return_value={"ok": True, "merged": True, "state": "closed", "merge_commit_sha": "realsha123"})), \
          patch("services.loop_safety.close_and_retract", new=AsyncMock()) as mock_close:
         res = await rollback_loop(
             loop_id="loop_pr_gap_1",
@@ -130,6 +132,8 @@ async def test_rollback_merged_pr_falls_through():
     assert len(bg.tasks) == 1
     assert bg.tasks[0].func.__name__ == "run_rollback_bg" or "run_rollback" in repr(bg.tasks[0].func)
     assert res["rollback_status"] == "queued"
+    # T2/R10: uses the REAL merge_commit_sha, not the stale pre-merge full_sha
+    assert res["commit_sha"] == "realsha123"
 
 
 @pytest.mark.asyncio

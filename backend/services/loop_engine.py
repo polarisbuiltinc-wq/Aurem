@@ -3046,6 +3046,15 @@ class LoopEngine:
                         _proj_for_token)
                     if _fresh_tok:
                         token = _fresh_tok
+                    # H3 hardening (2026-08-30) — pin {owner, repo, branch,
+                    # installation_id} the FIRST time ship is staged for
+                    # this loop, so confirm_ship() can assert nothing
+                    # drifted underneath a paused-for-user ship before the
+                    # real GitHub write. Set-once: never overwritten once
+                    # a loop has a pin.
+                    if "_pinned_installation_id" not in self.context:
+                        self.context["_pinned_installation_id"] = (
+                            _proj_for_token.get("installation_id"))
             except Exception as _tok_refresh_err:                    # noqa: BLE001
                 logger.warning(
                     "[loop %s] ship token refresh failed, falling back to "
@@ -3068,6 +3077,8 @@ class LoopEngine:
             owner   = proj.get("github_owner") or ""
             repo    = proj.get("github_repo")  or ""
             branch  = proj.get("github_branch") or "main"
+            if "_pinned_installation_id" not in self.context:
+                self.context["_pinned_installation_id"] = proj.get("installation_id")
             # 2026-06 PAT-removal — App-only, no OAuth fallback.
             from services.pat_vault import get_repo_token_or_error
             token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
@@ -3583,6 +3594,67 @@ class LoopEngine:
             logger.warning(
                 "[loop %s] ship-resume token refresh failed, falling back "
                 "to pending token: %r", self.loop_id, _tok_refresh_err)
+
+        # H3 hardening (2026-08-30, overnight-loop-2 P0) — pin-and-
+        # assert-before-write. `owner`/`repo`/`branch` above came from
+        # `pending` (staged when ship was first proposed, itself pinned
+        # from the loop's own immutable `bin_ctx` at loop start).
+        # Re-fetch the project's LIVE binding right now — the same
+        # instant we're about to make a real GitHub write — and assert
+        # it still matches what was pinned. A ship can be paused for
+        # user confirmation for an arbitrary amount of time; if the
+        # project's repo/branch/installation binding changed underneath
+        # it in that window (reconnect, repo swap, installation churn),
+        # this loop must ABORT with an explicit, visible error — never
+        # silently re-target, never continue on stale context. This is
+        # the confirmed root-cause defence for the reported cross-
+        # project incident (see REPORT-x1-crossproject.md §W1/H3).
+        try:
+            _proj_for_pin = await self.db.cto_projects.find_one(
+                {"project_id": self.project_id, "user_id": self.user_id},
+                {"_id": 0, "github_owner": 1, "github_repo": 1,
+                 "github_branch": 1, "installation_id": 1},
+            )
+        except Exception as _pin_err:                                 # noqa: BLE001
+            logger.warning("[loop %s] repo-pin re-fetch failed: %r",
+                            self.loop_id, _pin_err)
+            _proj_for_pin = None
+        if not _proj_for_pin:
+            await self._fail_ship(
+                "Your project's GitHub connection could not be verified "
+                "right before shipping — re-link your repo in Settings "
+                "and try again. No commit was made.")
+            return
+        _pinned_installation = self.context.get("_pinned_installation_id")
+        _live_branch = _proj_for_pin.get("github_branch") or "main"
+        _pin_mismatch = (
+            _proj_for_pin.get("github_owner") != owner
+            or _proj_for_pin.get("github_repo") != repo
+            or _live_branch != branch
+            or (_pinned_installation is not None
+                and _proj_for_pin.get("installation_id") != _pinned_installation)
+        )
+        if _pin_mismatch:
+            logger.warning(
+                "[loop %s] SHIP REFUSED — repo pin mismatch. pinned=%s/%s@%s "
+                "(installation=%s) live=%s/%s@%s (installation=%s)",
+                self.loop_id, owner, repo, branch, _pinned_installation,
+                _proj_for_pin.get("github_owner"), _proj_for_pin.get("github_repo"),
+                _live_branch, _proj_for_pin.get("installation_id"))
+            try:
+                from services.trust_surface_events import log_trust_event
+                await log_trust_event(
+                    self.db, "loop_pin_mismatch", user_id=self.user_id,
+                    loop_id=self.loop_id, project_id=self.project_id or "")
+            except Exception:
+                pass
+            await self._fail_ship(
+                "Your project's GitHub connection changed while this ship "
+                "was waiting for your approval — refusing to write to a "
+                "repo/branch that no longer matches what you approved. "
+                "No commit was made. Re-run the loop to ship against the "
+                "current connection.")
+            return
 
         # ── Overnight T7 (Wave 2 · ship-via-PR) ─────────────────────
         # Preview-only feature flag (services.feature_flags, Mongo-

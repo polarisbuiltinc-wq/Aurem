@@ -2600,6 +2600,16 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
     owner = proj["github_owner"]
     repo = proj["github_repo"]
     branch = proj.get("branch", "main")
+    # H3 hardening (2026-08-30, overnight-loop-2 P0) — pin {owner, repo,
+    # branch, installation_id} the moment this worker starts (this
+    # function runs the whole task — LLM generation + edit application
+    # — before it ever writes to GitHub; a project's binding could
+    # theoretically change underneath it during that window). Re-
+    # asserted right before the real commit below.
+    _pin_owner, _pin_repo, _pin_branch = owner, repo, branch
+    _pin_installation_id = proj.get("installation_id")
+    _pin_project_id = proj.get("project_id")
+    _pin_user_id = proj.get("user_id")
     if not user_token:
         await _set_status(task_id, status="failed",
                           error="No PAT on project — open Edit and add one",
@@ -3609,6 +3619,55 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
         async def _prog(step: str, status: str = "info"):
             await _log(task_id, step, status)
 
+        # H3 hardening (2026-08-30, overnight-loop-2 P0) — re-fetch the
+        # project's LIVE GitHub binding right before the real commit and
+        # assert it still matches what was pinned when this worker
+        # started. Mismatch -> ABORT, zero writes, explicit user-visible
+        # error (never silently re-target). Same defence as
+        # loop_engine.py's confirm_ship() — see
+        # REPORT-x1-crossproject.md §W1/H3.
+        try:
+            _live_proj = await _db_plan.cto_projects.find_one(
+                {"project_id": _pin_project_id, "user_id": _pin_user_id},
+                {"_id": 0, "github_owner": 1, "github_repo": 1,
+                 "branch": 1, "github_branch": 1, "installation_id": 1},
+            )
+        except Exception as _pin_err:                                # noqa: BLE001
+            logger.warning("[%s] repo-pin re-fetch failed: %r", task_id, _pin_err)
+            _live_proj = None
+        if not _live_proj:
+            await _set_status(task_id, status="failed",
+                              error="Your project's GitHub connection could not be "
+                                    "verified right before shipping — re-link your "
+                                    "repo in Settings and try again. No commit was made.",
+                              completed_at=time.time())
+            return
+        _live_branch = _live_proj.get("branch") or _live_proj.get("github_branch") or "main"
+        if (_live_proj.get("github_owner") != _pin_owner
+                or _live_proj.get("github_repo") != _pin_repo
+                or _live_branch != _pin_branch
+                or (_pin_installation_id is not None
+                    and _live_proj.get("installation_id") != _pin_installation_id)):
+            logger.warning(
+                "[%s] SHIP REFUSED — repo pin mismatch. pinned=%s/%s@%s live=%s/%s@%s",
+                task_id, _pin_owner, _pin_repo, _pin_branch,
+                _live_proj.get("github_owner"), _live_proj.get("github_repo"), _live_branch)
+            try:
+                from services.trust_surface_events import log_trust_event
+                await log_trust_event(
+                    _db_plan, "loop_pin_mismatch", user_id=_pin_user_id or "unknown",
+                    task_id=task_id, project_id=_pin_project_id or "")
+            except Exception:
+                pass
+            await _set_status(task_id, status="failed",
+                              error="Your project's GitHub connection changed while "
+                                    "this task was running — refusing to write to a "
+                                    "repo/branch that no longer matches. No commit "
+                                    "was made. Re-run the task to ship against the "
+                                    "current connection.",
+                              completed_at=time.time())
+            return
+
         # 2026-08-28 · P0 hotfix (root cause of the production
         # "commit_files() missing 2 required positional arguments:
         # 'author_email' and 'author_name'" crash). This is the ONLY
@@ -3641,6 +3700,14 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
             return
         sha = result["sha"]
         commit_full_sha = result.get("full_sha") or sha
+        # B1-extend hardening (2026-08-30) — same fix as loop_engine.py's
+        # post-ship cache clear, applied here so the direct task-submit
+        # path can't leave a stale "disconnected" reading either.
+        try:
+            from routers.repo_status import invalidate as _invalidate_repo_status
+            _invalidate_repo_status(_pin_project_id or "")
+        except Exception as _inv_err:                                # noqa: BLE001
+            logger.debug("[%s] repo_status invalidate skipped: %r", task_id, _inv_err)
 
         # POST-PUSH VERIFY — re-fetch every edited file at the new commit's
         # SHA and confirm the remote content equals what we just pushed.
