@@ -1,0 +1,44 @@
+{
+  "prompt": "ship a fix: add a trailing newline check comment to .gitignore",
+  "status": 200,
+  "dt_s": 14.45,
+  "response": {
+    "ok": true,
+    "content": "```aurem-handoff\nIn `.gitignore` add a single trailing comment line `# trailing-newline-check` at the very end of the file (after the `.ruff_cache/` line).\n```",
+    "provider": "longcat-2.0",
+    "watchdog": null,
+    "mode": "code",
+    "temperature": 0.0,
+    "iterations": 2,
+    "session_id": "m2-fence-5",
+    "user_id": "test_admin_001",
+    "tokens_remaining": 869291,
+    "low_confidence": false,
+    "ship_suppressed": false,
+    "intent": {
+      "tier": "agentic",
+      "raw_tier": "agentic",
+      "confidence": 0.92,
+      "method": "heuristic",
+      "reasoning": "Imperative verb 'ship' at start of message",
+      "signals": [
+        "agentic_lead_verb:ship"
+      ],
+      "was_ambiguous": false,
+      "clarify": null,
+      "gateway_ms": 0.0
+    },
+    "tier": "agentic",
+    "council_recalled": 0,
+    "plain_english_contract_active": true,
+    "leak_stripped": false,
+    "length_capped": false,
+    "output_guard_ref_id": null,
+    "council": "A",
+    "task_type": null,
+    "repo_owner": "polarisbuiltinc-wq",
+    "repo_name": "ora-grounding",
+    "branch": "main",
+    "findings_saved": []
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "prompt": "What do you think of this project overall? Any thoughts?",
+  "status": 200,
+  "dt_s": 16.04,
+  "response": {
+    "ok": true,
+    "content": "I need to actually read the source files before giving a grounded assessment. Let me fetch everything now.",
+    "provider": "glm-5.2",
+    "watchdog": null,
+    "mode": "chat",
+    "temperature": 0.7,
+    "iterations": 1,
+    "session_id": "m2-lowconf-1",
+    "user_id": "test_admin_001",
+    "tokens_remaining": 868989,
+    "low_confidence": false,
+    "ship_suppressed": false,
+    "intent": {
+      "tier": "query",
+      "raw_tier": "query",
+      "confidence": 0.86,
+      "method": "heuristic",
+      "reasoning": "Question word or '?' present",
+      "signals": [
+        "query_signal",
+        "query_lead:what"
+      ],
+      "was_ambiguous": false,
+      "clarify": null,
+      "gateway_ms": 0.0
+    },
+    "tier": "query",
+    "council_recalled": 0,
+    "plain_english_contract_active": false,
+    "leak_stripped": false,
+    "length_capped": false,
+    "output_guard_ref_id": null,
+    "council": "A",
+    "task_type": null,
+    "repo_owner": "polarisbuiltinc-wq",
+    "repo_name": "ora-grounding",
+    "branch": "main",
+    "findings_saved": []
+  }
+}

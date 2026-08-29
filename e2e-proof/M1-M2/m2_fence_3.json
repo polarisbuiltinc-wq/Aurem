@@ -1,0 +1,44 @@
+{
+  "prompt": "ship a fix: fix any obvious typo in requirements.txt",
+  "status": 200,
+  "dt_s": 21.05,
+  "response": {
+    "ok": true,
+    "content": "No `requirements.txt` exists in this repo \u2014 it's a modern Python package using `pyproject.toml` for dependencies (which I've read and verified). The `pyproject.toml` declares **zero runtime dependencies** and one dev dependency (`pytest>=8.0`), both spelled correctly.\n\n**Nothing to fix.** If you meant to add a dependency or fix something else, let me know what you need.",
+    "provider": "longcat-2.0",
+    "watchdog": null,
+    "mode": "code",
+    "temperature": 0.0,
+    "iterations": 2,
+    "session_id": "m2-fence-3",
+    "user_id": "test_admin_001",
+    "tokens_remaining": 869341,
+    "low_confidence": false,
+    "ship_suppressed": false,
+    "intent": {
+      "tier": "agentic",
+      "raw_tier": "agentic",
+      "confidence": 0.92,
+      "method": "heuristic",
+      "reasoning": "Imperative verb 'ship' at start of message",
+      "signals": [
+        "agentic_lead_verb:ship"
+      ],
+      "was_ambiguous": false,
+      "clarify": null,
+      "gateway_ms": 0.0
+    },
+    "tier": "agentic",
+    "council_recalled": 0,
+    "plain_english_contract_active": true,
+    "leak_stripped": false,
+    "length_capped": false,
+    "output_guard_ref_id": null,
+    "council": "A",
+    "task_type": null,
+    "repo_owner": "polarisbuiltinc-wq",
+    "repo_name": "ora-grounding",
+    "branch": "main",
+    "findings_saved": []
+  }
+}

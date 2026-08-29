@@ -1,0 +1,44 @@
+{
+  "prompt": "ship a fix: add an HTML comment noting the current date to README.md",
+  "status": 200,
+  "dt_s": 12.31,
+  "response": {
+    "ok": true,
+    "content": "```aurem-handoff\nAdd an HTML comment with the current date to README.md - insert at the very end of the file, before any existing closing tags. Format: <!-- LAST-REVIEWED: 2024-06-14 -->\n```\n\nI'll:\n1. Add the comment with today's date\n2. Preserve all existing content\n3. Place it before any closing tags if they exist (though README.md doesn't currently have any HTML tags)\n\nThe change will be minimal and non-disruptive to the existing content.",
+    "provider": "deepseek-v3-council-c",
+    "watchdog": null,
+    "mode": "code",
+    "temperature": 0.0,
+    "iterations": 1,
+    "session_id": "m2-fence-1",
+    "user_id": "test_admin_001",
+    "tokens_remaining": 869479,
+    "low_confidence": false,
+    "ship_suppressed": false,
+    "intent": {
+      "tier": "agentic",
+      "raw_tier": "agentic",
+      "confidence": 0.92,
+      "method": "heuristic",
+      "reasoning": "Imperative verb 'ship' at start of message",
+      "signals": [
+        "agentic_lead_verb:ship"
+      ],
+      "was_ambiguous": false,
+      "clarify": null,
+      "gateway_ms": 0.0
+    },
+    "tier": "agentic",
+    "council_recalled": 0,
+    "plain_english_contract_active": true,
+    "leak_stripped": false,
+    "length_capped": false,
+    "output_guard_ref_id": null,
+    "council": "C",
+    "task_type": "write",
+    "repo_owner": "polarisbuiltinc-wq",
+    "repo_name": "ora-grounding",
+    "branch": "main",
+    "findings_saved": []
+  }
+}

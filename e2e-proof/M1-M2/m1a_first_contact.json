@@ -1,0 +1,44 @@
+{
+  "prompt": "Hi, what does this tool do?",
+  "status": 200,
+  "dt_s": 3.87,
+  "response": {
+    "ok": true,
+    "content": "ORA helps developers by analyzing GitHub repos, fixing real issues, and shipping fixes as commits or PRs\u2014think of it as a hands-on coding assistant. Let me know how I can help!",
+    "provider": "intent-gateway-casual",
+    "watchdog": null,
+    "mode": "chat",
+    "temperature": 0.7,
+    "iterations": 1,
+    "session_id": "m1a-fresh-1",
+    "user_id": "test_admin_001",
+    "tokens_remaining": 869554,
+    "low_confidence": false,
+    "ship_suppressed": false,
+    "intent": {
+      "tier": "casual",
+      "raw_tier": "casual",
+      "confidence": 0.8,
+      "method": "heuristic",
+      "reasoning": "Question-shaped message with no concrete resource/data noun \u2014 informational product question, not a lookup that needs tool access.",
+      "signals": [
+        "informational_no_resource_noun"
+      ],
+      "was_ambiguous": false,
+      "clarify": null,
+      "gateway_ms": 0.0
+    },
+    "tier": "casual",
+    "council_recalled": 2,
+    "plain_english_contract_active": true,
+    "leak_stripped": false,
+    "length_capped": false,
+    "output_guard_ref_id": null,
+    "council": null,
+    "task_type": null,
+    "repo_owner": "polarisbuiltinc-wq",
+    "repo_name": "ora-grounding",
+    "branch": "main",
+    "findings_saved": []
+  }
+}

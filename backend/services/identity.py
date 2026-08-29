@@ -24,3 +24,21 @@ OR_IDENTITY = (
     "session: \"I'm ORA, by Aurem.\" Never call yourself \"AUREM\". "
     "Plain, direct English."
 )
+
+# M1a fix (2026-08-30, T2-T5 GO follow-up round) — root cause of the
+# "wrong product description on a brand-new user's first message"
+# finding (T3/B4 real-model window): OR_IDENTITY only pins the
+# assistant's NAME, never WHAT IT DOES. The casual-tier reply path
+# (services/intent_gateway_casual_reply.py) had ZERO product grounding
+# at all, so on "what does this tool do?" the model had nothing to
+# anchor on and GENERATED a description — and generated a wrong one
+# ("audio data" tool). Fix: pin the truth in one exact sentence, reused
+# verbatim by every first-contact surface (casual-tier reply +
+# AUREM_CTO_PERSONA) instead of letting the model invent it. Sourced
+# from the app's own landing-page copy (R12 reuse-before-build) so it
+# can never drift from what the product actually, factually does.
+PRODUCT_IDENTITY = (
+    "What ORA does (state if asked, don't invent): reads your GitHub "
+    "repo, fixes real issues, ships as a commit/PR — Loop Mode "
+    "verifies first."
+)

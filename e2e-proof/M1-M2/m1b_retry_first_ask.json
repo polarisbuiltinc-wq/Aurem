@@ -1,0 +1,44 @@
+{
+  "prompt": "Can you check my repo for security issues?",
+  "status": 200,
+  "dt_s": 51.77,
+  "response": {
+    "ok": true,
+    "content": "**Security Review Summary**  \n\nThe core library is **secure by design**\u2014no dependencies, no hardcoded secrets, no risky I/O. It\u2019s pure computation with injected adapters (like logging or LLM calls) and fails safely.  \n\n### Key Strengths:  \n- **No secrets** in code or configs.  \n- **No third-party dependencies** (supply-chain risk eliminated).  \n- **Inputs are truncated** (prevents log bloat/injection).  \n- **Errors never crash the host**\u2014empty results returned instead.  \n- **Regex and JSON parsing are safe** (no ReDoS or eval risks).  \n\n### Issues (Low Severity):  \n1. **Two orphaned test files** reference non-existent modules (likely copied from another project). They won\u2019t run in CI but should be deleted to avoid confusion.  \n2. **Broad exception handling** silently swallows adapter failures (intentional but worth noting for debugging).  \n\n### No Risks Found For:  \n- Authentication, file access, XSS, or secrets in CI.  \n\n### Recommendations:  \n- Delete the orphaned test files (`a project file`, `a project file`).  \n- Optionally, guard against pytest collecting root-level tests.  \n\nThe library is clean\u2014just needs minor cleanup.  \n\nWant technical details? Just ask.",
+    "provider": "glm-5.2",
+    "watchdog": null,
+    "mode": "chat",
+    "temperature": 0.7,
+    "iterations": 3,
+    "session_id": "m1b-retry-1",
+    "user_id": "test_admin_001",
+    "tokens_remaining": 868933,
+    "low_confidence": false,
+    "ship_suppressed": false,
+    "intent": {
+      "tier": "query",
+      "raw_tier": "query",
+      "confidence": 0.76,
+      "method": "heuristic",
+      "reasoning": "Question word or '?' present",
+      "signals": [
+        "query_signal"
+      ],
+      "was_ambiguous": false,
+      "clarify": null,
+      "gateway_ms": 0.0
+    },
+    "tier": "query",
+    "council_recalled": 2,
+    "plain_english_contract_active": true,
+    "leak_stripped": true,
+    "length_capped": true,
+    "output_guard_ref_id": "ORA-76c242",
+    "council": "A",
+    "task_type": null,
+    "repo_owner": "polarisbuiltinc-wq",
+    "repo_name": "ora-grounding",
+    "branch": "main",
+    "findings_saved": []
+  }
+}

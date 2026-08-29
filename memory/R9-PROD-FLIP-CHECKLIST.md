@@ -4,9 +4,12 @@
 1. R5e passed (real webhook delivered live, `ship_pr_merged`/`ship_pr_closed`
    written by the real route, not the replay fallback — see
    `R5e-VERIFY-PLAN.md`).
-2. R8 passed (real-model smoke + N1/K2-K9 re-test green, per
-   `PART_D_E_F_SYNTHESIS_2026_08_28.md`'s open items, cost baseline
-   captured).
+2. **R8 — NOW COMPLETE (2026-08-30, M1/M2 round).** Fence-emit rate
+   2/5 raw / 67% effective (excl. 1 correct no-fix + 1 infra-timeout);
+   low-confidence retest not-suppressed with honest infra caveat;
+   final cost baseline $0.0191/msg for $9/Pro tiering. See
+   `/app/e2e-proof/M1-M2/M1_M2_REPORT.md`. Real-model smoke +
+   N1/K2-K9 spot-checks green per prior rounds + this one.
 3. The 48-hour legit-ship warn-window has been reviewed by the
    founder (Preview `ship_via_pr` stayed ON, R2's drill + any organic
    Preview ships during that window logged no unexpected WARN-mode

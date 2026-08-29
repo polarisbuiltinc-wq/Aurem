@@ -385,3 +385,37 @@ Full 10-section report: `/app/memory/REPORT-loop2.md`. Summary:
 PART B (V1 — server-side browser deploy-verify) starts only after
 founder review, as its own clean workstream per the founder's explicit
 sequencing rule.
+
+## M1 + M2 — bounded real-model window (2026-08-30, founder follow-up "SMALL focused round")
+
+Founder accepted Loop 2, then authorized ONE more bounded real-model
+window ($3 cap) to fix M1's 2 P1 model-quality findings + complete
+M2's R8 acceptance numbers, BEFORE V1 (which still awaits a separate
+"GO V1"). Full report: `/app/e2e-proof/M1-M2/M1_M2_REPORT.md`.
+
+- Window: flip OFF `16:49:41Z` → flip ON `17:00:43Z`. Spend $0.210012/$3.
+- **M1a (wrong product description)**: FIXED, verified 100% on retest
+  — `PRODUCT_IDENTITY` pinned constant added, real reply now grounded.
+- **M1b (context-anchored repeat)**: PARTIALLY fixed — new persona
+  rule added; worst symptom (repeating an unrelated stale answer) not
+  reproduced on retest, but short-recap compliance not achieved
+  (model-instruction-following cap, logged not chased, per founder's
+  own "one attempt then move on").
+- **M2 fence rate**: 2/5 raw / 67% effective — NEW root cause found on
+  the 1 real miss (`output_guard.py` filename redaction collision,
+  named not fixed).
+- **M2 low-confidence**: not suppressed this retest (16s, real answer)
+  — same 60s infra-cutoff gap still fires elsewhere in this window
+  (fence prompt #4), so flakiness is real, just didn't hit this exact
+  retest. No threshold changed.
+- **M2 cost baseline**: $0.0191/msg final number for $9/Pro tiering.
+- Mock restored + zero-spend proven. Regression: 0 new (2 persona-
+  budget guardrail tests caught an over-budget edit mid-round, fixed
+  before finishing — exactly what those tests are for).
+- R9: still NOT READY TO FLIP — R5e (founder, in progress), 48h
+  warn-window (unreviewed), R1a gap#4 (open) remain.
+- NEEDS-FOUNDER: `ora-grounding`'s GitHub App installation needs
+  reconnecting (one-liner, not fixed this round).
+
+**STOP. V1 starts only on founder's separate "GO V1", per explicit
+instruction.**

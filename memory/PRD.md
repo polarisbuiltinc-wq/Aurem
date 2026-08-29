@@ -7319,6 +7319,27 @@ spent, 2 new P1 model-quality findings) + a full testing_agent journey pass (12/
 advisory bounce moments, zero code bugs); T4 confirmed production is running this pod's exact git
 HEAD (zero drift); T5's 5+5 battery found 10/10 chat+loop calls correctly pinned to the same project.
 **R9 verdict: NOT READY TO FLIP** — 2 of 5 stop-gate items (R5e webhook delivery, R8's full acceptance
+
+## 2026-08-30 (same day, follow-up) — M1 + M2 bounded real-model round
+
+Founder accepted the Loop 2 (T2-T5) report, then authorized ONE more
+small bounded real-model window ($3 cap) before V1: M1 (fix the 2 P1
+model-quality findings from T3) + M2 (complete R8's fence-rate/low-
+confidence/cost-baseline acceptance numbers). Full report:
+`/app/e2e-proof/M1-M2/M1_M2_REPORT.md`. Headline: M1a (wrong product
+description) FIXED and verified 100% on a real-model retest via a new
+`PRODUCT_IDENTITY` pinned constant; M1b (context-anchored repeat)
+PARTIALLY fixed (worst symptom gone, short-recap compliance not
+reliable — logged as a model-instruction-following cap, not chased
+further per founder's own instruction); M2 fence rate 2/5 raw/67%
+effective with a NEW named root cause on the 1 real miss
+(`output_guard.py` filename-redaction collision, not fixed, flagged);
+M2 low-confidence retest not suppressed this time; final cost baseline
+$0.0191/msg captured for the $9/Pro tier. R9 still NOT READY TO FLIP
+(R5e founder-in-progress, 48h warn-window unreviewed, R1a gap#4 open).
+V1 (server-side deploy-verify) remains queued, NOT started — awaits a
+separate founder "GO V1".
+
 numbers) remain open from prior rounds. STOPPED per founder's explicit instruction; PART B (V1 —
 server-side browser deploy-verify) is queued next as its own clean workstream, not started.
 

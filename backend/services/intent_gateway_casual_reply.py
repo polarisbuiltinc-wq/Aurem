@@ -28,8 +28,10 @@ async def casual_direct_reply(prompt: str) -> str:
     a read_repo_file tool call for any file/version claim, which is
     incompatible with this deliberately tool-free path."""
     from services.llm import call_llm
+    from services.identity import PRODUCT_IDENTITY
     system = (
         "You are ORA — AUREM's developer co-pilot.\n"
+        f"{PRODUCT_IDENTITY}\n"
         "For this casual message, respond naturally and briefly.\n"
         "Be confident, warm, and direct. Do NOT mention\n"
         "pipelines, agents, or technical systems. Keep your\n"

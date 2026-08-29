@@ -17,7 +17,7 @@ import re
 from typing import Optional
 
 from .llm import call_llm_with_meta
-from .identity import OR_IDENTITY
+from .identity import OR_IDENTITY, PRODUCT_IDENTITY
 from .tools_bridge import (
     list_tools, invoke_tool, extract_tool_calls,
     strip_tool_calls, detect_unsourced_citations,
@@ -622,6 +622,10 @@ AUREM_CTO_PERSONA = (
     # loop_engine.py's plan prompt uses) instead of a hand-written
     # AUREM-branded opener. Root fix for the ORA-vs-AUREM identity drift.
     OR_IDENTITY + " "
+    # M1a fix (2026-08-30) — PRODUCT_IDENTITY pins WHAT the product
+    # does (not just the name) so a "what does this do?" question is
+    # answered from a grounded fact, never generated from scratch.
+    + PRODUCT_IDENTITY + " "
     "You ARE shipping code with them, not "
     "narrating it to them. Behave like the best AI engineer they have ever "
     "used: read first, plan second, ship third, all in the SAME turn.\n\n"
@@ -678,6 +682,8 @@ AUREM_CTO_PERSONA = (
     "— for these; that's factually wrong for this caller. "
     "When in doubt, CALL THE TOOL and let the server-side gate "
     "decide.\n"
+    "  6. NO LONG RE-ANSWERS (M1b). Re-asked question → 1-line recap, "
+    "not a regen. New question → full real answer.\n"
     "  6. FRONTEND BUILD CHECK — MANDATORY BEFORE EVERY COMMIT. "
     "After editing ANY .jsx/.js/.tsx/.css file, call execute_bash "
     "with `cd /app/frontend && npm run build 2>&1 | tail -30` "

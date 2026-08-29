@@ -1,0 +1,44 @@
+{
+  "prompt": "Can you check my repo for security issues?",
+  "status": 200,
+  "dt_s": 44.03,
+  "response": {
+    "ok": true,
+    "content": "**Security Review \u2014 Complete**\n\nYour project is **secure by design**. It focuses on pure text analysis with no inherent vulnerabilities like database calls, file system access, or network requests. All external connections (e.g., logging, LLM calls) are user-provided, eliminating any attack surface within the library itself.\n\n### What\u2019s Working Well  \n- **No secrets** (passwords, API keys) in files or CI pipelines.  \n- **Zero dependencies**, so no supply-chain risks.  \n- **Inputs are size-capped** to prevent memory exhaustion or log flooding.  \n- **Fail-safe design** ensures empty results instead of crashes.  \n- **Secret files are ignored** (e.g., `.env`, private keys).  \n- **No injection vectors**\u2014no code execution, database queries, or HTML rendering.  \n- **Clean CI pipeline** with no exposed secrets or dangerous permissions.  \n\n### Issues Found  \n1. **Two orphaned test files** from another project\u2014they import modules that don\u2019t exist and are unrelated to your project. **Severity: Low.**  \n2. **One broken service file** imports non-existent helper modules and would crash if used. Likely leftover scaffolding. **Severity: Low.**  \n3. **Broad error swallowing**\u2014errors are logged as warnings instead of surfaced. While intentional (to avoid crashing the host), silent failures (e.g., a broken database connection) could go unnoticed. **Severity: Low.**  \n\n### No Risks Found For  \n- Hardcoded credentials or secrets.  \n- Authentication or authorization bypass.  \n- File system access or path traversal.  \n- Cross-site scripting (XSS).  \n- SQL or NoSQL injection.  \n- Insecure CI/CD configuration.  \n- Dependency vulnerabilities (there are none).  \n\n### Recommendations  \n1. **Delete the orphaned test files and broken service file** to avoid confusion.  \n2. **Add a health alert** for repeated error-swallowing paths to detect silent failures.  \n3. **No other action needed**\u2014the library is well-architected and secure.  \n\nWant the technical detail (file-level)? Let me know!",
+    "provider": "glm-5.2",
+    "watchdog": null,
+    "mode": "chat",
+    "temperature": 0.7,
+    "iterations": 3,
+    "session_id": "m1b-retry-1",
+    "user_id": "test_admin_001",
+    "tokens_remaining": 868839,
+    "low_confidence": false,
+    "ship_suppressed": false,
+    "intent": {
+      "tier": "query",
+      "raw_tier": "query",
+      "confidence": 0.76,
+      "method": "heuristic",
+      "reasoning": "Question word or '?' present",
+      "signals": [
+        "query_signal"
+      ],
+      "was_ambiguous": false,
+      "clarify": null,
+      "gateway_ms": 0.0
+    },
+    "tier": "query",
+    "council_recalled": 2,
+    "plain_english_contract_active": true,
+    "leak_stripped": false,
+    "length_capped": true,
+    "output_guard_ref_id": "ORA-898b84",
+    "council": "A",
+    "task_type": null,
+    "repo_owner": "polarisbuiltinc-wq",
+    "repo_name": "ora-grounding",
+    "branch": "main",
+    "findings_saved": []
+  }
+}

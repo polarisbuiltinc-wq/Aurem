@@ -1,0 +1,44 @@
+{
+  "prompt": "ship a fix: add a docstring one-liner to services/response_confidence.py",
+  "status": 200,
+  "dt_s": 22.78,
+  "response": {
+    "ok": true,
+    "content": "[ISSUE] The file `a project file` does not exist in this repository.\n\nThe only file in the `services/` directory is `a project file`, which already has a docstring: `\"\"\"Coordinates workflow execution across services with retry and state management.\"\"\"`\n\n**What I found:**\n- \u2713 `a project file` exists and already has a module-level docstring\n- \u2717 `a project file` does not exist\n\nIf you meant to add a docstring to `a project file` or create a new `a project file` file, let me know which one.",
+    "provider": "longcat-2.0",
+    "watchdog": null,
+    "mode": "code",
+    "temperature": 0.0,
+    "iterations": 2,
+    "session_id": "m2-fence-2",
+    "user_id": "test_admin_001",
+    "tokens_remaining": 869360,
+    "low_confidence": false,
+    "ship_suppressed": false,
+    "intent": {
+      "tier": "agentic",
+      "raw_tier": "agentic",
+      "confidence": 0.92,
+      "method": "heuristic",
+      "reasoning": "Imperative verb 'ship' at start of message",
+      "signals": [
+        "agentic_lead_verb:ship"
+      ],
+      "was_ambiguous": false,
+      "clarify": null,
+      "gateway_ms": 0.0
+    },
+    "tier": "agentic",
+    "council_recalled": 0,
+    "plain_english_contract_active": true,
+    "leak_stripped": true,
+    "length_capped": false,
+    "output_guard_ref_id": "ORA-062621",
+    "council": "A",
+    "task_type": null,
+    "repo_owner": "polarisbuiltinc-wq",
+    "repo_name": "ora-grounding",
+    "branch": "main",
+    "findings_saved": []
+  }
+}

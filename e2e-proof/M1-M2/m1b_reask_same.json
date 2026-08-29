@@ -1,0 +1,45 @@
+{
+  "prompt": "Explain in detail how the loop, PR, and rollback pipeline works end to end",
+  "status": 200,
+  "dt_s": 27.34,
+  "response": {
+    "ok": true,
+    "content": "Here\u2019s how I handle changes to your code, from start to finish\u2014and how to undo them if needed.  \n\nFirst, I **read** your actual GitHub files to understand the current code\u2014no guessing. Next, I **plan** the fix in a clear, concise way and show you the summary before making any changes. Once you approve, I **ship** the update as a commit or pull request (your choice).  \n\nIf Loop Mode is on, I **verify** the change before pushing\u2014checking for errors, broken imports, or build issues\u2014and fix anything before it reaches you. If something goes wrong later, just say \"revert\" and I\u2019ll **undo** the change cleanly through a new commit, keeping your git history intact.  \n\nYou control:  \n- **Branch** (where changes land)  \n- **Commit vs. PR** (direct push or pull request)  \n- **Loop Mode** (verify before shipping or not)  \n- **Rollback anytime** (just ask)  \n\nNeed technical details? Just say so.",
+    "provider": "glm-5.2",
+    "watchdog": null,
+    "mode": "chat",
+    "temperature": 0.7,
+    "iterations": 1,
+    "session_id": "m1b-repeat-1",
+    "user_id": "test_admin_001",
+    "tokens_remaining": 869504,
+    "low_confidence": false,
+    "ship_suppressed": false,
+    "intent": {
+      "tier": "query",
+      "raw_tier": "query",
+      "confidence": 0.86,
+      "method": "heuristic",
+      "reasoning": "Question word or '?' present",
+      "signals": [
+        "query_signal",
+        "query_lead:explain"
+      ],
+      "was_ambiguous": false,
+      "clarify": null,
+      "gateway_ms": 0.0
+    },
+    "tier": "query",
+    "council_recalled": 0,
+    "plain_english_contract_active": true,
+    "leak_stripped": false,
+    "length_capped": true,
+    "output_guard_ref_id": "ORA-ae5a00",
+    "council": "A",
+    "task_type": null,
+    "repo_owner": "polarisbuiltinc-wq",
+    "repo_name": "ora-grounding",
+    "branch": "main",
+    "findings_saved": []
+  }
+}
