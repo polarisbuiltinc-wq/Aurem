@@ -43,10 +43,48 @@ export default function FirstScanCard({ projectId }) {
   const [timedOut, setTimedOut] = useState(false);
   const [lastPolledAt, setLastPolledAt] = useState(null);
   const [, setTick] = useState(0); // re-renders the heartbeat clock every 1s
+  const [ackedFix, setAckedFix] = useState(false); // 2026-08-30: fixed-banner acknowledge-once
   const viewedSentRef = useRef(false);
   const pollStartRef = useRef(null);
   const statusRef = useRef(null);
   const applyingRef = useRef(false); // synchronous double-click guard (ahead of React's async setState)
+  const ackSentRef = useRef(false);
+
+  // Read-back fix (fixed) computed early so the ack hooks below can use it —
+  // must stay unconditional (before any early `return null`) per rules-of-hooks.
+  const fixed = applyResult?.commit_sha ? applyResult
+    : (state?.commit_sha ? state : null);
+
+  // 2026-08-30 fix (Issue A): the fixed banner must show ONCE then never
+  // re-render on refresh/relogin. Server truth (`fix_acknowledged`) is the
+  // source, not localStorage — survives incognito/clear/other-device.
+  useEffect(() => {
+    if (state?.fix_acknowledged) setAckedFix(true);
+  }, [state?.fix_acknowledged]);
+
+  const acknowledgeFix = useCallback(() => {
+    if (ackSentRef.current) return;
+    ackSentRef.current = true;
+    setAckedFix(true);
+    api.post("/onboarding/first-scan/acknowledge-fix", { project_id: projectId }).catch(() => {});
+  }, [projectId]);
+
+  // Auto-vanish: once seen, acknowledge after 7s so it doesn't linger forever
+  // (still dismissible immediately via the "Got it" button below).
+  useEffect(() => {
+    if (!fixed || ackedFix) return undefined;
+    const t = setTimeout(acknowledgeFix, 7000);
+    return () => clearTimeout(t);
+  }, [fixed, ackedFix, acknowledgeFix]);
+
+  // Reset the ack/dismiss session flags on a project switch — this card is
+  // not remounted (no `key`) when the active project changes, so without
+  // this a just-acknowledged project A would wrongly suppress project B's
+  // own, unrelated fresh fixed-banner.
+  useEffect(() => {
+    ackSentRef.current = false;
+    setAckedFix(false);
+  }, [projectId]);
 
   const poll = useCallback(async () => {
     if (!projectId || projectId === "home") return;
@@ -220,13 +258,13 @@ export default function FirstScanCard({ projectId }) {
     );
   }
 
-  // status === "ready" — read-back fix: prefer a fresh apply result from
-  // this session, else fall back to a fix already saved server-side so a
-  // reload shows "already fixed" instead of the unfixed findings again.
-  const fixed = applyResult?.commit_sha ? applyResult
-    : (state.commit_sha ? state : null);
-
+  // status === "ready", fixed already computed above (read-back: prefer a
+  // fresh apply result from this session, else the server-saved fix).
+  // 2026-08-30 fix (Issue A): once acknowledged (server-side, this session
+  // or a prior one), render nothing — the fix already happened, there's
+  // nothing left to show. Prevents the perpetual re-appear on refresh/relogin.
   if (fixed) {
+    if (ackedFix) return null;
     return (
       <WorkCard
         testId="first-scan-card"
@@ -247,6 +285,7 @@ export default function FirstScanCard({ projectId }) {
             )}
           </span>
         }
+        secondaryAction={{ label: "Got it", testId: "first-scan-fixed-ack-btn", onClick: acknowledgeFix }}
       />
     );
   }

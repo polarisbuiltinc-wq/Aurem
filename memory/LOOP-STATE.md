@@ -600,3 +600,108 @@ remaining gates. Still remaining: (a) founder actually sets the prod
 webhook secret via the channel confirmed in P3 and it shows 200, (b)
 founder reviews/accepts P1's CLEAN verdict. **R9 flips when both are
 done + founder GO — not performed this round.**
+
+---
+
+## R9 STATUS — CARRY-FORWARD (2026-08-30, this round)
+
+Founder ran the R9 pre-flight checks directly on production (correct
+paths turned out to be `/api/aurem-dev/admin/*`, not the ones in this
+checklist doc — checklist needs a path-correction follow-up) and
+pasted back real JSON:
+- **Webhook fence: CLEAN.** `subscribed_events: [pull_request,
+  workflow_job]`, `missing_subscriptions: []`, a real `pull_request`
+  delivery today, 200/success. R5e now genuinely closed on
+  PRODUCTION itself (previously only founder-read-GitHub-UI).
+- **Flag state: `ship_via_pr` already `enabled: true, rollout_pct:
+  100`** on production — founder flipped this earlier in the same
+  session, not this agent; no code/agent action taken to flip it.
+- **Loop metrics (7d): failed_ratio 33.3% -> 54.5%, +21.2pp** since
+  the flip. Founder's own caveat: some of this window's failures may
+  be their own live regression-testing noise (an Item-9 ship failure,
+  an intent-confusion bug), not necessarily organic. Not yet
+  separated by user_id — real signal vs noise still UNKNOWN.
+- **Real ship attempt (founder's own live test): FAILED.** No file
+  edits generated; self-heal retry also failed. No PR number / merge
+  SHA exists. Per the founder's OWN stated acceptance bar ("flag-on +
+  model-real is R8, not R9 LIVE... a production-safe ship is the
+  proof"), **this is NOT R9 LIVE.**
+
+**Decision (founder, explicit, this round): CARRY-FORWARD — do not
+re-attempt right now.** Flag stays as-is (already ON on production,
+untouched by this agent); move on to 2 new prod bugs (Issue A/B,
+below) this round; R9 proof-of-ship resumes in a future round.
+
+**R9 CARRY-FORWARD ITEM (top of next round's list):** still need ONE
+clean successful ship on production — PR opened -> merged -> Live
+chip, PR number + merge SHA captured — before "R9 LIVE" can be said.
+Also investigate the +21.2pp failure-rate regression (filter by
+user_id to separate today's manual-test noise from real signal)
+before dismissing it as noise-only.
+
+**No production credentials were used, requested, or stored by this
+agent this round.** All production reads/writes were performed by
+the founder directly; this agent only reviewed pasted-back JSON.
+
+---
+
+## ISSUE A + ISSUE B — production chat-UI bugs (2026-08-30, this round, started)
+
+Founder-reported, live production screenshot evidence
+(`RerootsBeauty/ReRoots-`). Two separate root causes, two separate
+fixes/PRs, read-only investigate first. NOT R9, NOT the post-R9
+batch, NOT the chromium/build_hash V1 issue (separately queued).
+
+- Issue A: "Fixed N file(s) — committed as {sha}" banner re-appears
+  on refresh AND re-login on the same project (should show once,
+  auto-vanish, never re-show). Must determine exact persistence path
+  (localStorage vs server-side shipped-task-state vs SSE-rehydrate)
+  vs the earlier, already-fixed sibling bug before patching.
+- Issue B: ORA drops the in-progress "find issues" intent on a
+  one-word follow-up ("i didnt find any ?"), asking "can you clarify
+  what you're looking for?" instead of answering in-thread. Need to
+  determine if this is context-window truncation or a missing
+  anchor-instruction gap, and which model/context length the Pro
+  chat path resolves to.
+
+Investigation starting now.
+
+## ISSUE A + ISSUE B — CLOSED, testing_agent verified (2026-08-30)
+
+**Issue A**: root cause CONFIRMED category (b) — `GET /onboarding/first-scan/status`
+re-surfaced `commit_sha` every call once present (Phase A read-back design), zero
+acknowledge mechanism → perpetual banner. Different component/path than the
+already-fixed sibling (`MessageBubble.jsx` `shipped_task_id` gate,
+`test_iter89_ship_button_no_reappear.py`) — not a regression of that fix.
+Fix: new `POST /onboarding/first-scan/acknowledge-fix` (idempotent,
+ownership-checked) + `fix_acknowledged` on `/status`. `FirstScanCard.jsx`:
+"Got it" button + 7s auto-vanish, both call the ack endpoint; once acked,
+component renders null. Resets per-project on switch (no false suppression
+of a different project's own fresh banner).
+
+**Issue B**: root cause CONFIRMED (source read, not guessed) — both
+`chat.py` call sites hardcode `history=[]` into `intent_gateway.classify()`,
+and `casual_direct_reply()` called the LLM with ONLY the current message,
+zero history, by construction. Not a model/context-length cap — literally
+no history ever reached the model. Fix: new
+`response_confidence.prior_turn_context_text()` (same cheap `$slice:-1`
+query as the existing `prior_turn_had_fix_signal`) threaded into
+`casual_direct_reply(prompt, prior_assistant_text=...)`, appending an
+explicit in-thread-answer anchor instruction only when a prior turn exists
+— zero change for genuine fresh chit-chat.
+
+**Tests**: 13 new (`test_first_scan_ack_2026_08_30.py`,
+`test_issue_b_context_anchor_2026_08_30.py`) + 116 regression
+(intent-gateway/casual-boundary/onboarding/workcard suites), all pass, 0
+new failures. `testing_agent` live-verified both end-to-end (real browser
+clicks + reload + relogin-equivalent for A, real 2-turn LLM chat sequence
+for B) — 0 bugs, 0 action items
+(`/app/test_reports/iteration_issue_ab_first_scan_ack_and_context_anchor_2026_08_30.json`).
+
+Note: test fixture `p_0fdafaa365`'s `fix_acknowledged_at` was left `True`
+after testing — harmless, reset script in the test report if needed.
+
+**Next up (per founder's earlier explicit sequencing)**: R9 proof-of-ship
+(carry-forward item above) whenever founder resumes it; post-R9 batch
+(infra root-cause → contrast CI guard → A7 reminder → bulk-revoke last)
+remains queued.

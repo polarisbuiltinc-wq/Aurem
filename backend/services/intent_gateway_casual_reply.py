@@ -12,7 +12,7 @@ its sibling). Both call sites now share this one function instead.
 from __future__ import annotations
 
 
-async def casual_direct_reply(prompt: str) -> str:
+async def casual_direct_reply(prompt: str, prior_assistant_text: str | None = None) -> str:
     """Direct, no-tool LLM reply for casual/clarify tier messages.
     Raises on failure — callers decide the fallback behavior.
 
@@ -26,7 +26,17 @@ async def casual_direct_reply(prompt: str) -> str:
     there are two agents behind it. Deliberately does NOT reuse
     ORA_PANEL_TONE (routers/chat.py) — that block's R1-R5 rules mandate
     a read_repo_file tool call for any file/version claim, which is
-    incompatible with this deliberately tool-free path."""
+    incompatible with this deliberately tool-free path.
+
+    `prior_assistant_text` — 2026-08-30 Issue B fix. This path
+    previously carried ZERO turns of history by construction (a
+    deliberate latency tradeoff — see the `history=[]` call sites in
+    chat.py), so a short follow-up to an in-progress task ("i didnt
+    find any ?") got "can you clarify what you're looking for?"
+    instead of an in-thread answer. Passing just the immediately-prior
+    assistant turn (one cheap DB read, same shape as
+    `prior_turn_had_fix_signal`) lets the model anchor a follow-up
+    without paying for full conversation history."""
     from services.llm import call_llm
     from services.identity import PRODUCT_IDENTITY
     system = (
@@ -37,6 +47,16 @@ async def casual_direct_reply(prompt: str) -> str:
         "pipelines, agents, or technical systems. Keep your\n"
         "reply under 2 sentences."
     )
+    if prior_assistant_text:
+        system += (
+            "\n\nYour own immediately-prior message to this user (for "
+            f"continuity only): \"{prior_assistant_text[:400]}\"\n"
+            "If the user's new message is a short follow-up to that "
+            "(e.g. \"did you find any?\", \"and?\", \"ok what next\"), "
+            "answer it in-thread using that context — give a real "
+            "status or answer. Do NOT ask them to clarify what they "
+            "want when the prior message already made that clear."
+        )
     try:
         from services.house_rules import get_active_house_rules, format_house_rules_block
         _hr = await get_active_house_rules("advisor", None)

@@ -138,6 +138,34 @@ async def prior_turn_had_fix_signal(db, session_id: str, user_id: str) -> bool:
         return False
 
 
+async def prior_turn_context_text(db, session_id: str, user_id: str) -> str | None:
+    """2026-08-30 — Issue B fix. Fetch the last stored assistant turn's
+    raw text (same cheap single-doc `$slice: -1` query shape as
+    `prior_turn_had_fix_signal` above) so a short follow-up
+    ("i didnt find any ?") can be anchored to what the assistant was
+    just doing, instead of the casual-tier reply path having ZERO
+    turns of history by construction (confirmed root cause — not a
+    model/context-length cap). Fail-open (returns None) on any DB
+    hiccup or if there's no prior assistant turn — same posture as
+    every other passive-audit read in this codebase."""
+    if db is None or not session_id:
+        return None
+    try:
+        doc = await db.chat_sessions.find_one(
+            {"session_id": session_id, "user_id": user_id},
+            {"_id": 0, "turns": {"$slice": -1}},
+        )
+        turns = (doc or {}).get("turns") or []
+        if not turns:
+            return None
+        last = turns[-1]
+        if not isinstance(last, dict) or last.get("role") != "assistant":
+            return None
+        return last.get("content") or None
+    except Exception:
+        return None
+
+
 async def persist_confidence_check(db, **fields) -> None:
     """2026-08-25 — passive audit trail for `chat.confidence_check`.
     Founder has no raw log access to Preview/Production; this makes

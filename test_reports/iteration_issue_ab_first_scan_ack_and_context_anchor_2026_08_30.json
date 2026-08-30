@@ -1,0 +1,33 @@
+{
+  "summary": "Full end-to-end verification of two independent 2026-08-30 production bug fixes on preview. Issue A (FirstScanCard 'Fixed and shipped' banner acknowledge-once via new POST /onboarding/first-scan/acknowledge-fix + fix_acknowledged flag on /status) and Issue B (casual-tier follow-up context anchoring via new prior_turn_context_text() threaded into casual_direct_reply). Ran 13 pytest tests + full live UI flow (login → project switch → banner-shows → click 'Got it' → banner-vanishes → reload → banner-still-gone → server flag True) + auto-vanish (7s timer server-persist) + live 3-turn chat sequence hitting real LLM + fresh-'hi' regression. All 13 pytest + all live UI scenarios PASSED.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_first_scan_ack_2026_08_30.py",
+    "/app/backend/tests/test_issue_b_context_anchor_2026_08_30.py",
+    "/app/test_reports/pytest/issue_ab_2026_08_30.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "FirstScanCard.jsx: 'fixed' computed before early returns and useEffect hooks placed unconditionally — rules-of-hooks compliant.",
+    "acknowledge-fix router endpoint uses _owned_project_or_404 (ownership 404 guaranteed) and short-circuits the DB write when row absent / already acked — idempotent and safe.",
+    "prior_turn_context_text() mirrors prior_turn_had_fix_signal shape with $slice: -1, single-doc read, fails open on exception — no perf regression.",
+    "casual_direct_reply anchor block is only appended when prior_assistant_text is truthy → zero behavior change for genuine chit-chat (verified live with fresh 'hi' returning normal greeting).",
+    "Test-fixture (p_0fdafaa365) fix_acknowledged_at was left set=True at the end of live verification (final auto-vanish confirmed True). If a future test needs the banner-shows state again, DB reset script: db.first_scan_results.update_one({project_id:'p_0fdafaa365'}, {'$unset':{'fix_acknowledged_at':''}}). Not a bug — expected side-effect of this test."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (13/13 pytest)", "frontend": "100% (all live UI scenarios)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview)",
+  "seed_data_creation": "None — reused existing pre-fixed project p_0fdafaa365 (commit ac25a0e). Reset fix_acknowledged_at twice during test to re-observe banner-shows state.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Fix-acknowledged flag on p_0fdafaa365 is currently TRUE at end of run. To re-observe the banner in UI on that project, unset first_scan_results.fix_acknowledged_at for that project_id. Both endpoints and the FirstScanCard 'Got it' + 7s auto-vanish paths are fully wired and verified live. Issue B fix relies on the immediately-prior assistant turn from chat_sessions.turns; if turn storage schema changes, prior_turn_context_text() needs review.",
+  "live_verification_evidence": {
+    "issue_a_banner_shows_once": "Screenshot: 'Fixed and shipped' WorkCard visible with FIXED badge, 'Fixed 2 file(s) — committed as ac25a0e' text, and 'Got it' button — data-testid=first-scan-card, first-scan-fixed, first-scan-fixed-ack-btn all present (count=1 each).",
+    "issue_a_got_it_dismiss": "After click of first-scan-fixed-ack-btn, first-scan-card count=0 immediately; component renders null (not the findings card).",
+    "issue_a_persists_after_reload": "After page.reload(), first-scan-card count=0; GET /onboarding/first-scan/status returned fix_acknowledged=true (commit_sha still ac25a0e — proves acknowledge, not deletion).",
+    "issue_a_auto_vanish_7s": "After DB reset of fix_acknowledged_at and 9s wait with no user action, first-scan-card count=0 and API returned fix_acknowledged=true — auto-vanish timer fired and persisted server-side.",
+    "issue_b_followup_anchored": "Live 2-turn: Turn1 tier=query 'take a look in my project…' → contextual response about needing repo connection. Turn2 tier=casual 'i didnt find any ?' → 'Ah you'll need to select a repo first … Once you do, I'll scan it immediately—no findings yet because I can't see any code without that.' — real LLM output anchored to prior turn, NO generic 'clarify what you're looking for' phrase.",
+    "issue_b_fresh_casual_regression": "Fresh session with only 'hi' → tier=casual → 'Hey! 👋 What's up?' — normal casual greeting, zero regression when there's no prior turn."
+  }
+}

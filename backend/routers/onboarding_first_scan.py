@@ -76,6 +76,11 @@ async def get_first_scan_status(
             resp["files_fixed"] = row.get("files_fixed")
             fixed_at = row.get("fix_applied_at")
             resp["fix_applied_at"] = fixed_at.isoformat() if fixed_at else None
+            # 2026-08-30 fix: the fixed-banner must show ONCE then stay
+            # suppressed on every future load (refresh/relogin), never
+            # re-surface as a perpetual banner. Ack lives server-side
+            # (per project row, not localStorage) so it survives both.
+            resp["fix_acknowledged"] = bool(row.get("fix_acknowledged_at"))
     elif status == "error":
         resp["message"] = "I couldn't scan your repo right now, but you can still ask me to build or fix anything."
     return resp
@@ -104,6 +109,35 @@ async def mark_first_scan_viewed(
         from services.signup_guards import emit_first_scan_findings_viewed
         await emit_first_scan_findings_viewed(
             db, user_id=user["user_id"], project_id=body.project_id)
+    return {"ok": True}
+
+
+class _AckFixBody(BaseModel):
+    project_id: str
+
+
+@router.post("/acknowledge-fix")
+async def acknowledge_first_scan_fix(
+    body: _AckFixBody, authorization: Optional[str] = Header(None),
+) -> dict:
+    """Marks the 'Fixed and shipped' banner as seen so it never
+    re-renders on a future /status read (refresh, relogin, or a
+    different device) — same server-side-truth pattern as
+    findings_viewed_at above, applied to the fixed banner instead of
+    the findings card. Idempotent; a project with no commit yet is a
+    no-op, not an error."""
+    user = await current_dev(authorization)
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "database unavailable")
+    await _owned_project_or_404(db, user["user_id"], body.project_id)
+
+    row = await db.first_scan_results.find_one({"project_id": body.project_id})
+    if row and row.get("commit_sha") and not row.get("fix_acknowledged_at"):
+        await db.first_scan_results.update_one(
+            {"project_id": body.project_id},
+            {"$set": {"fix_acknowledged_at": datetime.now(timezone.utc)}},
+        )
     return {"ok": True}
 
 

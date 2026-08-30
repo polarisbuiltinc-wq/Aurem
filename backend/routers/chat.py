@@ -515,8 +515,12 @@ async def chat_send(
     # the full budget. On any failure this falls through to the
     # original unconditional chat_with_tools call — never blank-screens.
     from core.intent_gateway import classify as _classify_intent_send
-    from services.response_confidence import prior_turn_had_fix_signal as _ptfs_send
+    from services.response_confidence import (
+        prior_turn_had_fix_signal as _ptfs_send,
+        prior_turn_context_text as _ptct_send,
+    )
     _prior_fix_signal = await _ptfs_send(_db, body.session_id, user["user_id"])
+    _prior_turn_text = await _ptct_send(_db, body.session_id, user["user_id"])
     _intent_result = await _classify_intent_send(
         body.prompt or "", history=[], pending_fix=_prior_fix_signal,
     )
@@ -545,7 +549,7 @@ async def chat_send(
             try:
                 from services.intent_gateway_casual_reply import casual_direct_reply
                 from services.response_confidence import apply_no_false_success_guard
-                _casual_reply_text = await casual_direct_reply(body.prompt)
+                _casual_reply_text = await casual_direct_reply(body.prompt, prior_assistant_text=_prior_turn_text)
                 _casual_reply_text = apply_no_false_success_guard(
                     body.prompt or "", _casual_reply_text, _prior_fix_signal,
                 )
@@ -2291,7 +2295,9 @@ async def chat_stream(
                     r"^LOOP_PHASE:\w+\s*\n", "", body.prompt or "", count=1,
                 )
                 from services.response_confidence import prior_turn_had_fix_signal as _ptfs_stream
+                from services.response_confidence import prior_turn_context_text as _ptct_stream
                 _prior_fix_signal = await _ptfs_stream(get_db(), body.session_id, user_id)
+                _prior_turn_text = await _ptct_stream(get_db(), body.session_id, user_id)
                 _intent_result = await _classify_intent(
                     _intent_probe_text,
                     history=[],   # full conversation context is heavy
@@ -2354,7 +2360,7 @@ async def chat_stream(
                     try:
                         from services.intent_gateway_casual_reply import casual_direct_reply
                         from services.response_confidence import apply_no_false_success_guard
-                        _casual_reply_text = await casual_direct_reply(body.prompt)
+                        _casual_reply_text = await casual_direct_reply(body.prompt, prior_assistant_text=_prior_turn_text)
                         _casual_reply_text = apply_no_false_success_guard(
                             body.prompt or "", _casual_reply_text, _prior_fix_signal,
                         )
