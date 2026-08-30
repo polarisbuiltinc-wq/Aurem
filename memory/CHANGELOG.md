@@ -1162,3 +1162,41 @@ fabricated "Approved! Let me know what you need" with no real commit landing. Fu
 **NOT started this round** (per founder's own "one workstream at a time" sequencing): the
 First-Experience Wave, the MOCK_LLM `chat_stream` short-circuit follow-up, and the Responsive/
 Layout-scan feature — all queued next, none touched.
+
+## 2026-08-30 — GitHub Bulk Revoke admin tool (standalone, not R9)
+Built after a near-miss (27/28 "idle" users had valid connections; only 1 was
+actually broken). New page `/admin/github-bulk-revoke`: table keyed by
+`installation_id`, filterable revokable/idle/all, "select all filtered" only
+(never "select all users"). Mandatory dry-run blast-radius preview before any
+destructive call; server-side hard guard blocks any selection containing a
+`pat_status=='valid'` row unless `confirm_text=="REVOKE"` (re-enforced
+server-side, not just UI). Real revoke = real GitHub `DELETE
+/app/installations/{id}` (App JWT) via `services/github_bulk_revoke.py::bulk_revoke`
+(parallel x5, 10s per-call timeout) + `services/github_app.py::revoke_installation_verbose`
+(204=deleted, 404/410=already_gone/skipped-not-failed, else=failed) — DB
+(`github_installations`, `cto_projects`) synced ONLY after success/already_gone,
+never on a genuine failure (avoids the half-state bug). Non-destructive "Flag
+idle" sets `re_engage_flagged`, zero GitHub calls, zero DB revoke. Every batch
+audit-logged to `admin_audit` (actor/installation_ids/reason/result).
+
+**STANDING GATE**: real destructive use is OFF via feature flag
+`github_bulk_revoke_live_verified` (seeded `enabled: false`) because the live
+drill-repo verify (U1-U6: real DELETE behavior against a disposable
+installation) could not run — preview's GitHub App key is stale (401 on
+`GET /app/installations`) and the only installation in this DB (152797252 /
+`polarisbuiltinc-wq/ora-grounding`) is a shared fixture many other tests
+depend on and must not be deleted. Founder decision: ship mock-tested, do the
+one real DELETE test later in production on a disposable installation. See
+`/app/memory/GITHUB_BULK_REVOKE_DRILL_VERIFY.md`.
+
+Backend: 20/20 new unit tests (mocked GitHub client throughout, `tests/test_bulk_github_revoke_2026_08_30.py`)
++ `testing_agent` e2e pass (6 passed / 1 env-dependent-skip, no regressions on
+`test_github_app_router.py`/`test_github_app_service.py` beyond 2 pre-existing
+unrelated failures). Frontend verified via Playwright: gate disables "Revoke
+selected…" with tooltip, view filters correct (revokable/idle/all), select-all
+scoped to filtered rows only, Flag Idle works regardless of the gate.
+Fixed during build: duplicate repo names in the table (multiple `cto_projects`
+rows per installation weren't deduped) and `last_session_at` rendering as a
+1970 date (raw epoch-seconds float wasn't converted to ISO before reaching the
+frontend's `new Date()`).
+

@@ -460,6 +460,7 @@ export default function App() {
           <Route path="/admin/ora-chat"       element={<AdminRoute><OraChat /></AdminRoute>} />
           {/* Iter 212m-171 — direct URLs for new admin sections */}
           <Route path="/admin/bin-tracker"    element={<AdminRoute><Admin initialTab="bin_tracker" /></AdminRoute>} />
+          <Route path="/admin/github-bulk-revoke" element={<AdminRoute><Admin initialTab="github_bulk_revoke" /></AdminRoute>} />
           <Route path="/admin/feature-flags"  element={<AdminRoute><Admin initialTab="feature_flags" /></AdminRoute>} />
           <Route path="/admin/llm-credits"    element={<AdminRoute><Admin initialTab="llm_credits" /></AdminRoute>} />
           <Route path="/admin/parliament-live" element={<AdminRoute><Admin initialTab="parliament_live" /></AdminRoute>} />

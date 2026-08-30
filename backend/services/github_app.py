@@ -414,23 +414,68 @@ async def verify_installation_for_repo(
     return True, None, None
 
 
+async def revoke_installation_verbose(installation_id: int) -> dict:
+    """Force-uninstall an App installation on GitHub's side (App-JWT
+    auth), returning a structured result instead of raising — so a
+    bulk caller (services.github_bulk_revoke) can tell a genuine
+    failure apart from "already gone" without exception-driven
+    control flow, and never has to guess a status code.
+
+    2026-08-30 — added for the admin bulk-revoke tool. Returns
+    {"outcome": "deleted"|"already_gone"|"failed",
+     "status_code": int|None, "error": str|None}.
+      "deleted"      → GitHub returned 204, installation removed now.
+      "already_gone" → GitHub returned 404 or 410 — nothing to do,
+                        NOT a failure (stale installation_id).
+      "failed"       → any other status code, or a network/config
+                        error. Caller must NOT touch its own DB row
+                        on "failed" (avoids the half-state bug where
+                        our DB says disconnected but GitHub still
+                        shows the install as active).
+
+    NEVER logs or returns the App private key — only the JWT
+    (already short-lived, minted per call by `_headers_app()`) goes
+    on the wire.
+    """
+    url = f"{GITHUB_API}/app/installations/{installation_id}"
+    try:
+        async with ext_client(
+            "github",
+            timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+        ) as client:
+            r = await client.delete(url, headers=_headers_app())
+    except GitHubAppNotConfigured as e:
+        return {"outcome": "failed", "status_code": None, "error": str(e)}
+    except httpx.RequestError as e:
+        return {"outcome": "failed", "status_code": None,
+                "error": f"{type(e).__name__}: {e}"}
+    _INSTALL_TOKEN_CACHE.pop(installation_id, None)
+    if r.status_code == 204:
+        return {"outcome": "deleted", "status_code": 204, "error": None}
+    if r.status_code in (404, 410):
+        return {"outcome": "already_gone", "status_code": r.status_code, "error": None}
+    return {"outcome": "failed", "status_code": r.status_code,
+            "error": (r.text or "")[:300]}
+
+
 async def revoke_installation(installation_id: int) -> None:
     """Delete an installation from GitHub's side (App-JWT auth).
 
-    Called by the future user-initiated disconnect endpoint. Also
-    evicts the local token cache row so a subsequent
-    `get_installation_token` doesn't hand out a stale token.
+    Called by the user-initiated disconnect endpoint. Back-compat
+    wrapper over `revoke_installation_verbose` — raises on a genuine
+    failure, no-ops on success/already-gone. Also evicts the local
+    token cache row so a subsequent `get_installation_token` doesn't
+    hand out a stale token (handled inside the verbose call).
+
+    New bulk-revoke callers should use `revoke_installation_verbose`
+    directly for the richer outcome/status_code distinction.
     """
-    url = f"{GITHUB_API}/app/installations/{installation_id}"
-    async with ext_client(
-        "github",
-        timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
-    ) as client:
-        r = await client.delete(url, headers=_headers_app())
-    # 204 = deleted; 404 = already gone (idempotent success).
-    if r.status_code not in (204, 404):
-        r.raise_for_status()
-    _INSTALL_TOKEN_CACHE.pop(installation_id, None)
+    result = await revoke_installation_verbose(installation_id)
+    if result["outcome"] == "failed":
+        raise RuntimeError(
+            f"revoke_installation({installation_id}) failed: "
+            f"status={result['status_code']} {result['error']}"
+        )
 
 
 # ═════════════════════════════════════════════════════════════════════

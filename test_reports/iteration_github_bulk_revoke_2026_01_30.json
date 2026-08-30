@@ -1,0 +1,25 @@
+{
+  "summary": "E2E validation of the new GitHub Bulk Revoke admin tool (backend + UI). Created 7-test pytest file exercising GET /admin/github/connections shape+live_verified flag, POST /admin/github/bulk-revoke dry_run preview (no side effects) and 403 live_verification_pending gate, and POST /admin/github/flag-idle non-destructive path. 6 passed / 1 skipped (hard_guard_blocked path could not be triggered because the current preview DB has 0 installations with pat_status=='valid' — both installations have pat_status='missing'; unit tests already cover the hard-guard branch with mocked data). Playwright UI verify against real preview confirmed: page renders, amber 'Live verification pending' banner shown, all data-testids present, view filters work (revokable=2, all=2, idle=0), 'Revoke selected…' button is disabled (playwright reports element is not enabled and modal does NOT open on click), select-all limited to visible/filtered rows (2/2), and Flag Idle button remains usable. Regression tests test_github_app_router.py + test_github_app_service.py: 48 passed, 2 failed — both are the pre-existing TestCallback::test_replayed_state_soft_redirect / test_expired_state_soft_redirect the founder explicitly called out as unrelated. BIN Tracker smoke: /admin/bin/{bin_id}/projects still routes (returns 404 BIN not found as expected).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "test_report_links": [
+    "/app/backend/tests/test_github_bulk_revoke_e2e_2026_01.py",
+    "/app/test_reports/pytest/gbr_e2e.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routers/admin_bin.py is now 913 lines — still under the 1000-line refactor threshold but drifting; consider splitting Section 1b into a dedicated routers/admin_github_bulk_revoke.py in a future iteration.",
+    "In /admin/github/bulk-revoke, the hard-guard (400) is evaluated BEFORE the feature-flag gate (403). This is correct for UX (user sees the more actionable message first), but note that a caller sending confirm_text='REVOKE' with a purely-revokable selection today would get 403; a caller with valid rows and no confirm gets 400 regardless of flag state. Documented, no fix needed.",
+    "Bulk-revoke rate limit is keyed only on admin identity + action; multiple concurrent admins are unaffected which is fine, but a burst from one admin retrying after a 429 could still race with an in-flight batch. Not a correctness bug for this feature; note for future."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_github_bulk_revoke_e2e_2026_01.py (new)"
+  ],
+  "success_rate": { "backend": "100% (6 passed / 1 skipped-env-dependent)", "frontend": "100% (all UI assertions pass)" },
+  "test_credentials": "test@aurem.dev / AuremTest2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. Existing installations (987654321, 152797252) used read-only. flag-idle test wrote re_engage_flagged=True to installation 987654321 (already flagged from prior run) with reason='TEST_e2e_test_flag_idle' — no destructive change, safe.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature is complete and passing. Live gate is intentionally OFF (github_bulk_revoke_live_verified=false). Do NOT flip that flag or attempt real DELETE against installation_id 152797252. Backend tests live at /app/backend/tests/test_github_bulk_revoke_e2e_2026_01.py — must be run from /app/backend cwd (repo conftest imports services.rate_limiter without package prefix, fails from /app). To trigger the skipped hard_guard_blocked path in the future, seed at least one cto_projects row with a working GitHub App PAT so probe_pat_status returns 'valid'. UI is at /admin/github-bulk-revoke.",
+  "rca of the issue": "N/A — no bug found in this iteration."
+}

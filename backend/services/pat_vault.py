@@ -162,4 +162,54 @@ async def get_repo_token_or_error(
         return None, e.code, e.detail
 
 
-__all__ = ["get_repo_token", "get_repo_token_or_error", "GithubAppAuthError"]
+async def probe_pat_status(project: dict) -> dict:
+    """Live GitHub HEAD probe: mint a token for `project` and check it
+    actually works against the repo. Returns
+    {"pat_status": str, "pat_last4": str|None}.
+
+    2026-08-30 — factored out of routers/admin_bin.py's inline
+    `_probe` (BIN Tracker, Section 1) so the new cross-user bulk-
+    revoke connections table (routers/admin_bin.py's
+    `/admin/github/connections`) uses the exact same probe semantics
+    instead of a second, possibly-drifting copy. `admin_bin.py`'s own
+    `bin_tracker_projects` probe is untouched — this is a new,
+    additive helper, not a refactor of working code.
+    """
+    from services.http import ext_client
+
+    pat, _auth_err, _ = await get_repo_token_or_error(project)
+    pat_status = "missing"
+    pat_last4 = None
+    if pat:
+        pat_last4 = pat[-4:]
+        owner = (project.get("github_owner") or "").strip()
+        repo = (project.get("github_repo") or "").strip()
+        if owner and repo:
+            try:
+                async with ext_client("github", timeout=httpx.Timeout(4.0)) as c:
+                    r = await c.head(
+                        f"https://api.github.com/repos/{owner}/{repo}",
+                        headers={
+                            "Authorization": f"Bearer {pat}",
+                            "Accept": "application/vnd.github+json",
+                        },
+                    )
+                if r.status_code == 200:
+                    pat_status = "valid"
+                elif r.status_code == 401:
+                    pat_status = "invalid"
+                elif r.status_code == 404:
+                    pat_status = "repo_not_found"
+                else:
+                    pat_status = f"http_{r.status_code}"
+            except Exception:
+                pat_status = "probe_error"
+        else:
+            pat_status = "no_repo"
+    return {"pat_status": pat_status, "pat_last4": pat_last4}
+
+
+__all__ = [
+    "get_repo_token", "get_repo_token_or_error", "GithubAppAuthError",
+    "probe_pat_status",
+]

@@ -25,6 +25,7 @@ Reuse:
 # arch: allow-http — BIN tracker external API probes (iter 212m-225)
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -194,6 +195,376 @@ async def change_user_tier(
         pass
     return {"ok": True, "bin_id": bin_id, "prev_tier": prev_tier,
             "new_tier": body.tier}
+
+
+# ────────────────────────────────────────────────────────────────────
+# SECTION 1b — GITHUB BULK REVOKE  (2026-08-30)
+#
+# Admin tool: bulk-select users/installations → force-uninstall the
+# GitHub App for real, or (non-destructively) flag idle-but-working
+# connections for re-engage follow-up.
+#
+# Built to fix a real near-miss: an admin almost revoked 27 of 28
+# "never ran a task" users whose GitHub connection was in fact
+# perfectly valid — only 1 was genuinely broken. `pat_status` must be
+# visible and filterable BEFORE any selection happens, and the hard
+# guard below is the second line of defense if a valid row still
+# slips into a selection.
+#
+# STANDING GATE: real destructive use is OFF by default via the
+# `github_bulk_revoke_live_verified` feature flag — the live drill-
+# repo verify (U1-U6) has not been run against a real disposable
+# installation yet (see /app/memory/GITHUB_BULK_REVOKE_DRILL_VERIFY.md).
+# Flipping that flag ON is the founder's call, after that live test.
+# ────────────────────────────────────────────────────────────────────
+
+REVOKE_COOLDOWN_SECONDS = 30
+_TERMINAL_LOOP_STATES = {"completed", "failed", "aborted", "expired"}
+
+
+class GithubBulkRevokeBody(BaseModel):
+    installation_ids: list[int] = Field(..., min_length=1, max_length=100)
+    confirm_text: Optional[str] = None
+    reason: Optional[str] = Field(None, max_length=500)
+    dry_run: bool = False
+
+
+class GithubFlagIdleBody(BaseModel):
+    installation_ids: list[int] = Field(..., min_length=1, max_length=200)
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+def _iso(v: Any) -> Any:
+    if hasattr(v, "isoformat"):
+        return v.isoformat()
+    if isinstance(v, (int, float)):
+        # Several collections (e.g. chat_sessions.updated_at) store epoch
+        # seconds as a raw float, not a datetime — coerce so the frontend
+        # always gets one consistent ISO string, never a bare number that
+        # `new Date()` would misread as epoch MILLISECONDS.
+        try:
+            return datetime.fromtimestamp(v, tz=timezone.utc).isoformat()
+        except (ValueError, OSError, OverflowError):
+            return None
+    return v
+
+
+@router.get("/github/connections")
+async def github_connections(
+    authorization: Optional[str] = Header(None),
+    view: str = "revokable",   # revokable | idle | all
+):
+    """Cross-user table of GitHub-App-connected projects, grouped by
+    installation_id, for the bulk-revoke tool. Read-only, live-probes
+    pat_status the same way BIN Tracker does (services.pat_vault.
+    probe_pat_status) so the numbers here always match what an admin
+    would see per-user in Section 1.
+
+    Row classification:
+      revokable — pat_status != "valid" (the ONLY ones eligible for
+                  the destructive revoke action)
+      idle      — pat_status == "valid" AND task_count == 0 (working
+                  but unused — flag-for-re-engage candidate, NEVER
+                  revoked by this tool)
+      active    — pat_status == "valid" AND task_count > 0
+    """
+    await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services import feature_flags as _ff
+    from services.pat_vault import probe_pat_status
+
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "DB unavailable")
+
+    live_verified = await _ff.is_enabled("github_bulk_revoke_live_verified")
+
+    projs = await db.cto_projects.find(
+        {"github_owner": {"$exists": True, "$ne": None},
+         "github_repo": {"$exists": True, "$ne": None},
+         "auth_method": "github_app"},
+        {"_id": 0, "project_id": 1, "github_owner": 1, "github_repo": 1,
+         "auth_method": 1, "status": 1, "installation_id": 1,
+         "user_id": 1, "tasks_done": 1, "re_engage_flagged": 1},
+    ).to_list(2000)
+
+    if not projs:
+        return {"ok": True, "rows": [], "view": view, "live_verified": live_verified}
+
+    user_ids = list({p.get("user_id") for p in projs if p.get("user_id")})
+    project_ids = [p["project_id"] for p in projs if p.get("project_id")]
+
+    users = await db.dev_users.find(
+        {"user_id": {"$in": user_ids}}, {"_id": 0, "user_id": 1, "email": 1},
+    ).to_list(len(user_ids) or 1)
+    email_by_uid = {u["user_id"]: u.get("email") for u in users}
+
+    last_sess_by_proj: dict[str, Any] = {}
+    if project_ids:
+        async for row in db.chat_sessions.aggregate([
+            {"$match": {"project_id": {"$in": project_ids}}},
+            {"$group": {"_id": "$project_id", "last": {"$max": "$updated_at"}}},
+        ]):
+            last_sess_by_proj[row["_id"]] = row.get("last")
+
+    inflight_projects: set[str] = set()
+    if project_ids:
+        async for row in db.loop_sessions.find(
+            {"project_id": {"$in": project_ids},
+             "state": {"$nin": list(_TERMINAL_LOOP_STATES)}},
+            {"_id": 0, "project_id": 1},
+        ):
+            if row.get("project_id"):
+                inflight_projects.add(row["project_id"])
+
+    sem = asyncio.Semaphore(10)
+
+    async def _probe(p):
+        async with sem:
+            return await probe_pat_status(p)
+
+    pat_results = await asyncio.gather(*[_probe(p) for p in projs])
+
+    by_installation: dict[Any, dict] = {}
+    for p, pat in zip(projs, pat_results):
+        iid = p.get("installation_id")
+        uid = p.get("user_id")
+        row_key = iid if iid else f"no_install:{p['project_id']}"
+        row = by_installation.setdefault(row_key, {
+            "installation_id": iid,
+            "email": email_by_uid.get(uid, uid),
+            "user_id": uid,
+            "auth_method": p.get("auth_method"),
+            "repos": [],
+            "pat_status": pat["pat_status"],
+            "status": p.get("status"),
+            "task_count": 0,
+            "last_session_at": None,
+            "in_flight_work": False,
+            "re_engage_flagged": False,
+        })
+        repo_str = f"{p.get('github_owner')}/{p.get('github_repo')}"
+        if repo_str not in row["repos"]:
+            row["repos"].append(repo_str)
+        row["task_count"] += int(p.get("tasks_done") or 0)
+        ls = last_sess_by_proj.get(p["project_id"])
+        if ls and (row["last_session_at"] is None or ls > row["last_session_at"]):
+            row["last_session_at"] = ls
+        if p["project_id"] in inflight_projects:
+            row["in_flight_work"] = True
+        if p.get("re_engage_flagged"):
+            row["re_engage_flagged"] = True
+        # Worst-status wins if one installation covers >1 repo.
+        if pat["pat_status"] != "valid":
+            row["pat_status"] = pat["pat_status"]
+
+    rows = []
+    for row in by_installation.values():
+        row["repo"] = " · ".join(row.pop("repos"))
+        row["last_session_at"] = _iso(row["last_session_at"])
+        is_valid = row["pat_status"] == "valid"
+        if is_valid and row["task_count"] == 0:
+            row["classification"] = "idle"
+        elif is_valid:
+            row["classification"] = "active"
+        else:
+            row["classification"] = "revokable"
+        row["revoke_eligible"] = bool(row["installation_id"]) and row["classification"] == "revokable"
+        rows.append(row)
+
+    if view in ("revokable", "idle"):
+        rows = [r for r in rows if r["classification"] == view]
+    # view == "all" -> no filter
+
+    return {"ok": True, "rows": rows, "view": view, "live_verified": live_verified}
+
+
+@router.post("/github/bulk-revoke")
+async def github_bulk_revoke(
+    body: GithubBulkRevokeBody,
+    authorization: Optional[str] = Header(None),
+):
+    """Force-uninstall the GitHub App for the given installations —
+    real GitHub call first, DB sync only on success/already-gone.
+    `dry_run=true` returns the blast-radius preview (email/repo/
+    pat_status per row) and makes ZERO GitHub calls / DB writes."""
+    admin = await _require_admin(authorization)
+    from cto_services.db import get_db
+    from services import feature_flags as _ff
+    from services.pat_vault import probe_pat_status
+
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "DB unavailable")
+
+    ids = list({int(i) for i in body.installation_ids})
+
+    projs = await db.cto_projects.find(
+        {"installation_id": {"$in": ids}, "auth_method": "github_app"},
+        {"_id": 0, "project_id": 1, "github_owner": 1, "github_repo": 1,
+         "installation_id": 1, "user_id": 1},
+    ).to_list(2000)
+    by_iid: dict[int, list[dict]] = {}
+    for p in projs:
+        by_iid.setdefault(int(p["installation_id"]), []).append(p)
+
+    user_ids = list({p["user_id"] for p in projs if p.get("user_id")})
+    users = await db.dev_users.find(
+        {"user_id": {"$in": user_ids}}, {"_id": 0, "user_id": 1, "email": 1},
+    ).to_list(len(user_ids) or 1)
+    email_by_uid = {u["user_id"]: u.get("email") for u in users}
+
+    preview = []
+    valid_count = 0
+    for iid in ids:
+        member_projs = by_iid.get(iid) or []
+        if not member_projs:
+            preview.append({"installation_id": iid, "email": None,
+                             "repo": None, "pat_status": "unknown_no_project"})
+            continue
+        statuses = await asyncio.gather(*[probe_pat_status(p) for p in member_projs])
+        worst = "valid"
+        for s in statuses:
+            if s["pat_status"] != "valid":
+                worst = s["pat_status"]
+        if worst == "valid":
+            valid_count += 1
+        seen_repos: list[str] = []
+        for p in member_projs:
+            repo_str = f"{p['github_owner']}/{p['github_repo']}"
+            if repo_str not in seen_repos:
+                seen_repos.append(repo_str)
+        preview.append({
+            "installation_id": iid,
+            "email": email_by_uid.get(member_projs[0].get("user_id")),
+            "repo": " · ".join(seen_repos),
+            "pat_status": worst,
+        })
+
+    if body.dry_run:
+        return {"ok": True, "dry_run": True, "preview": preview,
+                "valid_count": valid_count, "total": len(ids)}
+
+    # ── HARD GUARD — server-side, cannot be bypassed from the client ──
+    if valid_count > 0 and (body.confirm_text or "").strip().upper() != "REVOKE":
+        raise HTTPException(400, detail={
+            "error": "hard_guard_blocked",
+            "message": (
+                f"{valid_count} of your {len(ids)} selected installations "
+                "have a WORKING GitHub connection. Revoking will break "
+                "something that currently works for them. Retry with "
+                "confirm_text=\"REVOKE\" to proceed."
+            ),
+            "valid_count": valid_count, "total": len(ids),
+        })
+
+    # ── Master kill-switch — OFF until the live drill-verify (U1-U6)
+    #    is CONFIRMED against a real disposable installation. ────────
+    if not await _ff.is_enabled("github_bulk_revoke_live_verified"):
+        raise HTTPException(403, detail={
+            "error": "live_verification_pending",
+            "message": ("Live verification pending — this tool is not yet "
+                        "cleared for use. See "
+                        "GITHUB_BULK_REVOKE_DRILL_VERIFY.md; flip the "
+                        "github_bulk_revoke_live_verified feature flag once "
+                        "the real DELETE behavior has been confirmed."),
+        })
+
+    # ── Rate limit: 1 bulk-revoke batch per 30s per admin ────────────
+    admin_key = admin.get("email") or admin.get("user_id") or "admin"
+    last = await db.admin_audit.find_one(
+        {"action": "bulk_github_revoke", "actor": admin_key},
+        sort=[("ts", -1)],
+    )
+    if last and last.get("ts"):
+        age = (datetime.now(timezone.utc) - last["ts"]).total_seconds()
+        if age < REVOKE_COOLDOWN_SECONDS:
+            raise HTTPException(429, detail=(
+                f"Bulk-revoke rate limit — wait {int(REVOKE_COOLDOWN_SECONDS - age)}s "
+                "before the next batch."
+            ))
+
+    from services.github_bulk_revoke import bulk_revoke as _bulk_revoke
+    results = await _bulk_revoke(ids)
+
+    now = datetime.now(timezone.utc)
+    revoked, skipped, failed = [], [], []
+    for r in results:
+        iid = r["installation_id"]
+        if r["outcome"] in ("deleted", "already_gone"):
+            # Real GitHub call succeeded (or was already gone) — NOW
+            # sync our own DB. Soft-revoke only: preserve the project
+            # row + all its data (scans, findings, chat history).
+            await db.github_installations.update_one(
+                {"installation_id": int(iid)},
+                {"$set": {"active": False, "revoked_at": now,
+                          "revoked_by": admin_key, "updated_at": now}},
+            )
+            await db.cto_projects.update_many(
+                {"installation_id": int(iid)},
+                {"$set": {"installation_active": False, "status": "disconnected",
+                          "installation_status_updated_at": now}},
+            )
+            (revoked if r["outcome"] == "deleted" else skipped).append(r)
+        else:
+            # GitHub call failed — do NOT touch our DB (the half-state
+            # bug this tool exists to avoid).
+            failed.append(r)
+
+    audit_row = {
+        "ts": now,
+        "actor": admin_key,
+        "action": "bulk_github_revoke",
+        "installation_ids": ids,
+        "reason": body.reason,
+        "result": {"revoked": len(revoked), "skipped": len(skipped), "failed": len(failed)},
+        "per_installation": results,
+    }
+    try:
+        await db.admin_audit.insert_one(audit_row)
+    except Exception as e:
+        logger.warning("bulk_github_revoke audit write failed: %r", e)
+
+    return {
+        "ok": True,
+        "revoked": revoked, "skipped": skipped, "failed": failed,
+        "summary": (f"{len(revoked)} revoked, {len(failed)} failed, "
+                    f"{len(skipped)} skipped (already uninstalled)"),
+    }
+
+
+@router.post("/github/flag-idle")
+async def github_flag_idle(
+    body: GithubFlagIdleBody,
+    authorization: Optional[str] = Header(None),
+):
+    """Non-destructive: flags idle-but-working connections for a
+    re-engage follow-up. Makes ZERO GitHub calls and revokes nothing —
+    this is the safe action for the 27-of-28 case."""
+    admin = await _require_admin(authorization)
+    from cto_services.db import get_db
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "DB unavailable")
+
+    ids = list({int(i) for i in body.installation_ids})
+    now = datetime.now(timezone.utc)
+    admin_key = admin.get("email") or admin.get("user_id") or "admin"
+    res = await db.cto_projects.update_many(
+        {"installation_id": {"$in": ids}},
+        {"$set": {"re_engage_flagged": True, "re_engage_flagged_at": now,
+                  "re_engage_flagged_by": admin_key,
+                  "re_engage_reason": body.reason}},
+    )
+    try:
+        await db.admin_audit.insert_one({
+            "ts": now, "actor": admin_key, "action": "flag_idle_reengage",
+            "installation_ids": ids, "reason": body.reason,
+            "matched": res.modified_count,
+        })
+    except Exception:
+        pass
+    return {"ok": True, "flagged": res.modified_count}
 
 
 # ────────────────────────────────────────────────────────────────────

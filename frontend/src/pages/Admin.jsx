@@ -27,6 +27,7 @@ import TwoFactorCard from "../components/TwoFactorCard";  // Iter 212m-20
 import AdminHouseRules from "../components/AdminHouseRules";  // Iter 212m-24
 import AdminRobotGuide from "../components/AdminRobotGuide";  // Iter 212m-187
 import AdminBINTracker from "./AdminBINTracker";               // Iter 212m-171
+import AdminGithubBulkRevoke from "./AdminGithubBulkRevoke";    // 2026-08-30
 import AdminFeatureFlags from "./AdminFeatureFlags";           // Iter 212m-171
 import { LLMCreditMonitor } from "./AdminLLMCredits";          // Iter 212m-171
 import { ParliamentLivePanel } from "./AdminParliamentLive";   // Iter 212m-171
@@ -1764,6 +1765,7 @@ const NAV = buildGroupedAdminNav({
   // /admin/architecture silently fell through to Overview.
   arch: Cpu,
   bin_tracker: Users,
+  github_bulk_revoke: ShieldAlert,
   users: Users,
   support: Mail,
   suggestions: MessageCircle,   // Iter 212m-193
@@ -1931,6 +1933,7 @@ export default function Admin({ initialTab = "overview" }) {
                                        <ParliamentLivePanel />
                                      </div>;
       case "bin_tracker":    return <AdminBINTracker />;
+      case "github_bulk_revoke": return <AdminGithubBulkRevoke />;
       case "feature_flags":  return <AdminFeatureFlags />;
       case "dash":           return <Dashboard />;
       case "users":          return <UsersList onSelect={setSelectedUser} />;

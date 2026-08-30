@@ -482,6 +482,9 @@ async def init_prod_collections(db) -> dict:
         {"flag": "integration_health_cron", "enabled": True,
          "tier_allowlist": [], "user_allowlist": [],
          "description": "Periodic integration health probe (default: 10 min). Toggle OFF to pause runtime without a restart."},
+        {"flag": "github_bulk_revoke_live_verified", "enabled": False,
+         "tier_allowlist": [], "user_allowlist": [],
+         "description": "Master kill-switch for the admin bulk GitHub-App revoke tool (/admin/github/bulk-revoke). OFF until the drill-repo live verify (U1-U6: real DELETE /app/installations/{id} behavior) is CONFIRMED against a disposable installation — see GITHUB_BULK_REVOKE_DRILL_VERIFY.md. Flip ON only after that live test."},
     ]
     inserted_flags: list[str] = []
     for _spec in _SEED_FLAGS:
