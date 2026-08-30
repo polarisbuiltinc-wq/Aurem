@@ -396,12 +396,54 @@ async def chat_send(
             repo_ctx = ""
     else:
         repo_ctx = ""
+    # 2026-08-30 — Issue C fix: single-surface-drift. /chat/send never
+    # fetched project_brain context at all (chat_stream's equivalent
+    # block below, ~line 1402, does) — confirmed via source read, not
+    # a guess. Same brain-context fetch, mirrored for this surface.
+    async def _safe_send(coro, label, timeout_s=12.0):
+        try:
+            return await asyncio.wait_for(coro, timeout=timeout_s)
+        except Exception as e:
+            logger.warning("chat_send-context: %s failed/timed out (%r) — degrading", label, e)
+            return ""
+
+    brain_ctx = ""
+    if pid and pid != "home":
+        try:
+            _proj = await asyncio.wait_for(_db.cto_projects.find_one(
+                {"project_id": pid, "user_id": user["user_id"]},
+                {"_id": 0, "github_owner": 1, "github_repo": 1,
+                 "github_token": 1, "auth_method": 1,
+                 "installation_id": 1, "user_id": 1},
+            ), timeout=10.0)
+            owner = (_proj or {}).get("github_owner") or ""
+            repo = (_proj or {}).get("github_repo") or ""
+            repo_full = f"{owner}/{repo}" if owner and repo else pid
+            from services.project_brain import get_brain_context
+            _pat = None
+            try:
+                from services.pat_vault import get_repo_token_or_error
+                async def _pat_lookup():
+                    t, _e, _d = await get_repo_token_or_error(_proj or {})
+                    return t
+                _pat = await asyncio.wait_for(_pat_lookup(), timeout=10.0)
+            except Exception:
+                _pat = None
+            brain_ctx = await _safe_send(
+                get_brain_context(_db, pid, repo_full, github_token=_pat),
+                "brain_context",
+            )
+            if brain_ctx:
+                brain_ctx = "[PROJECT MEMORY]\n" + brain_ctx
+        except Exception:
+            logger.exception("chat_send: brain context fetch failed (continuing)")
+            brain_ctx = ""
     # Iter 212m-23 — URL context is NO LONGER eagerly stuffed here.
     # The orchestrator force-invokes the `fetch_url` tool when the
     # prompt contains an http(s) URL, which surfaces a proper step
     # card + web_sources chip in the UI and logs into tool_invocations.
     t_preflight = time.time()
-    extra_sys = repo_ctx or ""
+    extra_sys = "\n\n".join(s for s in (repo_ctx, brain_ctx) if s)
     # Iter 212m-77/78 — ORA Council self-learning ACTIVATED.
     # Returns (block, recalled_count). Surface count back to caller so
     # the FE can render "📚 ORA recalled N similar past answers".
@@ -518,9 +560,11 @@ async def chat_send(
     from services.response_confidence import (
         prior_turn_had_fix_signal as _ptfs_send,
         prior_turn_context_text as _ptct_send,
+        get_session_summary as _gss_send,
     )
     _prior_fix_signal = await _ptfs_send(_db, body.session_id, user["user_id"])
     _prior_turn_text = await _ptct_send(_db, body.session_id, user["user_id"])
+    _session_summary = await _gss_send(_db, body.session_id, user["user_id"])
     _intent_result = await _classify_intent_send(
         body.prompt or "", history=[], pending_fix=_prior_fix_signal,
     )
@@ -549,7 +593,10 @@ async def chat_send(
             try:
                 from services.intent_gateway_casual_reply import casual_direct_reply
                 from services.response_confidence import apply_no_false_success_guard
-                _casual_reply_text = await casual_direct_reply(body.prompt, prior_assistant_text=_prior_turn_text)
+                _casual_reply_text = await casual_direct_reply(
+                    body.prompt, prior_assistant_text=_prior_turn_text,
+                    session_summary=_session_summary,
+                )
                 _casual_reply_text = apply_no_false_success_guard(
                     body.prompt or "", _casual_reply_text, _prior_fix_signal,
                 )
@@ -2296,8 +2343,10 @@ async def chat_stream(
                 )
                 from services.response_confidence import prior_turn_had_fix_signal as _ptfs_stream
                 from services.response_confidence import prior_turn_context_text as _ptct_stream
+                from services.response_confidence import get_session_summary as _gss_stream
                 _prior_fix_signal = await _ptfs_stream(get_db(), body.session_id, user_id)
                 _prior_turn_text = await _ptct_stream(get_db(), body.session_id, user_id)
+                _session_summary = await _gss_stream(get_db(), body.session_id, user_id)
                 _intent_result = await _classify_intent(
                     _intent_probe_text,
                     history=[],   # full conversation context is heavy
@@ -2360,7 +2409,10 @@ async def chat_stream(
                     try:
                         from services.intent_gateway_casual_reply import casual_direct_reply
                         from services.response_confidence import apply_no_false_success_guard
-                        _casual_reply_text = await casual_direct_reply(body.prompt, prior_assistant_text=_prior_turn_text)
+                        _casual_reply_text = await casual_direct_reply(
+                            body.prompt, prior_assistant_text=_prior_turn_text,
+                            session_summary=_session_summary,
+                        )
                         _casual_reply_text = apply_no_false_success_guard(
                             body.prompt or "", _casual_reply_text, _prior_fix_signal,
                         )

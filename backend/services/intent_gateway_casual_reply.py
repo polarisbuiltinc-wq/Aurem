@@ -12,7 +12,8 @@ its sibling). Both call sites now share this one function instead.
 from __future__ import annotations
 
 
-async def casual_direct_reply(prompt: str, prior_assistant_text: str | None = None) -> str:
+async def casual_direct_reply(prompt: str, prior_assistant_text: str | None = None,
+                               session_summary: str | None = None) -> str:
     """Direct, no-tool LLM reply for casual/clarify tier messages.
     Raises on failure — callers decide the fallback behavior.
 
@@ -28,15 +29,13 @@ async def casual_direct_reply(prompt: str, prior_assistant_text: str | None = No
     a read_repo_file tool call for any file/version claim, which is
     incompatible with this deliberately tool-free path.
 
-    `prior_assistant_text` — 2026-08-30 Issue B fix. This path
-    previously carried ZERO turns of history by construction (a
-    deliberate latency tradeoff — see the `history=[]` call sites in
-    chat.py), so a short follow-up to an in-progress task ("i didnt
-    find any ?") got "can you clarify what you're looking for?"
-    instead of an in-thread answer. Passing just the immediately-prior
-    assistant turn (one cheap DB read, same shape as
-    `prior_turn_had_fix_signal`) lets the model anchor a follow-up
-    without paying for full conversation history."""
+    `session_summary` — 2026-08-30 Issue C fix. For sessions long
+    enough to have a rolling summary (services/session_summary.py),
+    this carries what happened BEFORE the single immediately-prior
+    turn above — otherwise a recall question like "what did we find
+    earlier?" (which the heuristic classifier routes here, same
+    resource-noun gap as Issue B) still has no way to answer beyond
+    the last exchange."""
     from services.llm import call_llm
     from services.identity import PRODUCT_IDENTITY
     system = (
@@ -56,6 +55,16 @@ async def casual_direct_reply(prompt: str, prior_assistant_text: str | None = No
             "answer it in-thread using that context — give a real "
             "status or answer. Do NOT ask them to clarify what they "
             "want when the prior message already made that clear."
+        )
+    if session_summary:
+        system += (
+            "\n\nRunning summary of this session so far (earlier turns "
+            f"not shown verbatim): \"{session_summary[:400]}\"\n"
+            "If the user references something from earlier in this "
+            "conversation (e.g. \"what did we find/fix earlier?\", "
+            "\"what did we decide?\"), answer FROM this summary. Do NOT "
+            "say you don't recall or ask them to clarify when the "
+            "summary already answers it."
         )
     try:
         from services.house_rules import get_active_house_rules, format_house_rules_block

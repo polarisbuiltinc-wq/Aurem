@@ -1,0 +1,64 @@
+{
+  "scenarios": [
+    {
+      "name": "recall_after_6turns",
+      "passed": true,
+      "hits": [
+        "promo50",
+        "pay now",
+        "webhook",
+        "acme",
+        "priya",
+        "safari",
+        "dispute",
+        "confirmation",
+        "email"
+      ],
+      "banned": [],
+      "reply": "You mentioned **four bugs** in your checkout flow:\n\n1. **PROMO50 discount stopped working** after the tax refactor last week\n2. **Pay Now button double-fires on mobile Safari** \u2014 creates duplicate Stripe charges\n3. **Webhook `/api/stripe/webhook` returns 500** when the event type is `charge.dispute.created`\n4. **Confirmation email uses old company name** \u2014 says \"Acme Old\" instead of \"Aurem\"\n\nOwner: Priya \nDeadline: Friday, September 5th\n\nStill waiting on you to connect the repo so I can read the code and ship fixes for all four."
+    },
+    {
+      "name": "recall_after_10turns_summary",
+      "passed": true,
+      "hits": [
+        "marco",
+        "priya",
+        "promo50"
+      ],
+      "banned": [],
+      "reply": "Marco is helping on the webhook fix (he's Priya's teammate), and the promo code is **PROMO50**."
+    },
+    {
+      "name": "session_isolation",
+      "passed": true,
+      "leaked": [],
+      "reply": "None \u2014 in our conversation so far, you just said \"hi\" and I said hi back. No bugs, no issues, no code problems were mentioned.\n\nIf you've got something to report now, lay it on me. I'll read the relevant code and we'll fix it."
+    },
+    {
+      "name": "recall_after_switch_back",
+      "passed": true,
+      "reply": "Marco mentioned the webhook fixes are due by EOD Friday \u2014 he's on it! No worries."
+    },
+    {
+      "name": "fresh_hi_regression",
+      "passed": true,
+      "leaked": [],
+      "reply": "Hey! How's your project going today?"
+    },
+    {
+      "name": "issue_b_regression",
+      "passed": true,
+      "ctx_hit": [
+        "repo",
+        "scan",
+        "connect",
+        "connected"
+      ],
+      "reply": "Not yet \u2014 I haven't scanned anything because no repo is connected to this session. Select one first and I'll immediately check."
+    }
+  ],
+  "history_probe": {
+    "turns": 24,
+    "summary_present": false
+  }
+}

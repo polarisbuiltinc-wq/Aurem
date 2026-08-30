@@ -166,6 +166,25 @@ async def prior_turn_context_text(db, session_id: str, user_id: str) -> str | No
         return None
 
 
+async def get_session_summary(db, session_id: str, user_id: str) -> str | None:
+    """2026-08-30 — Issue C fix. The casual-tier reply path
+    (`casual_direct_reply`) never sees `orchestrator.py`'s dynamic
+    history window at all — this is its equivalent memory anchor for
+    sessions long enough to have a rolling summary (see
+    `services/session_summary.py`). Same fail-open, single-doc read
+    posture as `prior_turn_context_text` above."""
+    if db is None or not session_id:
+        return None
+    try:
+        doc = await db.chat_sessions.find_one(
+            {"session_id": session_id, "user_id": user_id},
+            {"_id": 0, "summary": 1},
+        )
+        return (doc or {}).get("summary") or None
+    except Exception:
+        return None
+
+
 async def persist_confidence_check(db, **fields) -> None:
     """2026-08-25 — passive audit trail for `chat.confidence_check`.
     Founder has no raw log access to Preview/Production; this makes

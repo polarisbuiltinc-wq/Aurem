@@ -705,3 +705,32 @@ after testing — harmless, reset script in the test report if needed.
 (carry-forward item above) whenever founder resumes it; post-R9 batch
 (infra root-cause → contrast CI guard → A7 reminder → bulk-revoke last)
 remains queued.
+
+## ISSUE C — "ORA doesn't remember" — CLOSED, testing_agent verified (2026-08-30)
+
+Root cause CONFIRMED (source read): (1) `chat_with_tools` capped session
+history at a fixed `[-20:]` regardless of the actual token budget left by
+persona+tools+state that turn. (2) `casual_direct_reply` (the path most
+bare recall questions get routed into, same resource-noun classifier gap
+as Issue B) carried ZERO memory before this round. (3) `/chat/send` never
+fetched `project_brain` context at all (single-surface drift vs
+`/chat/stream`). (4) No rolling summary existed for content beyond the
+history window.
+
+Fix (ONE combined change, per founder's "not 4 PRs" instruction):
+`_select_history_window()` (dynamic, token-budgeted, replaces fixed cap)
++ new `services/session_summary.py` (fire-and-forget, every 10 turns,
+`chat_sessions.summary` field, always included in transcript) + MEMORY
+anchor instruction in `base_system` and `casual_direct_reply` + `/chat/send`
+brain_ctx drift fixed.
+
+Tests: 11 new (`test_issue_c_memory_2026_08_30.py`, 10 unit + 1 live E2E)
++ 167-test regression sweep, 0 new failures (2 pre-existing unrelated
+failures confirmed identical on baseline via `git stash`; one line-lock
+test re-snapshotted). `testing_agent` live-verified with a REAL 12-turn
+LLM conversation: multi-turn recall (4 bugs + names + dates), recall
+crossing the 10-turn summary threshold (pinpoint "Marco/webhook/PROMO50"
+recall), session isolation (fresh session leaks nothing), session
+switch-back (recalls the right session), Issue A/B regression checks —
+6/6 live scenarios PASS, 0 bugs, 0 action items
+(`/app/test_reports/iteration_issue_c_memory_multiturn_2026_08_30.json`).

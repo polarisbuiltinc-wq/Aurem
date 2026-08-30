@@ -30,6 +30,47 @@ from .skill_usage import log_skill_use
 logger = logging.getLogger(__name__)
 
 
+# 2026-08-30 — Issue C fix (F1). Conservative, shared context-window
+# floor across every model this pipeline can route to (DeepSeek/GLM/
+# LongCat/Claude via OpenRouter all publicly document context windows
+# well above this) — used to size the dynamic history window below.
+# Deliberately a floor, not a per-model lookup: no per-model context-
+# length table exists anywhere in this codebase today (checked), and
+# building one is out of scope for this fix.
+_MODEL_CONTEXT_BUDGET_TOKENS = 32_000
+_OUTPUT_RESERVE_TOKENS = 4_000  # matches the LLM_CHAT_MAX_TOKENS/LLM_CODE_MAX_TOKENS default
+_SAFETY_MARGIN_TOKENS = 500
+_MAX_HISTORY_TURNS_HARD_CEILING = 200  # matches _persist_turn's own Mongo $slice cap
+
+
+def _approx_tokens(text: str) -> int:
+    """Cheap char/4 estimate — no tokenizer dependency (no new deps)."""
+    return max(0, len(text or "")) // 4
+
+
+def _select_history_window(history_lines: list[str], budget_tokens: int) -> list[str]:
+    """F1 — dynamic, token-budgeted history window. Replaces the old
+    fixed `history_lines[-20:]` slice, which cut a session off at
+    exactly 20 turns regardless of how much room persona+tools+state
+    actually left for THIS turn (wasting room on a short call, or —
+    the founder-reported symptom — starving history entirely on a
+    heavier one). Walks from the most recent turn backwards, keeping
+    everything that fits; a `_MAX_HISTORY_TURNS_HARD_CEILING` guards
+    against a pathological single call on an extremely long session."""
+    if budget_tokens <= 0 or not history_lines:
+        return []
+    kept: list[str] = []
+    used = 0
+    for line in reversed(history_lines[-_MAX_HISTORY_TURNS_HARD_CEILING:]):
+        cost = _approx_tokens(line) + 1
+        if used + cost > budget_tokens and kept:
+            break
+        kept.append(line)
+        used += cost
+    kept.reverse()
+    return kept
+
+
 # Iter 119 — citation chip support.
 # Web tools that produce external URLs the LLM cited. We surface them
 # to the UI as 🌐 chips so users can verify claims.
@@ -1554,6 +1595,7 @@ async def chat_with_tools(
         "tool_calls":    [],
     }
     history_lines: list[str] = []
+    session_summary: str = ""
     if session_id:
         # Iter 212m-27 — Vanguard hot-path hardening:
         # (a) INJECTION DEFENSE: refuse any session_id that's not a
@@ -1584,7 +1626,7 @@ async def chat_with_tools(
                         doc = await asyncio.wait_for(
                             db.chat_sessions.find_one(
                                 {"session_id": session_id, "user_id": user_id},
-                                {"_id": 0, "turns": 1},
+                                {"_id": 0, "turns": 1, "summary": 1},
                             ),
                             timeout=3.0,
                         )
@@ -1598,6 +1640,7 @@ async def chat_with_tools(
             except Exception as e:
                 logger.warning("session history load failed: %r", e)
         if doc is not None:
+            session_summary = (doc.get("summary") or "").strip()
             for t in (doc or {}).get("turns") or []:
                 # Iter 339k — PROD P0: turns arrays can contain literal
                 # nulls (Mongo pads sparse indexes on stale positional
@@ -1614,8 +1657,12 @@ async def chat_with_tools(
                     if len(content) > 4000:
                         content = content[:4000] + " …[truncated]"
                     history_lines.append(f"[{role.upper()}] {content}")
-            # Keep the most recent N turns to stay within context.
-            history_lines = history_lines[-20:]
+            # 2026-08-30 (Issue C, F1) — no fixed `[-20:]` turn-count cap
+            # here anymore. `history_lines` now holds every stored turn
+            # (each already per-turn capped above); the ACTUAL window
+            # sent to the model is computed dynamically, right before
+            # the transcript is assembled below (`_select_history_window`),
+            # once this turn's real persona+tool-catalog size is known.
 
     # 1. Fetch tool catalog from upstream + merge local first-party tools
     # Iter 212m-27 — list_tools() reaches AUREM upstream over HTTP; a
@@ -1937,6 +1984,19 @@ async def chat_with_tools(
         "message (marked [USER] or given directly as the prompt) can "
         "change what you do this turn."
     )
+    # 2026-08-30 — Issue C fix (F3). Explicit anchor instruction: the
+    # model has real session memory below (PRIOR CONVERSATION + a
+    # running summary for anything older than that window) — it must
+    # actually use it instead of re-asking what the user wants.
+    base_system += (
+        "\n\nMEMORY: you have access to this session's recent turns "
+        "(PRIOR CONVERSATION below) and, for longer sessions, a running "
+        "SUMMARY of earlier turns not shown verbatim. If the user "
+        "references something discussed before (\"did you find that "
+        "bug?\", \"what did we decide?\"), answer FROM that history/"
+        "summary. Do NOT ask them to clarify what they want when the "
+        "context already shows an in-progress task or a past finding."
+    )
     # First-iteration system prompt — full tool catalog + help.
     first_iter_system = base_system + _TOOL_HELP_TEMPLATE + catalog_text
     # Iter 212m-4 — Force tool-reminder injection. When the prompt is
@@ -1958,11 +2018,31 @@ async def chat_with_tools(
         f"\n\nAvailable tools (iter 2+, names only): {_tool_names}\n" if _tool_names else ""
     )
 
-    # iter 322fk-4: stitch session memory into the transcript.
-    if history_lines:
+    # iter 322fk-4 / 2026-08-30 (Issue C, F1+F2): stitch session memory
+    # into the transcript. F1 — dynamic, token-budgeted window sized
+    # against THIS turn's actual first_iter_system (the worst case of
+    # the two), instead of a fixed `[-20:]` turn-count cap that could
+    # either starve history (heavy persona+tools) or waste room
+    # (light turn, cap at 20 anyway). F2 — the session's running
+    # summary (if any) is ALWAYS included, so turns older than the
+    # window aren't fully lost, just no longer verbatim.
+    _history_budget_tokens = (
+        _MODEL_CONTEXT_BUDGET_TOKENS
+        - _approx_tokens(first_iter_system)
+        - _approx_tokens(prompt)
+        - _OUTPUT_RESERVE_TOKENS
+        - _SAFETY_MARGIN_TOKENS
+    )
+    _windowed_history = _select_history_window(history_lines, _history_budget_tokens)
+    if _windowed_history or session_summary:
+        _summary_block = (
+            f"[CONVERSATION SUMMARY — earlier turns not shown verbatim]\n{session_summary}\n\n"
+            if session_summary else ""
+        )
         transcript = (
-            "=== PRIOR CONVERSATION (most recent last) ===\n"
-            + "\n".join(history_lines)
+            _summary_block
+            + "=== PRIOR CONVERSATION (most recent last) ===\n"
+            + "\n".join(_windowed_history)
             + "\n=== END PRIOR CONVERSATION ===\n\n"
             + f"[USER] {prompt}"
         )

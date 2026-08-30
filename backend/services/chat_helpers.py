@@ -488,6 +488,15 @@ async def _persist_turn(user_id: str, session_id: str, user_prompt: str,
             },
             upsert=True,
         )
+        # 2026-08-30 — Issue C fix (F2). Fire-and-forget, never awaited
+        # inline — a summary-update hiccup or its own LLM latency must
+        # never slow down or affect the turn already returned above.
+        try:
+            import asyncio as _asyncio
+            from services.session_summary import maybe_update_summary
+            _asyncio.create_task(maybe_update_summary(db, session_id, user_id))
+        except Exception:
+            pass
     except Exception as e:
         logger.warning("persist_turn failed: %r", e)
 
