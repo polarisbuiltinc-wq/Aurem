@@ -1,3 +1,9 @@
+# LOOP-STATE — see bottom of file for latest entries.
+# (2026-08-30 WEB PERFORMANCE + RELIABILITY AUDIT delivered in chat only,
+# read-only per founder instruction — not duplicated here in full; see
+# the KIT GAP-PATCH entry a few sections down for the code-changing work
+# from the same round.)
+
 # LOOP-STATE — R1-R4 focused round (2026-08-28, post-overnight)
 
 - R1 Future Ledger seed/reconcile: DONE. `/app/memory/ROADMAP.md` has exact F1-F18 (founder-supplied text, verbatim) + standing rules R1-R7. No duplicates confirmed by direct read.
@@ -854,6 +860,63 @@ script, so the boot-hydrated GitHub App JWT cache is real) —
 46** projects `connected` right now, including every `ora-grounding`
 row (`polarisbuiltinc-wq/ora-grounding`, installation `152797252`) —
 all show `status: "disconnected", error: "github_rejected"`. This is
+
+## KIT GAP-PATCH (2026-08-30, this round) — robots bug fix + schema @id + GBP advisory
+
+**KIT GAP-LATCHED**: robots bot-names fixed (real bug), schema @id added, GBP advisory row added.
+
+1. **Robots bug (CONFIRMED real bug, not preference)**: `Claude-Web` is a
+   dead/deprecated Anthropic token (web-search-verified against
+   support.claude.com, 2026-08-30) — the retrieval allow-rule was
+   inert, so the real Anthropic search bot was never actually
+   allowed. Fixed `services/visibility/robots.py`:
+   `RETRIEVAL_BOTS = ["OAI-SearchBot", "Claude-Web", "PerplexityBot", "Bingbot"]`
+   → `["OAI-SearchBot", "Claude-SearchBot", "PerplexityBot"]`;
+   `TRAINING_BOTS = [..., "DeepSeekBot"]` → `[...]` (DeepSeekBot
+   removed — no vendor-published docs page found, only third-party
+   directories; call made per the "no verified source, removed"
+   option). Sources pinned in the module docstring with the 2026-08-30
+   date. `t_robots_bot_names_verified` green.
+2. **Schema `@id`**: `services/visibility/schema.py` Organization block
+   now emits `"@id": "{site_url}/#organization"` — deterministic,
+   idempotent (same input → same `@id` every regeneration, proven by
+   `t_schema_org_stable_id` calling `render_json_ld` twice). No
+   fabricated `sameAs`.
+3. **GBP row**: new advisory-only `google_business_profile` catalog row
+   (weight=0 — deliberate, does not dilute/reweight the other 7 rows'
+   score denominator), added to `apply.py`'s `ADVISORY_ITEMS` (never
+   applied, never in the ship PR, no GBP API/OAuth code anywhere in
+   `services/visibility/`). `t_gbp_advisory_only` green.
+
+**Tests**: 3 new + full suite re-run, 31/31 pass
+(`test_visibility_kit_v2_2026_08_30.py` + `test_visibility_kit.py`,
+which was updated 7→8 rows for the new catalog count). DB re-migrated
+(idempotent upsert) so the live seeded catalog matches.
+
+**Deliberately NOT built**: GBP OAuth/posting automation (Google
+policy blocks multi-client bulk automation — verified via the
+founder's own brief), citation/visibility monitoring (future paid
+A7/SOV work), answer-first content generation (advisory guidance
+only, no new code).
+
+**Phase-2 live drill re-check**: still blocked — same GitHub
+connectivity gap reported in the prior round (0/46 projects
+connected). Could not "re-run the fixture's served robots.txt"
+against a real repo; verified the fix at the generator/unit level
+only (28 above + this round's 3 = 31 total kit tests).
+
+**Bonus finding, fixed (small, same confirmed bug class)**: AUREM's
+own static `frontend/public/robots.txt` (unrelated Phase-A dogfood
+file, not the Kit generator) also had the dead `Claude-Web` token on
+line 60 — same real bug, on AUREM's own live site. Fixed to
+`Claude-SearchBot` (single-line change, nothing else in that file
+touched — it has a deliberately broader "welcome everything" policy
+from an earlier round, out of this round's scope).
+
+**Regression**: `git stash` A/B on the 2 unrelated pre-existing
+`test_iter80_seo_pwa.py` JSON-LD failures confirmed identical with/
+without this round's changes — 0 new regressions.
+
 wider than the previously-documented "ora-grounding specifically
 unreachable" gap (which is why earlier rounds substituted
 `TJSNDHU/Aurem`) — right now NOTHING is connectable from this Preview

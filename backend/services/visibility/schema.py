@@ -6,6 +6,14 @@ FAQs), and a Person entity for the author (with sameAs) — merged into
 the target HTML's <head>, never clobbering anything already there.
 Delimited by the §7.1 AUREM comment so re-apply (R6) replaces only our
 own block.
+
+2026-08-30 KIT GAP-PATCH — Organization now carries a STABLE `@id`
+({site_url}/#organization) for entity disambiguation (the brief's
+highest-leverage, most under-deployed AI-citation element). Stable =
+deterministic from the site's own URL, so re-running the kit on the
+same site always emits the identical `@id` (R6 idempotency), never a
+random/changing value. `sameAs` is never fabricated — only emitted
+when the caller supplies real, verified profile URLs.
 """
 from __future__ import annotations
 
@@ -17,9 +25,11 @@ _END = "<!-- end AUREM Visibility Kit -->"
 
 def render_json_ld(site: dict) -> str:
     """`site` = {name, url, logo_url, sameAs, faqs, author}."""
+    org_id = f"{site['url'].rstrip('/')}/#organization"
     blocks = [{
         "@context": "https://schema.org",
         "@type": "Organization",
+        "@id": org_id,
         "name": site["name"], "url": site["url"],
         **({"logo": site["logo_url"]} if site.get("logo_url") else {}),
         **({"sameAs": site["sameAs"]} if site.get("sameAs") else {}),

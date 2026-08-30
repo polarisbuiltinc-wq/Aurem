@@ -7,7 +7,7 @@ Named tests per spec + this app's own conventions:
   t_detect_frameworks    — next / react / static / unknown fixtures
   t_author_schema        — Person+sameAs emitted only when author data present
   t_sitemap_idempotent   — apply twice → one sitemap, no dupes
-  t_catalog_seeded       — 7 rows, weights sum to 100
+  t_catalog_seeded       — 8 rows, weights sum to 100
   t_billing_gate         — free plan → 402 with upgrade payload (R2)
   t_branding_present     — generated robots/schema blocks carry the AUREM comment
   t_apply_no_copy_edit   — apply() only ever writes robots.txt/sitemap.xml/html-head,
@@ -81,7 +81,7 @@ async def test_catalog_seeded():
     db = client[os.environ["DB_NAME"]]
     items = await db.visibility_items.find({}, {"_id": 0}).to_list(20)
     client.close()
-    assert len(items) == 7
+    assert len(items) == 8
     assert sum(i["weight"] for i in items) == 100
 
 

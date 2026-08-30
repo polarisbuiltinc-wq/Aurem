@@ -16,6 +16,11 @@ Named tests (join the existing test_visibility_kit.py guardrail suite):
   t_kit_pref_sources_is_hero  — preferred_sources stays the top-weighted (25) per-visitor badge
   t_kit_score_not_overclaimed — panel note frames the score as a preparedness checklist, not live tracking
   t_kit_no_oversell_number    — no bare unsourced customer-facing stat anywhere in the catalog copy
+
+2026-08-30 KIT GAP-PATCH (robots bot-name bug fix + schema @id + GBP advisory):
+  t_robots_bot_names_verified — generated block uses verified current tokens, no dead "Claude-Web"
+  t_schema_org_stable_id      — Organization @id is a stable URI, idempotent across regenerations
+  t_gbp_advisory_only         — GBP row is advisory-only, never applied, no GBP API code path
 """
 import importlib
 from pathlib import Path
@@ -26,6 +31,8 @@ import pytest
 from services.visibility import preferred_sources as badge_gen
 from services.visibility import llms_txt as llms_gen
 from services.visibility import robots as robots_gen
+from services.visibility import schema as schema_gen
+from services.visibility import apply as apply_mod
 
 _CATALOG = importlib.import_module("migrations.003_visibility_kit").CATALOG_ITEMS
 _FRONTEND_PANEL = Path(__file__).resolve().parents[2] / "frontend/src/components/VisibilityKitPanel.jsx"
@@ -237,6 +244,7 @@ def test_t_kit_catalog_weights_sum_to_100_and_pr_created_half_documented():
     spec_weights = {
         "preferred_sources": 25, "ai_crawler_policy": 20, "structured_data": 20,
         "llms_txt": 15, "sitemap_auto": 10, "answer_blocks": 7, "image_quick_wins": 3,
+        "google_business_profile": 0,  # advisory checklist, deliberately non-scoring
     }
     assert sum(spec_weights.values()) == 100
 
@@ -255,7 +263,6 @@ def test_t_kit_branding_in_correct_places():
     assert "Maintained with AUREM" in txt
 
     # R11 — no AUREM entity in the site's own JSON-LD, ever.
-    from services.visibility import schema as schema_gen
     json_ld = schema_gen.render_json_ld({"name": "X", "url": "https://x.com"})
     import json as _json
     ld_only = json_ld.split(schema_gen._START, 1)[-1]
@@ -326,3 +333,56 @@ def test_t_kit_no_oversell_number():
     assert "2x the clicks" in all_copy
     assert "Google reports preferred links get about 2x the clicks" in all_copy
     assert "(May 2026)" in all_copy  # sourced/dated, not a bare assertion
+
+
+# ── 2026-08-30 KIT GAP-PATCH ──────────────────────────────────────────
+def test_t_robots_bot_names_verified():
+    out = robots_gen.render_managed_block({})
+    # the real bug: a dead token meant the retrieval bot was never
+    # actually allowed. Must be gone, replaced by the verified token.
+    assert "Claude-Web" not in out
+    assert "User-agent: Claude-SearchBot\nAllow: /" in out
+    # verified retrieval set (allow), exact match, no extras.
+    assert robots_gen.RETRIEVAL_BOTS == ["OAI-SearchBot", "Claude-SearchBot", "PerplexityBot"]
+    # verified training set (deny by default) — DeepSeekBot removed (no
+    # vendor-published source found), Bingbot never was a training bot.
+    assert robots_gen.TRAINING_BOTS == ["GPTBot", "ClaudeBot", "Google-Extended", "CCBot"]
+    assert "DeepSeekBot" not in out
+    # user-fetch bots deliberately excluded (don't reliably obey robots.txt).
+    for fetch_bot in ("ChatGPT-User", "Claude-User", "Perplexity-User"):
+        assert fetch_bot not in out
+
+
+def test_t_schema_org_stable_id():
+    site = {"name": "Example Co", "url": "https://example.com/"}
+    first = schema_gen.render_json_ld(site)
+    second = schema_gen.render_json_ld(site)
+    import json as _json
+    def _org_id(rendered):
+        block = rendered.split('"@type": "Organization"', 1)[-1]
+        # walk back to find this same script tag's @id (simplest: re-parse)
+        for chunk in rendered.split("<script"):
+            if '"Organization"' in chunk:
+                raw = chunk.split(">", 1)[-1].rsplit("</script", 1)[0].strip()
+                return _json.loads(raw)["@id"]
+        raise AssertionError("no Organization block found")
+    id1, id2 = _org_id(first), _org_id(second)
+    assert id1 == id2  # idempotent — same input, same @id, every time
+    assert id1 == "https://example.com/#organization"
+    assert id1.startswith("https://")  # a real URI, not an opaque token
+    # no fabricated sameAs when the caller supplied none.
+    assert '"sameAs"' not in first.split('"@type": "Organization"', 1)[-1].split("}", 1)[0]
+
+
+def test_t_gbp_advisory_only():
+    gbp = next(i for i in _CATALOG if i["key"] == "google_business_profile")
+    assert gbp["mode"] == "advisory"
+    assert "google_business_profile" in apply_mod.ADVISORY_ITEMS
+    assert "google_business_profile" not in apply_mod.IMPLEMENTED_AUTO_ITEMS
+    # never earns/dilutes the readiness score — deliberate, documented choice.
+    assert gbp["weight"] == 0
+    # no GBP API/OAuth code path exists anywhere in the visibility services.
+    vis_dir = Path(apply_mod.__file__).resolve().parent
+    for py_file in vis_dir.glob("*.py"):
+        src = py_file.read_text().lower()
+        assert "mybusiness" not in src and "businessprofile" not in src

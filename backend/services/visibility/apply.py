@@ -31,7 +31,12 @@ IMPLEMENTED_AUTO_ITEMS = {
     "preferred_sources", "llms_txt",
 }
 NOT_YET_IMPLEMENTED: set[str] = set()
-ADVISORY_ITEMS = {"answer_blocks", "image_quick_wins"}
+# google_business_profile: 2026-08-30 KIT GAP-PATCH — advisory-only by
+# design. GBP's own API requires per-client OAuth + manual end-client
+# sign-in per action; Google's policy does not allow a multi-client
+# SaaS to bulk/automate postings. No GBP API/OAuth code exists in this
+# kit — this item is a checklist, never applied, never in the ship PR.
+ADVISORY_ITEMS = {"answer_blocks", "image_quick_wins", "google_business_profile"}
 
 
 def _domain_from_url(url: str | None) -> str | None:

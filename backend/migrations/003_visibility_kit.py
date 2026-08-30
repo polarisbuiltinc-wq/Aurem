@@ -14,6 +14,13 @@ from .base import Migration
 
 # §3 catalog — single source of truth for copy + weights. AUTO items
 # apply directly in the PR; ADVISORY items are report-only (R3/§9).
+#
+# 2026-08-30 KIT GAP-PATCH: added `google_business_profile` (advisory,
+# weight=0 by deliberate choice — GBP automation is policy-blocked
+# (see item's own copy), so this row is a pure checklist. weight=0
+# means it never earns AND never dilutes the readiness score's
+# denominator — no reweighting of the other 7 rows, matching the
+# truth-update round's explicit "no score reweighting" rule.
 CATALOG_ITEMS: list[dict] = [
     {
         "key": "preferred_sources", "weight": 25, "mode": "auto",
@@ -82,6 +89,22 @@ CATALOG_ITEMS: list[dict] = [
             "list + advice. Auto alt-fill from filenames is forbidden."
         ),
         "frameworks": ["next", "react", "static", "unknown"], "sort": 7,
+    },
+    {
+        "key": "google_business_profile", "weight": 0, "mode": "advisory",
+        "name": "Google Business Profile",
+        "what_why": (
+            "Your Google Business Profile is a citation source for local AI "
+            "answers. Complete it yourself in Google's own dashboard — we "
+            "don't post on your behalf (GBP's API requires per-client OAuth "
+            "+ your own manual sign-in per action, so no SaaS can bulk-"
+            "automate this — Google's own policy). Checklist: 5+ photos, "
+            "every category/service filled in, NAP (name/address/phone) "
+            "matching everywhere online, hours kept current, a weekly post "
+            "or photo, and a refresh within 30 days — Whitespark's 2026 "
+            "report ties stale profiles to falling impressions."
+        ),
+        "frameworks": ["next", "react", "static", "unknown"], "sort": 8,
     },
 ]
 
