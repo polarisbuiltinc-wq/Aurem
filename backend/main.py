@@ -259,6 +259,7 @@ if _SENTRY_DSN:
 # decorator/dep-injection collision.
 from services.rate_limiter import (
     check_rate_limit, check_rate_limit_async, client_ip_from_request,
+    in_memory_bucket_count,
 )
 
 # Services
@@ -1715,7 +1716,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AUREM API",
+    title="AUREM API — ORA Developer Docs",
     version="1.0.0",
     lifespan=lifespan,
     # Iter 140 — expose interactive docs at /api/docs (avoids
@@ -2063,6 +2064,10 @@ async def _security_headers(request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    # 2026-08-30 · public-site fixes (P2 #4 Vary: Accept). See the
+    # matching comment on _apply_security_headers below (cached-response
+    # twin of this same header set) for why.
+    response.headers["Vary"] = "Accept, Accept-Encoding"
     # Iter 140 — Content Security Policy + version stamp.
     # Locked-down sources for default/script/style/img/connect/frame/font.
     # 'unsafe-inline' kept for style+script because lucide-react and our
@@ -2114,6 +2119,11 @@ def _apply_security_headers(resp):
     resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     resp.headers["X-XSS-Protection"] = "1; mode=block"
+    # 2026-08-30 · public-site fixes (P2 #4). We don't currently branch
+    # response bodies on Accept, but declaring it is correct/harmless
+    # and matches HTTP content-negotiation best practice a crawler
+    # audit checks for; Accept-Encoding is genuinely true (gzip vs not).
+    resp.headers["Vary"] = "Accept, Accept-Encoding"
     resp.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
 
 
@@ -2418,7 +2428,16 @@ async def _global_rate_limit_guard(request, call_next):
                 "detail": "Too many requests — global per-IP limit hit",
                 "limit_per_minute": _GLOBAL_RL_PER_MIN,
             },
-            headers={"Retry-After": "60"},
+            headers={
+                "Retry-After": "60",
+                # 2026-08-30 · public-site fixes (P2 #10). Standard
+                # RFC-shaped rate-limit headers — see
+                # services/rate_limiter.in_memory_bucket_count for the
+                # single-pod-exact / multi-pod-approximate tradeoff.
+                "X-RateLimit-Limit": str(_GLOBAL_RL_PER_MIN),
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Reset": str(int(time.time()) + 60),
+            },
         )
     # THE FIX for "RuntimeError: No response returned" at deploy time.
     # BaseHTTPMiddleware + Python 3.11 ExceptionGroup: when call_next
@@ -2432,7 +2451,13 @@ async def _global_rate_limit_guard(request, call_next):
     # this middleware and can't recover if call_next itself corrupted
     # the response stream. So we catch here defensively.
     try:
-        return await call_next(request)
+        resp = await call_next(request)
+        resp.headers["X-RateLimit-Limit"] = str(_GLOBAL_RL_PER_MIN)
+        resp.headers["X-RateLimit-Remaining"] = str(max(
+            0, _GLOBAL_RL_PER_MIN - in_memory_bucket_count(f"global-ip:{ip}"),
+        ))
+        resp.headers["X-RateLimit-Reset"] = str(int(time.time()) + 60)
+        return resp
     # 2026-08-19 deploy-log fix: widened to also catch BaseExceptionGroup
     # (see matching comment on the skip-path branch above for the exact
     # anyio/CancelledError mechanics this closes).

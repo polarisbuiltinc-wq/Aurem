@@ -24,7 +24,8 @@ const POLICY_MAP = {
   "subprocessors":      { file: "subprocessors.md",         title: "Subprocessor List" },
   "dpa":                { file: "dpa.md",                   title: "Data Processing Agreement" },
   "security":           { file: "security.md",              title: "Security & Trust" },
-  "status":             { file: "status.md",                title: "System Status" },
+  "status":             { file: "status.md",                 title: "System Status" },
+  "api-versioning":     { file: "api-versioning.md",         title: "API Versioning & Deprecation Policy" },
 };
 
 export default function PolicyPage({ slug }) {

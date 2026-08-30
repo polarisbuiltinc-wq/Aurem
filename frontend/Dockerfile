@@ -29,8 +29,27 @@ RUN printf 'server {\n\
     add_header Expires "0" always;\n\
     try_files $uri =404;\n\
   }\n\
-  location / {\n\
+  # 2026-08-30 · public-site fixes (P0 #2 real-404). is-agentic.com\n\
+  # scan flagged: unknown paths returned 200 + the app shell (a soft\n\
+  # 404 — crawlers/agents cannot tell a broken link from a real page).\n\
+  # React Router already renders a NotFound component client-side for\n\
+  # ANY unmatched path (see src/pages/NotFound.jsx), but the raw HTTP\n\
+  # status was always 200 before React ever ran. Fix: only the KNOWN\n\
+  # top-level route prefixes (mirrors every <Route path="..."> in\n\
+  # src/App.jsx — keep this list in sync when routes are added/removed)\n\
+  # fall through to the SPA shell; a genuinely unknown top-level path\n\
+  # gets a real 404. Prerendered static dirs (about/, contact/,\n\
+  # privacy/, vs/*, compare/) are matched by try_files BEFORE this\n\
+  # regex even runs, so they keep serving their own real files.\n\
+  location ~ ^/(both|why-ora|demo|login|signup|reset-password|verify|support|dashboard|ora|build|integrations|deploy|domain|settings|profile|tokens|analytics|projects|admin|tools|feature-window|codebase-health|health|bug-hunt|sidebar-preview|dashboard-preview-v2|privacy|terms|acceptable-use|cookie-policy|cookie-preferences|refund-policy|ai-code-processing|subprocessors|dpa|security|status|policies|wall|wrapped|automations|oauth-finish|magic-login|vs|pricing|compare|dev|about|contact)(/|$) {\n\
     try_files $uri $uri/ /index.html;\n\
+  }\n\
+  location / {\n\
+    try_files $uri $uri/ =404;\n\
+  }\n\
+  error_page 404 /404.html;\n\
+  location = /404.html {\n\
+    internal;\n\
   }\n\
 }\n' > /etc/nginx/conf.d/default.conf
 

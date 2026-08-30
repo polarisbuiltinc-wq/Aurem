@@ -344,3 +344,28 @@ def reset_buckets_for_tests() -> None:
     limits are exercised exactly as-is, nothing is disabled."""
     _buckets.clear()
 
+
+def in_memory_bucket_count(key: str) -> int:
+    """2026-08-30 · public-site fixes (P2 #10 rate-limit headers).
+
+    Best-effort count of requests already recorded for `key` in the
+    CURRENT sliding window, read from the per-process in-memory bucket
+    ONLY. This is informational (used purely to populate
+    X-RateLimit-Remaining on responses), never for enforcement — the
+    real allow/deny decision stays in check_rate_limit_async() above,
+    untouched.
+
+    Deliberately approximate: under the Redis backend (multi-pod prod)
+    this under-counts, since other pods' requests aren't visible here
+    — exact cross-pod remaining would need an extra Redis round trip
+    per request just for a header, which we're not paying for. Exact
+    in single-pod / no-Redis deployments (this preview pod's own
+    default, since REDIS_URL is typically unset here)."""
+    now = time.time()
+    bucket = _buckets.get(key)
+    if not bucket:
+        return 0
+    while bucket and (now - bucket[0]) > _WINDOW_SEC:
+        bucket.popleft()
+    return len(bucket)
+

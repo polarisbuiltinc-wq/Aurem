@@ -18,11 +18,26 @@
  *
  * Content comes from src/data/competitors.js — the SAME objects the
  * React pages render, so snapshots can never drift from the live UI.
+ *
+ * 2026-08-30 · AUREM public-site "agentic readiness" fixes (P0 #1):
+ * the is-agentic.com scan found the homepage itself (and /about,
+ * /contact, /privacy) serve ~60 chars of raw HTML to any crawler that
+ * doesn't execute JS (AUREM's own research: 69% of AI crawlers can't
+ * run JS). Same react-snap pattern extended to those four routes —
+ * dist/index.html (the literal root file AND the SPA fallback shell
+ * for every unmatched route) plus dist/about/, dist/contact/,
+ * dist/privacy/. Content for about/contact comes from
+ * src/data/companyInfo.mjs (same drift-proof pattern); privacy is the
+ * real public/policies/privacy-policy.md, rendered through the same
+ * `marked` parser PolicyPage.jsx uses client-side, so the static
+ * snapshot and the live page always show identical text.
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { marked } from "marked";
 import { COMPETITORS, COMPARE_HUB, LAST_VERIFIED } from "../src/data/competitors.mjs";
+import { ABOUT, CONTACT } from "../src/data/companyInfo.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = join(ROOT, "dist");
@@ -159,6 +174,102 @@ for (const c of Object.values(COMPETITORS)) {
   writeFileSync(join(DIST, "compare", "index.html"), html);
   written += 1;
   console.log("[seo-prerender] wrote /compare/index.html");
+}
+
+// ── 2026-08-30 · P0 #1 — homepage / about / contact / privacy ───────
+function homeBody() {
+  return `<main>
+<h1>ORA by AUREM \u2014 the AI engineer that actually commits</h1>
+<p>ORA is an autonomous AI software engineer. It connects to your GitHub repository, plans a change, writes the code, runs a pre-commit security scan (Vanguard), and commits the result directly to your branch \u2014 only after your manual approval.</p>
+<h2>How it works</h2>
+<ul>
+<li><strong>Plan</strong> \u2014 ORA shows what it will do; you approve first.</li>
+<li><strong>Execute</strong> \u2014 files are written one at a time.</li>
+<li><strong>Verify</strong> \u2014 lint/type checks run after every file, with a hard self-heal cap of 2 retries.</li>
+<li><strong>Scan</strong> \u2014 Vanguard's pre-commit security patterns run automatically.</li>
+<li><strong>Ship</strong> \u2014 nothing commits until you click Ship.</li>
+</ul>
+<h2>Pricing</h2>
+<p>Free: 10 tasks/month, no credit card. Starter: $9/month flat \u2014 no per-token billing.</p>
+<p><a href="/about">About AUREM</a> \u00b7 <a href="/compare">How ORA compares</a> \u00b7 <a href="/pricing">Pricing</a> \u00b7 <a href="/signup">Start free</a></p>
+</main>`;
+}
+
+function aboutBody() {
+  const paras = ABOUT.paragraphs.map((p) => `<p>${esc(p)}</p>`).join("");
+  const links = ABOUT.links
+    .map((l) => `<a href="${esc(l.href)}">${esc(l.label)}</a>`)
+    .join(" \u00b7 ");
+  return `<main>
+<h1>${esc(ABOUT.heading)}</h1>
+${paras}
+<h2>Links</h2>
+<p>${links}</p>
+<p><a href="/contact">Contact</a> \u00b7 <a href="/privacy">Privacy</a> \u00b7 <a href="/terms">Terms</a></p>
+</main>`;
+}
+
+function contactBody() {
+  const paras = CONTACT.paragraphs.map((p) => `<p>${esc(p)}</p>`).join("");
+  return `<main>
+<h1>${esc(CONTACT.heading)}</h1>
+${paras}
+<p><a href="/support">Open a support ticket</a></p>
+<p><a href="/about">About</a> \u00b7 <a href="/privacy">Privacy</a> \u00b7 <a href="/terms">Terms</a></p>
+</main>`;
+}
+
+function privacyBody() {
+  const md = readFileSync(
+    join(ROOT, "public", "policies", "privacy-policy.md"), "utf8",
+  );
+  return `<main>${marked.parse(md)}</main>`;
+}
+
+{
+  let html = swapHead(base, {
+    title: "ORA by AUREM \u2014 the AI engineer that actually commits",
+    description:
+      "ORA connects to your GitHub repo, writes code, runs a security " +
+      "scan, and commits on your approval. Free tier: 10 tasks/month, " +
+      "no card. Starter: $9/month flat.",
+    canonical: "https://auremcto.com/",
+  });
+  html = injectRoot(html, homeBody());
+  writeFileSync(join(DIST, "index.html"), html);
+  written += 1;
+  console.log("[seo-prerender] wrote / (root index.html, homepage content)");
+}
+
+{
+  let html = swapHead(base, ABOUT);
+  html = injectRoot(html, aboutBody());
+  mkdirSync(join(DIST, "about"), { recursive: true });
+  writeFileSync(join(DIST, "about", "index.html"), html);
+  written += 1;
+  console.log("[seo-prerender] wrote /about/index.html");
+}
+
+{
+  let html = swapHead(base, CONTACT);
+  html = injectRoot(html, contactBody());
+  mkdirSync(join(DIST, "contact"), { recursive: true });
+  writeFileSync(join(DIST, "contact", "index.html"), html);
+  written += 1;
+  console.log("[seo-prerender] wrote /contact/index.html");
+}
+
+{
+  let html = swapHead(base, {
+    title: "Privacy Policy — AUREM",
+    description: "AUREM's privacy policy: GDPR/PIPEDA/DPDP disclosures, cookie policy, data-retention windows, subprocessor list.",
+    canonical: "https://auremcto.com/privacy",
+  });
+  html = injectRoot(html, privacyBody());
+  mkdirSync(join(DIST, "privacy"), { recursive: true });
+  writeFileSync(join(DIST, "privacy", "index.html"), html);
+  written += 1;
+  console.log("[seo-prerender] wrote /privacy/index.html");
 }
 
 console.log(`[seo-prerender] done — ${written} snapshots.`);

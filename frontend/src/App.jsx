@@ -93,6 +93,8 @@ const PersonalTrackAdmin = lazy(() => import("./pages/admin/PersonalTrackAdmin")
 const OraChat            = lazy(() => import("./pages/admin/OraChat"));            // Iter 212m-238
 const OraDirect          = lazy(() => import("./pages/OraDirect"));                 // Iter 212m-241 public PIN-gated
 const PolicyPage        = lazy(() => import("./pages/PolicyPage"));
+const AboutPage         = lazy(() => import("./pages/AboutPage"));   // 2026-08-30 · public-site fixes
+const ContactPage       = lazy(() => import("./pages/ContactPage")); // 2026-08-30 · public-site fixes
 const Wrapped           = lazy(() => import("./pages/Wrapped"));
 const ShipWall          = lazy(() => import("./pages/ShipWall"));
 const BrainDump         = lazy(() => import("./pages/BrainDump"));
@@ -476,6 +478,9 @@ export default function App() {
           <Route path="/dpa"                element={<PolicyPage slug="dpa" />} />
           <Route path="/security"           element={<PolicyPage slug="security" />} />
           <Route path="/status"             element={<PolicyPage slug="status" />} />
+          <Route path="/policies/api-versioning" element={<PolicyPage slug="api-versioning" />} />
+          <Route path="/about"              element={<AboutPage />} />
+          <Route path="/contact"            element={<ContactPage />} />
           <Route path="/admin/architecture" element={<AdminRoute><Admin initialTab="arch" /></AdminRoute>} />
           <Route path="/admin/ops" element={<AdminRoute><OpsRecipes /></AdminRoute>} />
           <Route path="/admin/brain/:projectId" element={<AdminRoute><BrainDump /></AdminRoute>} />

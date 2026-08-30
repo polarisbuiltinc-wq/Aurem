@@ -1,0 +1,44 @@
+{
+  "summary": "Tested public-site agentic-readiness fixes (P0/P1/P2). Backend: all 9 new pytest tests PASS; live-preview header/openapi/docs/redoc checks all PASS. Frontend: /about and /contact render correctly with every required data-testid; existing routes (/, /pricing, /privacy, /terms) unaffected; dist/ prerender artifacts contain real per-page content >500 chars. CRITICAL FINDING: /api-versioning route is unreachable on the live-preview (and will be on prod) because the Kubernetes ingress routes ANY path starting with '/api' to the backend on port 8001 — visiting /api-versioning returns FastAPI's {'detail':'Not Found'} JSON, never reaching React Router. The pytest for this only checks that the markdown file exists on disk (t_api_versioning_policy_page_exists), so it passed while the actual page is broken end-to-end. Pre-existing 7 SEO test failures reproduce identically and are not caused by this round.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "App.jsx route /api-versioning",
+        "issue": "Route path starts with '/api' so K8s ingress forwards it to the FastAPI backend (port 8001) instead of the React SPA (port 3000). GET https://<preview>/api-versioning returns HTTP 404 JSON {'detail':'Not Found'} from FastAPI — PolicyPage never renders. Same will happen in production behind the same ingress rule ('/api* -> backend'). Rename the route (e.g. /versioning, /policies/api-versioning, /developer/api-versioning) and update PolicyPage POLICY_MAP + any llms.txt / sitemap references. The prerender for /api-versioning (if added) will also be shadowed by the ingress.",
+        "selector": "/api-versioning",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_public_site_agentic_readiness_2026_08_30.py"
+  ],
+  "action_items": [
+    "Rename frontend route '/api-versioning' to a path that does NOT start with '/api' (ingress routes /api* to backend). Suggested: '/versioning' or '/policies/api-versioning'. Update: (a) frontend/src/App.jsx <Route path=...>, (b) frontend/src/pages/PolicyPage.jsx POLICY_MAP key if it's used for URL, (c) any llms.txt / sitemap.xml / internal links referencing /api-versioning, (d) frontend/scripts/seo-prerender.mjs snapshot path, (e) update pytest t_api_versioning_policy_page_exists if it hard-codes the URL path.",
+    "Add an HTTP-level pytest that curls the live preview URL for /api-versioning (or the new path) and asserts HTML (not JSON 404) — the current test only stats the .md file on disk and hides this routing bug."
+  ],
+  "critical_code_review_comments": [
+    "Naming a public SPA route with an '/api' prefix in a K8s deployment where '/api*' is a hard ingress rule to the backend is a foot-gun; consider adding an eslint/lint rule or an App.jsx assertion at boot that no <Route path> begins with '/api'.",
+    "The new pytest t_api_versioning_policy_page_exists is a file-existence assertion — it does not validate the route is reachable via HTTP. Prefer end-to-end reachability checks for user-facing pages.",
+    "Pre-existing 7 SEO test failures in test_iter358_seo_refresh.py / test_iter80_seo_pwa.py / test_iter212m29_seo_core_engine.py are stale content assertions (pricing $19, brand 'Aurem CTO', 'direct GitHub commit' feature, orchestrator dry-run PAT auth removal) — worth a follow-up cleanup round; unrelated to this fix.",
+    "React Router v6->v7 future flag warnings appear on every page (v7_startTransition, v7_relativeSplatPath). Non-blocking but should be opted-in before v7 upgrade.",
+    "Multiple 401 console errors on every page load from an unnamed resource — worth investigating whether a public page is making an authenticated call it shouldn't."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (9/9 new tests; live headers/openapi/docs/redoc all green; pre-existing 7 SEO failures reproduced identically = 0 new regressions)",
+    "frontend": "80% (/about ✅, /contact ✅, 4/4 regression routes ✅, /api-versioning ❌ hits backend 404)"
+  },
+  "test_credentials": "Not required this round (all tested surfaces are public).",
+  "seed_data_creation": "None.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After main agent renames /api-versioning route, re-verify: (a) new path returns 200 HTML on live preview and shows API Versioning & Deprecation Policy content, (b) llms.txt developer-resources section references the new path (not /api-versioning), (c) 9-item pytest still green. /about and /contact are fully verified and stable. dist/ prerender artifacts confirmed present for /, /about, /contact, /privacy with real content >500 chars and page-specific h2/paragraph text (site-wide h1 'ORA by Aurem — The AI Engineer That Actually Commits' is shared across all four which is intentional — page-specific titles live in <title> and body h2/paragraphs). Nginx real-404 fix is production-only and cannot be tested from this preview (vite dev server) — main agent's local nginx verification stands.",
+  "rca of the issue": "Kubernetes ingress rule: any URL path matching '/api*' is proxied to backend port 8001. The new frontend route '/api-versioning' matches this pattern and is therefore intercepted before it can reach the React SPA on port 3000. FastAPI has no matching route for /api-versioning (only /api/... routes) and returns its default 404 JSON. Mitigation: rename the SPA route to a path that does not start with '/api' (e.g. '/versioning', '/policies/api-versioning', '/developer/versioning'). Reproduction: curl -s https://bin-context-pat.preview.emergentagent.com/api-versioning -> {\"detail\":\"Not Found\"} with content-type application/json; expected: HTML from PolicyPage."
+}
