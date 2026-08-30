@@ -101,7 +101,12 @@ async def test_billing_gate_free_plan_returns_402():
     })
     db.dev_users.find_one = AsyncMock(return_value={"tier": "free"})
     with patch("routers.visibility.current_dev", new=AsyncMock(return_value={"user_id": "u1"})), \
-         patch("routers.visibility.get_db", return_value=db):
+         patch("routers.visibility.get_db", return_value=db), \
+         patch("services.feature_flags.is_enabled", new=AsyncMock(return_value=True)):
+        # 2026-08-30 — the R9-gate (kit_apply_enabled) runs BEFORE this
+        # billing gate; mocked ON here so this test still isolates the
+        # billing-gate behavior specifically. See
+        # test_visibility_kit_v2_2026_08_30.py for the R9-gate's own tests.
         from fastapi import HTTPException
         with pytest.raises(HTTPException) as exc_info:
             await apply_kit("p1", ApplyBody(items=["ai_crawler_policy"]), authorization="Bearer x")

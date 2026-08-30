@@ -41,6 +41,7 @@ import {
   setActiveProjectId as setActiveProjectIdGlobal,
 } from "../components/TabBar";
 import NewUserWizard from "../components/NewUserWizard";
+import VisibilityKitPanel from "../components/VisibilityKitPanel";
 import ConnectRepoBanner from "../components/ConnectRepoBanner";
 import RepoCleanupBanner from "../components/RepoCleanupBanner";
 import ConnectRepoTour from "../components/tour/ConnectRepoTour";     // Iter 212m-200
@@ -101,6 +102,7 @@ function DashboardV2Body() {
   // v2 chrome state ----------------------------------------------------
   const [projects,         setProjects]         = useState([]);
   const [tab,              setTab]              = useState("Chat");
+  const [kitOpen,          setKitOpen]          = useState(false);
   // Iter 212m-143 — Track preview window state so the topbar "Preview"
   // tab can TOGGLE: click once → open, click again → close. Previously
   // every click hard-set `open: true` so a second click was a no-op.
@@ -597,6 +599,9 @@ function DashboardV2Body() {
                 return;
               }
               setTab(next);
+              if (next === "Kit") {
+                setKitOpen(true);
+              }
               if (next === "Graph") {
                 // Iter 212m-106 — opens the existing GraphPanel drawer
                 // (force-directed nodes of the active project's repo).
@@ -612,6 +617,7 @@ function DashboardV2Body() {
                 window.dispatchEvent(new CustomEvent("aurem:toggle-graph", {
                   detail: { open: false },
                 }));
+                setKitOpen(false);
               }
             }}
             hidden={false}
@@ -688,6 +694,20 @@ function DashboardV2Body() {
       {showWizard && <NewUserWizard onComplete={onWizardComplete} />}
       {/* Iter 212m-200 — Connect-Repo interactive tour overlay. */}
       {tourOpen && <ConnectRepoTour onClose={() => setTourOpen(false)} />}
+
+      {/* 2026-08-30 — Visibility Kit visual panel (spec §6), the
+          "Kit" tab. Only renders when a project with a repo is active
+          (TopBar's own TABS.filter already hides the tab otherwise). */}
+      {kitOpen && activeProject?.project_id && (
+        <VisibilityKitPanel
+          projectId={activeProject.project_id}
+          siteDomain={(() => {
+            try { return activeProject.preview_url ? new URL(activeProject.preview_url).hostname : null; }
+            catch { return null; }
+          })()}
+          onClose={() => { setKitOpen(false); setTab("Chat"); }}
+        />
+      )}
 
       {/* 2026-08-20 — bug fix: this modal was imported but never
           rendered, so clicking Preview on a project with no

@@ -734,3 +734,60 @@ recall), session isolation (fresh session leaks nothing), session
 switch-back (recalls the right session), Issue A/B regression checks —
 6/6 live scenarios PASS, 0 bugs, 0 action items
 (`/app/test_reports/iteration_issue_c_memory_multiturn_2026_08_30.json`).
+
+## VISIBILITY KIT — PHASE 1 BUILT, testing_agent verified (2026-08-30)
+
+Backend for this already existed (20+ rounds old: `services/visibility/*`,
+`routers/visibility.py`, `migrations/003_visibility_kit.py`, `loop_safety.py`'s
+`visibility_kit_pr_events` webhook plumbing) — never had a frontend. This
+round: built the missing VISUAL PANEL + the 2 previously-not-implemented
+generators (`preferred_sources` badge, `llms_txt`) + an R9-gate + admin tile.
+
+**Founder's 4 resolutions this round**: (1) R9 NOT live — built full Kit,
+Apply gated behind new `kit_apply_enabled` flag, DEFAULT OFF, seeded in
+`init_prod_collections.py`; only a real ship + the failure-rate dig can
+un-gate it, not the flag being on. (2) Preferred Sources badge —
+web-searched Google's real current docs (confirmed 2026-08-30):
+`<script async src="https://news.google.com/swg/js/v1/publisher.js">`,
+`<div google-add-preferred-source-btn data-theme="light" data-lang="en">`,
+deeplink fallback `google.com/preferences/source?q={domain}` always
+rendered beside it (no-silent-fail). (3) Scope — Phase 1 (build+test) now;
+Phase 2 (real live PR->merge->revert on `ora-grounding`) explicitly
+DEFERRED, awaiting founder go-ahead. (4) Admin citation-data section is an
+honest placeholder ("No citation data yet — day-14 recheck pending (~Sept
+11)") — zero fake numbers, A7 wiring NOT built this round.
+
+**Built**: `VisibilityKitPanel.jsx` (readiness donut, 7 rows, canonical
+5-chip set, Apply CTA + per-row Apply fully R9-gated both client- and
+server-side, badge code preview, advisory "View report" modal), new "Kit"
+tab in `TopBar.jsx`, `AdminVisibilityKit.jsx` tile (`/admin/visibility-kit`).
+Backend: `services/visibility/preferred_sources.py` + `llms_txt.py` (both
+deterministic, 0 LLM tokens), wired into `apply.py`'s `IMPLEMENTED_AUTO_ITEMS`
+(now all 5 auto items done, 0 remaining `NOT_YET_IMPLEMENTED`). R9-gate
+added to `POST .../apply` (403 before the billing-tier gate) and exposed
+via `apply_enabled`/`apply_disabled_reason` on `GET .../state`. New
+`GET /admin/visibility-kit/dashboard` admin endpoint.
+
+**Failure-rate dig (parallel, per founder's ask)**: discovered
+`/admin/loop-metrics` ALREADY has an owner-classification breakdown
+(founder/admin/test/user/orphan) + a documented priority rule ("P0 live
+regression if `delta_failed_ratio > +0.05` OR `failed_owner_counts.user
+>= 3`; otherwise fixture-shape/dogfood signal") — no new endpoint needed.
+Founder's earlier paste only had the aggregate numbers (33.3%→54.5%,
++21.2pp), not the `failed_owner_counts`/`failed_sample` breakdown needed
+to apply that rule. **Action needed**: re-run `GET /admin/loop-metrics` on
+production and paste the FULL response (esp. `failed_owner_counts`) —
+verdict (real regression vs. testing noise) will be given from that.
+
+**Tests**: 21 new (`test_visibility_kit_v2_2026_08_30.py`) + 1 existing
+test updated for the new gate ordering, 37 total pass, 0 regressions.
+`testing_agent` verified live: state/apply endpoints correctly R9-gated,
+panel renders with real data, Apply provably inert everywhere (no way to
+trigger a real PR from the UI), advisory report modal works, badge
+preview shows the real SDK. Found + fixed 1 bug: `visibility_kit` was
+missing from `Admin.jsx`'s icon map, crashing `/admin/visibility-kit` —
+fixed (`Sparkles` icon added). 0 remaining issues
+(`/app/test_reports/iteration_visibility_kit_panel_2026_01_31.json`).
+
+**Phase 2 (live 13-step E2E on `ora-grounding`) is NOT started** — awaiting
+founder review of this Phase 1 report + the failure-rate dig re-run.

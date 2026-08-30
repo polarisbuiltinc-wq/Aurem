@@ -3,12 +3,13 @@
  */
 import React, { useEffect, useState } from "react";
 import { cn } from "./cn";
-import { MessagesSquare, MonitorPlay, Workflow, ChevronRight, Plus } from "lucide-react";
+import { MessagesSquare, MonitorPlay, Workflow, ChevronRight, Plus, Sparkles } from "lucide-react";
 
 const TABS = [
   { id: "Chat",    icon: MessagesSquare },
   { id: "Preview", icon: MonitorPlay },
   { id: "Graph",   icon: Workflow },
+  { id: "Kit",     icon: Sparkles },
 ];
 
 function HealthRing({ score = 87 }) {

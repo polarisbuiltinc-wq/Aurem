@@ -68,9 +68,16 @@ async def get_state(project_id: str, authorization: str = Header(None)):
     policy = await db.visibility_bot_policies.find_one(
         {"project_id": project_id}, {"_id": 0},
     )
+    from services.feature_flags import is_enabled as _kit_flag_enabled
+    apply_enabled = await _kit_flag_enabled("kit_apply_enabled", user_id=user["user_id"])
     return {
         "ok": True, "score": score, "items": rows,
         "bot_policy": (policy or {}).get("training_choice", {}),
+        "apply_enabled": apply_enabled,
+        "apply_disabled_reason": (
+            None if apply_enabled else
+            "Apply available once ship-via-PR (R9) is proven live on production."
+        ),
     }
 
 
@@ -109,6 +116,18 @@ async def apply_kit(project_id: str, body: ApplyBody, authorization: str = Heade
     )
     if not proj:
         raise HTTPException(404, "project_not_found_or_not_yours")
+
+    # 2026-08-30 — R9-gate. Apply opens a real PR against the user's repo
+    # via the SAME ship-via-PR path R9 governs. Master kill-switch, DEFAULT
+    # OFF, independent of the billing-tier gate below — flipped ON only
+    # once R9 is proven live on production (a real ship, PR->merge->Live,
+    # not just the flag being on). See LOOP-STATE.md R9 carry-forward note.
+    from services.feature_flags import is_enabled as _kit_flag_enabled
+    if not await _kit_flag_enabled("kit_apply_enabled", user_id=user["user_id"]):
+        raise HTTPException(403, {
+            "error": "apply_not_yet_enabled",
+            "message": "Apply available once ship-via-PR (R9) is proven live on production.",
+        })
 
     dev_row = await db.dev_users.find_one({"user_id": user["user_id"]}, {"_id": 0, "tier": 1})
     tier = (dev_row or {}).get("tier") or "free"

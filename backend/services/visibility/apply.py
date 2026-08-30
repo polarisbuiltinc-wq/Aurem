@@ -6,13 +6,11 @@ mechanism verbatim (services/loop_safety.py + services/github_api_writer.py,
 the exact primitives the T7 ship-via-PR drill already proved live) →
 PR body per R14 → upsert VisibilityState + VisibilityApplication.
 
-v1 scope (2026-08-28): implements the 3 fully-deterministic, zero-LLM
-AUTO items — ai_crawler_policy, structured_data, sitemap_auto (R9/R15:
-"thin implementation" — these need no LLM call at all). `preferred_sources`
-and `llms_txt` generators are NOT yet built; requesting them returns
-them in `not_implemented`, never silently drops them (R2 — no silent
-failures). Advisory items (f, g) are never applied — always excluded,
-per R3.
+v2 scope (2026-08-30): all 5 AUTO items are now implemented, all
+fully deterministic/zero-LLM (R9/R15) — ai_crawler_policy,
+structured_data, sitemap_auto, preferred_sources (Google's real SDK,
+docs-verified), llms_txt (llms.txt + llms-full.txt). Advisory items
+(f, g) are never applied — always excluded, per R3.
 """
 from __future__ import annotations
 
@@ -24,11 +22,23 @@ from services.loop_safety import create_or_reuse_branch, open_draft_pr, ship_bra
 from services.visibility import robots as robots_gen
 from services.visibility import schema as schema_gen
 from services.visibility import sitemap as sitemap_gen
+from services.visibility import preferred_sources as badge_gen
+from services.visibility import llms_txt as llms_gen
 from services.visibility.detect import detect_framework
 
-IMPLEMENTED_AUTO_ITEMS = {"ai_crawler_policy", "structured_data", "sitemap_auto"}
-NOT_YET_IMPLEMENTED = {"preferred_sources", "llms_txt"}
+IMPLEMENTED_AUTO_ITEMS = {
+    "ai_crawler_policy", "structured_data", "sitemap_auto",
+    "preferred_sources", "llms_txt",
+}
+NOT_YET_IMPLEMENTED: set[str] = set()
 ADVISORY_ITEMS = {"answer_blocks", "image_quick_wins"}
+
+
+def _domain_from_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    from urllib.parse import urlparse
+    return urlparse(url).netloc or None
 
 
 async def apply_visibility_kit(
@@ -81,6 +91,33 @@ async def apply_visibility_kit(
     if "sitemap_auto" in to_apply:
         existing_sitemap = await fetch_file(owner, repo, "sitemap.xml", base_branch, token)
         files["sitemap.xml"] = sitemap_gen.merge_lastmod(existing_sitemap, scan_urls, scan_date)
+
+    if "preferred_sources" in to_apply:
+        html_path = site_meta.get("html_entry_path") or "index.html"
+        existing_html_ps = files.get(html_path) or await fetch_file(owner, repo, html_path, base_branch, token)
+        domain = site_meta.get("domain") or _domain_from_url((site_meta.get("schema") or {}).get("url"))
+        site_name = (site_meta.get("schema") or {}).get("name")
+        if existing_html_ps is None:
+            item_conflicts["preferred_sources"] = f"{html_path} not found in this repo"
+        elif not domain:
+            item_conflicts["preferred_sources"] = "no site URL/domain on file — cannot build the deeplink"
+        elif badge_gen._START not in existing_html_ps and "</body>" not in existing_html_ps and not force:
+            item_conflicts["preferred_sources"] = f"{html_path} has no </body> to inject into"
+        else:
+            files[html_path] = badge_gen.apply_managed_block(existing_html_ps, domain, site_name)
+
+    if "llms_txt" in to_apply:
+        existing_llms = await fetch_file(owner, repo, "llms.txt", base_branch, token)
+        site_name = (site_meta.get("schema") or {}).get("name") or (site_meta.get("domain") or "this site")
+        site_url = (site_meta.get("schema") or {}).get("url") or site_meta.get("domain") or ""
+        llms_content, llms_full_content, conflict = llms_gen.apply_llms_files(
+            existing_llms, site_name, site_url, scan_urls,
+        )
+        if conflict and not force:
+            item_conflicts["llms_txt"] = "llms.txt already exists without an AUREM marker"
+        else:
+            files["llms.txt"] = llms_content
+            files["llms-full.txt"] = llms_full_content
 
     conflicts = list(item_conflicts.values())
     if not files:
@@ -143,12 +180,20 @@ async def apply_visibility_kit(
 def _render_pr_body(applied: list[str], advisory: list[str], paths: list[str], branch: str) -> str:
     changes = "\n".join(f"- {p} (managed block)" for p in paths)
     advisory_line = (f"Advisory (not applied): {advisory} → see report" if advisory else "")
+    csp_note = (
+        "\n### Note\nIf this site sends a Content-Security-Policy header, "
+        "add `news.google.com` to `script-src` or the Preferred Sources "
+        "button script will be blocked (the deeplink fallback link still "
+        "works either way).\n"
+        if "preferred_sources" in applied else ""
+    )
     return (
         f"## Visibility Kit ({', '.join(applied)}) — by AUREM\n"
         f"Adds: {applied}\n"
         f"{advisory_line}\n"
         f"### Changes\n{changes}\n"
+        f"{csp_note}"
         f"### Revert\ngh branch delete {branch}\n"
-        f"_Created by AUREM. No user copy was modified. "
+        f"_Created by AUREM Visibility Kit. No user copy was modified. "
         f"Training-bot choices per settings._\n"
     )

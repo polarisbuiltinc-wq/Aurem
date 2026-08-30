@@ -898,3 +898,4 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 ### Iter 0 · 2026-08-30
 
 - `services/github_bulk_revoke.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-30T12:59:52.525263Z] <!-- inv:service:services/github_bulk_revoke.py -->
+- `services/session_summary.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-30T21:43:10.524620Z] <!-- inv:service:services/session_summary.py -->

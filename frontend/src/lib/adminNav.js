@@ -26,6 +26,7 @@ export const ADMIN_NAV = [
   { id: "arch",            label: "Architecture",         route: "/admin/architecture",   group: "MONITOR" },
   { id: "bin_tracker",     label: "BIN Tracker",          route: "/admin/bin-tracker",    group: "USERS" },
   { id: "github_bulk_revoke", label: "GitHub Bulk Revoke", route: "/admin/github-bulk-revoke", group: "USERS" },
+  { id: "visibility_kit",  label: "Visibility Kit",       route: "/admin/visibility-kit", group: "USERS" },
   { id: "users",           label: "Users (Legacy)",       route: "/admin/users",          group: "USERS" },
   { id: "support",         label: "Support",              route: "/admin/support",        group: "USERS" },
   { id: "suggestions",     label: "Suggestions",          route: "/admin/suggestions",    group: "USERS" },

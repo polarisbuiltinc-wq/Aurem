@@ -2070,6 +2070,73 @@ async def loop_metrics(
     }
 
 
+@router.get("/visibility-kit/dashboard")
+async def visibility_kit_admin_dashboard(authorization: Optional[str] = Header(None)):
+    """2026-08-30 — Visibility Kit admin tile (spec §6). Per-project kit
+    status across every project that has ANY visibility_states row (i.e.
+    has been scanned at least once), pass rate (score>=1 / total scanned),
+    last-failure hint. Citation-data section is an HONEST PLACEHOLDER —
+    A7's day-14 recheck was never wired in this round (founder's explicit
+    call, Q4 (b)): no fake numbers, ever."""
+    await _require_admin(authorization)
+    db = require_db()
+
+    catalog = await db.visibility_items.find({}, {"_id": 0}).to_list(length=20)
+    weight_by_key = {c["key"]: c.get("weight", 0) for c in catalog}
+    total_weight = sum(weight_by_key.values()) or 1
+
+    project_ids = await db.visibility_state.distinct("project_id")
+    rows: list = []
+    for pid in project_ids:
+        states = await db.visibility_state.find(
+            {"project_id": pid}, {"_id": 0},
+        ).to_list(length=20)
+        earned = 0
+        applied_keys: list = []
+        pending_keys: list = []
+        for s in states:
+            status = s.get("status") or "missing"
+            key = s.get("item_id")
+            w = weight_by_key.get(key, 0)
+            if status in ("pr_merged", "live"):
+                earned += w
+                applied_keys.append(key)
+            elif status == "pr_created":
+                earned += w * 0.5
+                pending_keys.append(key)
+        score = round(100 * earned / total_weight) if total_weight else 0
+        proj = await db.cto_projects.find_one(
+            {"project_id": pid}, {"_id": 0, "user_id": 1, "github_owner": 1, "github_repo": 1},
+        )
+        user_doc = await db.dev_users.find_one(
+            {"user_id": (proj or {}).get("user_id")}, {"_id": 0, "email": 1},
+        ) if proj else None
+        rows.append({
+            "project_id": pid,
+            "repo": f"{(proj or {}).get('github_owner','')}/{(proj or {}).get('github_repo','')}",
+            "user_email": (user_doc or {}).get("email") or "(unknown)",
+            "score": score,
+            "applied_items": applied_keys,
+            "pending_items": pending_keys,
+            "live": score > 0,
+        })
+    rows.sort(key=lambda r: -r["score"])
+    pass_rate = (
+        round(100 * sum(1 for r in rows if r["score"] > 0) / len(rows))
+        if rows else 0
+    )
+    return {
+        "ok": True,
+        "projects": rows,
+        "pass_rate_pct": pass_rate,
+        "total_projects_scanned": len(rows),
+        "citation_data": {
+            "available": False,
+            "message": "No citation data yet — day-14 recheck pending (~Sept 11).",
+        },
+    }
+
+
 @router.get("/preview-deploy-monitor")
 async def preview_deploy_monitor(
     authorization: Optional[str] = Header(None),

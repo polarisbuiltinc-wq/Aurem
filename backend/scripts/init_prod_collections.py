@@ -485,6 +485,9 @@ async def init_prod_collections(db) -> dict:
         {"flag": "github_bulk_revoke_live_verified", "enabled": False,
          "tier_allowlist": [], "user_allowlist": [],
          "description": "Master kill-switch for the admin bulk GitHub-App revoke tool (/admin/github/bulk-revoke). OFF until the drill-repo live verify (U1-U6: real DELETE /app/installations/{id} behavior) is CONFIRMED against a disposable installation — see GITHUB_BULK_REVOKE_DRILL_VERIFY.md. Flip ON only after that live test."},
+        {"flag": "kit_apply_enabled", "enabled": False,
+         "tier_allowlist": [], "user_allowlist": [],
+         "description": "Master kill-switch for the Visibility Kit's Apply button (POST /visibility/projects/{id}/apply — opens a real PR via the ship-via-PR/R9 path). OFF until R9 is proven live on production (a real ship completing PR->merge->Live, not just the R9 flag being on) — see LOOP-STATE.md R9 carry-forward note. Flip ON only after that proof."},
     ]
     inserted_flags: list[str] = []
     for _spec in _SEED_FLAGS:
