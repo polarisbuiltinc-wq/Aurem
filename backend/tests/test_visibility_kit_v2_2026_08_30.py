@@ -10,7 +10,15 @@ Named tests (join the existing test_visibility_kit.py guardrail suite):
   t_kit_apply_preserves_existing_files — an existing llms.txt is NOT overwritten without force
   t_kit_branding_in_correct_places    — code comment + llms.txt marker + PR body wording; no fake claims
   t_kit_admin_honest_placeholder      — admin dashboard's citation section is a real placeholder, never fake numbers
+
+2026-08-30 KIT TRUTH-UPDATE (copy honesty patch, no schema/reweight change):
+  t_kit_llms_row_honest       — llms_txt row discloses Google ignores it, weight stays 15
+  t_kit_pref_sources_is_hero  — preferred_sources stays the top-weighted (25) per-visitor badge
+  t_kit_score_not_overclaimed — panel note frames the score as a preparedness checklist, not live tracking
+  t_kit_no_oversell_number    — no bare unsourced customer-facing stat anywhere in the catalog copy
 """
+import importlib
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -18,6 +26,13 @@ import pytest
 from services.visibility import preferred_sources as badge_gen
 from services.visibility import llms_txt as llms_gen
 from services.visibility import robots as robots_gen
+
+_CATALOG = importlib.import_module("migrations.003_visibility_kit").CATALOG_ITEMS
+_FRONTEND_PANEL = Path(__file__).resolve().parents[2] / "frontend/src/components/VisibilityKitPanel.jsx"
+
+
+def _catalog_item(key: str) -> dict:
+    return next(i for i in _CATALOG if i["key"] == key)
 
 
 # ── t_kit_badge_component_generated ─────────────────────────────────
@@ -272,3 +287,42 @@ async def test_t_kit_admin_honest_placeholder():
         isinstance(v, (int, float)) and not isinstance(v, bool)
         for v in out["citation_data"].values()
     )
+
+
+# ── 2026-08-30 KIT TRUTH-UPDATE ───────────────────────────────────────
+def test_t_kit_llms_row_honest():
+    item = _catalog_item("llms_txt")
+    assert item["weight"] == 15
+    assert "Google ignores it" in item["what_why"]
+    assert "Claude" in item["what_why"] and "ChatGPT" in item["what_why"]
+    # the old, unsourced "~4% of major sites" claim must be gone.
+    assert "%" not in item["what_why"]
+
+
+def test_t_kit_pref_sources_is_hero():
+    item = _catalog_item("preferred_sources")
+    assert item["weight"] == 25
+    assert item["weight"] == max(i["weight"] for i in _CATALOG)
+    assert "PER-VISITOR" in item["what_why"]
+    assert "not a global ranking signal" in item["what_why"]
+    assert "badge" in item["what_why"].lower()
+    assert "Top Stories" in item["what_why"]
+
+
+def test_t_kit_score_not_overclaimed():
+    panel_src = _FRONTEND_PANEL.read_text()
+    assert "preparedness checklist, not live citation tracking" in panel_src
+    assert "kit-score-note" in panel_src
+    assert "Others measure your AI visibility. AUREM fixes it" in panel_src
+    assert "kit-positioning-line" in panel_src
+
+
+def test_t_kit_no_oversell_number():
+    all_copy = " ".join(i["what_why"] for i in _CATALOG)
+    # the old, unsourced "~4% of major sites ship one" stat must be gone.
+    assert "% of" not in all_copy
+    # the one customer-facing performance stat that remains (2x clicks)
+    # must be phrased as an attributed claim, never a flat fact.
+    assert "2x the clicks" in all_copy
+    assert "Google reports preferred links get about 2x the clicks" in all_copy
+    assert "(May 2026)" in all_copy  # sourced/dated, not a bare assertion

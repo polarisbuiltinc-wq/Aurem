@@ -791,3 +791,120 @@ fixed (`Sparkles` icon added). 0 remaining issues
 
 **Phase 2 (live 13-step E2E on `ora-grounding`) is NOT started** — awaiting
 founder review of this Phase 1 report + the failure-rate dig re-run.
+
+
+## KIT TRUTH-UPDATE + Phase 2 attempt (2026-08-30, this round)
+
+**KIT TRUTH-UPDATED.** Copy patch, no schema/reweight change:
+- `llms_txt` row: weight stays 15. Before → After (both catalog file
+  AND the live seeded `visibility_items` DB row — see HONEST-COPY
+  CHECK below): "A curated map of your site that AI assistants
+  fetch. Claude & Perplexity confirm they use it; ~4% of major sites
+  ship one — your competitors haven't. No downside if you're wrong."
+  → "A map of your site that helps Claude, ChatGPT and coding agents
+  find you. Google ignores it for Search and AI Overviews. Cheap to
+  add, low-risk, useful for the assistants that do read it."
+- `preferred_sources` row: weight stays 25 (still the top-weighted
+  hero item). Before → After: "Let your visitors make your site a
+  'preferred source' on Google. For them, your links then get a
+  'preferred' badge in AI Mode & AI Overviews, and you appear more in
+  Top Stories. Google reports these links are clicked 2x more. ~2
+  minutes to install." → "Your visitors can mark you a 'preferred
+  source' on Google — a PER-VISITOR choice, not a global ranking
+  signal. Once they do, they see a 'preferred' badge on your links in
+  AI Mode, AI Overviews and Top Stories. Google reports preferred
+  links get about 2x the clicks (May 2026). ~2 minutes to install."
+- `VisibilityKitPanel.jsx` — 2 new lines, both previously absent:
+  score note under the donut ("This is a preparedness checklist, not
+  live citation tracking.", `data-testid="kit-score-note"`) and a
+  positioning line under the header ("Others measure your AI
+  visibility. AUREM fixes it — and we ship the fix.",
+  `data-testid="kit-positioning-line"`).
+- Escape key now closes the panel (and its report/confirm sub-modals
+  first, if open) — small addition, no new component.
+
+**HONEST-COPY CHECK result: the OLD copy WAS what was actually shipped.**
+The migration *file* (`migrations/003_visibility_kit.py`) already had
+the honest wording from an earlier edit this fork, but `GET
+/visibility/catalog` and `/state` read from the SEEDED
+`visibility_items` Mongo collection, not the file directly — and that
+collection still had the stale copy above (confirmed by a direct read
+before touching anything). Fixed by running the existing, idempotent
+`VisibilityKitMigration.up()` against this pod's real DB (via the
+same Motor/`.env` init pattern `main.py` itself uses — not the two
+earlier broken standalone-script attempts). Re-read both rows after:
+DB now matches the honest file copy exactly (pasted above). No
+schema change, upsert-by-key only, safe to re-run.
+
+**Named tests, all 4 green** (`tests/test_visibility_kit_v2_2026_08_30.py`):
+`test_t_kit_llms_row_honest`, `test_t_kit_pref_sources_is_hero`,
+`test_t_kit_score_not_overclaimed`, `test_t_kit_no_oversell_number`.
+Full file + `test_visibility_kit.py`: 28/28 pass, 0 regressions.
+
+**Customer-facing numbers audit**: exactly one remains in the catalog
+copy — "Google reports preferred links get about 2x the clicks (May
+2026)" — dated + attributed to Google, not a flat AUREM claim. The
+old unsourced "~4% of major sites ship one" stat is gone. No other
+digit-bearing customer claim exists in the 7-row catalog.
+
+**PHASE 2 — NOT RUN, hard live blocker found (confirmed, not guessed).**
+Checked connectivity via the ACTUAL running backend (not a standalone
+script, so the boot-hydrated GitHub App JWT cache is real) —
+`GET /cto/projects/connection-status` as test@aurem.dev returns **0 of
+46** projects `connected` right now, including every `ora-grounding`
+row (`polarisbuiltinc-wq/ora-grounding`, installation `152797252`) —
+all show `status: "disconnected", error: "github_rejected"`. This is
+wider than the previously-documented "ora-grounding specifically
+unreachable" gap (which is why earlier rounds substituted
+`TJSNDHU/Aurem`) — right now NOTHING is connectable from this Preview
+pod, `TJSNDHU/Aurem` included per the same call. Root cause is at the
+GitHub-App-credential/installation level (the App's own JWT or a
+mass-revoke on GitHub's side), not this pod's code — `admin_settings.
+github_app_config` has app_id/private_key/webhook_secret all present,
+so it's not a "never configured" gap either. **Did not attempt the
+13-step drill against a repo I cannot reach — that would only
+produce fabricated/fake artifacts.** Kit engine's file-generation
+code (badge/robots/llms.txt/sitemap/JSON-LD) already has non-live
+unit-test coverage (28/28 above); only the real GitHub PR/merge/
+revert leg needs a reachable installation, which is currently 0-for-46.
+
+**Action needed from founder**: re-verify the AUREM DevOps GitHub App
+install (github.com/settings/apps/aurem-devops/installations, or
+production's own Admin → GitHub App card) — confirm at least one
+installation among the 46 preview project rows is actually still
+authorized, or reconnect one. Phase 2 resumes the moment any repo
+shows `connected: true` on this pod.
+
+**Live Score Preview (Q4) — answered, not built.** Read `GET
+/state`'s scoring code (`routers/visibility.py::get_state`): an item
+only earns weight when its `visibility_state.status` is
+`pr_created`/`pr_merged`/`live` — there is no "detected-but-unshipped"
+credit anywhere in the formula. A fresh, never-applied project's every
+item is `status="missing"` → score is always exactly **0** before any
+Apply. That is answer **(b) APPLIED-STATE** ("what's been shipped"),
+not (a) diagnostic-readiness. Rationale for NOT building "show score
+instantly after scan": it would show 0 for every single new user by
+construction, which is not informative and would look broken — the
+already-existing per-row "Missing"/"Needs you" chips (spec §6) are the
+honest pre-apply UX, no new surface needed. Low priority, did not
+block anything else this round.
+
+**Apply button**: unchanged, still `kit_apply_enabled: enabled=false`
+(re-confirmed via direct DB read, no flag touched this round).
+Un-gate criteria unchanged: Phase 2 green (blocked above) AND the
+failure-rate verdict (still awaiting founder's full `/admin/
+loop-metrics` `failed_owner_counts` paste — not received this round,
+no verdict given).
+
+**Regression**: no-new-vs-baseline — only files touched this round
+were `VisibilityKitPanel.jsx` (2 copy lines + 1 keydown effect) and
+the DB content push (idempotent upsert, no code path changed). Ran
+`test_visibility_kit_v2_2026_08_30.py` + `test_visibility_kit.py`
+(28/28 pass) and confirmed frontend hot-reload compiled clean (no
+new console/supervisor errors). No live E2E run, per founder's
+explicit instruction for the truth-update patch.
+
+**STOP**, per founder's instruction, pending: (1) founder's
+loop-metrics paste for the failure-rate verdict, (2) founder
+reconnecting/re-verifying a GitHub App installation before Phase 2 can
+be attempted for real.

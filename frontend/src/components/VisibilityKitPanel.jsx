@@ -193,6 +193,17 @@ export default function VisibilityKitPanel({ projectId, siteDomain, onClose }) {
   const [confirmItem, setConfirmItem] = useState(null); // item object, or "ALL"
   const [reportItem, setReportItem] = useState(null);
 
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== "Escape") return;
+      if (confirmItem) { setConfirmItem(null); return; }
+      if (reportItem) { setReportItem(null); return; }
+      onClose?.();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [confirmItem, reportItem, onClose]);
+
   const load = useCallback(async () => {
     try {
       const { data } = await api.get(`/visibility/projects/${projectId}/state`);
@@ -228,11 +239,18 @@ export default function VisibilityKitPanel({ projectId, siteDomain, onClose }) {
     <div data-testid="visibility-kit-panel" style={overlayStyle} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ ...cardStyle, width: 720, maxHeight: "88vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Sparkles size={18} style={{ color: "#4ADE80" }} />
-            <h2 style={{ fontFamily: "Jost, sans-serif", fontSize: 19, fontWeight: 600, color: TEXT, margin: 0 }}>
-              Visibility Kit
-            </h2>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <Sparkles size={18} style={{ color: "#4ADE80" }} />
+              <h2 style={{ fontFamily: "Jost, sans-serif", fontSize: 19, fontWeight: 600, color: TEXT, margin: 0 }}>
+                Visibility Kit
+              </h2>
+            </div>
+            <p data-testid="kit-positioning-line" style={{
+              fontFamily: "Jost, sans-serif", fontSize: 12, color: MUTED, margin: "6px 0 0",
+            }}>
+              Others measure your AI visibility. AUREM fixes it — and we ship the fix.
+            </p>
           </div>
           <button data-testid="kit-panel-close" onClick={onClose}
             style={{ background: "transparent", border: "none", color: MUTED, cursor: "pointer" }}>
@@ -250,6 +268,9 @@ export default function VisibilityKitPanel({ projectId, siteDomain, onClose }) {
               {readyCount > 0
                 ? `${readyCount} fix${readyCount > 1 ? "es" : ""} ready as one PR.`
                 : "Everything auto-applicable is already Done or In review."}
+            </p>
+            <p data-testid="kit-score-note" style={{ color: MUTED, fontSize: 11.5, margin: "6px 0 0" }}>
+              This is a preparedness checklist, not live citation tracking.
             </p>
             {!state.apply_enabled && (
               <div data-testid="kit-apply-disabled-banner" style={{

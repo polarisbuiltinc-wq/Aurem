@@ -19,10 +19,11 @@ CATALOG_ITEMS: list[dict] = [
         "key": "preferred_sources", "weight": 25, "mode": "auto",
         "name": "Preferred Sources badge",
         "what_why": (
-            "Let your visitors make your site a 'preferred source' on Google. "
-            "For them, your links then get a 'preferred' badge in AI Mode & AI "
-            "Overviews, and you appear more in Top Stories. Google reports "
-            "these links are clicked 2x more. ~2 minutes to install."
+            "Your visitors can mark you a 'preferred source' on Google — a "
+            "PER-VISITOR choice, not a global ranking signal. Once they do, "
+            "they see a 'preferred' badge on your links in AI Mode, AI "
+            "Overviews and Top Stories. Google reports preferred links get "
+            "about 2x the clicks (May 2026). ~2 minutes to install."
         ),
         "frameworks": ["next", "react", "static"], "sort": 1,
     },
@@ -50,9 +51,10 @@ CATALOG_ITEMS: list[dict] = [
         "key": "llms_txt", "weight": 15, "mode": "auto",
         "name": "/llms.txt + /llms-full.txt",
         "what_why": (
-            "A curated map of your site that AI assistants fetch. Claude & "
-            "Perplexity confirm they use it; ~4% of major sites ship one — "
-            "your competitors haven't. No downside if you're wrong."
+            "A map of your site that helps Claude, ChatGPT and coding "
+            "agents find you. Google ignores it for Search and AI "
+            "Overviews. Cheap to add, low-risk, useful for the assistants "
+            "that do read it."
         ),
         "frameworks": ["next", "react", "static", "unknown"], "sort": 4,
     },
