@@ -60,9 +60,14 @@ export default function ConnectRepoBanner({ onConnect, onProjectCreated }) {
   const hasZeroRepos = installationActive && installations.length > 0 && allRepos.length === 0;
   const [creatingRepo, setCreatingRepo] = useState(null);
   const [createErr, setCreateErr] = useState("");
+  // 2026-09-01 — connect-flow refinement: D2 (already-added redirect)
+  // + D3 (short "Connected ✓" beat before landing, standard pattern).
+  const [successRepo, setSuccessRepo] = useState(null);
+  const [alreadyConnected, setAlreadyConnected] = useState(null); // {repo, projectId, projectName}
 
   const createProjectFromRepo = useCallback(async (repo) => {
     setCreateErr("");
+    setAlreadyConnected(null);
     setCreatingRepo(repo.full_name);
     try {
       const name = repo.full_name.split("/").pop();
@@ -74,9 +79,19 @@ export default function ConnectRepoBanner({ onConnect, onProjectCreated }) {
         installation_id: repo.installation_id,
       });
       trackFunnel("app_repo_selected", "banner", { full_name: repo.full_name });
-      onProjectCreated?.(r.data?.project_id);
+      const newProjectId = r.data?.project_id;
+      setSuccessRepo(repo.full_name);
+      setTimeout(() => { onProjectCreated?.(newProjectId); }, 1000);
     } catch (e) {
       const detail = e?.response?.data?.detail;
+      if (typeof detail === "object" && detail?.error === "already_connected") {
+        setAlreadyConnected({
+          repo: repo.full_name,
+          projectId: detail.project_id,
+          projectName: detail.project_name,
+        });
+        return;
+      }
       setCreateErr(
         (typeof detail === "object" && detail?.message) ? detail.message
           : (typeof detail === "string" ? detail : "Could not connect that repo — try again."),
@@ -214,6 +229,37 @@ export default function ConnectRepoBanner({ onConnect, onProjectCreated }) {
         <div data-testid="connect-repo-banner-repo-picker" style={{
           paddingTop: 10, borderTop: "1px dashed rgba(234,179,8,0.30)",
         }}>
+          {successRepo ? (
+            <div data-testid="connect-repo-banner-success-beat" style={{
+              display: "flex", alignItems: "center", gap: 8,
+              fontSize: 12.5, color: "#22c55e", fontWeight: 600,
+            }}>
+              <span style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 18, height: 18, borderRadius: "50%",
+                background: "rgba(34,197,94,0.16)", fontSize: 11,
+              }}>✓</span>
+              Connected — taking you to {successRepo} now…
+            </div>
+          ) : alreadyConnected ? (
+            <div data-testid="connect-repo-banner-already-connected" style={{
+              display: "flex", flexDirection: "column", gap: 8,
+            }}>
+              <div style={{ fontSize: 12.5, color: "var(--text-dim, #b8b8b8)" }}>
+                <strong>{alreadyConnected.repo}</strong> is already your project{" "}
+                <strong>{alreadyConnected.projectName}</strong>.
+              </div>
+              <button
+                type="button"
+                data-testid="connect-repo-banner-open-existing-btn"
+                onClick={() => onProjectCreated?.(alreadyConnected.projectId)}
+                className="btn-primary"
+                style={{ alignSelf: "flex-start", padding: "6px 12px", fontSize: 12, fontWeight: 600 }}
+              >
+                Open my {alreadyConnected.repo} project →
+              </button>
+            </div>
+          ) : (<>
           {createErr && (
             <div data-testid="connect-repo-banner-create-error" style={{
               fontSize: 12, color: "#ef4444", marginBottom: 8,
@@ -244,6 +290,7 @@ export default function ConnectRepoBanner({ onConnect, onProjectCreated }) {
               </button>
             ))}
           </div>
+          </>)}
         </div>
       )}
 

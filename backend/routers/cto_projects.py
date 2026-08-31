@@ -883,6 +883,29 @@ async def add_project(body: AddProject, authorization: str = Header(None)) -> di
         )
         raise HTTPException(status_code, payload)
 
+    # 2026-09-01 — D2 (connect-flow refinement): picking a repo that's
+    # ALREADY one of this user's projects used to either silently no-op
+    # or produce a confusing generic error (the "Michael-loop" — "I
+    # already connected, why is it saying connect again?"). Check BEFORE
+    # any GitHub verification call so a duplicate never even hits the
+    # network, and return the existing project so the UI can offer a
+    # direct "Open my project" redirect instead of a dead end.
+    existing = await db.cto_projects.find_one(
+        {
+            "user_id": me["user_id"],
+            "github_owner": {"$regex": f"^{re.escape(owner)}$", "$options": "i"},
+            "github_repo":  {"$regex": f"^{re.escape(repo)}$",  "$options": "i"},
+        },
+        {"_id": 0, "project_id": 1, "name": 1},
+    )
+    if existing:
+        await _fail(409, {
+            "error": "already_connected",
+            "message": f"'{owner}/{repo}' is already your project '{existing.get('name')}'.",
+            "project_id":   existing["project_id"],
+            "project_name": existing.get("name"),
+        }, "already_connected")
+
     # ═══════════════════════════════════════════════════════════════
     # 2026-02-10 · Phase 3a — dual-auth gate
     # ═══════════════════════════════════════════════════════════════

@@ -1,3 +1,29 @@
+## 2026-09-02 — Connect-flow REFINEMENT (on top of shipped Michael/Mike fix): standard success-beat UX, per-repo isolated projects, already-connected redirect
+
+Founder's correction on top of the earlier 12s "finishing up" design: use the STANDARD SaaS pattern (GitHub/Linear/Notion/Slack) instead — a short ~1s "Connected ✓" beat, then auto-land on the project. No blocking interstitial.
+
+**D3 — success beat, no 12s block:**
+- `routers/github_app.py` `_BRIDGE_HTML`: `window.close()` delay 12000ms → 1200ms (the false-denied race is already fixed at the root via `installation_active` in `useGitHubConnectStatus.js`, so this popup no longer needs to hold open).
+- `NewUserWizard.jsx` `submitRepo()`: on success, shows `wizard-success-beat` (checkmark + "Connected") for 1s, then `close()` (which sets the new project active + dismisses the wizard).
+- `ConnectRepoBanner.jsx` `createProjectFromRepo()`: same pattern, `connect-repo-banner-success-beat`, 1s then `onProjectCreated`.
+
+**D2 — already-connected redirect (fixes the Michael-loop UX for good):**
+- `cto_projects.py::add_project`: new check BEFORE dual-auth GitHub verification — case-insensitive `github_owner`/`github_repo` match against the user's existing projects. If found, returns 409 `{error: "already_connected", message, project_id, project_name}` instead of creating a duplicate or a generic error.
+- Both `NewUserWizard.jsx` and `ConnectRepoBanner.jsx` catch this and show "X is already your project Y" + "Open my project →" button (`wizard-open-existing-project-btn` / `connect-repo-banner-open-existing-btn`) that sets the existing project active and closes.
+
+**D1 — per-repo isolation (confirmed, not new logic):** every project-scoped query in `cto_projects.py` already filters by `{"project_id": ..., "user_id": me["user_id"]}` — a picker-created project inherits this automatically. Added regression tests proving cross-user isolation + that a 2nd picked repo creates a 2nd separate project (never merged).
+
+**Tests (all new, all passing):**
+- Backend: `tests/test_connect_flow_refinement_2026_09_02.py` (6 tests: already-connected 409 + case-insensitive + false-positive guard + isolation + separate-project + bridge-delay-short).
+- Backend: `tests/test_connect_bridge_close_delay_2026_09_01.py` rewritten (old ≥10s assertion superseded, now asserts <2s).
+- Frontend: `NewUserWizard.connectRefinement.test.jsx` (3 tests: success-beat-then-lands, no-12s-block, already-connected-redirect).
+- Frontend: `ConnectRepoBanner.reconciliation.test.jsx` updated for 1s beat timing + 1 new already-connected test.
+
+**Testing-agent verification:** `/app/test_reports/iteration_connect_flow_refinement_2026_09_02.json` — 34/34 backend + 10/10 frontend pass, `retest_needed: false`, Revoots orphan-recovery (`_recovered_user_id`, `github_app.py` lines 322-423) confirmed untouched, "ship-ready."
+
+**Unchanged from prior round:** Michael-class repo-picker, Mike-class "select your repos" (not denied), Bug-1 onboarding nudge, Justin/Jolene status still unconfirmed (do not claim fixed). No live GitHub OAuth E2E possible in preview (`key_state: STALE-ON-GITHUB`, known infra gap). No prod deploy by agent — founder deploys when ready. Do NOT DM Michael/Mike until deployed to production; HOLD Justin/Jolene until their data is confirmed.
+
+
 ## 2026-09-01 (final) — Connect-flow: unified reconciliation fix (both sub-causes) + testing-agent verified, then STOPPED per founder instruction
 
 **Confirmed diagnosis (from pulled production state, re-confirmed):** Michael (a1afe914...) = active install, 5 repos known, but `projects.count: 0` — repos exist, project never created; banner was re-running install instead of offering his already-connected repos. Mike (7371377d...) = active install, `repo_ids: []` at grant time; `/status` only reported "connected" once repos were non-empty, so the client inferred a false "denied" for a real success. Two DIFFERENT sub-causes, one shared theme: server-side install succeeded, frontend reconciliation gave up too early.

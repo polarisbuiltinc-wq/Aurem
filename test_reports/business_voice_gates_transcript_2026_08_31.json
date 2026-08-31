@@ -4,7 +4,7 @@
     {
       "turn": 1,
       "prompt": "hi, what can you do for my website?",
-      "reply": "I can help fix real issues in your website's content—just point me to the Your website's connection website's pages and tell me what needs attention!",
+      "reply": "I can help improve your website by fixing issues, optimizing content, and suggesting enhancements—just let me know what you need!",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -22,7 +22,7 @@
     {
       "turn": 2,
       "prompt": "please put our opening hours at the top of our main page",
-      "reply": "Got it—I'll move the opening hours to the top of the main page right away. Want me to adjust anything else while I'm at it?",
+      "reply": "Got it—I'll move the opening hours to the top of your main page right away. Want me to style them a certain way?",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -40,7 +40,7 @@
     {
       "turn": 3,
       "prompt": "9am to 5pm every day",
-      "reply": "Perfect—I'll update the hours to show \"9am to 5pm daily\" at the top. Publishing this change now.",
+      "reply": "Perfect—I'll make those hours bold and center them at the top. Publishing the update now.",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -58,7 +58,7 @@
     {
       "turn": 4,
       "prompt": "add our phone number 1-800-555-0199 to the bottom of my main page",
-      "reply": "I can't make that change right now because no website is connected to this chat. \n\n**But I can** help you add that phone number as soon as you connect your website — just click the project selector in the sidebar and choose your site. Once it's connected, I'll add \"1-800-555-0199\" to the bottom of your main page right away.\n\nWhat else can I help with?",
+      "reply": "I can't add the phone number right now because no website is connected to this chat. \n\n**But I can** help you the moment you connect your site — just click the project selector in the sidebar and choose your website. Once that's done, I'll add `1-800-555-0199` to the bottom of your main page in the same turn.\n\nWhat else can I help with while we wait?",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -137,7 +137,7 @@
   "regression": [
     {
       "prompt": "hello!",
-      "reply": "Hey! I'm here to help with your Your website's connection website's pages—let me know what you're working on.",
+      "reply": "Hey! How can I assist you today?",
       "provider": "intent-gateway-casual",
       "tier": "casual"
     }

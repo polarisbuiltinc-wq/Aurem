@@ -71,7 +71,14 @@ describe("Bug-3/Bug-2 — confirmed different sub-causes, each fixed + tested", 
         installation_id: 157944565,
       }),
     ));
-    await waitFor(() => expect(onProjectCreated).toHaveBeenCalledWith("p123"));
+    // 2026-09-02 — D3 refinement: a short "Connected ✓" beat now
+    // shows for ~1s before onProjectCreated fires (standard SaaS
+    // pattern), instead of an instant silent hand-off.
+    expect(screen.getByTestId("connect-repo-banner-success-beat")).toBeTruthy();
+    await waitFor(
+      () => expect(onProjectCreated).toHaveBeenCalledWith("p123"),
+      { timeout: 2000 },
+    );
   });
 
   it("t_install_with_0_repos_shows_select_not_denied (Mike-class)", async () => {
@@ -101,5 +108,39 @@ describe("Bug-3/Bug-2 — confirmed different sub-causes, each fixed + tested", 
     render(<ConnectRepoBanner onConnect={vi.fn()} onProjectCreated={vi.fn()} />);
     await waitFor(() => expect(api.get).toHaveBeenCalled());
     expect(screen.getByTestId("connect-repo-banner-cta").textContent).toMatch(/connect repo/i);
+  });
+
+  it("t_already_added_shows_open_existing_project", async () => {
+    mockUseGitHubConnectStatus.mockReturnValue({
+      status: {
+        installation_active: true,
+        installations: [{
+          installation_id: 157944565,
+          repositories: [
+            { full_name: "mpelletier0691-byte/forseti", default_branch: "main" },
+          ],
+        }],
+      },
+    });
+    api.post.mockRejectedValue({
+      response: { data: { detail: {
+        error: "already_connected",
+        message: "'mpelletier0691-byte/forseti' is already your project 'forseti'.",
+        project_id: "p_existing1",
+        project_name: "forseti",
+      } } },
+    });
+    const onProjectCreated = vi.fn();
+
+    render(<ConnectRepoBanner onConnect={vi.fn()} onProjectCreated={onProjectCreated} />);
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    fireEvent.click(screen.getByTestId("connect-repo-banner-repo-mpelletier0691-byte/forseti"));
+
+    const panel = await screen.findByTestId("connect-repo-banner-already-connected");
+    expect(panel.textContent).toMatch(/already your project/i);
+    expect(panel.textContent).toMatch(/forseti/);
+
+    fireEvent.click(screen.getByTestId("connect-repo-banner-open-existing-btn"));
+    expect(onProjectCreated).toHaveBeenCalledWith("p_existing1");
   });
 });

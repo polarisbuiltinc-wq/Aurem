@@ -765,15 +765,18 @@ _BRIDGE_HTML = """<!doctype html>
                   err: err };
 
   // 1. Popup case — postMessage back to opener, then close self.
-  // 2026-09-01 — CONFIRMED FIX (Item C, connect-flow investigation):
-  // closing at 400ms let the popup vanish while the server's own
-  // repo-list reconciliation (self-heal, ~10s) was still in flight,
-  // making a real success look like it "did nothing". Give the
-  // parent + server time to actually converge before the window
-  // disappears — the message itself still posts immediately either way.
+  // 2026-09-01 (revised) — connect-flow refinement: the earlier fix
+  // held this popup open 12s so the PARENT's poll wouldn't miss a
+  // real success during GitHub's repo-list lag. That's no longer
+  // needed here — the parent's poll (useGitHubConnectStatus.js) now
+  // exits on `installation_active` alone and actively closes this
+  // popup itself as soon as it sees that, AND absorbs any repo-list
+  // lag as a background sync after the user lands on their project
+  // page — not as a delay on this popup. So this window can close on
+  // the standard short "acknowledged" beat instead of blocking for 12s.
   if (window.opener && !window.opener.closed) {
     try { window.opener.postMessage(payload, '*'); } catch (e) {}
-    setTimeout(function(){ try { window.close(); } catch (e) {} }, 12000);
+    setTimeout(function(){ try { window.close(); } catch (e) {} }, 1200);
     return;
   }
 

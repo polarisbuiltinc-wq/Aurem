@@ -40,6 +40,14 @@ export default function NewUserWizard({ onComplete }) {
   const [projectId, setProject] = useState(null);
   const [busy, setBusy]         = useState(false);
   const [err, setErr]           = useState("");
+  // 2026-09-01 — connect-flow refinement: standard SaaS pattern
+  // (GitHub/Linear/Notion/Slack) is a short "Connected ✓" beat, then
+  // auto-land on the project — never a silent instant vanish, never a
+  // multi-second blocking interstitial.
+  const [successBeat, setSuccessBeat] = useState(false);
+  // D2 — picking a repo that's already one of this user's projects
+  // now redirects instead of dead-ending.
+  const [alreadyConnected, setAlreadyConnected] = useState(null); // {projectId, projectName}
 
   // 2026-08-24 · Guard 22 — Phase 3.1 blueprint gap: the "start from
   // an idea" path (routers/scaffold.py — brief → real generated repo
@@ -328,9 +336,22 @@ export default function NewUserWizard({ onComplete }) {
       const newProjectId = r.data?.project_id;
       setProject(newProjectId);
       setActiveProjectId(newProjectId);
-      close();
+      // 2026-09-01 — connect-flow refinement (D3, standard pattern):
+      // a ~1s "Connected ✓" beat, then auto-land — no 12s blocking
+      // interstitial, no silent instant vanish either.
+      setSuccessBeat(true);
+      setTimeout(() => { close(); }, 1000);
     } catch (e2) {
       const detail = e2?.response?.data?.detail;
+      // D2 — already one of this user's projects: redirect, don't
+      // dead-end. Server returns this shape from /cto/projects/add.
+      if (typeof detail === "object" && detail?.error === "already_connected") {
+        setAlreadyConnected({
+          projectId: detail.project_id,
+          projectName: detail.project_name,
+        });
+        return;
+      }
       const msg = (typeof detail === "object" && detail?.message)
         ? detail.message
         : (typeof detail === "string" ? detail : (e2?.message || "Could not connect repo."));
@@ -346,6 +367,12 @@ export default function NewUserWizard({ onComplete }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  function openExistingProject() {
+    if (!alreadyConnected?.projectId) return;
+    setActiveProjectId(alreadyConnected.projectId);
+    close();
   }
 
   // ─── Guard 22 · Phase 3.1 — "start from an idea" (scaffold path) ──
@@ -463,6 +490,49 @@ export default function NewUserWizard({ onComplete }) {
 
         <div style={{ padding: "20px 20px 16px", overflowY: "auto",
                        flex: "1 1 auto", minHeight: 0 }}>
+          {/* 2026-09-01 — D3: standard "Connected ✓" success beat
+              (~1s), then this overlay closes on its own and the user
+              lands on the project — no 12s blocking interstitial. */}
+          {successBeat ? (
+            <div data-testid="wizard-success-beat" style={{
+              display: "flex", flexDirection: "column", alignItems: "center",
+              gap: 10, padding: "36px 0",
+            }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: "50%",
+                background: "rgba(34,197,94,0.14)", color: "#22c55e",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 20, fontWeight: 700,
+              }}>✓</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+                Connected
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
+                Your site is connected — taking you there now…
+              </div>
+            </div>
+          ) : alreadyConnected ? (
+            // D2 — redirect instead of dead-ending the "I already
+            // connected this" loop.
+            <div data-testid="wizard-already-connected" style={{
+              display: "flex", flexDirection: "column", gap: 12,
+              padding: "24px 0",
+            }}>
+              <p style={{ ...pStyle, margin: 0 }}>
+                <strong>{repoUrl.replace(/^https?:\/\/github\.com\//i, "")}</strong>{" "}
+                is already your project{" "}
+                <strong>{alreadyConnected.projectName}</strong>.
+              </p>
+              <button
+                type="button"
+                data-testid="wizard-open-existing-project-btn"
+                onClick={openExistingProject}
+                style={primaryBtn}
+              >
+                Open my project <ArrowRight size={12} />
+              </button>
+            </div>
+          ) : (<>
           {/* Robot Guide */}
           <RobotGuide message={robotMsg} kind={err ? "error" : "info"} testid="wizard-robot-guide" />
           {step === 1 && (
@@ -979,6 +1049,7 @@ export default function NewUserWizard({ onComplete }) {
               )}
             </form>
           )}
+          </>)}
         </div>
       </div>
     </div>
