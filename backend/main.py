@@ -98,6 +98,7 @@ from routers.ora_chat import router as ora_chat_router                # Iter 212
 from routers.findings      import router as findings_router         # Iter 212m-190 backlog + dismiss/snooze
 from routers.suggestions   import router as suggestions_router      # Iter 212m-193 founder suggestion box
 from routers.self_bugs_admin import router as self_bugs_admin_router  # Item 3 (2026-08-31) self-repair dashboard
+from routers.admin_connect_diagnostic import router as admin_connect_diagnostic_router  # Connect-flow investigation (2026-09-01)
 from routers.version       import router as version_router          # Iter 212m-205 build info + system health
 from routers.advisor_context import router as advisor_ctx_router     # Iter 212m-209 advisor read layer
 from routers.qa_probe      import router as qa_probe_router         # Iter 212m-190 QA-only chat-probe
@@ -3367,6 +3368,7 @@ app.include_router(codebase_health_router, prefix="/api/aurem-dev")  # Iter 212m
 app.include_router(findings_router,        prefix="/api/aurem-dev")  # Iter 212m-190 backlog + dismiss
 app.include_router(suggestions_router,     prefix="/api/aurem-dev")  # Iter 212m-193 founder suggestions
 app.include_router(self_bugs_admin_router, prefix="/api/aurem-dev")  # Item 3 (2026-08-31) self-repair dashboard
+app.include_router(admin_connect_diagnostic_router, prefix="/api/aurem-dev")  # Connect-flow investigation (2026-09-01)
 app.include_router(version_router)                                  # Iter 212m-205 (already prefixed inside)
 app.include_router(advisor_ctx_router)                              # Iter 212m-209 (already prefixed inside)
 app.include_router(qa_probe_router,        prefix="/api/aurem-dev")  # Iter 212m-190 QA-only probe

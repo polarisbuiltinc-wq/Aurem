@@ -132,6 +132,10 @@ async def trigger_first_scan(*, db, user_id: str, project_id: str) -> None:
                 db, user_id=user_id, project_id=project_id,
                 findings_count=0, scan_duration_ms=duration_ms,
             )
+            from services.onboarding_first_task_nudge import send_onboarding_first_task_nudge
+            await send_onboarding_first_task_nudge(
+                db=db, user_id=user_id, project_id=project_id, findings_count=0,
+            )
             return
 
         from services.seo.finding_translator import translate_patches
@@ -149,6 +153,11 @@ async def trigger_first_scan(*, db, user_id: str, project_id: str) -> None:
             db, user_id=user_id, project_id=project_id,
             findings_count=len(cards), scan_duration_ms=duration_ms,
             top_category="seo",
+        )
+        from services.onboarding_first_task_nudge import send_onboarding_first_task_nudge
+        await send_onboarding_first_task_nudge(
+            db=db, user_id=user_id, project_id=project_id,
+            findings_count=len(cards),
         )
     except Exception as e:                                       # noqa: BLE001
         logger.warning("[first-scan] failed for project=%s: %r", project_id, e)

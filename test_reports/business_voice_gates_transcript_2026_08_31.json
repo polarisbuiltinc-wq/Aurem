@@ -4,7 +4,7 @@
     {
       "turn": 1,
       "prompt": "hi, what can you do for my website?",
-      "reply": "I can help fix issues, suggest improvements, and go live with updates directly to your content—just point me to your website's pages!",
+      "reply": "I can help fix bugs, improve features, and optimize your site—just point me at your website's pages and let me know what needs work!",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -22,7 +22,7 @@
     {
       "turn": 2,
       "prompt": "please put our opening hours at the top of our main page",
-      "reply": "Got it—I'll update your main page with the opening hours at the top and send you the change to review.",
+      "reply": "Got it! I'll add your opening hours prominently at the top of the main page. Let me know if you'd like any specific styling or formatting.",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -40,7 +40,7 @@
     {
       "turn": 3,
       "prompt": "9am to 5pm every day",
-      "reply": "Perfect—I'll add those hours prominently at the top of your main page now. You'll see the change in just a moment.",
+      "reply": "Perfect—I'll add \"9am to 5pm daily\" in a clean, prominent spot at the top of your homepage. Want it bold or any specific color?",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -58,7 +58,7 @@
     {
       "turn": 4,
       "prompt": "add our phone number 1-800-555-0199 to the bottom of my main page",
-      "reply": "I can't see your website right now—looks like we need to connect it first. \n\n**But I can help you get set up:** just connect your website from the sidebar (look for a \"Select Project\" or similar option), and I'll be able to add that phone number to the bottom of your main page right away.\n\nOnce it's connected, I'll add **1-800-555-0199** to the footer along with the opening hours we discussed earlier.\n\nWhat else can I help with in the meantime?",
+      "reply": "I can't see your website right now — looks like no project is connected. \n\n**But I can** walk you through exactly how to add your phone number yourself, or you can connect your website's content (if it's on Your website's connection) and I'll make the change for you instantly.\n\nWhich would help more — a quick how-to, or connecting your site so I can update it directly?",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -137,7 +137,7 @@
   "regression": [
     {
       "prompt": "hello!",
-      "reply": "Hey! How can I help you today? :)",
+      "reply": "Hey! Ready to help with your content — what’s on your mind?",
       "provider": "intent-gateway-casual",
       "tier": "casual"
     }

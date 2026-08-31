@@ -7594,3 +7594,97 @@ shown inline + toast (never silent). Contrast-guard nudge → always
 surfaced in chat when it fires (never just logged). Gate 4 → reported
 blocked with the exact GitHub error, not faked.
 
+
+## 2026-09-01 (later) — Connect-Flow Investigation: Bug-1 FIXED + tested · Bug-2/Bug-3 diagnostic tool built, root cause HYPOTHESIZED from code but NOT confirmed (waiting on production state pull) · NO fix applied to the connect flow itself
+
+Per founder's explicit instruction: no fix before the cause is
+confirmed from PULLED STATE for Bug-2/Bug-3 (the connect flow itself
+is untouched this round). Bug-1 had no state to pull (a missing
+nudge, not a bug) and was implemented + tested.
+
+**Read-only diagnostic tool (built, tested, live-verified):**
+`routers/admin_connect_diagnostic.py` —
+`GET /api/aurem-dev/admin/connect-diagnostic/{user_id}`, admin-gated,
+zero writes. Returns exactly the state named in the brief for ONE
+user_id: `github_installations` rows (installation_id, user_id
+set/null, repo_ids/full_names, active/suspended/deleted timestamps),
+`cto_projects` rows + count, `oauth_states` (github_app_install
+kind — issued `created_at` vs consumed `used_at`), `funnel_events`
+(connect_repo_install_failed + first_scan_* onboarding signals), and
+one ORDERED combined stream merging `github_funnel_events` (client+
+server stage instrumentation) + `webhook_deliveries`, sorted by
+timestamp. 2/2 tests pass
+(`tests/test_admin_connect_diagnostic_2026_09_01.py`), live-curled
+against this preview (empty-state case confirmed working). **Founder
+still needs to deploy this + run it for Michael Pelletier and Mike
+Froedge's real user_ids and paste the JSON output back — no fix was
+applied without that.**
+
+**Code-based hypothesis for Bug-2/Bug-3 (UNCONFIRMED — needs the
+diagnostic output above before any fix is written):** Read
+`hooks/useGitHubConnectStatus.js`, `routers/github_app.py` (install/
+callback/webhook/status), and the bridge page in full. Found:
+- GitHub Apps have NO real webhook "denied" event — `app_install_denied`
+  is a 100% CLIENT-SIDE inferred signal (fires whenever the install
+  popup closes before the poll sees `state:"connected"` — the code's
+  own comment admits this can't distinguish a real user back-out from
+  a lingering already-succeeded popup being closed).
+- `GET /github/app/status`'s `state` only becomes `"connected"` once
+  `list_installation_repos()` returns a NON-EMPTY list — and this
+  codebase's OWN existing UI hint (`wizard-app-github-glitch-hint`,
+  2026-08-21) already documents that GitHub's repo-list API can
+  briefly return empty right after authorizing. A prior fix
+  (`tests/test_iter_hardening3_github_connect_status.py`, "GitHub
+  Connect PERMANENT fix") added server-side self-healing (10s TTL
+  cache invalidation) for exactly this "0-repo poisoned row" case —
+  but that self-heal takes up to ~10s, while the success-bridge popup
+  auto-closes itself in 400ms.
+- **Leading hypothesis (NOT yet confirmed from real state):** if the
+  popup auto-closes (or the user closes a lingering post-success
+  window) before the client's poll catches a since-self-healed
+  `"connected"` state, the client fires a FALSE `app_install_denied`
+  AND the wizard falls back to the "Connection didn't finish, try
+  again" banner — even though the server-side install fully succeeded
+  and `github_installations.user_id` is correctly set (the 2026-08-27
+  state-recovery fix for the ORIGINAL Revoots orphan case is untouched
+  and still active — this is a DIFFERENT gap in the same fragile area,
+  not a regression of that fix). This would explain BOTH symptoms
+  from ONE shared root, exactly as hypothesized in the brief: Bug-2's
+  false "denied" AND Bug-3's "no project ever created" (the repo-
+  picker can't be used to create a project while the wizard believes
+  the connection is denied/pending).
+- This is a hypothesis from reading the code, NOT a confirmed
+  diagnosis. Per instruction, NOT fixed. Waiting on the diagnostic
+  output for Michael + Mike's real user_ids to confirm or refute
+  before writing any fix.
+
+**Bug-1 — FIXED + tested (missing nudge, not a connect-flow bug):**
+new `services/onboarding_first_task_nudge.py::build_first_task_nudge()`
+(deterministic, one concrete example, never "what can I help you
+with?") + `send_onboarding_first_task_nudge()` (writes one
+ORA-authored assistant turn into a new `chat_sessions` doc for that
+project — same `turns` schema `_persist_turn` uses). Wired into both
+success-completion branches of `services/onboarding_first_scan.py::
+trigger_first_scan()` (clean scan AND scan-with-findings), which
+already piggybacks on the existing one-shot `dev_users.first_scan_at`
+gate — fires exactly once per user, no new flag needed. 4/4 tests
+pass (`tests/test_onboarding_first_task_nudge_2026_09_01.py`) incl.
+`t_onboarding_completes_with_first_task_nudge`; existing onboarding
+suites (`test_iter_onboarding_step4_sa/_sb.py`, 13 tests) still green.
+
+**IMPORTANT caveat on Bug-1 for the ALREADY-STUCK users:** the nudge
+is gated on `dev_users.first_scan_at`, which is already SET for
+Justin and Jolene (they already completed their first scan, in the
+past). The automated nudge will fire for every FUTURE user's first
+scan, but will NOT retroactively reach Justin/Jolene once this ships
+— the founder needs to DM/email them manually with a concrete first
+task (per the brief's customer-save script), since the system has no
+retroactive trigger for users who already crossed that gate.
+
+**Regression:** full suite re-run
+(`test_admin_connect_diagnostic`, `test_onboarding_first_task_nudge`,
+`test_iter_onboarding_step4_sa/_sb`, `test_business_owner_gates` Gates
+1-3) — 25/25 pass, no new failures. `routers/github_app.py`,
+`hooks/useGitHubConnectStatus.js`, and the Revoots state-recovery
+logic (2026-08-27) are all UNTOUCHED this round.
+
