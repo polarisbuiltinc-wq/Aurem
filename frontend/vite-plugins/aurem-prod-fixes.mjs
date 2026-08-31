@@ -25,7 +25,6 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { marked } from "marked";
 import { ABOUT, CONTACT } from "../src/data/companyInfo.mjs";
 
 // Mirrors frontend/Dockerfile's nginx allowlist regex EXACTLY — keep
@@ -77,7 +76,15 @@ function contactBody() {
   return `<main><h1>${esc(CONTACT.heading)}</h1>${paras}<p><a href="/support">Open a support ticket</a></p></main>`;
 }
 
-function privacyBody(root) {
+async function privacyBody(root) {
+  // 2026-08-31 — dynamic import, NOT a static `import { marked }` at
+  // module scope: this file is pulled into vite.config.js's own
+  // dependency graph, which esbuild bundles to CJS at config-load
+  // time. `marked` ships ESM-only (marked.esm.js) — a static import
+  // gets rewritten to `require("marked")` there and crashes the prod
+  // build with ERR_REQUIRE_ESM. Dynamic import() stays a real ESM
+  // import even inside that bundled CJS wrapper.
+  const { marked } = await import("marked");
   const md = readFileSync(join(root, "public", "policies", "privacy-policy.md"), "utf8");
   return `<main>${marked.parse(md)}</main>`;
 }
@@ -141,17 +148,18 @@ export default function auremProdFixes() {
       const urlPath = (ctx.originalUrl || ctx.path || "/").split("?")[0];
       const meta = ROUTE_META[urlPath];
       if (!meta) return html;
-      let out = html
-        .replace(/<title>[^<]*<\/title>/, `<title>${esc(meta.title)}</title>`)
-        .replace(
-          /<meta\s+name="description"\s+content="[^"]*"/,
-          `<meta name="description" content="${esc(meta.description)}"`,
-        )
-        .replace(
-          /<div id="root"><\/div>/,
-          `<div id="root">${meta.body(root)}</div>`,
-        );
-      return out;
+      return Promise.resolve(meta.body(root)).then((body) =>
+        html
+          .replace(/<title>[^<]*<\/title>/, `<title>${esc(meta.title)}</title>`)
+          .replace(
+            /<meta\s+name="description"\s+content="[^"]*"/,
+            `<meta name="description" content="${esc(meta.description)}"`,
+          )
+          .replace(
+            /<div id="root"><\/div>/,
+            `<div id="root">${body}</div>`,
+          ),
+      );
     },
   };
 }
