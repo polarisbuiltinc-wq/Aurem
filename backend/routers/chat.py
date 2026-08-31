@@ -864,6 +864,17 @@ async def chat_send(
     except Exception as _dge:
         logger.debug("no_edit_deadend guard skipped (chat_send): %r", _dge)
 
+    # 2026-09-03 — orphan-confirm guard (Root 1, core-flow round): a
+    # fabricated discovery claim ("Found the ... section at line 42,
+    # current ... shows ...") + a confirm question with no real fence
+    # is swapped for an honest message — see response_confidence.py's
+    # docstring for the full bug class.
+    try:
+        from services.response_confidence import apply_no_orphan_confirm_guard
+        content = apply_no_orphan_confirm_guard(content)
+    except Exception as _ocg:
+        logger.debug("no_orphan_confirm guard skipped (chat_send): %r", _ocg)
+
     # 2026-08-27 · Output Guard (Phase 1 net, "Show the Outcome, Never
     # the Engine"). Runs AFTER the mismatch/retry/fallback resolution
     # above (nets whatever text is actually about to be returned).
@@ -3461,6 +3472,14 @@ async def chat_stream(
             content = apply_no_edit_deadend_guard(content)
         except Exception as _dge:
             logger.debug("no_edit_deadend guard skipped (chat_stream): %r", _dge)
+
+        # 2026-09-03 — orphan-confirm guard (see chat_send's identical
+        # comment above).
+        try:
+            from services.response_confidence import apply_no_orphan_confirm_guard
+            content = apply_no_orphan_confirm_guard(content)
+        except Exception as _ocg:
+            logger.debug("no_orphan_confirm guard skipped (chat_stream): %r", _ocg)
 
         # 2026-08-27 · Output Guard (Phase 1 net) — runs AFTER the
         # mismatch/fallback resolution above (so it nets whatever text

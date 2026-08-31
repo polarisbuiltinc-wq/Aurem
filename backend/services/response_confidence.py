@@ -480,3 +480,77 @@ def apply_no_edit_deadend_guard(content: str) -> str:
         return content
     cleaned = _CONFIRM_QUESTION_RE.sub("", content).rstrip()
     return cleaned + "\n\n" + NO_EDIT_DEADEND_MESSAGE
+
+
+# ═════════════════════════════════════════════════════════════════════
+# 2026-09-03 — ORPHAN CONFIRM guard (core-flow round, Root 1).
+#
+# Real, live-reproduced founder E2E test (non-technical flow, failed
+# 3x): a reply claims a SPECIFIC discovery — "Found the opening hours
+# section at line 42, current hours show 10am-5pm" — that was never
+# actually read this turn, then asks the user to confirm applying a
+# change based on that fabricated finding. This is narrower than, and
+# NOT caught by, `contains_no_edit_deadend` above (which requires a
+# visible code block) — here there is no code block, just a
+# confident-sounding claim + a confirm question. Because no real
+# `aurem-handoff` fence exists, `prior_turn_had_fix_signal` correctly
+# returns False on the NEXT turn, so a follow-up "yes please" lands on
+# `NO_PENDING_FIX_MESSAGE` — technically honest at that point, but the
+# damage (a false "something is pending" impression) was already done
+# on THIS turn. This guard stops it at the source.
+#
+# Deliberately scoped to SPECIFIC discovery-claim language (a line
+# number, "current X show(s)/is/says", "found the X section", "I
+# checked/read/opened X and", "your page/site currently...") rather
+# than ANY confirm-question-without-a-fence — a plain, honest
+# "Should I go ahead and update the homepage copy for you?" (no claim
+# of already having found/checked anything) is a legitimate way to
+# ask permission before starting work and must stay untouched (see
+# test_confirm_question_without_codeblock_is_untouched in
+# test_no_edit_deadend_guard_2026_09_02.py — that test must keep
+# passing unchanged).
+# ═════════════════════════════════════════════════════════════════════
+_DISCOVERY_CLAIM_RE = re.compile(
+    r"\bat line\s+\d+\b"
+    r"|\bfound\s+(?:the|your|our|an?)\b[^.\n]{0,60}\bsection\b"
+    r"|\bcurrent(?:ly)?\b[^.\n]{0,40}\b(?:shows?|is|are|says?)\b"
+    r"|\bi\s+(?:checked|read|looked at|opened)\b[^.\n]{0,40}\band\b"
+    r"|\byour\s+(?:page|site|website|homepage)\b[^.\n]{0,40}\b"
+    r"(?:currently|shows?|has)\b",
+    re.IGNORECASE,
+)
+
+ORPHAN_CONFIRM_MESSAGE = (
+    "I don't actually have that open in front of me right now, so I "
+    "shouldn't guess at what it currently says. Tell me exactly what "
+    "you'd like it to say (or make sure your website is connected if "
+    "it isn't yet) and I'll get a real change ready for you to "
+    "approve."
+)
+
+
+def contains_orphan_confirm(content: str) -> bool:
+    """True iff `content` makes a SPECIFIC discovery claim (a line
+    number, a "current X shows/is" statement, a "found the X section"
+    claim) AND asks the user to confirm/apply a change, with NO real
+    `aurem-handoff` fence backing it — the exact shape of the
+    fabricated "Found the opening hours section at line 42, current
+    hours show 10am-5pm... Would you like me to update this change?"
+    bug reported live (2026-09 core-flow round)."""
+    if not content or "```aurem-handoff" in content:
+        return False
+    if not _DISCOVERY_CLAIM_RE.search(content):
+        return False
+    return bool(_CONFIRM_QUESTION_RE.search(content))
+
+
+def apply_no_orphan_confirm_guard(content: str) -> str:
+    """Replaces the ENTIRE turn with an honest message when an orphan
+    confirm is detected — surgical sentence-removal isn't safe here
+    (the false CLAIM itself, not just the confirm question, is the
+    problem being hidden from the user), so the whole misleading turn
+    is swapped rather than patched. Real ```aurem-handoff fences are
+    never touched (see `contains_orphan_confirm`)."""
+    if not contains_orphan_confirm(content):
+        return content
+    return ORPHAN_CONFIRM_MESSAGE

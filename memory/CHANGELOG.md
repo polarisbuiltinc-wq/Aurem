@@ -1415,3 +1415,60 @@ tests + 1 existing test updated in
 prep work — `kit_apply_enabled` is still OFF, so no real user can hit
 Apply yet either way; this just gets the billing plumbing right for
 when it's turned on.
+
+## 2026-09-03 — Core-flow dead-end Root 1 (orphan-confirm guard) + real E2E test
+
+Founder reported a real non-technical E2E flow failed 3x: model claimed
+"Found the opening hours section at line 42, current hours show
+10am-5pm" (fabricated, no file ever read this turn) + asked "Would
+you like me to update this change?" with NO real `aurem-handoff`
+fence behind it -> next turn "yes please" hit the deterministic
+"nothing pending" message, i.e. an orphan confirm.
+
+Traced root cause: `apply_no_edit_deadend_guard` (2026-09-02) only
+fires when a visible code block is present; a pure-prose fabricated
+discovery claim + confirm question slipped straight past it, and
+`grounding_check.py` is wired ONLY into the admin ORA advisor route
+(`routers/ora_chat.py`), never into the main chat surface
+(`routers/chat.py`).
+
+Added a new, narrowly-scoped guard in `services/response_confidence.py`:
+`contains_orphan_confirm()` / `apply_no_orphan_confirm_guard()` — fires
+ONLY when a SPECIFIC discovery claim (a line number, "current X
+shows/is", "found the X section", "I checked/read X and") is paired
+with a confirm-to-apply question and no real fence; replaces the
+WHOLE turn with an honest message rather than surgical sentence
+removal (the claim itself, not just the question, is the problem).
+Deliberately narrower than "any confirm question without a fence" —
+a plain "Should I go ahead and update the homepage copy for you?" (no
+claim of already having found/checked anything) stays untouched, so
+the existing `test_confirm_question_without_codeblock_is_untouched`
+acceptance test keeps passing unchanged. Wired universally into both
+`/chat/send` and `/chat/stream` right after the existing
+`apply_no_edit_deadend_guard` call.
+
+New tests: `test_no_orphan_confirm_guard_2026_09_03.py` (7 unit tests
+covering `t_no_orphan_confirm` + `t_confirmed_action_approves_something`
+— the latter proves a confirmation reply to a REAL pending fix
+classifies as agentic via the existing `pending_fix` ack-override, never
+the "nothing pending" dead end) and
+`test_core_flow_e2e_2026_09_03.py` (2 tests, run LIVE against the
+running preview backend over real HTTP — no mocks — exercising
+greeting -> "update my opening hours" -> confirm -> "yes please" on
+the `home` project). **Scope note, not overclaimed**: no GitHub App
+installation is available in this preview pod (`app_installation_missing`
+on every `cto_projects` row, verified live before writing the test —
+same finding as `test_iter2026_08_27_ship_e2e_real_push.py`'s
+documented block), so the E2E test cannot verify a real file changing
+on a connected repo; it verifies the real router/guard code path
+never fabricates or dead-ends. Regression: 145/145 existing
+response_confidence/intent_gateway tests + the live 6/6
+`test_business_owner_gates_2026_08_31.py` gates all still pass
+unchanged.
+
+**Explicitly NOT done this round (founder chose to split, review-gate
+before continuing)**: Root 2 (wiring grounding_check into the main
+chat surface), Root 3 (broadening intent_gateway's casual-seed
+override to check agentic verbs anywhere, not just the first token),
+Root 4 (config-gating `mode_routing.py`'s tier-escalation default per
+founder's "honest upgrade" preference). See ROADMAP.md P0 entry.
