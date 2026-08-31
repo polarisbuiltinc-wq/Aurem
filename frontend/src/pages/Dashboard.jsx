@@ -666,7 +666,7 @@ function DashboardV2Body() {
                 banner's "track is null" trigger can never fire. */}
             <RepoCleanupBanner />
             {projectCount === 0 && (
-              <ConnectRepoBanner onConnect={openWizardFromBanner} />
+              <ConnectRepoBanner onConnect={openWizardFromBanner} onProjectCreated={onWizardComplete} />
             )}
             <div data-testid="chat-pane"
               style={{ flex: 1, minHeight: 0, width: "100%",

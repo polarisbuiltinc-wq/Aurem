@@ -19,13 +19,14 @@
  * flag in localStorage.
  */
 import React, { useCallback, useEffect, useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { api } from "../lib/api";
-import { trackFunnel } from "../lib/githubFunnel";
+import { trackFunnel, getFunnelSessionId } from "../lib/githubFunnel";
+import useGitHubConnectStatus from "../hooks/useGitHubConnectStatus";
 
 const COLLAPSE_KEY = "aurem_connect_banner_collapsed";
 
-export default function ConnectRepoBanner({ onConnect }) {
+export default function ConnectRepoBanner({ onConnect, onProjectCreated }) {
   // 2026-08-27 · Journey Watch Phase 0 — this CTA was the #1 dark
   // click identified in the signup drop-off investigation: `onConnect`
   // only ever flipped local React state, so a click here was
@@ -40,6 +41,50 @@ export default function ConnectRepoBanner({ onConnect }) {
     try { return localStorage.getItem(COLLAPSE_KEY) === "1"; }
     catch { return false; }
   });
+
+  // 2026-09-01 — CONFIRMED FIX (connect-flow investigation, Bug-3
+  // Michael Pelletier): mounting this banner already GUARANTEES
+  // projectCount === 0 (per the visibility contract above). If the
+  // GitHub App install is ALSO already active with real repos on it,
+  // the correct move is to let the user PICK one of those repos right
+  // here and create the project — NOT re-run the install flow, which
+  // GitHub just answers "already installed" to, producing no visible
+  // change and stranding the user in a loop.
+  const ghConnect = useGitHubConnectStatus();
+  const installations = ghConnect?.status?.installations || [];
+  const installationActive = Boolean(ghConnect?.status?.installation_active);
+  const allRepos = installations.flatMap((inst) => (inst.repositories || []).map((r) => ({
+    ...r, installation_id: inst.installation_id,
+  })));
+  const hasReposButNoProject = installationActive && allRepos.length > 0;
+  const hasZeroRepos = installationActive && installations.length > 0 && allRepos.length === 0;
+  const [creatingRepo, setCreatingRepo] = useState(null);
+  const [createErr, setCreateErr] = useState("");
+
+  const createProjectFromRepo = useCallback(async (repo) => {
+    setCreateErr("");
+    setCreatingRepo(repo.full_name);
+    try {
+      const name = repo.full_name.split("/").pop();
+      const r = await api.post("/cto/projects/add", {
+        name,
+        github_url: `https://github.com/${repo.full_name}`,
+        branch: repo.default_branch || "main",
+        funnel_session: getFunnelSessionId(),
+        installation_id: repo.installation_id,
+      });
+      trackFunnel("app_repo_selected", "banner", { full_name: repo.full_name });
+      onProjectCreated?.(r.data?.project_id);
+    } catch (e) {
+      const detail = e?.response?.data?.detail;
+      setCreateErr(
+        (typeof detail === "object" && detail?.message) ? detail.message
+          : (typeof detail === "string" ? detail : "Could not connect that repo — try again."),
+      );
+    } finally {
+      setCreatingRepo(null);
+    }
+  }, [onProjectCreated]);
 
   // ── Polling (60 s) ──────────────────────────────────────────────
   useEffect(() => {
@@ -105,7 +150,9 @@ export default function ConnectRepoBanner({ onConnect }) {
               color: "var(--text-strong, var(--text, #fff))",
             }}
           >
-            Connect a repo to unlock your free SEO fix
+            {hasReposButNoProject
+              ? "You're connected — pick a repo to finish up"
+              : "Connect a repo to unlock your free SEO fix"}
           </div>
           <div
             data-testid="connect-repo-banner-counter"
@@ -122,19 +169,21 @@ export default function ConnectRepoBanner({ onConnect }) {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-          <button
-            type="button"
-            data-testid="connect-repo-banner-cta"
-            onClick={handleConnectClick}
-            className="btn-primary"
-            style={{
-              padding: "8px 16px",
-              fontSize: 13, fontWeight: 600,
-              whiteSpace: "nowrap",
-            }}
-          >
-            Connect repo →
-          </button>
+          {!hasReposButNoProject && (
+            <button
+              type="button"
+              data-testid="connect-repo-banner-cta"
+              onClick={handleConnectClick}
+              className="btn-primary"
+              style={{
+                padding: "8px 16px",
+                fontSize: 13, fontWeight: 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {hasZeroRepos ? "Select your repos →" : "Connect repo →"}
+            </button>
+          )}
           <button
             type="button"
             data-testid="connect-repo-banner-toggle"
@@ -155,12 +204,55 @@ export default function ConnectRepoBanner({ onConnect }) {
         </div>
       </div>
 
+      {/* 2026-09-01 — CONFIRMED FIX (Bug-3, Michael Pelletier): install
+          is active with real repos already on it, but no project was
+          ever created. Offer those repos directly instead of routing
+          back through the install flow (GitHub just says "already
+          installed" to a re-run, which is why the old CTA looped with
+          no visible result). */}
+      {hasReposButNoProject && !collapsed && (
+        <div data-testid="connect-repo-banner-repo-picker" style={{
+          paddingTop: 10, borderTop: "1px dashed rgba(234,179,8,0.30)",
+        }}>
+          {createErr && (
+            <div data-testid="connect-repo-banner-create-error" style={{
+              fontSize: 12, color: "#ef4444", marginBottom: 8,
+            }}>
+              {createErr}
+            </div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {allRepos.map((repo) => (
+              <button
+                key={repo.full_name}
+                type="button"
+                data-testid={`connect-repo-banner-repo-${repo.full_name}`}
+                onClick={() => createProjectFromRepo(repo)}
+                disabled={creatingRepo === repo.full_name}
+                style={{
+                  textAlign: "left", padding: "8px 12px", fontSize: 12.5,
+                  background: "rgba(234,179,8,0.08)",
+                  border: "1px solid rgba(234,179,8,0.30)", borderRadius: 6,
+                  color: "var(--text, #fff)", cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 8,
+                }}
+              >
+                {creatingRepo === repo.full_name
+                  ? <Loader2 size={12} className="spin" />
+                  : null}
+                {repo.full_name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 2026-02-12 · App-first flow — the wizard is the single source
           of truth for the connect UX. Copy focuses on the one-click
           GitHub App install; the wizard itself still offers a PAT
           fallback for private / legacy repos, so we don't advertise
           PAT setup here. */}
-      {!collapsed && (
+      {!collapsed && !hasReposButNoProject && (
         <div
           data-testid="connect-repo-banner-steps"
           style={{
@@ -171,10 +263,14 @@ export default function ConnectRepoBanner({ onConnect }) {
             lineHeight: 1.6,
           }}
         >
-          Click <strong>Connect repo →</strong> above to install the{" "}
-          <strong>Aurem GitHub App</strong> — one click, no tokens to
-          manage. Choose which repositories to grant access to, and
-          Aurem will start indexing immediately.
+          {hasZeroRepos
+            ? <>You connected the GitHub App but haven't selected any
+                repos yet. Click <strong>Select your repos →</strong> above
+                to pick which ones to grant access to.</>
+            : <>Click <strong>Connect repo →</strong> above to install the{" "}
+                <strong>Aurem GitHub App</strong> — one click, no tokens to
+                manage. Choose which repositories to grant access to, and
+                Aurem will start indexing immediately.</>}
         </div>
       )}
     </div>

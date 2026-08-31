@@ -1,3 +1,30 @@
+## 2026-09-01 (final) — Connect-flow: unified reconciliation fix (both sub-causes) + testing-agent verified, then STOPPED per founder instruction
+
+**Confirmed diagnosis (from pulled production state, re-confirmed):** Michael (a1afe914...) = active install, 5 repos known, but `projects.count: 0` — repos exist, project never created; banner was re-running install instead of offering his already-connected repos. Mike (7371377d...) = active install, `repo_ids: []` at grant time; `/status` only reported "connected" once repos were non-empty, so the client inferred a false "denied" for a real success. Two DIFFERENT sub-causes, one shared theme: server-side install succeeded, frontend reconciliation gave up too early.
+
+**Unified fix (both cases + the race, no band-aid):**
+- `hooks/useGitHubConnectStatus.js` — success now keyed on `installation_active` (GitHub's own grant confirmation), not `state==="connected"` (which additionally required a non-empty repo list). Added bounded background repo-sync (5s interval, 2min cap) so a real success with a lagging repo list self-heals instead of being marked denied. True denial (`installation_active:false`) still fires correctly.
+- `components/ConnectRepoBanner.jsx` — three explicit states: (a) active install + repos + no project → repo picker that POSTs `/cto/projects/add` directly (Michael-class, no reinstall loop); (b) active install + 0 repos → "select your repos" CTA, never "denied" (Mike-class); (c) no install → plain "Connect repo" CTA. Wired into `pages/Dashboard.jsx` via `onProjectCreated={onWizardComplete}`.
+- `components/NewUserWizard.jsx` — shows a "GitHub is still syncing your repo list… Check now" state instead of a silently-empty repo picker.
+- `routers/github_app.py` — success-bridge `window.close()` delay raised from ~400ms to 12000ms so it can't preempt the server's ~10s repo-list self-heal. Revoots orphan-recovery (`_recovered_user_id`, lines 322-423) confirmed untouched.
+- `routers/admin_connect_diagnostic.py` — added `dev_user_found`/`dev_user_email` so a mistyped/wrong `user_id` is never indistinguishable from a real-but-quiet account (this is what caused Justin/Jolene's diagnostic pull to look all-empty).
+
+**Regression tests (exact names requested, all present + passing):**
+- `t_install_with_repos_no_project_shows_repo_picker`, `t_install_with_0_repos_shows_select_not_denied` — `frontend/src/components/__tests__/ConnectRepoBanner.reconciliation.test.jsx`
+- `t_connect_state_does_not_close_at_400ms` — `backend/tests/test_connect_bridge_close_delay_2026_09_01.py`
+- `t_no_false_denied_when_installation_active_but_repos_still_empty`, `t_denied_still_fires_when_truly_no_installation` (true-denial regression guard), `t_background_sync_keeps_polling_until_repos_populate_then_stops` — `frontend/src/hooks/__tests__/useGitHubConnectStatus.repoSyncLag.test.js`
+- `test_diagnostic_flags_wrong_id_vs_real_but_quiet_account` (Justin/Jolene class) — `backend/tests/test_admin_connect_diagnostic_2026_09_01.py`
+- Michael/Mike front-end tests use their real production `installation_id`s (157944565 / 157839994) as the fixture data, not synthetic IDs.
+
+**Testing-agent verification:** `/app/test_reports/iteration_connect_flow_fix_2026_09_01.json` — 54/54 backend + 6/6 frontend targeted tests pass, `retest_needed: false`, Revoots recovery confirmed untouched via direct code read, bridge close-delay confirmed at 12000ms (>=10000ms requirement). No live GitHub popup E2E possible in preview (`key_state: STALE-ON-GITHUB`, separate known infra gap, unrelated to this fix).
+
+**Bug-1 (Justin/Jolene) — status UNCHANGED, still NOT confirmed:** their diagnostic pull came back fully empty even after the `dev_user_found` fix. The onboarding first-task nudge (`services/onboarding_first_task_nudge.py`) is kept as a general improvement but is NOT proof of their root cause. Flagged candidate 4th bug (client activity feed may report "success" on attempt, not confirmed completion) — explicitly NOT investigated or fixed this round, per founder instruction.
+
+**Customer outreach — explicitly HELD:** Do NOT DM Michael or Mike until the founder deploys this fix to production. HOLD Justin/Jolene entirely until the founder re-confirms their correct `user_id`s and real project state.
+
+**No new deps. No prod flags touched. Fix is preview-only; founder deploys when ready.**
+
+
 # AUREM CTO — Product Requirements Document
 
 **Live URL**: https://auremcto.com

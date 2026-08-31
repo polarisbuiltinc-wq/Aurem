@@ -1,0 +1,37 @@
+{
+  "summary": "Verified AUREM connect-flow investigation fixes (Bug-2 Mike-class, Bug-3 Michael-class, bridge close-delay, admin diagnostic dev_user_found flag, NewUserWizard syncing UI, useGitHubConnectStatus installation_active success signal + bounded background repo-sync). Ran all named backend pytest suites and both targeted frontend vitest suites — all pass. Confirmed Revoots orphan-recovery block (routers/github_app.py `_recovered_user_id`, lines 322-423) is present and untouched. Bridge HTML setTimeout for window.close() is now 12000ms (>=10000ms requirement). No live GitHub popup flow exercised — per brief, key_state is STALE-ON-GITHUB in preview.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_connect_bridge_close_delay_2026_09_01.py",
+    "/app/backend/tests/test_admin_connect_diagnostic_2026_09_01.py",
+    "/app/backend/tests/test_onboarding_first_task_nudge_2026_09_01.py",
+    "/app/frontend/src/hooks/__tests__/useGitHubConnectStatus.repoSyncLag.test.js",
+    "/app/frontend/src/components/__tests__/ConnectRepoBanner.reconciliation.test.jsx"
+  ],
+  "results": {
+    "backend_new_tests": "8/8 passed (bridge-close-delay, admin-connect-diagnostic x3, onboarding-first-task-nudge x4)",
+    "backend_regression": "46/46 passed across business_owner_gates, contrast_guard, contrast_guard_write_wiring, self_bugs_admin_dashboard, palette_nudge_chat_visibility, github_key_visibility, onboarding_first_task_nudge, iter_onboarding_step4_sa, iter_onboarding_step4_sb",
+    "frontend_new_tests": "6/6 passed (useGitHubConnectStatus.repoSyncLag x3, ConnectRepoBanner.reconciliation x3)"
+  },
+  "code_verification": {
+    "revoots_orphan_recovery_untouched": "routers/github_app.py `_recovered_user_id` present at lines 322,340,344,346,376,419,423 — logic intact",
+    "bridge_close_delay": "routers/github_app.py line 776: setTimeout(..., 12000) — meets >=10000ms requirement",
+    "hook_installation_active_success": "src/hooks/useGitHubConnectStatus.js line 141 checks `data.installation_active` (not state===connected). BACKGROUND_SYNC_INTERVAL_MS=5000, BACKGROUND_SYNC_MAX_MS=120000 (2min) confirmed; bg sync stops when state==='connected' or after cap",
+    "connect_repo_banner_states": "ConnectRepoBanner.jsx: hasReposButNoProject (Michael-class picker), hasZeroRepos ('Select your repos →' CTA), plain 'Connect repo →' when no install — all three states wired; createProjectFromRepo POSTs /cto/projects/add and calls onProjectCreated",
+    "wizard_syncing_ui": "NewUserWizard.jsx lines 699/712: wizard-app-repos-syncing div + wizard-app-repos-refresh-btn button present",
+    "dashboard_wiring": "Dashboard.jsx passes onProjectCreated={onWizardComplete} to ConnectRepoBanner (verified in earlier code review — reload path wired)"
+  },
+  "critical_code_review_comments": [
+    "Bridge close delay of 12000ms is at the top end of user tolerance; if the server self-heal typically completes in <10s this is fine, but if a user closes the popup manually they still wait 12s for programmatic close — acceptable trade-off given the >=10000ms explicit requirement.",
+    "Background repo-sync polls every 5s for up to 2 minutes; if repos never populate within 2min the user is silently left with an empty banner picker unless they refresh — consider surfacing a 'still syncing' state on the banner after cap (only wizard has this today)."
+  ],
+  "action_items": [],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (54/54)", "frontend": "100% (6/6 targeted)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (not exercised — no live GitHub App credential in preview per brief)",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Connect-flow fix is fully green on automated suites (backend + frontend vitest). Real end-to-end popup->install flow is NOT testable in preview (GitHub App key is STALE-ON-GITHUB per admin/github-app-config — separate known infra gap). If retesting, focus on the two new vitest files and the two new pytest files. Revoots orphan-recovery must remain untouched — do not refactor github_app.py."
+}
