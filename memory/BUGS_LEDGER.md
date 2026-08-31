@@ -93,3 +93,67 @@ the manifest in the same PR so future silent-drops are impossible.
 - bundle-verified = sentinel strings present in served chunks (SHA-256 comparable).
 - trigger-verified = real user flow fires the expected network event (verified via DevTools Network filter or Meta Events Manager Test Events).
 - Both labels are separately valid; do not conflate. A code deploy proves the code is on prod, NOT that any given code path runs at runtime.
+
+
+---
+
+## L-02 · ORA "file confusion" — named file requested, different file answered (intent/target mismatch)
+
+**First reported**: pre-2026-08-31 (founder says recurring, exact prior
+instance not located in this ledger/memory — see "Not yet confirmed"
+below).
+**Recurrence pattern**: founder-reported TWICE now. Not yet reproduced
+with a captured transcript, so root cause below is a HYPOTHESIS, not
+confirmed. Log now so the NEXT occurrence can be captured properly
+instead of re-diagnosed from scratch.
+
+### Symptom
+Founder asks ORA about a specific named file (e.g. `AuremHomepage.jsx`).
+ORA's answer is based on inspecting a DIFFERENT file (`README.md`) —
+without flagging the mismatch to the founder. The founder only caught
+it because they happened to notice the wrong file named in ORA's reply.
+
+### What the code actually does (confirmed, not a hypothesis)
+`services/local_tools.py::read_repo_file` requires an EXACT path string
+as `args.path` from the model. There is no fuzzy-matching/best-guess
+substitution in this function — if the path doesn't exist, it returns a
+loud, explicit 404 telling the model to STOP guessing and call
+`list_repo_files` with a glob to discover the real path, and NOT to
+answer until it has:
+> "STOP guessing paths. Your next tool call MUST be `list_repo_files`
+> ... Do not write a plan, do not produce a handoff brief ... until
+> you have called list_repo_files and seen the actual layout."
+
+### Leading hypothesis (UNCONFIRMED — needs a captured transcript to verify)
+Because the substitution is silent (no visible error/caveat to the
+founder), this is most likely an LLM tool-call-selection/prompt-adherence
+gap, not a broken function:
+1. `AuremHomepage.jsx` may not exist under that exact name/path in the
+   connected repo (e.g. it's actually `Homepage.jsx` or `Landing.jsx`) →
+   `read_repo_file` 404'd → the model did NOT follow the 404's explicit
+   "call list_repo_files, don't answer yet" instruction, and instead
+   fell back to a file it already had context on (README.md) to answer
+   a "what's on the homepage" style question generically.
+2. Less likely: the model never called `read_repo_file` with that path
+   at all — jumped straight to README.md as a "get oriented" step and
+   answered from there without ever attempting the named file.
+
+### NOT yet done
+- Prior occurrence transcript not located — founder should paste it
+  next time (or this time, if still available) so both instances can
+  be compared for a real pattern vs. two unrelated one-offs.
+- No code change made this round — founder said "note it, move on."
+
+### Verification playbook for the NEXT occurrence
+1. Capture the exact tool-call trace for that turn (which tools were
+   called, in what order, with what `args.path`) — most chat/admin
+   surfaces log this; pull it from `loop_events`/`chat` logs or the
+   session transcript.
+2. Check whether `AuremHomepage.jsx` exists at the exact path the
+   founder meant (`list_repo_files` glob `**/AuremHomepage*`).
+3. If it exists and was never called → prompt-adherence gap (model
+   picked README.md without even trying the named file).
+4. If it 404'd and the model answered anyway without calling
+   `list_repo_files` next → confirms hypothesis #1 above; the loud-404
+   instruction is being ignored under some condition (e.g. only enforced
+   within Loop mode's stricter system prompt, not regular chat).
