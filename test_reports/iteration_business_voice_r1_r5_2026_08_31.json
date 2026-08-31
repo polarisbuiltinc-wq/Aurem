@@ -1,0 +1,40 @@
+{
+  "summary": "Verified R1-R5 business-owner voice rework. Backend unit tests: 20/20 pass in tests/test_business_owner_voice_2026_08_31.py (business_voice_filter, bail_reason, no_dead_end_guard, incomplete_reply_guard, page_resolver — all deterministic guards + handoff-fence exemption regression). Frontend UI verified: R5b preview panel (iframe-live renders, device toggle present with Phone default), R5a old banned banner ('I'm not confident enough in this response... try rephrasing') is GONE from the UI, new SHIP_SUPPRESSED_NOTE text 'The approve button didn't load for that fix — Retry this fix' rendered instead. Guards wired at 4 emission sites in routers/chat.py (lines ~640-660, ~849-870, ~2512-2530, ~3401-3415). Full LLM-through-chat E2E validation of R1/R2/R4 language on live turns is BLOCKED in preview because the aurem-demo/frontend GitHub App installation is revoked (banner: 'GitHub access revoked ... token rejected — access revoked or expired') — every chat turn short-circuits to a repo-error banner or 'Loop cancelled/failed at plan phase' before reaching the LLM output pipeline where the filters apply. Deterministic guarantee is covered by the 20 unit tests.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Chat turn on a project whose GitHub App install is revoked",
+        "issue": "Repo-disconnected error banner shown inside chat contains the word 'repo' (e.g. 'GitHub access for this repo is unavailable', 'This project's GitHub App access isn't available — the installation may have been revoked or doesn't cover this repo'). Per R1, 'repo' is on the banned dev-jargon list. This is a HARDCODED frontend/status banner (not an LLM reply), so apply_business_voice() never touches it. Consider softening to 'your live site connection was revoked — reconnect it in Settings' or similar business-owner phrasing, OR explicitly document this banner as ora_panel-equivalent (admin surface exempt).",
+        "affected_selectors": ["repo-status banner in ChatPanel.jsx / GitHub access revoked toast"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_business_owner_voice_2026_08_31.py",
+    "/app/test_reports/business_voice_acceptance.json"
+  ],
+  "action_items": [
+    "OPTIONAL/LOW: soften hardcoded repo-disconnected chat banner copy to remove the word 'repo' for business-owner voice consistency (or document it as admin-surface exempt).",
+    "BLOCKED (not a bug in this session's code): to fully E2E-validate R1/R2/R4 filter behaviour on live LLM output in the preview pod, the aurem-demo/frontend GitHub App install needs to be reconnected (or a different connected repo made available) so that chat turns actually reach the LLM. Currently every turn short-circuits to 'Loop cancelled/failed at plan phase' due to 'pat_invalid_or_expired'. Per the review request, this was noted as blocked rather than failing the feature."
+  ],
+  "critical_code_review_comments": [
+    "backend/routers/chat.py is 4,274 lines — well over the 700-line guideline. Multiple duplicated guard-chain call sites (apply_business_voice + ensure_alternative + ensure_complete wired at 4 separate emission sites, ~640/849/2512/3401). Extract to a single apply_business_owner_guards(content, ora_panel) helper to prevent one site drifting out of sync from the others (real regression risk for this exact feature).",
+    "The 4 guard-chain sites all guard against a ```aurem-handoff``` fence being present before running the filename filter (correct — protects the Approve button). Consider centralizing that fence-detection check into apply_business_voice itself so future callers can't forget it.",
+    "Historical chat bubbles in the preview account still contain raw filenames (e.g. 'src/App.js', 'backend/auth.py', 'src/services/analyticsService.js') from PRE-filter turns. This is expected (filter only runs on new emissions), but worth being aware of when reviewing screenshots — those are not R1 failures.",
+    "no_dead_end_guard.ensure_alternative() and incomplete_reply_guard.ensure_complete() are newly-added and only covered by unit tests — no integration test yet asserts they actually wrap real streamed chat output. Add a lightweight regression that stubs the LLM to return 'I can't do that.' and asserts the final response contains 'but I can'."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (20/20 unit tests)", "frontend": "R5a + R5b verified; R1/R2/R4 live-LLM path blocked by revoked GitHub App install in preview"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview) — worked",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Deterministic guards (business_voice_filter, bail_reason, no_dead_end_guard, incomplete_reply_guard, page_resolver) verified via unit tests. Preview R5b/R5a UI checks pass. To fully validate R1/R2/R4 wording on real LLM output E2E, reconnect the AUREM GitHub App on test@aurem.dev / aurem-demo/frontend first (currently revoked, causing every chat turn to short-circuit before LLM emission). Once repo is connected, replay the 4-prompt business-owner acceptance simulation from the review request in a fresh session.",
+  "rca of the issue": "N/A — no functional bugs found this pass. The one observation (repo-disconnected banner contains 'repo') is a copy nit on a hardcoded status banner, not an LLM output filter miss, and is arguably intentional as it directs the user to a technical remediation action."
+}

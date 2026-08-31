@@ -98,6 +98,16 @@ _FIX_INTENT_TOKENS = {
     "audit", "audits", "scan", "scans", "review", "reviews",
     "vulnerability", "vulnerabilities", "vulnerable", "insecure",
     "security", "secure", "harden", "hardening", "exploit", "exploits",
+    # R3 (2026-08-31) — CONFIRMED gap: a non-technical business owner's
+    # plain, clear, task-shaped request ("put our opening hours at the
+    # top of our main page") has NONE of the tokens above, so
+    # `is_definitional_mismatch` wrongly treated a legitimate task as
+    # a hallucinated "mismatch" and nuked it to FALLBACK_MESSAGE. These
+    # are the everyday verbs a non-developer actually uses for the same
+    # intent as add/update/change/ship above.
+    "put", "show", "display", "set", "make", "list", "post", "insert",
+    "place", "swap", "replace", "move", "adjust",
+    "edit", "hide", "reword", "rename",
 }
 
 # 2026-08-22 — raised from 10: widens the coverage of the STRICT,

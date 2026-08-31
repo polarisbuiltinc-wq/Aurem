@@ -970,6 +970,30 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
             )}
           </div>
           </div>
+        ) : effectiveBlocks.length === 0 ? (
+          // 2026-08-31 (R5b) — root-cause fix: a project with no
+          // preview_url/live_url yet AND no chat-produced code block
+          // fell through every branch below to an EMPTY <pre>, which
+          // read as a dead blank panel. Show an honest empty state
+          // instead.
+          <div
+            data-testid="preview-empty-state"
+            style={{
+              display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              height: "100%", padding: 24, textAlign: "center",
+              color: "var(--text-faint)", gap: 8,
+            }}
+          >
+            <Eye size={22} style={{ opacity: 0.5 }} />
+            <span style={{ fontSize: 13, color: "var(--text-dim)" }}>
+              No preview yet
+            </span>
+            <span style={{ fontSize: 12, maxWidth: 320 }}>
+              Ask ORA to make a change to your site, or connect your
+              live site, and it will show up here.
+            </span>
+          </div>
         ) : viewMode === "preview" && isRenderable && !block?.isCodebase ? (
           <iframe
             key={`iframe-${activeTab}-${refreshKey}`}

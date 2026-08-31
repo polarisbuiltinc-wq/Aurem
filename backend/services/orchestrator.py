@@ -1575,6 +1575,11 @@ async def chat_with_tools(
     local_ctx: dict = {
         "user_id":       user_id,
         "project_id":    project_id,
+        # R4 (2026-08-31) — the user's own message text, so
+        # list_repo_files can attach a deterministic page-resolver
+        # hint (services/page_resolver.py) the moment it discovers
+        # the repo tree, instead of the model guessing a filename.
+        "user_prompt":   prompt,
         "is_founder":    bool(is_founder),   # Iter 212m-168 — gates execute_bash
         "bin_ctx":       bin_ctx,            # Iter 212m-169 — locked user+project+PAT
         # Iter 388t — Bug 20 fix.  Founder-pod-debug mode unlocks

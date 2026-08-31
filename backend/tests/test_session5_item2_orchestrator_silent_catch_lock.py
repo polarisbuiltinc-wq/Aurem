@@ -36,7 +36,7 @@ ORCHESTRATOR = BACKEND / "services" / "orchestrator.py"
 # all 7 sites verified still-hooks, only line numbers shifted). If a
 # real hygiene target ever slips into orchestrator.py, it will NOT be
 # in this set and the test below will fail.
-LEGIT_UI_HOOK_LINES = {2167, 2172, 2274, 2539, 2590, 2621, 2630}
+LEGIT_UI_HOOK_LINES = {2172, 2177, 2279, 2544, 2595, 2626, 2635}
 # 2026-08-23 audit fix — the last 3 of these 7 line numbers drifted
 # (+4) after this session's findings-to-fix-bridge edits added lines
 # earlier in orchestrator.py (capturing `findings_saved_this_turn`),

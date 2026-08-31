@@ -251,6 +251,58 @@ PLAIN_ENGLISH_EXPLAIN_CONTRACT = (
 )
 
 
+# 2026-08-31 · Business-Owner Voice Contract (R1-R5 core rework). Unlike
+# PLAIN_ENGLISH_EXPLAIN_CONTRACT above (flag-gated, mode-"A"-only,
+# experimental), this is the production tone fix the founder asked
+# for: EVERY non-ora_panel turn, any mode. It only changes the WORDS
+# in the final reply — read-first/mutation-verb/tool-use rules above
+# are completely unaffected. The deterministic filters below
+# (business_voice_filter.py, bail_reason.py, no_dead_end_guard.py,
+# incomplete_reply_guard.py) are the GUARANTEE layer for whenever the
+# model doesn't follow this "best effort" contract.
+BUSINESS_OWNER_VOICE_CONTRACT = (
+    "── BUSINESS-OWNER VOICE (this chat is talking to a non-technical "
+    "site owner, not a developer) ──\n"
+    "Keep using real tool calls/file paths internally — that never "
+    "changes. But the WORDS YOU WRITE to the user must sound like a "
+    "person fixing their website, not a developer:\n"
+    "  - Never say: commit, push, deploy, merge, PR, repo, codebase, "
+    "branch, file, markup, HTML/CSS/JS, API, endpoint, database, diff, "
+    "rollback. Say instead: update, publish/make it live, finalize, "
+    "your website, your page / the [X] page, the design, the "
+    "connection, the change, undo.\n"
+    "  - Never name a file with its extension (AuremHomepage.jsx, "
+    "README.md). Say 'your main page' / 'the about page' / 'the top "
+    "of your page' instead. This never applies inside a "
+    "```aurem-handoff fence — that block still needs the real path.\n"
+    "  - If you can't do something, your NEXT sentence must start "
+    "with 'but I can' and offer a concrete alternative. Never say "
+    "'try rephrasing', 'I'm not confident', or leave a dead end.\n"
+    "  - If something is missing (e.g. they said 'add our hours' but "
+    "never gave the hours), ask for exactly that ONE thing in plain "
+    "words. Don't ask them to 'clarify' or 'be more specific'.\n"
+    "  - One thing at a time. Fix what they asked, say 'Done — [what "
+    "changed]', then ask one short 'What else?' — never a list of "
+    "five extra suggestions.\n"
+    "  - Every reply must be a complete thought. Never end with 'let "
+    "me...', 'here's what I found:', or trail off — finish the "
+    "sentence or ask a real question.\n"
+    "  - On a design/brand/visual ask ('redesign our brand', 'make "
+    "it look better'): NEVER refuse or say 'I need design assets/"
+    "brand guidelines/strategy docs you should provide' — that's a "
+    "dead end wearing a prerequisite costume. Instead: say what you "
+    "CAN do right now (a real visual refresh — colors/fonts/spacing/"
+    "layout — you can actually apply), propose 2-3 concrete "
+    "directions in plain visual words (e.g. 'Clean & minimal', 'Bold "
+    "& confident', 'Warm & friendly'), offer a before/after, and ask "
+    "for AT MOST one input (a word, a brand they like, a color) — "
+    "never a list of deliverables. A brand-new logo or a full brand-"
+    "strategy book is the BIGGER project — scope it, never call it "
+    "impossible. Never say 'in this session' or 'I don't have "
+    "access to' — those are jargon leaks."
+)
+
+
 class ChatBody(BaseModel):
     # Iter 44 — bounded length to prevent prompt-bomb DoS + match
     # downstream cap_for() context windows.
@@ -492,6 +544,11 @@ async def chat_send(
                 _plain_english_active = True
     except Exception as _pee_exc:
         logger.debug("plain_english_contract skipped (chat/send): %r", _pee_exc)
+
+    # 2026-08-31 · Business-Owner Voice Contract — every non-ora_panel
+    # turn, not flag-gated (see BUSINESS_OWNER_VOICE_CONTRACT docstring).
+    if not body.ora_panel:
+        extra_sys = (extra_sys + "\n\n" + BUSINESS_OWNER_VOICE_CONTRACT).strip()
     # Iter 212m-24 — Admin House Rules (HIGHEST PRIORITY).
     # If the admin has enabled house rules for `chat` + the requested
     # mode, prepend the rules block at the very top of extra_sys so it
@@ -570,7 +627,35 @@ async def chat_send(
     )
     _tier = _intent_result.get("tier") or "agentic"
     result = None
-    if _tier in ("casual", "clarify") and not body.ora_panel:
+    # P7-D (2026-08-31) — the user reporting ORA's OWN UI/reply/panel
+    # as broken (never their own website — see user_report_classifier's
+    # possessive guard) short-circuits BEFORE tier routing, deterministic
+    # + zero LLM spend, straight to the guaranteed self-bug reply pattern
+    # (ownership + no blame + a path forward — see self_bug_reply_guard.py).
+    if not body.ora_panel:
+        from services.user_report_classifier import is_user_reporting_ora_bug
+        if is_user_reporting_ora_bug(body.prompt or ""):
+            from services.self_bug import emit as _emit_self_bug
+            from services.self_bug_reply_guard import compose_self_bug_reply
+            await _emit_self_bug(
+                "user_reported", (body.prompt or "")[:300],
+                {"session_id": body.session_id, "user_id": user["user_id"]},
+                source="user_report_classifier",
+            )
+            result = {
+                "ok": True,
+                "content": compose_self_bug_reply("user_reported"),
+                "provider": "self-bug-reply",
+                "iterations": 0,
+                "tool_calls_run": 0,
+                "meta": {},
+                "council": None,
+                "task_type": None,
+                "findings_saved_this_turn": [],
+            }
+    if result is not None:
+        pass
+    elif _tier in ("casual", "clarify") and not body.ora_panel:
         from services.response_confidence import is_confirmation_reply, NO_PENDING_FIX_MESSAGE
         if is_confirmation_reply(body.prompt or "") and not _prior_fix_signal:
             # 2026-08-28 · NEW P0 Task 2 — a bare confirmation with
@@ -593,12 +678,20 @@ async def chat_send(
             try:
                 from services.intent_gateway_casual_reply import casual_direct_reply
                 from services.response_confidence import apply_no_false_success_guard
+                from services.business_voice_filter import apply_business_owner_guards
                 _casual_reply_text = await casual_direct_reply(
                     body.prompt, prior_assistant_text=_prior_turn_text,
                     session_summary=_session_summary,
                 )
                 _casual_reply_text = apply_no_false_success_guard(
                     body.prompt or "", _casual_reply_text, _prior_fix_signal,
+                )
+                # R1/R2 (2026-08-31) — single guard chain (see
+                # apply_business_owner_guards docstring).
+                _casual_reply_text = await apply_business_owner_guards(
+                    getattr(body, "ora_panel", False), _casual_reply_text,
+                    body.prompt or "",
+                    session_id=body.session_id, user_id=user["user_id"],
                 )
                 result = {
                     "ok": True,
@@ -632,6 +725,15 @@ async def chat_send(
             is_founder=_is_fnd,
             bin_ctx=bin_ctx,
         )
+    if isinstance(result, dict):
+        # Pre-existing gap fix (2026-08-31, confirmed via
+        # test_intent_gateway_casual_boundary_2026_01.py) — chat_stream
+        # always stamps result["tier"]/["intent"] (see ~line 3010); the
+        # sync /chat/send endpoint never did, for ANY branch, so every
+        # response silently lost tier/intent info. Mirrors chat_stream's
+        # own convention exactly.
+        result.setdefault("intent", _intent_result)
+        result.setdefault("tier", _tier)
     t_llm = time.time()
     content = result.get("content", "") or ""
     provider = result.get("provider", "") or ""
@@ -649,10 +751,12 @@ async def chat_send(
     # before falling back to the canned message.
     _low_confidence = False
     _ship_suppressed = False
+    _bail_reason = None
     try:
         from services.response_confidence import (
             response_seems_mismatched, has_ship_suggestion, FALLBACK_MESSAGE,
         )
+        from services.bail_reason import classify_bail
         _mismatch = response_seems_mismatched(body.prompt or "", content, _prior_fix_signal)
         logger.info(
             "chat.confidence_check surface=chat_send turn=1 prompt=%r "
@@ -710,11 +814,21 @@ async def chat_send(
                 _ship_suppressed = (
                     has_ship_suggestion(content) or has_ship_suggestion(_retry_content)
                 )
-                content = FALLBACK_MESSAGE
+                # R2 (2026-08-31) — never the useless generic
+                # FALLBACK_MESSAGE ("try rephrasing, or ask again") to a
+                # business owner. classify_bail() is deterministic (no
+                # LLM) and always returns a CONCRETE next step:
+                # missing_data -> ask for that value in plain words,
+                # out_of_scope -> say what ORA can do instead,
+                # low_confidence -> ONE specific clarifying question.
+                _bail = classify_bail(body.prompt or "")
+                content = _bail["message"]
+                _bail_reason = _bail["reason"]
                 _low_confidence = True
                 logger.warning(
                     "chat_send: retry ALSO mismatched (or came back empty) "
-                    "— showing fallback message",
+                    "— showing reason-carrying bail (reason=%s), never the "
+                    "generic 'try rephrasing' fallback", _bail_reason,
                 )
     except Exception as _rce:
         logger.debug("response_confidence gate skipped (chat_send): %r", _rce)
@@ -766,6 +880,24 @@ async def chat_send(
                 _output_guard_ref_id = new_ref_id()
         except Exception as _og_exc:
             logger.debug("output_guard skipped (chat/send): %r", _og_exc)
+
+    # R1 (2026-08-31) — business-owner voice filter, applied LAST (after
+    # every other content-mutating guard, INCLUDING output_guard above)
+    # so nothing downstream can re-introduce a raw filename/dev term.
+    # Same "aurem-handoff" exemption as output_guard just above: that
+    # fence is structured ship-pipeline machinery the frontend parses
+    # for the real file path (Approve/ShipDialog) — NOT prose. Rewriting
+    # tokens inside it would risk breaking the exact ship flow this
+    # rework must not touch (see R5a — the K1 approve-button history).
+    if content and "aurem-handoff" not in content:
+        try:
+            from services.business_voice_filter import apply_business_owner_guards
+            content = await apply_business_owner_guards(
+                getattr(body, "ora_panel", False), content, body.prompt or "",
+                session_id=body.session_id, user_id=user["user_id"],
+            )
+        except Exception as _bvf_e:
+            logger.debug("business_voice filter skipped (chat_send): %r", _bvf_e)
 
     # Maxx mode: watchdog review (only if we have non-empty content)
     # Iter 161 — same legacy-only gating as the streaming path: skip
@@ -877,9 +1009,8 @@ async def chat_send(
         "user_id": user.get("user_id"),
         "tokens_remaining": tokens_remaining,
         "low_confidence": _low_confidence,
+        "bail_reason": _bail_reason,
         "ship_suppressed": _ship_suppressed,
-        "intent": _intent_result,
-        "tier": _tier,
         # Iter 212m-78 — Council self-learning indicator. FE renders
         # "📚 ORA recalled N similar past answers" above the bubble
         # when this is > 0.
@@ -897,6 +1028,12 @@ async def chat_send(
         # without scraping Mongo / Langfuse.
         "council":   result.get("council"),
         "task_type": result.get("task_type"),
+        # 2026-08-31 — fix confirmed via
+        # test_intent_gateway_casual_boundary_2026_01.py: chat_stream
+        # always echoes tier/intent (see ~line 3011); chat_send never
+        # did, for any branch, so callers could never verify routing.
+        "tier":      result.get("tier", _tier),
+        "intent":    result.get("intent", _intent_result),
         # Iter 212m-171 — Scope Badge echo.  FE stamps this on the
         # assistant bubble so the user sees which repo they were
         # scoped to.  Zero PII beyond the repo slug (already public
@@ -1543,6 +1680,11 @@ async def chat_stream(
                 _plain_english_active = True
     except Exception as _pee_exc:
         logger.debug("plain_english_contract skipped (chat/stream): %r", _pee_exc)
+
+    # 2026-08-31 · Business-Owner Voice Contract — every non-ora_panel
+    # turn, not flag-gated (see BUSINESS_OWNER_VOICE_CONTRACT docstring).
+    if not body.ora_panel:
+        extra_sys = (extra_sys + "\n\n" + BUSINESS_OWNER_VOICE_CONTRACT).strip()
 
     # Iter 212m-24 — Admin House Rules (HIGHEST PRIORITY).
     # For SSE chat (non-Advisor), scope is "chat" + the requested mode.
@@ -2365,6 +2507,33 @@ async def chat_stream(
                 })
 
                 _tier = _intent_result.get("tier") or "agentic"
+                # P7-D (2026-08-31) — same self-bug short-circuit as
+                # chat_send, before tier routing (see that function's
+                # comment for the full reasoning).
+                if not body.ora_panel:
+                    from services.user_report_classifier import is_user_reporting_ora_bug
+                    if is_user_reporting_ora_bug(body.prompt or ""):
+                        from services.self_bug import emit as _emit_self_bug
+                        from services.self_bug_reply_guard import compose_self_bug_reply
+                        await _emit_self_bug(
+                            "user_reported", (body.prompt or "")[:300],
+                            {"session_id": body.session_id, "user_id": user_id},
+                            source="user_report_classifier",
+                        )
+                        result = {
+                            "ok":               True,
+                            "content":          compose_self_bug_reply("user_reported"),
+                            "provider":         "self-bug-reply",
+                            "fallback_chain":   ["self_bug_user_reported"],
+                            "iterations":       0,
+                            "tool_calls_run":   0,
+                            "tool_invocations": [],
+                            "intent":           _intent_result,
+                            "tier":             _tier,
+                            "mode":             "chat",
+                        }
+                        await q.put({"type": "result", "result": result})
+                        return
                 # Iter 212m-211 — HARD GUARDRAIL: `ora_panel=true` MUST
                 # always take the advisor-direct path (built below at
                 # `if body.ora_panel:`) so it inherits house_rules
@@ -2409,12 +2578,20 @@ async def chat_stream(
                     try:
                         from services.intent_gateway_casual_reply import casual_direct_reply
                         from services.response_confidence import apply_no_false_success_guard
+                        from services.business_voice_filter import apply_business_owner_guards
                         _casual_reply_text = await casual_direct_reply(
                             body.prompt, prior_assistant_text=_prior_turn_text,
                             session_summary=_session_summary,
                         )
                         _casual_reply_text = apply_no_false_success_guard(
                             body.prompt or "", _casual_reply_text, _prior_fix_signal,
+                        )
+                        # R1/R2 (2026-08-31) — single guard chain (see
+                        # apply_business_owner_guards docstring).
+                        _casual_reply_text = await apply_business_owner_guards(
+                            getattr(body, "ora_panel", False), _casual_reply_text,
+                            body.prompt or "",
+                            session_id=body.session_id, user_id=user.get("user_id"),
                         )
                         # Iter 212m-155 — BUG FIX: previously set `reply`
                         # here, but the SSE worker downstream reads
@@ -3146,11 +3323,13 @@ async def chat_stream(
         # before falling back to the canned message.
         _low_confidence = False
         _ship_suppressed = False
+        _bail_reason = None
         try:
             from services.response_confidence import (
                 response_seems_mismatched, has_ship_suggestion, FALLBACK_MESSAGE,
                 prior_turn_had_fix_signal,
             )
+            from services.bail_reason import classify_bail
             _prior_fix_signal = await prior_turn_had_fix_signal(
                 get_db(), body.session_id, (user or {}).get("user_id")
             )
@@ -3220,11 +3399,17 @@ async def chat_stream(
                     _ship_suppressed = (
                         has_ship_suggestion(content) or has_ship_suggestion(_retry_content)
                     )
-                    content = FALLBACK_MESSAGE
+                    # R2 (2026-08-31) — same reason-carrying bail as
+                    # chat_send: never the generic "try rephrasing"
+                    # fallback (see services/bail_reason.py).
+                    _bail = classify_bail(body.prompt or "")
+                    content = _bail["message"]
+                    _bail_reason = _bail["reason"]
                     _low_confidence = True
                     logger.warning(
                         "chat_stream: retry ALSO mismatched (or came back "
-                        "empty) — showing fallback message",
+                        "empty) — showing reason-carrying bail (reason=%s), "
+                        "never the generic 'try rephrasing' fallback", _bail_reason,
                     )
         except Exception as _rce:
             logger.debug("response_confidence gate skipped (chat_stream): %r", _rce)
@@ -3269,11 +3454,29 @@ async def chat_stream(
             except Exception as _og_exc:
                 logger.debug("output_guard skipped (chat/stream): %r", _og_exc)
 
+        # R1 (2026-08-31) — business-owner voice filter, applied LAST
+        # (after output_guard above) so nothing downstream can
+        # re-introduce a raw filename/dev term. Same "aurem-handoff"
+        # exemption as output_guard: that fence is structured
+        # ship-pipeline machinery (Approve/ShipDialog parses the real
+        # file path from it) — not prose. See chat_send's identical
+        # comment for the full reasoning (R5a K1 approve-button risk).
+        if content and "aurem-handoff" not in content:
+            try:
+                from services.business_voice_filter import apply_business_owner_guards
+                content = await apply_business_owner_guards(
+                    getattr(body, "ora_panel", False), content, body.prompt or "",
+                    session_id=body.session_id, user_id=user.get("user_id"),
+                )
+            except Exception as _bvf_e:
+                logger.debug("business_voice filter skipped (chat_stream): %r", _bvf_e)
+
         meta = {"meta": True, "session_id": body.session_id,
                 "provider": provider, "mode": mode, "temperature": temperature,
                 "thinking_s": round(_t.monotonic() - t_start, 1),
                 "tool_calls_run": result.get("tool_calls_run", 0),
                 "low_confidence": _low_confidence,
+                "bail_reason": _bail_reason,
                 "ship_suppressed": _ship_suppressed}
         yield f"data: {json.dumps(meta)}\n\n"
 

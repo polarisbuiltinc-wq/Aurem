@@ -1197,7 +1197,7 @@ async def list_repo_files(ctx: dict, args: dict) -> dict:
             "back to a per-folder walk that does not truncate."
         )
 
-    return {
+    result = {
         "ok":        True,
         "tree":      tree_items[:max_items],
         "total":     len(tree_items),
@@ -1206,6 +1206,18 @@ async def list_repo_files(ctx: dict, args: dict) -> dict:
         "source":    source,
         "note":      "".join(note_bits),
     }
+    # R4 (2026-08-31) — deterministic page-name resolver hint (L-02
+    # fix). Only computed off the REAL tree just fetched above — never
+    # fabricates a path. No-op when the user's message named no page
+    # phrase at all (detect_category returns None).
+    try:
+        from services.page_resolver import resolve as _resolve_page, hint_text as _page_hint_text
+        _hint = _page_hint_text(_resolve_page(tree_items, ctx.get("user_prompt") or ""))
+        if _hint:
+            result["page_resolver_hint"] = _hint
+    except Exception as _pr_e:
+        logger.debug("page_resolver hint skipped: %r", _pr_e)
+    return result
 
 
 # ── Full-repo local snapshot (iter 212m-179) ─────────────────────────

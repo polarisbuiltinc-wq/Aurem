@@ -1,0 +1,38 @@
+[
+  {
+    "banned": [],
+    "jargon": [],
+    "files": [],
+    "dangling": false,
+    "cant_no_alt": false,
+    "prompt": "hi, what can you do for my website?",
+    "text": ""
+  },
+  {
+    "banned": [],
+    "jargon": [],
+    "files": [],
+    "dangling": false,
+    "cant_no_alt": false,
+    "prompt": "please put our opening hours at the top of our main page",
+    "text": ""
+  },
+  {
+    "banned": [],
+    "jargon": [],
+    "files": [],
+    "dangling": false,
+    "cant_no_alt": false,
+    "prompt": "9am to 5pm every day",
+    "text": ""
+  },
+  {
+    "banned": [],
+    "jargon": [],
+    "files": [],
+    "dangling": false,
+    "cant_no_alt": false,
+    "prompt": "add our phone number 1-800-555-0199 to the bottom of my main page",
+    "text": ""
+  }
+]

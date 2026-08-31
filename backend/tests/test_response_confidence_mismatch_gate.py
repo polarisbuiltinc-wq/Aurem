@@ -131,7 +131,13 @@ def test_mismatched_response_swapped_for_fallback_in_stream(client_factory):
         "handoff fence leaked into the stream — Ship via CTO could still render"
     )
     assert "root cause" not in content.lower()
-    assert "I couldn't find a confident answer" in content
+    # R2 (2026-08-31) — the old generic FALLBACK_MESSAGE ("I couldn't
+    # find a confident answer...") was REPLACED by a reason-carrying
+    # bail (services/bail_reason.py) precisely so this never says the
+    # old useless fallback text. Assert the NEW contract instead.
+    from services.bail_reason import contains_banned_fallback_phrase
+    assert not contains_banned_fallback_phrase(content)
+    assert content.strip()
 
     events = [json.loads(line[len("data: "):])
               for line in r.text.splitlines() if line.startswith("data: ")]
@@ -158,7 +164,10 @@ def test_mismatched_response_swapped_for_fallback_in_send(client_factory):
     payload = r.json()
     content = payload.get("content", "")
     assert "aurem-handoff" not in content
-    assert "I couldn't find a confident answer" in content
+    # R2 (2026-08-31) — same contract update as the stream test above.
+    from services.bail_reason import contains_banned_fallback_phrase
+    assert not contains_banned_fallback_phrase(content)
+    assert content.strip()
     assert payload.get("low_confidence") is True, (
         "Confidence Badge: /chat/send response did not flag low_confidence"
     )

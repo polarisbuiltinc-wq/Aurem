@@ -7343,3 +7343,101 @@ separate founder "GO V1".
 numbers) remain open from prior rounds. STOPPED per founder's explicit instruction; PART B (V1 —
 server-side browser deploy-verify) is queued next as its own clean workstream, not started.
 
+
+## 2026-08-31 — ORA Business-Owner Voice Rework (R1-R5 + P1-P8), 3 Acceptance Gates GREEN
+
+Core rework making ORA's regular (non-`ora_panel`) chat usable for a
+NON-TECHNICAL business owner, per founder's detailed multi-part spec
+(business-owner voice rules doc + backend implementation spec P1-P8).
+All deterministic, zero LLM in any filter's hot path — same
+architecture as the existing `response_confidence.py`/`bail_reason.py`
+guard stack. **62 new named unit tests, all green; 3 live E2E gate
+tests (`tests/test_business_owner_gates_2026_08_31.py`) run against
+the real preview server, all green; zero net-new regressions** (3
+pre-existing unrelated failures confirmed via git-stash A/B, documented
+in this session — `test_happy_path_home_no_project`,
+`test_chat_router_wires_council_before_mode_f`,
+`test_response_confidence_gate_crash_is_swallowed`; plus 2
+GitHub-App-connection-dependent seo_core_engine tests, also confirmed
+pre-existing).
+
+**New files:** `services/business_voice_filter.py` (R1 — filename/
+jargon strip via `config/business_voice_map.json`, plus a universal
+"I don't have access to X" reframe), `services/bail_reason.py` (R2 —
+`classify_bail`/`strip_banned_fallback_phrases`, banned-phrase regex
+broadened to cover "not confident"/"please clarify"/"be more
+specific"), `services/no_dead_end_guard.py` (a "can't" must be
+followed by "but I can", skips reply that already has a real
+positive next step), `services/incomplete_reply_guard.py` (dangling-
+sentence detector/completer), `services/page_resolver.py` (R4 —
+deterministic "my homepage/about/contact/footer" → real file
+resolver, wired into `list_repo_files`' tool result as a hint, never
+silently substitutes the wrong file), `services/user_report_classifier.py`
++ `services/self_bug.py` + `services/self_bug_reply_guard.py` (P7
+self-repair — ORA recognizes ITS OWN bugs vs the user's website,
+logs a structured report + learned-recurrence counter to
+`ora_self_bugs`/`self_bug_learned`, replies with ownership + a real
+path forward, never "try rephrasing"/"check your browser"; read/
+log-only by construction — no unattended self-deploy path),
+`services/design_ask_detector.py` + `services/design_refusal_guard.py`
+(P8 — a design/brand/visual ask can never be refused with "send me
+your brand book"; gated on the FULL compliance check, not just a
+literal refusal regex, so soft deflections get caught too).
+
+**`services/business_voice_filter.py::apply_business_owner_guards()`**
+is now the single consolidated async guard chain (voice filter → bail-
+phrase strip → completeness → dead-end → design-refusal-if-design-ask),
+replacing what used to be 4 duplicated inline chains in
+`routers/chat.py` (a testing_agent code-review finding, fixed). A new
+`is_user_reporting_ora_bug()` short-circuit runs BEFORE tier routing
+in both `chat_send`/`chat_stream`. `BUSINESS_OWNER_VOICE_CONTRACT`
+persona block added to both endpoints' `extra_sys`, gated on
+`not ora_panel` — admin/technical view (`ora_panel=True`) is
+untouched by any of this.
+
+**Real bugs found + fixed along the way (not just the planned work):**
+(1) `chat_stream`'s "silent SSE close" empty-content fallback was
+verified via a `chat_sessions` DB query to have emitted the literal
+banned phrase "Please rephrase or try again" **177 times** in this
+pod's history — now caught by `strip_banned_fallback_phrases`. (2) A
+hardcoded frontend banner in `ChatPanel.jsx` said "try rephrasing or
+asking again" verbatim, completely bypassing every backend filter —
+replaced with a `bailReason`-driven message. (3) `PreviewPanel.jsx`
+fell through to a blank `<pre>` for a project with no live URL and no
+code blocks yet — added `data-testid="preview-empty-state"`. (4)
+`chat_send`'s API response never echoed `tier`/`intent` for ANY
+branch (chat_stream always did) — fixed, this was breaking 41
+pre-existing tests once the `is_user_reporting_ora_bug` short-circuit
+made that gap visible. (5) A first version of the design-refusal
+gate and the user-report classifier both had real false-
+positive/false-negative bugs caught via live E2E testing (over-broad
+"button...not working" pattern colliding with legitimate "fix the
+checkout button" requests; design guard only checking literal
+refusal regex missed real model soft-deflections) — both fixed and
+locked with regression tests.
+
+**Documented (not enforced by code, by design):** `/app/memory/
+HOUSE_RULES.md` — HR-VOICE, HR-COMPLETE, HR-NO-DEADEND,
+HR-DETERMINISTIC-OVER-PROMPT, HR-OWNER-VOX-POPULI, HR-SELF-REPAIR,
+HR-DESIGN-NO-REFUSAL (P6).
+
+**Deliberately NOT built (no false capability):** a standalone WCAG
+contrast-checker module for P8-C.4 (ORA's existing file read/write
+tooling already lets it edit theme/CSS files — that capability
+already existed; this rework only added the persona + anti-refusal
+guard layer, not a new visual-editing subsystem). A cross-session
+"Welcome back, last time we..." feature (R6, addendum) — the existing
+`session_summary`/`prior_assistant_text` continuity in
+`intent_gateway_casual_reply.py` substantially covers same-session
+continuity; full day-based greeting is left as a backlog item.
+
+**3 acceptance gates (live, real preview server, MOCK_LLM=False):**
+Gate 1 (4-prompt non-technical business-owner run) — zero jargon,
+zero dead-ends, all replies complete, Approve-button path intact.
+Gate 2 (2 design-ask prompts) — zero refusals, concrete directions,
+before/after offered, ≤1 question, honest big-project scoping. Gate
+3 (2 self-bug-report prompts) — ownership-first reply, no blame, real
+path forward, no error codes. Full transcripts:
+`/app/test_reports/business_voice_gates_transcript_2026_08_31.json`.
+Test reports: `iteration_business_voice_r1_r5_2026_08_31.json`,
+`iteration_business_voice_gates_2026_08_31.json`.

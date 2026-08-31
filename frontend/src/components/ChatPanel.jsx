@@ -43,6 +43,16 @@ import IntentTierIndicator from "./IntentTierIndicator";
 import ModeLoopPill from "./ModeLoopPill";
 import { isDismissedForSession, dismissForSession } from "../utils/sessionDismiss";
 import LoopStepBar from "./LoopStepBar";
+// 2026-08-31 (R2) — mirrors services/bail_reason.py's message family
+// so the "ship suppressed" note (below) never re-introduces a banned
+// dead-end phrase like "try rephrasing". Kept intentionally short —
+// the real, specific ask is already in the bubble's own content.
+const SHIP_SUPPRESSED_NOTE = {
+  missing_data: "I need one more detail from you to make this change safely — see my reply above.",
+  out_of_scope: "That's outside what I can change directly — see my reply above for what I can do instead.",
+  low_confidence: "I want to get this right — see my question above.",
+};
+
 import LoopStatusChip from "./LoopStatusChip";        // Iter 309 · Batch-2 aftermath — sticky loop-status chip
 import RevokedRepoBanner from "./RevokedRepoBanner";   // 2026-08-20 — in-chat revoked-access banner
 import PaymentFailedBanner from "./PaymentFailedBanner"; // 2026-08-22 — in-chat "update your card" banner
@@ -2436,6 +2446,11 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
               // fence (the thing that renders "Approve the fix") was the
               // thing suppressed, not just a bare "Root cause:" text.
               ...(m?.ship_suppressed ? { shipSuppressed: true } : {}),
+              // 2026-08-31 (R2) — carries WHY the confidence gate
+              // bailed (missing_data/out_of_scope/low_confidence, see
+              // services/bail_reason.py) so the UI note below can show
+              // a concrete reason instead of a generic banned phrase.
+              ...(m?.bail_reason ? { bailReason: m.bail_reason } : {}),
             };
           }
           return copy;
@@ -4878,7 +4893,13 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                   fence (the one thing that renders a "Approve the fix"
                   button, see MessageBubble.jsx) was suppressed by the
                   confidence gate — never for a normal Q&A turn like
-                  "what is 5+5?" (no fence was ever going to appear). */}
+                  "what is 5+5?" (no fence was ever going to appear).
+                  2026-08-31 (R2) — copy no longer says "try rephrasing
+                  or asking again" (the exact banned dead-end phrase);
+                  uses the concrete bail reason when available, same
+                  wording family as services/bail_reason.py's messages
+                  so the note and the bubble content never contradict
+                  each other. */}
               {m.role === "assistant"
                 && (m.shipSuppressed || m.ship_suppressed) && (
                 <div
@@ -4898,9 +4919,10 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
                     borderRadius: 999,
                     letterSpacing: 0.2,
                   }}
-                  title="An Approve-the-fix suggestion was withheld because ORA wasn't confident enough in it"
+                  title="ORA needs one more thing before it can suggest a change here"
                 >
-                  I'm not confident enough in this response to suggest a code change — try rephrasing or asking again.
+                  {SHIP_SUPPRESSED_NOTE[m.bailReason || m.bail_reason]
+                    || "I need a bit more to make this change safely — see my reply above."}
                 </div>
               )}
               <MessageBubble

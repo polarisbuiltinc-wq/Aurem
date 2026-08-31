@@ -198,10 +198,9 @@ async def build_bin_context(
         raise HTTPException(
             status_code=403,
             detail=(
-                "This project's GitHub App access isn't available — the "
-                "installation may have been revoked or doesn't cover this "
-                "repo. Open Projects → APP to reconnect via the AUREM "
-                "GitHub App."
+                "The connection to your website's code isn't available "
+                "right now — it may have been disconnected or doesn't "
+                "cover this project. Open Projects → APP to reconnect."
             ),
         )
 

@@ -1,0 +1,233 @@
+{
+  "summary": "END-TO-END acceptance run of the 3 business-owner-voice gates against the LIVE preview backend (/api/aurem-dev/chat/send with project_id=home, real LLM path, not stubs). Login test@aurem.dev worked. Prior blocker (revoked GitHub App) BYPASSED by using project_id=home, which routes through the same guard chain via intent_gateway_casual + apply_business_owner_guards. Result: GATE 1 FAILS on turn 1 (jargon leak: 'code' + 'files'), GATE 2 FAILS both turns (P8 refusal-guard regex is too narrow — misses the actual refusals the model produces), GATE 3 PASSES cleanly (both self-repair prompts short-circuit to the deterministic compose_self_bug_reply('user_reported') template). Regression casual 'hello!' still works. All 51 pre-existing unit tests (business_voice + design_p8 + self_repair_p7) still green — the bugs are integration gaps between the unit-tested regexes and the actual model output, not regressions in the unit-tested behaviour. FULL VERBATIM TRANSCRIPTS embedded below for the founder.",
+
+  "full_transcripts": {
+    "gate1_business_owner_flow": {
+      "session_id_type": "single continuous session (as required)",
+      "turns": [
+        {
+          "turn": 1,
+          "prompt": "hi, what can you do for my website?",
+          "reply_verbatim": "I can help fix bugs and improve your site's code—just share your website's files and I'll start working on real issues.",
+          "provider": "intent-gateway-casual",
+          "tier": "casual",
+          "verdict": "FAIL",
+          "checks": {
+            "no_developer_jargon": "FAIL — leaks 'code' AND 'files'. 'code' is not in business_voice_map.json (should be, e.g., 'website's content'). 'files' is INTRODUCED BY the map itself: the mapping `\"repo\": \"website's files\"` produces the very word Gate 1 bans.",
+            "no_dead_end_phrases": "PASS",
+            "ends_with_terminal_punct": "PASS (period)",
+            "no_dangling_cutoff": "PASS",
+            "aurem_handoff_fence_expected": "no — this is a capability question, not a fix"
+          }
+        },
+        {
+          "turn": 2,
+          "prompt": "please put our opening hours at the top of our main page",
+          "reply_verbatim": "I'd love to put your opening hours right at the top of your main page — but I don't see your website connected yet. I can't read or update your pages without it.\n\nTo get started: pick your website project from the sidebar on the left. Once it's connected, I'll be able to see your pages and make the change for you.\n\nAlso, what are your opening hours? Give me the days and times and I'll add them the moment your site is connected. but I can update the text, images, or layout on your site instead — want me to do that?",
+          "provider": "glm-5.2",
+          "tier": "agentic",
+          "verdict": "PASS (with cosmetic nit)",
+          "checks": {
+            "no_developer_jargon": "PASS",
+            "no_dead_end_phrases": "PASS",
+            "ends_with_terminal_punct": "PASS",
+            "no_dangling_cutoff": "PASS",
+            "cosmetic_nit": "no_dead_end_guard's DEFAULT_ALTERNATIVE ('but I can update the text, images, or layout on your site instead — want me to do that?') was appended even though the reply ALREADY offered a real path forward ('pick your website project from the sidebar'). Guard fires on presence of 'can't' regardless of whether a real alternative exists elsewhere in the reply. Reads awkwardly (double-ask, lowercase 'but' after '?')."
+          }
+        },
+        {
+          "turn": 3,
+          "prompt": "9am to 5pm every day",
+          "reply_verbatim": "Got it — 9am to 5pm, every day. I have that saved in my memory.\n\nBut I still can't see your website. No project is connected right now, so I can't read or update your pages yet.\n\nHere's what to do: pick your website project from the sidebar on the left. The moment it's connected, I'll add \"Open 9am–5pm, every day\" right at the top of your main page — no need to ask me again. but I can update the text, images, or layout on your site instead — want me to do that?",
+          "provider": "glm-5.2",
+          "tier": "casual",
+          "verdict": "PASS (with same cosmetic nit as T2)",
+          "checks": {
+            "no_developer_jargon": "PASS",
+            "no_dead_end_phrases": "PASS",
+            "ends_with_terminal_punct": "PASS",
+            "no_dangling_cutoff": "PASS",
+            "cosmetic_nit": "same DEFAULT_ALTERNATIVE double-ask"
+          }
+        },
+        {
+          "turn": 4,
+          "prompt": "add our phone number 1-800-555-0199 to the bottom of my main page",
+          "reply_verbatim": "I still can't see your website — no project is connected right now, so I can't read or update your pages.\n\nHere's what to do: pick your website project from the sidebar on the left. The moment it's connected, I'll add your phone number **1-800-555-0199** to the bottom of your main page (and I'll also add those opening hours at the top — I still have that saved).\n\nWhat else can I help with once your site is connected? but I can update the text, images, or layout on your site instead — want me to do that?",
+          "provider": "longcat-2.0",
+          "tier": "agentic",
+          "verdict": "PASS (with same cosmetic nit)",
+          "checks": {
+            "no_developer_jargon": "PASS — including 'sidebar' which is a UI word owners already understand",
+            "no_dead_end_phrases": "PASS",
+            "ends_with_terminal_punct": "PASS",
+            "no_dangling_cutoff": "PASS",
+            "cosmetic_nit": "same DEFAULT_ALTERNATIVE double-ask"
+          }
+        }
+      ],
+      "gate1_overall_verdict": "FAIL — turn 1 leaks 'code' and 'files'. T2/T3/T4 pass the hard rules but all three have a cosmetic no-dead-end double-append."
+    },
+
+    "gate2_design_ask": {
+      "turns": [
+        {
+          "prompt": "can you redesign our brand identity?",
+          "reply_verbatim": "I focus on publishing code—hit me with a GitHub issue and I'll help solve it directly.",
+          "provider": "intent-gateway-casual",
+          "tier": "casual",
+          "verdict": "FAIL",
+          "checks": {
+            "no_refusal_of_design_ask": "FAIL — reply is a hard deflection ('I focus on publishing code'). is_design_ask() correctly returns True for this prompt (verified live), but design_refusal_guard.has_refusal() returns False because the regex only matches literal phrases like 'I can't design [because] brand book/guidelines/strategy docs'. It does NOT match the generic 'I focus on X, not Y' deflection the model actually produced. So strip_design_refusal() never fires and DEFAULT_DESIGN_REPLY is never substituted.",
+            "no_session_or_access_jargon": "PASS (technically)",
+            "leaks_developer_jargon": "FAIL — 'code', 'GitHub', 'issue' — none are in business_voice_map.json, so business_voice_filter passes them through untouched.",
+            "has_can_do_now_statement": "FAIL — none",
+            "has_2_or_3_concrete_visual_directions": "FAIL — none",
+            "offers_before_after": "FAIL",
+            "asks_at_most_one_question": "PASS (0 questions)",
+            "frames_brand_new_logo_as_bigger_project": "FAIL — no scope line"
+          }
+        },
+        {
+          "prompt": "our site looks dated — can you modernize it?",
+          "reply_verbatim": "Absolutely! Share the website's files link and I'll analyze the current design, then propose modern updates with a clean Review request.",
+          "provider": "intent-gateway-casual",
+          "tier": "casual",
+          "verdict": "FAIL",
+          "checks": {
+            "no_refusal_of_design_ask": "PASS (agrees, doesn't refuse)",
+            "no_session_or_access_jargon": "PASS",
+            "leaks_developer_jargon": "FAIL — 'files' (from map's `repo -> website's files`) and 'Review request' (from map's `pull request -> review request`). The map values themselves are jargon-adjacent when read in-context.",
+            "has_can_do_now_statement": "FAIL",
+            "has_2_or_3_concrete_visual_directions": "FAIL — no directions listed",
+            "offers_before_after": "FAIL",
+            "asks_at_most_one_question": "PASS (0 questions)",
+            "frames_brand_new_logo_as_bigger_project": "FAIL"
+          }
+        }
+      ],
+      "gate2_overall_verdict": "FAIL — the P8 design-capability guarantee is NOT actually enforced end-to-end. It's only enforced when the model happens to phrase its refusal in the exact way the has_refusal/has_session_jargon regexes catch. Real model output on 'can you redesign our brand identity?' takes a different escape hatch ('I focus on publishing code…') that bypasses both regex checks entirely, so DEFAULT_DESIGN_REPLY never runs. The 42 unit tests for P8 all use synthesized inputs that DO match the narrow regex — none test 'what the actual intent_gateway_casual reply looks like on a design ask'."
+    },
+
+    "gate3_self_repair": {
+      "turns": [
+        {
+          "prompt": "the approve button isn't showing",
+          "reply_verbatim": "You're right, and I'm sorry — that's on me, not your website. Let me try that again, and I've flagged it so we fix it properly.",
+          "provider": "self-bug-reply (deterministic short-circuit, model NEVER called)",
+          "verdict": "PASS",
+          "checks": {
+            "starts_with_ownership": "PASS ('you're right, and I'm sorry — that's on me, not your website')",
+            "no_check_your_browser_cache_connection_blame": "PASS",
+            "has_real_path_forward": "PASS ('let me try that again' + 'I've flagged it')",
+            "no_technical_error_code_or_stack": "PASS",
+            "mongo_ora_self_bugs_row_check": "not verified this run — self_bug.emit() call is present in the wired path; DB read not required to grade the gate per review request"
+          }
+        },
+        {
+          "prompt": "I clicked it and nothing happened, and you keep saying try again — what do I even try?",
+          "reply_verbatim": "You're right, and I'm sorry — that's on me, not your website. Let me try that again, and I've flagged it so we fix it properly.",
+          "provider": "self-bug-reply (deterministic short-circuit)",
+          "verdict": "PASS",
+          "checks": {
+            "starts_with_ownership": "PASS",
+            "no_check_your_browser_cache_connection_blame": "PASS",
+            "has_real_path_forward": "PASS",
+            "no_technical_error_code_or_stack": "PASS"
+          }
+        }
+      ],
+      "gate3_overall_verdict": "PASS — the P7 deterministic short-circuit is working exactly as designed. Both self-repair-reporting prompts routed to compose_self_bug_reply('user_reported') without hitting the LLM."
+    },
+
+    "regression_casual_hello": {
+      "prompt": "hello!",
+      "reply_verbatim": "Hey there! 👋 What can I help you with today?",
+      "provider": "intent-gateway-casual",
+      "verdict": "PASS — normal casual chat unaffected by the new short-circuits."
+    }
+  },
+
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "/api/aurem-dev/chat/send  (via services/business_voice_filter.py + config/business_voice_map.json)",
+        "issue": "GATE 1 REGRESSION — the intent_gateway_casual reply for the very first prompt ('hi, what can you do for my website?') leaks the words 'code' and 'files' to a non-technical owner. Root cause A: 'code' is not in business_voice_map.json, so it passes through untouched. Root cause B: the map itself REWRITES 'repo' -> 'website's files', which INTRODUCES the banned word 'files'. Recommend adding 'code' -> 'website's content' (or similar) and changing `\"repo\": \"website's files\"` -> `\"repo\": \"website's pages\"` (or similar file-free phrasing). Both are pure config-data edits in one JSON file.",
+        "priority": "HIGH"
+      },
+      {
+        "endpoint": "/api/aurem-dev/chat/send  (via services/design_refusal_guard.py)",
+        "issue": "GATE 2 GUARANTEE NOT ENFORCED END-TO-END — has_refusal() and has_session_jargon() regexes ONLY catch verbose 'I need your brand book/guidelines/strategy docs' phrasings. Real model output for 'can you redesign our brand identity?' takes a DIFFERENT escape hatch ('I focus on publishing code — hit me with a GitHub issue') that neither regex matches, so strip_design_refusal() never fires and DEFAULT_DESIGN_REPLY never gets substituted. Recommend broadening has_refusal() to also match 'I focus on {code|coding|publishing code|bugs|technical}', 'hit me with a {github|issue|ticket}', 'share the {website's files|repo|codebase}' as design-ask deflections, OR change the guard architecture so that on is_design_ask=True the guard checks is_compliant_design_reply(content) and substitutes DEFAULT_DESIGN_REPLY when NOT compliant (rather than only when has_refusal matches). The P8 unit tests all use synthesized inputs that DO trigger has_refusal — none test 'what does intent_gateway_casual actually reply on a real design ask', which is why the gap wasn't caught in unit tests.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "services/no_dead_end_guard.py",
+        "issue": "ensure_alternative() appends DEFAULT_ALTERNATIVE any time the reply contains 'can't', WITHOUT checking whether the reply already offered a real alternative elsewhere. Gate 1 T2/T3/T4 all reply with a real path forward ('pick your website project from the sidebar') AND get a redundant 'but I can update the text, images, or layout on your site instead — want me to do that?' pinned on the end. Reads awkwardly and asks a second unrelated question. Consider only appending when NO 'here's what to do'/'pick your'/'I'll add'/'once it's connected'/etc positive-path-forward pattern exists elsewhere in the reply. Also: the join uses ' — ' when the reply doesn't end with terminal punctuation, but when it DOES the guard just space-appends 'but I can…' with a lowercase 'b' after a '?' — grammatically a new sentence should start capitalised."
+      },
+      {
+        "endpoint": "services/business_voice_filter.py",
+        "issue": "The map's `\"pull request\" -> \"review request\"` substitution produced 'clean Review request' in Gate 2 T2 (capitalisation preserved from mid-sentence position). Reads slightly stilted but not a jargon leak — noted for polish."
+      }
+    ]
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Gate 1 first-turn capability question via ChatPanel",
+        "issue": "Whatever the ChatPanel eventually renders for the first-turn capability question, it will show 'I can help fix bugs and improve your site's code—just share your website's files' — same jargon leak as the API layer, since ChatPanel just renders content returned by /chat/send.",
+        "affected_selectors": ["[data-testid='chat-panel']", "MessageBubble.jsx"]
+      }
+    ],
+    "design_issues": [],
+    "note": "Full frontend E2E via Playwright was NOT re-run this pass. The previous testing_agent (report iteration_business_voice_r1_r5_2026_08_31.json) already verified R5a/R5b UI rendering and the Approve-button gating. This pass targets the transcript deliverable at the API layer, which is the authoritative source of the text the UI subsequently renders (ChatPanel does not post-process content). Approve-button gating regression untouched — no ```aurem-handoff fence was emitted by any of the 4 Gate 1 prompts because none produced a code-fix (repo is not connected)."
+  },
+
+  "test_report_links": [
+    "/app/backend/tests/test_business_owner_gates_2026_08_31.py",
+    "/app/test_reports/business_voice_gates_transcript_2026_08_31.json",
+    "/app/test_reports/pytest/business_voice_gates_2026_08_31.xml"
+  ],
+
+  "action_items": [
+    "HIGH — Fix Gate 1: add 'code'/'files'/'file' handling to /app/backend/config/business_voice_map.json (add `code`/`codes` -> `content`/`website content`, and change `\"repo\": \"website's files\"` -> `\"repo\": \"website's pages\"` or similar 'file'-free phrasing). Consider adding 'files' as its own key mapping to 'pages' or removing 'files' from map values entirely.",
+    "HIGH — Fix Gate 2: broaden design_refusal_guard.has_refusal() to catch generic deflections ('I focus on X', 'hit me with a github/issue/ticket'), OR change the wiring in apply_business_owner_guards() so that when is_design_ask(user_prompt) is True and NOT is_compliant_design_reply(content), the reply is replaced wholesale with DEFAULT_DESIGN_REPLY. The unit tests would then need a new case that feeds 'I focus on publishing code…' through the guard and asserts DEFAULT_DESIGN_REPLY replaces it.",
+    "MEDIUM — Fix no_dead_end_guard.ensure_alternative() double-append: skip when the reply already contains a positive path-forward pattern ('pick your website project', 'here's what to do', 'the moment it's connected', 'once it's connected'), and capitalise the appended sentence when the preceding text ends with terminal punctuation ('But I can…' not 'but I can…').",
+    "LOW — Add integration tests that call apply_business_owner_guards() with the ACTUAL text intent_gateway_casual_reply() produces for the 6 gate prompts (record fixtures, replay in tests) so future changes to the map/regexes can't silently reopen these gaps."
+  ],
+
+  "critical_code_review_comments": [
+    "backend/routers/chat.py is still 4,329 lines — same code-review comment from prior report still applies. The consolidated apply_business_owner_guards() helper landed cleanly and is now called at 4 sites (lines 691, 895, 2591, 3467 approx) — good — but the router itself has not been split.",
+    "The 51 unit tests for business_voice/design_p8/self_repair_p7 all pass, but they exclusively use synthesized inputs designed to match the guard regexes. They do NOT exercise the FULL PATH from user prompt -> LLM/casual-reply-generator -> guards -> final content. This is a testing-shape gap that let Gate 1 T1 and Gate 2 T1+T2 ship with the guarantees unenforced. Recommend adding at least one 'golden path' test per gate that goes through /chat/send.",
+    "design_refusal_guard.is_compliant_design_reply() is DEFINED but never CALLED as the gating condition — only has_refusal/has_session_jargon are checked in apply_business_owner_guards. This is a discoverability trap: the 'guarantee' function exists but isn't wired as the substitution gate."
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_business_owner_gates_2026_08_31.py (new — E2E gate test file)"
+  ],
+
+  "success_rate": {
+    "backend_pytest": "5/6 (83%) test cases green — Gate 1 asserted-fail on jargon leak, Gate 2 assertions PASSED because the narrow test-asserts only checked has_refusal/has_session_jargon (matching production guard behaviour), but the FULL P8 contract per review-request criteria FAILS both turns",
+    "unit_tests_regression": "51/51 (100%) — no regression in unit-level guard tests (business_voice + design_p8 + self_repair_p7)",
+    "gate1_founder_criteria": "1/4 turns fail (T1 jargon leak)",
+    "gate2_founder_criteria": "0/2 turns pass full P8 contract (both fail can-do-now, concrete-directions, scope-line, no-jargon)",
+    "gate3_founder_criteria": "2/2 turns pass",
+    "regression_smoke": "1/1 pass"
+  },
+
+  "test_credentials": "test@aurem.dev / AuremTest2026! — login worked, JWT returned tier=founder, is_unlimited=true",
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Preview backend is /api/aurem-dev prefix (NOT /api directly). /chat/send works with project_id='home' and bypasses the revoked GitHub App issue that blocked the prior testing_agent — use this to get real LLM output through the full guard chain for future business-voice testing. Full transcripts saved at /app/test_reports/business_voice_gates_transcript_2026_08_31.json (raw json) and embedded in this iteration report. After the two HIGH-priority fixes land (business_voice_map data + design_refusal wiring), re-run test_business_owner_gates_2026_08_31.py — should go 6/6. The 3rd action item (double-append cosmetic) is nice-to-have but not blocking. LLM providers on this preview are anthropic sonnet-4.5 + glm-5.2 + longcat-2.0 (all live, not mocked — health check shows MOCK_LLM=false, longcat_live=true).",
+
+  "rca_of_the_issue": {
+    "gate1_t1": "Root cause is TWO-fold. (a) business_voice_map.json omits 'code' — the raw casual reply generator freely uses the word 'code' as consumer-friendly-ish shorthand and the filter passes it through. (b) The map itself uses the word 'files' as the humanized replacement for 'repo' ('website's files'), so ANY reply that mentioned 'repo' pre-filter emits the banned word 'files' POST-filter. Gate 1's founder criteria explicitly ban 'file' (banned-word grep). The mapping table needs to be reconciled with the banned-word list — one source of truth.",
+    "gate2_both_turns": "The P8 guard was designed for the SPECIFIC failure mode 'model says I need brand book/guidelines/strategy docs.' In practice, when the design ask hits the intent_gateway_casual short path (tier=casual, low confidence), the model instead deflects with 'I focus on publishing code — hit me with a GitHub issue' — a different refusal shape entirely. The has_refusal regex doesn't catch this class, so strip_design_refusal is never invoked, and the P8 default reply never lands. The design_refusal_guard.is_compliant_design_reply() function correctly detects the reply as non-compliant, but that function is only used inside unit tests, not wired as the substitution trigger in production.",
+    "gate3_pass": "Working as designed — the P7 short-circuit in chat.py routes on is_user_reporting_ora_bug(prompt) BEFORE tier routing, calls compose_self_bug_reply('user_reported'), and returns the deterministic template directly. Model was not called on either turn."
+  }
+}
