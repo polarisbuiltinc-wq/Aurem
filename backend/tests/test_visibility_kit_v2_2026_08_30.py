@@ -181,23 +181,90 @@ async def test_t_kit_apply_gated_off_while_apply_flag_off():
 
 
 @pytest.mark.asyncio
-async def test_t_kit_apply_proceeds_past_gate_when_flag_on():
-    """Proves the gate is real (not a no-op) — with the flag ON, the
-    SAME free-plan request now reaches the billing gate (402) instead
-    of being blocked at 403 by the R9-gate."""
+async def test_t_kit_apply_proceeds_past_r9_gate_to_quota_gate_when_flag_on():
+    """2026-08-31 — the old Pro-tier paywall is REMOVED (Kit Apply is
+    free on every plan for a limited period). Proves the R9-gate is
+    still real (not a no-op): with the flag ON, the SAME free-plan
+    request now reaches the TASK-QUOTA gate (services/scan_fix_quota.py)
+    instead of being blocked at 403 by the R9-gate — never a billing
+    'upgrade to Pro' 402 anymore."""
     from routers.visibility import apply_kit, ApplyBody
+    from fastapi import HTTPException
     db = MagicMock()
     db.cto_projects.find_one = AsyncMock(return_value={
         "project_id": "p1", "user_id": "u1", "github_owner": "o", "github_repo": "r",
     })
-    db.dev_users.find_one = AsyncMock(return_value={"tier": "free"})
+    quota_exhausted = HTTPException(402, {"error": "insufficient_tasks"})
     with patch("routers.visibility.current_dev", new=AsyncMock(return_value={"user_id": "u1"})), \
          patch("routers.visibility.get_db", return_value=db), \
-         patch("services.feature_flags.is_enabled", new=AsyncMock(return_value=True)):
-        from fastapi import HTTPException
+         patch("services.feature_flags.is_enabled", new=AsyncMock(return_value=True)), \
+         patch("services.scan_fix_quota.assert_can_fix",
+               new=AsyncMock(side_effect=quota_exhausted)) as mock_assert_can_fix:
         with pytest.raises(HTTPException) as exc_info:
             await apply_kit("p1", ApplyBody(items=["ai_crawler_policy"]), authorization="Bearer x")
     assert exc_info.value.status_code == 402
+    assert exc_info.value.detail["error"] == "insufficient_tasks"
+    # Gated by TOOL "visibility-kit" — proves it's wired into the SAME
+    # quota system as vanguard-scan/health-scan/etc., not a bespoke gate.
+    mock_assert_can_fix.assert_awaited_once()
+    called_args = mock_assert_can_fix.await_args
+    assert called_args.args[1] == "visibility-kit"
+
+
+def test_t_visibility_kit_free_on_every_tier_but_costs_a_task():
+    """The removed paywall's replacement: every tier (including free)
+    has 'visibility-kit' in its fix-tool set — no plan gate — but it's
+    registered in ALL_FIX_TOOLS, so it still draws from the same
+    monthly task quota as vanguard-scan/health-scan/etc. Not unmetered."""
+    from services import scan_fix_quota as q
+    assert "visibility-kit" in q.ALL_FIX_TOOLS
+    for tier in ("free", "starter", "pro", "team", "founder"):
+        assert "visibility-kit" in q.FIX_TOOLS_BY_TIER[tier], tier
+
+
+@pytest.mark.asyncio
+async def test_t_kit_apply_records_task_only_on_real_success():
+    """1 apply = 1 task, deducted ONLY for a real successful PR open —
+    never pre-deducted, never charged for a request that found nothing
+    to apply or failed to open a PR (same rule scan_fix_quota.py's
+    docstring states for every other fix tool)."""
+    from routers.visibility import apply_kit, ApplyBody
+
+    def _make_db():
+        db = MagicMock()
+        db.cto_projects.find_one = AsyncMock(return_value={
+            "project_id": "p1", "user_id": "u1", "github_owner": "o", "github_repo": "r",
+        })
+        db.visibility_bot_policies.find_one = AsyncMock(return_value=None)
+        return db
+
+    common_patches = [
+        patch("routers.visibility.current_dev", new=AsyncMock(return_value={"user_id": "u1"})),
+        patch("services.feature_flags.is_enabled", new=AsyncMock(return_value=True)),
+        patch("services.scan_fix_quota.assert_can_fix", new=AsyncMock(return_value={})),
+        patch("services.pat_vault.get_repo_token_or_error",
+              new=AsyncMock(return_value=("tok", None, None))),
+    ]
+
+    # Success case — record_scan_fixes MUST be called.
+    db = _make_db()
+    with common_patches[0], common_patches[1], common_patches[2], common_patches[3], \
+         patch("routers.visibility.get_db", return_value=db), \
+         patch("services.visibility.apply.apply_visibility_kit",
+               new=AsyncMock(return_value={"ok": True, "pr_url": "https://x/pull/1"})), \
+         patch("services.scan_fix_quota.record_scan_fixes", new=AsyncMock()) as mock_record:
+        await apply_kit("p1", ApplyBody(items=["ai_crawler_policy"]), authorization="Bearer x")
+    mock_record.assert_awaited_once_with("u1", "visibility-kit", count=1)
+
+    # Failure case (e.g. no items implemented) — record_scan_fixes must NOT run.
+    db2 = _make_db()
+    with common_patches[0], common_patches[1], common_patches[2], common_patches[3], \
+         patch("routers.visibility.get_db", return_value=db2), \
+         patch("services.visibility.apply.apply_visibility_kit",
+               new=AsyncMock(return_value={"ok": False, "error": "no_implemented_items_in_request"})), \
+         patch("services.scan_fix_quota.record_scan_fixes", new=AsyncMock()) as mock_record2:
+        await apply_kit("p1", ApplyBody(items=["ai_crawler_policy"]), authorization="Bearer x")
+    mock_record2.assert_not_awaited()
 
 
 # ── t_kit_score_calculation ──────────────────────────────────────────
@@ -235,6 +302,10 @@ async def test_t_kit_score_calculation_pr_created_is_half_weight():
     # 25 (full, pr_merged) + 10 (half of 20, pr_created) = 35 / 45 total weight
     assert out["score"] == round(100 * 35 / 45)
     assert out["apply_enabled"] is False
+    # 2026-08-31 — every state response carries the honest pricing note
+    # (no separate Kit price, free for now, still 1 task on apply).
+    assert "free" in out["pricing_note"].lower()
+    assert "1 task" in out["pricing_note"]
 
 
 def test_t_kit_catalog_weights_sum_to_100_and_pr_created_half_documented():

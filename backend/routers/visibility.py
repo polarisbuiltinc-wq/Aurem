@@ -4,7 +4,7 @@ routers/visibility.py — Visibility Kit (SEO+GEO+AEO) Phase B API (spec §5).
 GET  /visibility/catalog                       → 7-item catalog
 GET  /visibility/projects/{pid}/state           → score + per-item status
 PUT  /visibility/projects/{pid}/bot-policy      → save training-bot choices
-POST /visibility/projects/{pid}/apply           → apply engine (402 gated)
+POST /visibility/projects/{pid}/apply           → apply engine (task-quota gated)
 POST /visibility/applications/{id}/revert       → close PR + delete branch
 """
 from __future__ import annotations
@@ -19,10 +19,11 @@ from cto_services.db import get_db
 
 router = APIRouter(prefix="/visibility", tags=["Visibility Kit"])
 
-# §11 pricing gate — apply requires plan >= PRO. Reuses the SAME tier
-# field routers/payments.py already writes (dev_users.tier), no new
-# entitlement system.
-_APPLY_ALLOWED_TIERS = {"pro", "team", "founder", "admin", "unlimited"}
+# 2026-08-31 — Apply's plan-tier paywall (Pro+) is REMOVED for a
+# limited promotional period: every tier, including Free, can Apply.
+# It is NOT unmetered — it draws from the SAME monthly task quota as
+# every other fix tool (services/scan_fix_quota.py), 1 apply = 1 task,
+# deducted only on a successful PR open. No separate Kit price exists.
 
 
 @router.get("/catalog")
@@ -78,6 +79,13 @@ async def get_state(project_id: str, authorization: str = Header(None)):
             None if apply_enabled else
             "Apply available once ship-via-PR (R9) is proven live on production."
         ),
+        # 2026-08-31 — no separate Kit price exists; free for a limited
+        # promotional period on every plan. Applying still draws 1 task
+        # from your existing monthly quota (services/scan_fix_quota.py).
+        "pricing_note": (
+            "Free to use for a limited time — Apply still uses 1 task "
+            "from your plan's regular monthly quota, no extra charge."
+        ),
     }
 
 
@@ -129,16 +137,11 @@ async def apply_kit(project_id: str, body: ApplyBody, authorization: str = Heade
             "message": "Apply available once ship-via-PR (R9) is proven live on production.",
         })
 
-    dev_row = await db.dev_users.find_one({"user_id": user["user_id"]}, {"_id": 0, "tier": 1})
-    tier = (dev_row or {}).get("tier") or "free"
-    # t_billing_gate — free plan → 402 with a friendly, actionable upgrade
-    # payload (R2), never a raw "forbidden".
-    if tier not in _APPLY_ALLOWED_TIERS:
-        raise HTTPException(402, {
-            "error": "upgrade_required",
-            "message": "Apply (opening the Visibility Kit PR) needs a Pro plan.",
-            "upgrade_url": "/pricing",
-        })
+    # 2026-08-31 — quota gate replaces the old Pro-tier paywall. Free
+    # for a limited time: every tier can apply, but it still costs 1
+    # task from the SAME monthly quota chat/scan fixes use.
+    from services.scan_fix_quota import assert_can_fix, record_scan_fixes
+    await assert_can_fix(user, "visibility-kit", count=1)
 
     from services.pat_vault import get_repo_token_or_error
     token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
@@ -156,6 +159,10 @@ async def apply_kit(project_id: str, body: ApplyBody, authorization: str = Heade
         scan_urls=proj.get("scan_urls") or [], site_meta=proj.get("site_meta") or {},
         bot_policy=bot_policy, force=body.force,
     )
+    # Deduct ONLY on a real successful PR open — never pre-deduct, and
+    # never charge for a request that failed/found nothing to apply.
+    if result.get("ok"):
+        await record_scan_fixes(user["user_id"], "visibility-kit", count=1)
     return result
 
 

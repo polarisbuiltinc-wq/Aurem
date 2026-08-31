@@ -1393,3 +1393,25 @@ Top suspect flagged to founder: production env vars may still have
 `PLAYWRIGHT_CHROME_EXECUTABLE_PATH=/root/bin/chromium` set (copied from
 preview), which would override the new `PLAYWRIGHT_BROWSERS_PATH`
 default and explain the fix not taking even after a real redeploy.
+
+## 2026-08-31 — Visibility Kit: removed Pro-tier paywall, wired into existing task quota (free for now)
+
+Founder asked: no separate charge for Kit right now, keep free, but
+"charge tokens from plan." Removed the old `_APPLY_ALLOWED_TIERS`
+Pro-plan 402 paywall in `routers/visibility.py::apply_kit`. Replaced it
+with `services/scan_fix_quota.py`'s existing task-quota gate — added
+"visibility-kit" to `ALL_FIX_TOOLS` and to EVERY tier's fix-set
+(including `free`), so Apply is available on every plan with no
+upgrade wall, but still deducts 1 task from the SAME monthly quota
+chat/other scan fixes use — never pre-deducted, only on a real
+successful PR open (`record_scan_fixes` called only when
+`apply_visibility_kit` returns `ok: True`). Added a `pricing_note`
+field to `GET /visibility/projects/{id}/state` ("Free to use for a
+limited time — Apply still uses 1 task from your plan's regular
+monthly quota, no extra charge") and surfaced it in
+`VisibilityKitPanel.jsx` (`data-testid="kit-pricing-note"`). 3 new
+tests + 1 existing test updated in
+`test_visibility_kit_v2_2026_08_30.py` — 27/27 passed. Note: this is
+prep work — `kit_apply_enabled` is still OFF, so no real user can hit
+Apply yet either way; this just gets the billing plumbing right for
+when it's turned on.

@@ -272,6 +272,11 @@ export default function VisibilityKitPanel({ projectId, siteDomain, onClose }) {
             <p data-testid="kit-score-note" style={{ color: MUTED, fontSize: 11.5, margin: "6px 0 0" }}>
               This is a preparedness checklist, not live citation tracking.
             </p>
+            {state.pricing_note && (
+              <p data-testid="kit-pricing-note" style={{ color: "#4ADE80", fontSize: 11.5, margin: "4px 0 0" }}>
+                {state.pricing_note}
+              </p>
+            )}
             {!state.apply_enabled && (
               <div data-testid="kit-apply-disabled-banner" style={{
                 marginTop: 10, fontSize: 12, color: "#FB923C",
