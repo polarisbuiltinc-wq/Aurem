@@ -30,6 +30,7 @@ export const ADMIN_NAV = [
   { id: "users",           label: "Users (Legacy)",       route: "/admin/users",          group: "USERS" },
   { id: "support",         label: "Support",              route: "/admin/support",        group: "USERS" },
   { id: "suggestions",     label: "Suggestions",          route: "/admin/suggestions",    group: "USERS" },
+  { id: "self_bugs",       label: "Self-Repair Log",      route: "/admin/self-bugs",       group: "USERS" },
   { id: "audit",           label: "Audit Log",            route: "/admin/audit",          group: "USERS" },
   { id: "feature_flags",   label: "Feature Flags",        route: "/admin/feature-flags",  group: "CONFIG" },
   { id: "house_rules",     label: "House Rules V2",       route: "/admin/house-rules",    group: "CONFIG" },

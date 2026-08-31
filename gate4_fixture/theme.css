@@ -1,0 +1,35 @@
+/* theme.css — the ONE central stylesheet for this fixture site.
+   Every page includes this file for all color decisions. */
+:root {
+  --bg-color: #ffffff;       /* dated cream background */
+  --panel-bg: #fafafa;       /* dated tan panel */
+  --text-color: #737373;     /* dark brown body text */
+  --heading-color: #18181b;  /* darker brown headings */
+  --accent-color: #6366f1;   /* dated caramel accent */
+  --border-color: #e5e5e5;
+}
+
+body {
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-family: -apple-system, Inter, sans-serif;
+  margin: 0;
+  padding: 40px;
+}
+
+h1 { color: var(--heading-color); }
+
+.panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  padding: 24px;
+  border-radius: 4px;
+}
+
+.btn {
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 4px;
+}

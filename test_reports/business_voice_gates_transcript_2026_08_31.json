@@ -4,7 +4,7 @@
     {
       "turn": 1,
       "prompt": "hi, what can you do for my website?",
-      "reply": "I can help optimize your website’s performance and fix any issues directly in your website's pages!",
+      "reply": "I can help fix bugs, improve content, and go live with updates—just share your website's pages and what you need.",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -22,7 +22,7 @@
     {
       "turn": 2,
       "prompt": "please put our opening hours at the top of our main page",
-      "reply": "Got it! I'll add your opening hours prominently at the top of the main page right now. Want to review before I update?",
+      "reply": "I'd love to make that happen — I just need one thing from you: **what are your opening hours?** (e.g. \"Mon–Fri 9am–5pm, Sat 10am–2pm, closed Sun\")\n\nOnce you share those, I'll put them right at the top of your main page.",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -32,15 +32,15 @@
         "no_dangling": true,
         "has_handoff_fence": false
       },
-      "provider": "intent-gateway-casual",
-      "tier": "clarify",
+      "provider": "glm-5.2",
+      "tier": "agentic",
       "bail_reason": null,
       "ship_suppressed": false
     },
     {
       "turn": 3,
       "prompt": "9am to 5pm every day",
-      "reply": "Perfect! Adding those hours now—stand by for the preview.",
+      "reply": "Got it! I'll add \"Open daily 9am–5pm\" to your page right away.",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -58,7 +58,7 @@
     {
       "turn": 4,
       "prompt": "add our phone number 1-800-555-0199 to the bottom of my main page",
-      "reply": "I can't update your page right now because no website is connected to this chat. \n\n**But I can** help you the moment you connect your website — just click the project selector in the sidebar and choose your site. Once connected, I'll add that phone number to the bottom of your main page in seconds.\n\nWant me to walk you through connecting your website?",
+      "reply": "I can't add the phone number right now because no website is connected — I need you to **select your project from the sidebar** first, then I can update your page.\n\nOnce you've selected it, I'll add \"1-800-555-0199\" to the bottom of your main page along with the opening hours we discussed.",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -137,7 +137,7 @@
   "regression": [
     {
       "prompt": "hello!",
-      "reply": "Hey! How can I assist you today?",
+      "reply": "Hey! How can I help today?",
       "provider": "intent-gateway-casual",
       "tier": "casual"
     }

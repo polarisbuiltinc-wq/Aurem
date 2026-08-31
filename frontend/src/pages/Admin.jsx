@@ -10,9 +10,10 @@ import {
   Cpu, CreditCard, Network as SitemapIcon, Settings as SettingsIcon,
   LogOut, ExternalLink, ArrowLeft, Loader2, Brain, Eye, Terminal,
   Mail, Activity, Plug, GitBranch, Zap, ShieldAlert, DollarSign, ShieldCheck,
-  Menu, X, Wrench, KeyRound, Sparkles,
+  Menu, X, Wrench, KeyRound, Sparkles, Bug,
 } from "lucide-react";
 import { api } from "../lib/api";
+import AdminSelfBugs from "./AdminSelfBugs";              // Item 3 (2026-08-31)
 import { toast } from "../components/Toast";
 import { buildGroupedAdminNav } from "../lib/adminNav";
 import AuremAdminPanel from "../components/AuremAdminPanel";
@@ -1771,6 +1772,7 @@ const NAV = buildGroupedAdminNav({
   users: Users,
   support: Mail,
   suggestions: MessageCircle,   // Iter 212m-193
+  self_bugs: Bug,               // Item 3 (2026-08-31)
   audit: ShieldAlert,
   feature_flags: Zap,
   house_rules: ShieldCheck,
@@ -1949,6 +1951,7 @@ export default function Admin({ initialTab = "overview" }) {
       case "payments":       return <AdminFinancialsLazy />;
       case "support":        return <AdminSupportPageLazy />;
       case "suggestions":    return <AdminSuggestions />;
+      case "self_bugs":      return <AdminSelfBugs />;
       case "audit":          return <AdminAuditPageLazy />;
       case "house_rules":    return <AdminHouseRules />;
       case "robot_guide":    return <AdminRobotGuide />;

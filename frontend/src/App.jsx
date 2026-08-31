@@ -401,6 +401,7 @@ export default function App() {
           <Route path="/admin/dashboard" element={<AdminRoute><Admin initialTab="dash" /></AdminRoute>} />
           <Route path="/admin/users"       element={<AdminRoute><Admin initialTab="users" /></AdminRoute>} />
           <Route path="/admin/suggestions" element={<AdminRoute><Admin initialTab="suggestions" /></AdminRoute>} />
+          <Route path="/admin/self-bugs" element={<AdminRoute><Admin initialTab="self_bugs" /></AdminRoute>} />
           <Route path="/admin/overview"  element={<AdminRoute><Admin initialTab="overview" /></AdminRoute>} />
           {/* Feb 2026 · Sidebar Integrity fix — every in-shell sidebar
               item now has a real deep-linkable URL so browser Back /

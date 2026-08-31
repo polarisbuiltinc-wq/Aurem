@@ -7441,3 +7441,72 @@ path forward, no error codes. Full transcripts:
 `/app/test_reports/business_voice_gates_transcript_2026_08_31.json`.
 Test reports: `iteration_business_voice_r1_r5_2026_08_31.json`,
 `iteration_business_voice_gates_2026_08_31.json`.
+
+## 2026-08-31 (later, "NEXT ROUND") — Gate 4 dry-run + Contrast Guard + Self-Bug Dashboard — Items 2 & 3 DONE, Item 1 partial (infra-blocked)
+
+Three preview-only items requested: (1) Gate 4 real redesign E2E,
+(2) deterministic contrast guard, (3) read-only self-bug dashboard.
+Founder chose: use existing connected drill repo for Gate 4 (blocked,
+see below); OK to seed safe preview self-bug entries.
+
+**Item 2 — Contrast guard (DONE, tested):** new
+`services/contrast_guard.py` — deterministic WCAG relative-luminance
+math (`contrast_ratio`, `is_readable`, `nudge_to_readable`,
+`check_and_nudge_css`), threshold 4.5:1 (AA normal text), NO LLM.
+Confirmed via codebase search this is genuinely new (no pre-existing
+contrast utility existed to reuse). Wired into
+`services/local_tools.py::write_repo_file()` — any CSS write with
+`--text-var: #hex;` custom properties gets checked/nudged BEFORE the
+commit. Tests: `tests/test_contrast_guard_2026_08_31.py` (9),
+`tests/test_contrast_guard_write_wiring_2026_08_31.py` (2) — 11/11
+pass, including required `t_contrast_rejects_unreadable`,
+`t_contrast_passes_readable`, `t_contrast_is_deterministic`.
+
+**Item 3 — Self-Bug Dashboard (DONE, tested, browser-verified):**
+`routers/self_bugs_admin.py` (`GET /api/aurem-dev/admin/self-bugs/list`,
+admin-gated, zero mutate routes) + `frontend/src/pages/AdminSelfBugs.jsx`
+wired into Admin at `/admin/self-bugs` (added to `lib/adminNav.js`,
+`App.jsx` route, `Admin.jsx` import/icon/switch-case). Lists
+`ora_self_bugs`, sorted by recurrence (`times_seen` desc, `ts` desc
+tiebreak), type filter chips, zero edit/delete affordances anywhere
+on the page. Tests: `tests/test_self_bugs_admin_dashboard_2026_08_31.py`
+(5/5) incl. required `t_self_bug_dashboard_lists`,
+`_recurring_bubbles_up`, `_readonly`. Live-verified via screenshot
+against real preview data (`dead_end_leak` at times_seen=20 correctly
+bubbled to top) — logged in test_admin_001@/`test@aurem.dev` pod.
+
+**Item 1 — Gate 4 real redesign E2E (INFRA-BLOCKED → dry-run instead,
+per founder's explicit choice):** Confirmed via live diagnostic
+(`GET /api/aurem-dev/admin/github-app-diagnostics`) that this
+preview's GitHub App JWT is signed successfully but REJECTED by
+GitHub itself (`401 Unauthorized` on `GET /app/installations`) — same
+root cause as the pre-existing 2026-08-27 finding
+(`test_iter2026_08_27_ship_e2e_real_push.py`, still skipped). No
+installation currently covers `polarisbuiltinc-wq/aurem-rollback-testbed`;
+`pat_vault` confirms PAT/OAuth auth was intentionally removed (App-only).
+This is a founder-only fix (re-paste a fresh GitHub App private key at
+Admin → Settings → GitHub App) — per standing house rule, did NOT
+re-debug JWT signing further. Founder chose dry-run option instead:
+built a local-only fixture site (`/app/gate4_fixture/` — "Aurora
+Bakery Co.", central `theme.css` with `:root` CSS vars, dated
+beige/brown/serif palette) and ran the REAL production
+`contrast_guard.check_and_nudge_css()` against ORA's first-draft
+"modern and clean" palette proposal. Guard caught 2 unreadable pairs
+or the real proposal (2.08:1 and 2.17:1) and nudged both to pass AA
+(4.54:1, 4.74:1) BEFORE the file was written. Before/after screenshots
+captured showing a clear, readable visual change. **Honest scope:**
+this proves the contrast-guard + redesign-logic pipeline works
+end-to-end; it does NOT prove a live GitHub commit (that step remains
+blocked on the founder's key refresh). No `t_real_redesign_*` gate
+was marked passed against a real repo — labeled explicitly as partial.
+
+**Regression:** re-ran `tests/test_business_owner_gates_2026_08_31.py`
+(the exact Gate 1-3 suite) — still 6/6 passing, zero new failures.
+
+**Next when founder refreshes the GitHub App key:** re-run
+`GET /api/aurem-dev/admin/github-app-diagnostics` to confirm
+`list_installations` returns 200, then retry Gate 4 for real against
+`polarisbuiltinc-wq/aurem-rollback-testbed` (already wired end-to-end
+in `services/rollback_drill.py`'s auth-resolution pattern — same repo,
+same App).
+

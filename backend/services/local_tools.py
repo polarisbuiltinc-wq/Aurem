@@ -823,6 +823,23 @@ async def write_repo_file(ctx: dict, args: dict) -> dict:
     except Exception:                                       # noqa: BLE001
         pass
 
+    # Item 2 (2026-08-31) — WCAG contrast guard. Only stylesheet/theme
+    # files carry color-role custom properties; a plain regex `.css`/
+    # `.scss`/theme-file check keeps this a no-op for every other
+    # write (best-effort, never blocks — a palette that ORA can't
+    # confidently nudge just ships as-is with the finding attached to
+    # the tool result, rather than failing the write).
+    _contrast_note = None
+    if re.search(r"\.(css|scss)$", path, re.IGNORECASE) or "theme" in path.lower():
+        try:
+            from services.contrast_guard import check_and_nudge_css
+            _cg = check_and_nudge_css(content)
+            if _cg["adjustments"]:
+                content = _cg["content"]
+                _contrast_note = _cg["adjustments"]
+        except Exception as _cg_e:
+            logger.debug("contrast_guard skipped for %s: %r", path, _cg_e)
+
     # Iter 212m-6 — pre-commit vanguard regex pass. CRITICAL+HIGH
     # secrets block; everything else passes through. LLM/E2B layers
     # are off this hot path (chat latency budget); the task-queue
@@ -948,6 +965,7 @@ async def write_repo_file(ctx: dict, args: dict) -> dict:
         "sha":      res.get("sha"),
         "html_url": res.get("html_url"),
         "message":  commit_msg,
+        "contrast_adjustments": _contrast_note,
     }
 
 
