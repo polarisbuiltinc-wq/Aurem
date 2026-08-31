@@ -1,3 +1,20 @@
+## 2026-09-02 (part 3) — Event-loop-blocking FIX + audit sweep (the deferred #4 timeout follow-up, now completed)
+
+**Fix #A (the real fix, previously only diagnosed):** `services/local_tools.py::write_repo_file`'s syntax gate now calls `await asyncio.to_thread(_run_syntax_check, content=content, file_path=path, ext=_ext)` instead of calling it synchronously — same function, same args, same per-language timeouts, just offloaded to a thread so the event loop stays free. The gate is `python -m py_compile` / `node --check` / `npx tsc --noEmit`, run once per changed file (not batched — batching would be a bigger design change, correctly out of scope this round). `logger.info` now confirms the gate no longer blocks (was `logger.warning` when it did).
+
+**Audit sweep #B (bounded, targeted):**
+- **Fixed** (small, isolated, safe): `services/deploy_readiness.py::get_deploy_readiness()` ran up to 3 sequential `git` subprocess calls directly on the event loop (admin-only, 60s-cached endpoint) — now `await asyncio.to_thread(_workspace_state)`.
+- **Already fine** (confirmed already offloaded correctly): `duplication_scanner.py`, `churn_risk.py` (both via `admin_projects_brain.py`), `inventory_service.py::record_from_git_async`, `local_tools.py::_search_snapshot_sync` — all already wrapped in `asyncio.to_thread` at their call sites.
+- **Not reachable / boot-time-only** (no action needed): `routers/version.py`'s `_COMMIT_SHA` (module-level, computed once at import), `services/process_recovery.py::_git_sha` (boot classification only), `services/boilerplate_audit.py` (zero callers anywhere in the codebase — dead code).
+- **FLAGGED, deferred, NOT fixed this round** (explicit founder instruction — no wholesale refactor, no risky batching): `services/cto_projects_helpers.py::_sh()` — the git clone/revert/push helper (up to 90s timeout per call) used by `routers/cto_projects.py`'s rollback flow (`_run_rollback_with_git`, ~15 call sites) and the regular ship/commit flow. Both run via FastAPI `BackgroundTasks` (`bg.add_task`), which execute on the SAME event loop, not a separate thread — same bug class as the syntax gate, but 15+ call sites in the single most safety-critical git-write path in the app. Also flagged: `services/qa_matrix.py`'s verification-pipeline subprocesses and `services/health_coverage_scan.py`'s `asyncio.create_task(run_coverage_scan(...))` — both are long-running by design (real test suites), so the correct fix there is likely a dedicated worker, not a bare `to_thread`.
+
+**Tests:** 3 new/rewritten files — `test_event_loop_not_starved_2026_09_02.py` (2 tests, drive the REAL `write_repo_file` with a mocked slow subprocess, prove a concurrent heartbeat/poll is never starved, single-file AND 3-file cases), `test_timeout_diagnosis_2026_09_02.py` (rewritten to prove the fix instead of the old bug), `test_deploy_readiness_offload_2026_09_02.py`.
+
+**Testing-agent verification:** `/app/test_reports/iteration_event_loop_offload_2026_09_02.json` — 46/46 pass, zero regressions, `retest_needed: false`. Explicitly confirmed the flagged `_sh()`/qa_matrix/health_coverage_scan findings are acknowledged deferred items, not missed bugs.
+
+**Next round (flagged, not started):** offload `cto_projects_helpers.py::_sh()`'s ~15 call sites (rollback + ship flows) via `asyncio.to_thread` — needs its own dedicated round with BackgroundTask-starvation tests analogous to this round's, given the blast radius.
+
+
 ## 2026-09-02 (part 2) — Chat dead-end bug (Swift/GLM raw-code + fake approve trap), auto-escalation, narration leak, 60s timeout diagnosis
 
 Founder ran a full manual Hindi/Hinglish regression test and found: "Swift" mode (default, always GLM model) sometimes returns raw code + a confirm question ("Would you like me to update this change?") with NO valid `aurem-handoff` fence; saying "yes" correctly (but confusingly) got "nothing pending" — a genuine dead end. Also found a leaked AI stage-direction ("Silently checks the page first") and a "Loop status error · timeout of 60000ms exceeded" banner.

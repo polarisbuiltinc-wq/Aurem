@@ -898,26 +898,29 @@ async def write_repo_file(ctx: dict, args: dict) -> dict:
     except Exception:
         _ext = ""
     if _ext in (".py", ".ts", ".tsx", ".js", ".jsx"):
-        # 2026-09-02 — diagnostic instrumentation for the "Loop status
-        # 60s timeout" root-cause investigation (NOT a fix — see
-        # BUGS_LEDGER.md): `_run_syntax_check` calls `subprocess.run()`
-        # SYNCHRONOUSLY with no `asyncio.to_thread`, so it blocks the
-        # ENTIRE event loop for its duration. On a multi-file edit
-        # this compounds (up to the per-language 10-15s cap EACH),
-        # starving unrelated concurrent requests — e.g. the GET
-        # /loop/{id}/status poll — long enough to hit the frontend's
-        # 60s axios timeout and show a spurious "Loop status error".
-        # Logged here so the block is visible in production instead
-        # of only showing up as a mystery frontend timeout.
+        # 2026-09-02 — FIXED (was diagnosed-only last round, see
+        # BUGS_LEDGER.md / PRD.md for the root-cause writeup):
+        # `_run_syntax_check` runs `subprocess.run()` (py_compile /
+        # node --check / tsc --noEmit), which blocks for real wall-
+        # clock time. Running it directly on the event loop froze
+        # EVERY concurrent request on this worker for that whole
+        # window — on a multi-file edit this compounded past the
+        # frontend's 60s axios cap and showed up as a spurious "Loop
+        # status error" timeout. `asyncio.to_thread` offloads the
+        # exact same call (same args, same per-language timeouts) to
+        # the thread pool so the event loop stays free to service
+        # other in-flight requests (e.g. the /loop/{id}/status poll)
+        # while the syntax check runs. Timing kept so a genuinely slow
+        # gate is still visible in logs.
         _gate_t0 = time.monotonic()
-        _gate = _run_syntax_check(content=content, file_path=path, ext=_ext)
+        _gate = await asyncio.to_thread(
+            _run_syntax_check, content=content, file_path=path, ext=_ext,
+        )
         _gate_ms = (time.monotonic() - _gate_t0) * 1000
         if _gate_ms > 2000:
-            logger.warning(
-                "syntax_gate BLOCKED THE EVENT LOOP for %.0fms on %s — "
-                "subprocess.run() is synchronous inside async "
-                "write_repo_file (see BUGS_LEDGER.md, 'loop status "
-                "60s timeout' root-cause finding)",
+            logger.info(
+                "syntax_gate took %.0fms on %s (offloaded to a thread — "
+                "event loop was NOT blocked)",
                 _gate_ms, path,
             )
         if _gate.get("has_errors"):

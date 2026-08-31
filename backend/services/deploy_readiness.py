@@ -70,7 +70,14 @@ async def get_deploy_readiness() -> dict:
     if _CACHE["data"] and now - _CACHE["ts"] < CACHE_TTL_S:
         return _CACHE["data"]
 
-    ws = _workspace_state()
+    # 2026-09-02 — event-loop-blocking sweep (fix #B): `_workspace_state`
+    # runs up to 3 sequential `git` subprocess calls (5s timeout each)
+    # directly on the event loop, same class of bug as the syntax-gate
+    # fix above. Cached for 60s so it's rare, but on a cache-miss this
+    # request handler would freeze every other concurrent request for
+    # up to ~15s. Offloaded the same way.
+    import asyncio
+    ws = await asyncio.to_thread(_workspace_state)
     token = (os.environ.get("GITHUB_ACTIONS_TOKEN")
              or os.environ.get("GITHUB_TOKEN") or "").strip()
     repo = (os.environ.get("GITHUB_REPO") or "").strip()
