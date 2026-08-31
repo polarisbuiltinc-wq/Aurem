@@ -23,6 +23,7 @@ import asyncio
 import fnmatch
 import logging
 import re
+import time
 from typing import Optional
 
 from cto_services.db import get_db
@@ -897,7 +898,28 @@ async def write_repo_file(ctx: dict, args: dict) -> dict:
     except Exception:
         _ext = ""
     if _ext in (".py", ".ts", ".tsx", ".js", ".jsx"):
+        # 2026-09-02 — diagnostic instrumentation for the "Loop status
+        # 60s timeout" root-cause investigation (NOT a fix — see
+        # BUGS_LEDGER.md): `_run_syntax_check` calls `subprocess.run()`
+        # SYNCHRONOUSLY with no `asyncio.to_thread`, so it blocks the
+        # ENTIRE event loop for its duration. On a multi-file edit
+        # this compounds (up to the per-language 10-15s cap EACH),
+        # starving unrelated concurrent requests — e.g. the GET
+        # /loop/{id}/status poll — long enough to hit the frontend's
+        # 60s axios timeout and show a spurious "Loop status error".
+        # Logged here so the block is visible in production instead
+        # of only showing up as a mystery frontend timeout.
+        _gate_t0 = time.monotonic()
         _gate = _run_syntax_check(content=content, file_path=path, ext=_ext)
+        _gate_ms = (time.monotonic() - _gate_t0) * 1000
+        if _gate_ms > 2000:
+            logger.warning(
+                "syntax_gate BLOCKED THE EVENT LOOP for %.0fms on %s — "
+                "subprocess.run() is synchronous inside async "
+                "write_repo_file (see BUGS_LEDGER.md, 'loop status "
+                "60s timeout' root-cause finding)",
+                _gate_ms, path,
+            )
         if _gate.get("has_errors"):
             logger.warning(
                 "syntax_gate BLOCKED commit: %s — %s",

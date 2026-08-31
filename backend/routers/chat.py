@@ -626,6 +626,16 @@ async def chat_send(
         body.prompt or "", history=[], pending_fix=_prior_fix_signal,
     )
     _tier = _intent_result.get("tier") or "agentic"
+    # 2026-09-02 — auto-escalate: a genuine code-edit (agentic tier)
+    # on Swift transparently uses the reliable model so real edits
+    # land correctly; quick chat/query turns stay on the fast/cheap
+    # Swift model. No manual mode switch, no jargon — the user never
+    # sees this happen, they just get a real edit instead of a raw-
+    # code dead end (see response_confidence.py's
+    # apply_no_edit_deadend_guard for the safety net when this still
+    # slips through on any other model).
+    from services.mode_routing import resolve_model_mode
+    req_mode = resolve_model_mode(_tier, req_mode)
     result = None
     # P7-D (2026-08-31) — the user reporting ORA's OWN UI/reply/panel
     # as broken (never their own website — see user_report_classifier's
@@ -843,6 +853,16 @@ async def chat_send(
         content = apply_no_false_success_guard(body.prompt or "", content, _prior_fix_signal)
     except Exception as _gce:
         logger.debug("no_false_success guard skipped (chat_send): %r", _gce)
+
+    # 2026-09-02 — general (model-agnostic) dead-end guard: a real-
+    # edit-looking code block + a confirm question with NO valid
+    # aurem-handoff fence is never shown as-is — see
+    # response_confidence.py's docstring for the full class of bug.
+    try:
+        from services.response_confidence import apply_no_edit_deadend_guard
+        content = apply_no_edit_deadend_guard(content)
+    except Exception as _dge:
+        logger.debug("no_edit_deadend guard skipped (chat_send): %r", _dge)
 
     # 2026-08-27 · Output Guard (Phase 1 net, "Show the Outcome, Never
     # the Engine"). Runs AFTER the mismatch/retry/fallback resolution
@@ -2510,6 +2530,10 @@ async def chat_stream(
                 })
 
                 _tier = _intent_result.get("tier") or "agentic"
+                # 2026-09-02 — same auto-escalation as chat_send (see
+                # that function's identical comment for reasoning).
+                from services.mode_routing import resolve_model_mode
+                req_mode_stream = resolve_model_mode(_tier, req_mode_stream)
                 # P7-D (2026-08-31) — same self-bug short-circuit as
                 # chat_send, before tier routing (see that function's
                 # comment for the full reasoning).
@@ -3429,6 +3453,14 @@ async def chat_stream(
             content = apply_no_false_success_guard(body.prompt or "", content, _prior_fix_signal)
         except Exception as _gce:
             logger.debug("no_false_success guard skipped (chat_stream): %r", _gce)
+
+        # 2026-09-02 — general dead-end guard (see chat_send's
+        # identical comment above).
+        try:
+            from services.response_confidence import apply_no_edit_deadend_guard
+            content = apply_no_edit_deadend_guard(content)
+        except Exception as _dge:
+            logger.debug("no_edit_deadend guard skipped (chat_stream): %r", _dge)
 
         # 2026-08-27 · Output Guard (Phase 1 net) — runs AFTER the
         # mismatch/fallback resolution above (so it nets whatever text

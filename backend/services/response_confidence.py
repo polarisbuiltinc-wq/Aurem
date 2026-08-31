@@ -401,3 +401,82 @@ def apply_no_false_success_guard(
     if not contains_false_success_claim(content or ""):
         return content
     return RETRY_FIX_MESSAGE if prior_turn_had_fix_signal else NO_PENDING_FIX_MESSAGE
+
+
+# ═════════════════════════════════════════════════════════════════════
+# 2026-09-02 — GENERAL "no-edit-codeblock dead end" guard.
+#
+# Founder-confirmed root cause (connect-flow-refinement follow-up,
+# same conversation): the model-agnostic failure mode is a turn that
+# shows a real-edit-looking code block (raw JS/py/diff/etc — not the
+# structured ```aurem-handoff fence the frontend parses for the real
+# Approve button) AND asks the user to confirm/apply it ("Would you
+# like me to update this change?"). Nothing is actually "pending" for
+# the real approve flow to pick up — a later bare "yes" correctly
+# lands on `NO_PENDING_FIX_MESSAGE` above, but by THEN the damage is
+# done: the turn already implied an apply flow that doesn't exist.
+#
+# This fires on ANY model's output (not Swift/GLM-specific — the same
+# class of bug can happen after a Loop timeout falls back to raw
+# content, or from any other model that free-texts a fix instead of
+# using the real tool-call/fence protocol), so the guard is written
+# generally rather than keyed on `mode`.
+# ═════════════════════════════════════════════════════════════════════
+_CODE_FENCE_RE = re.compile(r"```([\w-]*)\n([\s\S]*?)```")
+_EDIT_LANG_HINTS = {
+    "js", "jsx", "ts", "tsx", "py", "python", "diff", "patch",
+    "java", "go", "rb", "ruby", "php", "css", "scss", "html",
+    "json", "c", "cpp", "sql", "sh", "bash",
+}
+_CONFIRM_QUESTION_RE = re.compile(
+    r"[^.!?\n]*\b(?:would you like me to|do you want me to|"
+    r"should i (?:apply|update|make|proceed|go ahead)|"
+    r"shall i (?:apply|update|make)|"
+    r"want me to (?:apply|update|make) this)\b[^.!?\n]*\?",
+    re.IGNORECASE,
+)
+
+NO_EDIT_DEADEND_MESSAGE = (
+    "I put together a possible change, but I couldn't get it into a "
+    "shape I can apply directly here. To have me make this change for "
+    "real, try again in Pro mode, or just ask me once more and I'll "
+    "take another pass."
+)
+
+
+def _has_edit_looking_codeblock(content: str) -> bool:
+    for lang, body in _CODE_FENCE_RE.findall(content or ""):
+        lang_lc = lang.lower()
+        if lang_lc == "aurem-handoff":
+            continue
+        if lang_lc in _EDIT_LANG_HINTS:
+            return True
+        # Unlabeled fence — still counts if it looks like real code
+        # (multi-line + code-shaped punctuation), not a plain-text list.
+        if not lang_lc and len(body.strip().splitlines()) >= 2 \
+                and re.search(r"[{};=()<>]", body):
+            return True
+    return False
+
+
+def contains_no_edit_deadend(content: str) -> bool:
+    """True iff `content` shows a real-edit-looking code block with NO
+    valid ```aurem-handoff fence AND asks the user to confirm/apply
+    it — the setup for a guaranteed dead end once the user says yes."""
+    if not content or "```aurem-handoff" in content:
+        return False
+    if not _has_edit_looking_codeblock(content):
+        return False
+    return bool(_CONFIRM_QUESTION_RE.search(content))
+
+
+def apply_no_edit_deadend_guard(content: str) -> str:
+    """Strips the misleading confirm-question sentence (the code block
+    itself stays — still useful via the Copy button) and appends an
+    honest message with a real path forward. Model-agnostic: fires on
+    Swift/GLM raw-code replies, Loop-timeout-fallback raw content, or
+    any other source of the same failure shape."""
+    if not contains_no_edit_deadend(content):
+        return content
+    cleaned = _CONFIRM_QUESTION_RE.sub("", content).rstrip()
+    return cleaned + "\n\n" + NO_EDIT_DEADEND_MESSAGE

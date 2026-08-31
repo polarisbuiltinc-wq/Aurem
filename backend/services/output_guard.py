@@ -73,6 +73,20 @@ _UNIVERSAL_LEAK_PATTERNS = [
     (re.compile(r"\bghp_[A-Za-z0-9]{30,}\b"), "[redacted credential]"),
     (re.compile(r"\bsk_live_[A-Za-z0-9]{20,}\b"), "[redacted credential]"),
     (re.compile(r"\bmongodb(?:\+srv)?://[^\s\"'<>]+"), "[redacted connection string]"),
+    # 2026-09-02 — leaked AI stage-direction / self-narration (e.g.
+    # "(Silently checks the page first)", "*checking the file now*")
+    # — internal planning narration that should never reach the
+    # business-owner-facing reply. Scoped to parenthetical/asterisk-
+    # wrapped clauses naming the AI's own silent action on a page/
+    # file/code/repo, so normal prose about "the page" is untouched.
+    (re.compile(
+        r"[\(\*]\s*(?:silently\s+|quietly\s+|first\s+)*"
+        r"(?:checks?|checking|looks?|looking|glances?|glancing|"
+        r"takes?\s+a\s+look|reads?|reading|reviewing|reviews?)\s+"
+        r"(?:at\s+)?(?:the\s+)?(?:page|file|code|repo|codebase|site)"
+        r"[^)\*\n]*[\)\*]",
+        re.IGNORECASE,
+    ), ""),
 ]
 
 # M3 fix (2026-08-30, founder-directed) — the bare-file-path pattern

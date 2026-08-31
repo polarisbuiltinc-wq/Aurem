@@ -1,3 +1,20 @@
+## 2026-09-02 (part 2) — Chat dead-end bug (Swift/GLM raw-code + fake approve trap), auto-escalation, narration leak, 60s timeout diagnosis
+
+Founder ran a full manual Hindi/Hinglish regression test and found: "Swift" mode (default, always GLM model) sometimes returns raw code + a confirm question ("Would you like me to update this change?") with NO valid `aurem-handoff` fence; saying "yes" correctly (but confusingly) got "nothing pending" — a genuine dead end. Also found a leaked AI stage-direction ("Silently checks the page first") and a "Loop status error · timeout of 60000ms exceeded" banner.
+
+**Fix (4 parts, founder-directed):**
+1. **General dead-end guard** — `services/response_confidence.py::apply_no_edit_deadend_guard` (model-agnostic, no Swift/GLM keying): fires on ANY reply with a real-edit-looking code block + confirm question + no `aurem-handoff` fence. Strips the misleading question, keeps the code (still Copy-able), appends an honest message with a real path forward ("try again in Pro mode, or ask me once more"). Wired into both `chat_send` and `chat_stream` right after the existing `apply_no_false_success_guard`.
+2. **Auto-escalation, not a manual switch** — new `services/mode_routing.py::resolve_model_mode(tier, req_mode)`: when a turn is classified `agentic` (real code edit) AND the user is on Swift, transparently routes the model call to `pro`. Quick casual/query turns on Swift stay on the fast/cheap model. No blanket Pro default (would break the Swift-cheap/Pro-paid split), no "please switch modes" jargon. Wired into `chat_send` (after `_tier` is computed) and `chat_stream` (same point, `req_mode_stream`).
+3. **Narration leak strip** — new regex in `services/output_guard.py::_UNIVERSAL_LEAK_PATTERNS` (runs on every reply unconditionally): strips parenthetical/asterisk-wrapped AI self-narration naming its own silent action on a page/file/code/repo ("(Silently checks the page first)", "*checking the file now*"). Normal prose mentioning "the page" is untouched (false-positive guarded).
+4. **60s timeout — DIAGNOSED, not fixed this round** (explicit founder scope): root cause found via code read — `services/local_tools.py::write_repo_file`'s mandatory syntax gate calls `_run_syntax_check` (a SYNCHRONOUS `subprocess.run`, up to 10-15s per file, per language) with no `asyncio.to_thread`, blocking the entire event loop. A multi-file real edit compounds this, starving concurrent requests (e.g. the `/loop/{id}/status` poll) long enough to hit the frontend's 60s axios cap — exactly the "Loop status error" banner. Added `logger.warning` instrumentation (fires >2000ms) so this is visible in logs, plus a diagnostic test proving the event-loop-block mechanism. **Deferred follow-up**: wrap `_run_syntax_check` in `asyncio.to_thread` — flagged in BUGS_LEDGER-equivalent (this PRD entry) for next round.
+
+**Tests:** 4 new files, 13 tests, all passing — `test_no_edit_deadend_guard_2026_09_02.py`, `test_mode_auto_escalation_2026_09_02.py`, `test_narration_leak_strip_2026_09_02.py`, `test_timeout_diagnosis_2026_09_02.py`.
+
+**Testing-agent verification:** `/app/test_reports/iteration_deadend_guard_auto_escalate_2026_09_02.json` — 53/53 (13 new + 40 regression: 30 connect-flow-refinement + 10 `apply_no_false_success_guard` non-regression), `retest_needed: false`. Confirmed via `git stash` that ~22 unrelated pre-existing failures elsewhere in the 6000+ test suite reproduce identically without this round's changes (baseline flakiness, not a regression). Backend-only round, no frontend changes.
+
+**Not yet done:** the actual `asyncio.to_thread` fix for the 60s block (deferred, tracked above). No prod deploy by agent.
+
+
 ## 2026-09-02 — Connect-flow REFINEMENT (on top of shipped Michael/Mike fix): standard success-beat UX, per-repo isolated projects, already-connected redirect
 
 Founder's correction on top of the earlier 12s "finishing up" design: use the STANDARD SaaS pattern (GitHub/Linear/Notion/Slack) instead — a short ~1s "Connected ✓" beat, then auto-land on the project. No blocking interstitial.
