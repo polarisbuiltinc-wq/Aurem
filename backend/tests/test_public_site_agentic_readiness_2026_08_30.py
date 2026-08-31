@@ -154,3 +154,19 @@ def test_t_dockerfile_real_404_allowlist():
     assert "error_page 404 /404.html;" in src
     # the allowlist regex must still let known app routes fall through
     assert "dashboard" in src and "admin" in src and "about" in src and "contact" in src
+
+
+def test_t_vite_plugin_real_404_and_static_content_wired():
+    """2026-08-30 · CRITICAL correction: Emergent's actual production
+    deploy runs `yarn start` (the Vite DEV server), NOT `yarn build` —
+    confirmed via deployment_agent. The frontend/Dockerfile nginx fix
+    above belongs to a separate, unused 'Hybrid Standalone' stack.
+    THIS plugin (vite-plugins/aurem-prod-fixes.mjs) is what actually
+    fixes P0 #1 / #2 on the real Emergent-hosted auremcto.com."""
+    cfg_src = (FRONTEND / "vite.config.js").read_text()
+    assert "aurem-prod-fixes" in cfg_src
+    assert "auremProdFixes()" in cfg_src
+    plugin_src = (FRONTEND / "vite-plugins" / "aurem-prod-fixes.mjs").read_text()
+    assert "configureServer" in plugin_src
+    assert "transformIndexHtml" in plugin_src
+    assert "ctx.originalUrl" in plugin_src  # ctx.path is always /index.html — the real bug found live this round
