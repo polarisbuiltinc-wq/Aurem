@@ -386,3 +386,68 @@ def test_t_gbp_advisory_only():
     for py_file in vis_dir.glob("*.py"):
         src = py_file.read_text().lower()
         assert "mybusiness" not in src and "businessprofile" not in src
+
+
+# ── 2026-08-30 KIT ADD (2 advisory rows: Search Console + GBP checklist,
+#    Google Platforms links) ──────────────────────────────────────────
+def test_t_search_console_gbp_row_advisory():
+    item = _catalog_item("search_console_gbp_check")
+    assert item["mode"] == "advisory"
+    assert item["weight"] == 0
+    assert "search_console_gbp_check" in apply_mod.ADVISORY_ITEMS
+    assert "search_console_gbp_check" not in apply_mod.IMPLEMENTED_AUTO_ITEMS
+    assert "search.google.com/search-console" in item["what_why"]
+    assert "business.google.com" in item["what_why"]
+    # frontend renders every advisory row with a generic "View report"
+    # button (same modal pattern as the GBP row) — no per-key hardcoding
+    # needed, confirmed by grep: no google_business_profile-style special
+    # case exists for this key either.
+    panel_src = _FRONTEND_PANEL.read_text()
+    assert 'item.mode === "advisory"' in panel_src
+    assert "search_console_gbp_check" not in panel_src  # generic, not hardcoded
+    assert "kit-view-report-" in panel_src  # the button id pattern this row gets
+
+
+def test_t_google_platforms_row_advisory():
+    item = _catalog_item("google_platforms_connected")
+    assert item["mode"] == "advisory"
+    assert item["weight"] == 0
+    assert "google_platforms_connected" in apply_mod.ADVISORY_ITEMS
+    assert "google_platforms_connected" not in apply_mod.IMPLEMENTED_AUTO_ITEMS
+    assert "search.google.com/search-console" in item["what_why"]
+    assert "business.google.com" in item["what_why"]
+    assert "analytics.google.com" in item["what_why"]
+
+
+def test_t_advisory_items_not_in_ship_pr():
+    """Extends t_gbp_advisory_only's guard to the 2 new rows — same
+    property: they are in ADVISORY_ITEMS, NOT in IMPLEMENTED_AUTO_ITEMS,
+    so `apply_visibility_kit`'s `to_apply = requested & IMPLEMENTED_AUTO_ITEMS`
+    can never place them in the `files` dict handed to the PR. No Google
+    Search Console / GBP / Analytics API or OAuth code exists anywhere
+    in the visibility services for these 2 keys either."""
+    for key in ("search_console_gbp_check", "google_platforms_connected"):
+        assert key in apply_mod.ADVISORY_ITEMS
+        assert key not in apply_mod.IMPLEMENTED_AUTO_ITEMS
+        requested_incl_new_rows = set(apply_mod.IMPLEMENTED_AUTO_ITEMS) | {key}
+        to_apply = requested_incl_new_rows & apply_mod.IMPLEMENTED_AUTO_ITEMS
+        assert key not in to_apply  # would never enter the ship-PR files dict
+    vis_dir = Path(apply_mod.__file__).resolve().parent
+    for py_file in vis_dir.glob("*.py"):
+        src = py_file.read_text().lower()
+        assert "searchconsole" not in src and "analytics.google" not in src
+
+
+def test_t_score_weight_sum_still_100():
+    """Adding 2 weight=0 advisory rows must not change the score
+    denominator — still 100, the 7 scorable rows' weights untouched."""
+    spec_weights = {
+        "preferred_sources": 25, "ai_crawler_policy": 20, "structured_data": 20,
+        "llms_txt": 15, "sitemap_auto": 10, "answer_blocks": 7, "image_quick_wins": 3,
+    }
+    assert sum(spec_weights.values()) == 100
+    total_weight_all_catalog_rows = sum(i["weight"] for i in _CATALOG)
+    assert total_weight_all_catalog_rows == 100  # 3 advisory rows all weight=0
+    for key in ("google_business_profile", "search_console_gbp_check",
+                "google_platforms_connected"):
+        assert _catalog_item(key)["weight"] == 0

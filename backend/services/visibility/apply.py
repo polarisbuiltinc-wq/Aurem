@@ -36,7 +36,14 @@ NOT_YET_IMPLEMENTED: set[str] = set()
 # sign-in per action; Google's policy does not allow a multi-client
 # SaaS to bulk/automate postings. No GBP API/OAuth code exists in this
 # kit — this item is a checklist, never applied, never in the ship PR.
-ADVISORY_ITEMS = {"answer_blocks", "image_quick_wins", "google_business_profile"}
+# search_console_gbp_check / google_platforms_connected: 2026-08-30 KIT
+# ADD — same reasoning, checklist/links only. We cannot log into a
+# user's Google accounts, so no Search Console / GBP / Analytics API
+# or OAuth code exists anywhere in this kit for these 2 rows either.
+ADVISORY_ITEMS = {
+    "answer_blocks", "image_quick_wins", "google_business_profile",
+    "search_console_gbp_check", "google_platforms_connected",
+}
 
 
 def _domain_from_url(url: str | None) -> str | None:

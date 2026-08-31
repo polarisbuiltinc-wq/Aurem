@@ -106,6 +106,46 @@ CATALOG_ITEMS: list[dict] = [
         ),
         "frameworks": ["next", "react", "static", "unknown"], "sort": 8,
     },
+    # 2026-08-30 KIT ADD (2 advisory rows) — the #1 kit item
+    # (preferred_sources, weight 25) only works well when the site is
+    # also connected to Google's own platforms. These 2 rows make that
+    # dependency visible + guide the user. ADVISORY ONLY, weight=0 —
+    # same reasoning as google_business_profile: no automation exists
+    # or is attempted, so no score reweighting of the 7 scorable rows.
+    {
+        "key": "search_console_gbp_check", "weight": 0, "mode": "advisory",
+        "name": "Google Search + Business Profile",
+        "what_why": (
+            "The Preferred Sources button works best when your site is "
+            "verified in Google Search Console and your Business Profile "
+            "is fresh. We can't connect these for you (they're Google's, "
+            "not ours) — but here's the 3-step checklist: 1) Verify your "
+            "site in Google Search Console (search.google.com/search-"
+            "console) — 5 min one-time. 2) Claim + complete your Google "
+            "Business Profile (business.google.com) — 5+ photos, all "
+            "categories, hours up to date. 3) Keep it fresh — profiles "
+            "inactive 30+ days can drop in impressions. Do all 3 and the "
+            "Preferred Sources badge + AI Overviews both work at full "
+            "strength."
+        ),
+        "frameworks": ["next", "react", "static", "unknown"], "sort": 9,
+    },
+    {
+        "key": "google_platforms_connected", "weight": 0, "mode": "advisory",
+        "name": "Google Platforms",
+        "what_why": (
+            "The more your business is connected across Google's products, "
+            "the more Google trusts your content in AI answers. This is a "
+            "one-time 10-min setup per platform: Search Console "
+            "(search.google.com/search-console) — verify your site, get "
+            "search insights; Google Business Profile (business.google.com) "
+            "— local listings, reviews; Google Analytics "
+            "(analytics.google.com) — traffic + behavior data. Connect all "
+            "three and your site signals 'trusted source' to every AI "
+            "system that reads Google's data on you."
+        ),
+        "frameworks": ["next", "react", "static", "unknown"], "sort": 10,
+    },
 ]
 
 

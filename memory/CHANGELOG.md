@@ -1261,3 +1261,24 @@ request). Preview code behavior is agent-tested; production Chromium
 provisioning remains unverified until the founder redeploys (Option B) and
 asks ORA in production to retry the homepage check — this cannot be verified
 from preview.
+
+## 2026-08-30 — KIT: 2 advisory rows (Search Console+GBP checklist, Google Platforms links)
+
+Added 2 advisory-only catalog rows (weight=0, mode=advisory, never in ship PR,
+no Google API/OAuth) to `migrations/003_visibility_kit.py`, mirroring the
+`google_business_profile` row's pattern exactly:
+- `search_console_gbp_check` — "Google Search + Business Profile", 3-step
+  checklist (Search Console verify, GBP claim+complete, keep fresh).
+- `google_platforms_connected` — "Google Platforms", links to Search
+  Console / Business Profile / Analytics.
+Both added to `services/visibility/apply.py::ADVISORY_ITEMS`. Frontend
+needed no changes — `VisibilityKitPanel.jsx` already renders any
+`mode === "advisory"` row generically with a "View report" button +
+report modal (confirmed by grep — no per-key hardcoding exists for this
+either). 4 named tests added to `tests/test_visibility_kit_v2_2026_08_30.py`
+(`t_search_console_gbp_row_advisory`, `t_google_platforms_row_advisory`,
+`t_advisory_items_not_in_ship_pr`, `t_score_weight_sum_still_100`) — 25/25
+in that file passed. DB synced via the migration's idempotent upsert-by-key
+`up()` (called directly since version 003 was already marked applied) —
+confirmed 10 rows now in `visibility_items`, all 3 advisory rows weight=0,
+total catalog weight still 100.
