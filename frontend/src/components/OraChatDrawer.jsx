@@ -232,6 +232,13 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
           } else if (evtType === "tool_call" || obj.type === "tool_call") {
             setStream(s => ({ ...s, lastTool: obj.name }));
           } else if (evtType === "tool_result" || obj.type === "tool_result") {
+            // A — C1's browser-free degrade (web_verify/web_inspect,
+            // browser_available=False) surfaces as its own field on
+            // the tool_result event. Sticky per-turn so the founder
+            // sees WHY there's no screenshot, not a silent skip.
+            if (obj.browser_available === false) {
+              routeMeta = { ...routeMeta, browserUnavailable: true };
+            }
             setStream(s => ({ ...s, lastTool: null }));
           } else if (evtType === "action_proposal" || obj.type === "action_proposal") {
             setMessages(m => [...m, {
@@ -254,6 +261,7 @@ export default function OraChatDrawer({ forceOpen = false, fullscreen = false } 
               downgraded: routeMeta.downgraded || obj.downgraded,
               ungrounded: routeMeta.ungrounded || obj.ungrounded,
               review_caveats: routeMeta.review_caveats || obj.review_caveats,
+              browserUnavailable: routeMeta.browserUnavailable,
               cost_usd: obj.cost_usd,
               tokens_out: obj.tokens_out ?? obj.output_tokens,
               tokens_in: obj.tokens_in ?? obj.input_tokens,
@@ -831,6 +839,16 @@ function MessageBubble({ msg, onResolveAction, actionBusy }) {
                         border: "1px solid rgba(148,163,216,0.45)",
                         color: "#94A3D8", fontSize: 11, lineHeight: 1.5 }}>
           ⚠︎ Review-flagged as unverified: {msg.review_caveats.join(" · ")}
+        </div>
+      )}
+      {!isUser && msg.browserUnavailable && (
+        <div data-testid="ora-browser-unavailable-badge"
+             style={{ marginTop: 8, padding: "6px 10px", borderRadius: 8,
+                        background: "rgba(251,146,60,0.10)",
+                        border: "1px solid rgba(251,146,60,0.45)",
+                        color: "#FB923C", fontSize: 11, lineHeight: 1.5 }}>
+          🌐 Browser unavailable — showing text check only (no screenshot,
+          no visual/console check ran).
         </div>
       )}
       {(msg.route || msg.streaming || msg.interrupted || (!isUser && (msg.tokens_in || msg.tokens_out))) && (

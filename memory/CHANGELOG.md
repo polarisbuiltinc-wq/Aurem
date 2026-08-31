@@ -1282,3 +1282,60 @@ in that file passed. DB synced via the migration's idempotent upsert-by-key
 `up()` (called directly since version 003 was already marked applied) —
 confirmed 10 rows now in `visibility_items`, all 3 advisory rows weight=0,
 total catalog weight still 100.
+
+## 2026-08-30 — Chromium follow-up: A (degraded badge), B (mint retest), C (ticket draft), D (Dockerfile cure)
+
+**A — degraded-result badge (preview, shipped):** `services/ora_chat_v2/engine.py`'s
+`tool_result` SSE event now carries an explicit `browser_available` field
+(pulled straight off the tool's result dict, not just buried in the
+truncated `summary` string). `OraChatDrawer.jsx` sets a sticky
+`browserUnavailable` flag on the turn and renders a
+`data-testid="ora-browser-unavailable-badge"` chip ("🌐 Browser unavailable
+— showing text check only...") on that assistant message — mirrors the
+existing `ora-review-caveat`/`ora-grounding-warning` chip pattern exactly.
+Tests: backend `test_t_degraded_result_shows_browser_unavailable_badge`
+(`tests/test_iter2026_08_27_ora_chat_v2_p1_p5.py`, monkeypatches
+`llm_client.stream_chat` + `tools_mod.execute_tool` to simulate a degraded
+`web_verify` call) — passed. Frontend
+`OraChatDrawer.browser_unavailable_badge.test.jsx` (2 tests: badge shows
+on degrade, does NOT show on a normal pass) — both passed via `yarn
+vitest run`. Sanity screenshot of the admin ORA chat drawer confirmed no
+visual regression (preview's own Chromium is present, so the live
+degrade condition itself can't be reproduced by screenshot here — proven
+via the unit tests instead).
+
+**B — GitHub App mint retested (not assumed):** Retried
+`POST /app/installations/152797252/access_tokens` directly against this
+pod's real config (hydrated via `services.github_app_config
+.ensure_configured_from_db`, same path the live backend uses — also
+independently confirmed via the live `/admin/github-app-diagnostics`
+endpoint). Result: **still 401** —
+`{"message":"A JSON web token could not be decoded",...}` — identical to
+the prior round. `admin_settings.github_app_config.updated_at` is still
+`2026-08-22 20:12:18 UTC` — unchanged since last round, confirming the
+founder's claimed key update has NOT reached this pod's admin config.
+No further diagnosis attempted per instruction — the only fix is the
+founder saving the current github.com private key into THIS preview
+pod's admin (Admin → GitHub App config) and confirming the success
+toast. Kit Phase 2 stays blocked; not started.
+
+**C — support ticket drafted (not sent):** `/app/memory/SUPPORT_TICKET_DRAFT_CHROMIUM.md`
+— exact error, what was tried (Dockerfile chromium install + env var),
+expected `PLAYWRIGHT_BROWSERS_PATH` path, platform questions. Founder
+sends to support@emergent.sh only if Option B fails after redeploy.
+
+**D — Dockerfile Chromium fix (the cure, written, not build-tested):**
+`backend/Dockerfile` now sets `ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright`
+and runs `python -m playwright install --with-deps chromium` (installs
+Chromium's own apt deps too) right after the pip install step, before
+switching to the non-root `aurem` user (`chmod -R o+rX` so the non-root
+runtime user can still read it). Using a stable `PLAYWRIGHT_BROWSERS_PATH`
+env (not a hardcoded version-specific binary path) means both build-time
+install and runtime resolution agree regardless of which user runs it —
+no `PLAYWRIGHT_CHROME_EXECUTABLE_PATH` override needed in production
+after this. **Caveat for founder:** if production's env vars currently
+have `PLAYWRIGHT_CHROME_EXECUTABLE_PATH` set to anything (e.g. copied
+from preview's `/root/bin/chromium`), it should be removed/unset —
+it would incorrectly override the new working default. Cannot build/
+verify the Docker image from preview (no prod build access) — founder
+must redeploy to prove it.

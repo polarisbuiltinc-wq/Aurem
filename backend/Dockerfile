@@ -50,6 +50,23 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
 
+# 2026-08-30 KIT D — Option B (the cure, not the band-aid). `playwright`
+# (the Python package) was already in requirements.txt, but its
+# Chromium BINARY was never installed here — that's the exact root
+# cause of prod's "chromium executable doesn't exist at
+# /root/bin/chromium" error (services/deploy_verify.py's C1 fallback
+# is the band-aid for until this lands; screenshots/full verify need
+# this). `PLAYWRIGHT_BROWSERS_PATH` is set as a stable ENV (not a
+# version-specific hardcoded binary path, which changes every
+# Playwright release) so both this install step AND the app at
+# runtime resolve the SAME browser location regardless of which user
+# runs it. `--with-deps` pulls Chromium's own apt dependencies
+# (libnss3, libatk-bridge2.0-0, libgbm1, etc.) — no manual apt list to
+# maintain, always matches the pinned playwright==1.61.0 version.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN python -m playwright install --with-deps chromium \
+    && chmod -R o+rX /opt/ms-playwright
+
 # Copy application code
 COPY . .
 

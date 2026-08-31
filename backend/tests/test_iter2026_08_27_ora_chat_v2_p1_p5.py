@@ -187,6 +187,49 @@ async def test_undefined_tool_call_is_rejected_and_logged(db, caplog):
     assert result == {"error": "undefined_tool", "name": "delete_everything"}
 
 
+# ── KIT A / C1 — tool_result surfaces browser_available ──────────────
+@pytest.mark.asyncio
+async def test_t_degraded_result_shows_browser_unavailable_badge(db, monkeypatch):
+    """C1's graceful Chromium-missing degrade sets
+    `browser_available=False` on the web_verify/web_inspect result
+    dict. `run_turn`'s `tool_result` SSE event must carry that field
+    through explicitly (not just buried in the truncated summary
+    string) so the frontend can render an unmistakable badge instead
+    of a silent skip."""
+    calls_made = {"n": 0}
+
+    async def _fake_stream_chat(*, messages, tools, reasoning, db, user_id):
+        calls_made["n"] += 1
+        if calls_made["n"] == 1:
+            yield {"type": "resolved", "model": "mock", "label": "mock"}
+            yield {"type": "tool_calls", "calls": [
+                {"id": "call1", "name": "web_verify",
+                 "arguments": {"url": "https://auremcto.com"}},
+            ]}
+            yield {"type": "usage", "input_tokens": 10, "output_tokens": 5}
+        else:
+            yield {"type": "delta", "content": "Chromium isn't installed here."}
+            yield {"type": "usage", "input_tokens": 10, "output_tokens": 5}
+
+    async def _fake_execute_tool(_db, name, _args, user_id=None):
+        assert name == "web_verify"
+        return {"verdict": "degraded", "browser_available": False,
+                "fail_reason": "browser_unavailable", "checks": []}
+
+    monkeypatch.setattr(engine.llm_client, "stream_chat", _fake_stream_chat)
+    monkeypatch.setattr(engine.tools_mod, "execute_tool", _fake_execute_tool)
+
+    events = [e async for e in engine.run_turn(
+        db, admin_id="u6", session={"messages": []},
+        user_message="verify auremcto.com")]
+
+    tool_result_events = [e for e in events if e["type"] == "tool_result"]
+    assert len(tool_result_events) == 1
+    assert tool_result_events[0]["name"] == "web_verify"
+    assert tool_result_events[0]["browser_available"] is False
+    assert any(e["type"] == "final" for e in events)
+
+
 @pytest.mark.asyncio
 async def test_known_tool_dispatches(db):
     await db.ora_backlog_items.insert_one(

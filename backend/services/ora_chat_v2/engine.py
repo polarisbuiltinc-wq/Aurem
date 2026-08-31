@@ -206,8 +206,17 @@ async def run_turn(db, *, admin_id: str, session: dict, user_message: str,
                 yield {"type": "tool_call", "name": call["name"], "args": call["arguments"]}
                 tool_result = await tools_mod.execute_tool(db, call["name"], call["arguments"],
                                                             user_id=admin_id)
+                # C1/A — web_verify / web_inspect can return
+                # browser_available=False (Chromium missing, graceful
+                # degrade). Surface it as its own field (not just
+                # buried in the truncated `summary` string) so the
+                # frontend can show an explicit "browser unavailable"
+                # badge instead of the founder assuming a silent skip.
+                _browser_available = (tool_result.get("browser_available")
+                                       if isinstance(tool_result, dict) else None)
                 yield {"type": "tool_result", "name": call["name"],
-                       "summary": str(tool_result)[:300]}
+                       "summary": str(tool_result)[:300],
+                       "browser_available": _browser_available}
             messages.append({"role": "tool", "tool_call_id": call["id"],
                               "content": str(tool_result)[:4000]})
 
