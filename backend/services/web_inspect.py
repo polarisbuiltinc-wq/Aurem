@@ -88,6 +88,28 @@ def _wrap_page_content(pruned_text: str, origin: str) -> tuple[str, str]:
     return boundary, nonce
 
 
+async def _browser_free_snapshot_fallback(url: str, exc: Exception) -> dict:
+    """C1 — web_inspect's version of deploy_verify's browser-free
+    degrade. Only reached when Chromium's own executable is missing.
+    Returns raw HTML fetched via httpx (NOT a rendered innerText
+    snapshot) — no screenshot, no JS execution. `browser_available`
+    and `degraded_reason` let `run_web_inspect` surface this plainly
+    instead of pretending it inspected a rendered page."""
+    import httpx
+    import services.deploy_verify as dv
+
+    out: dict = {"snapshot": "", "screenshot_meta": None, "error": None,
+                 "egress_attempts": [], "browser_available": False,
+                 "degraded_reason": f"chromium_unavailable:{type(exc).__name__}"}
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+            resp = await client.get(url)
+        out["snapshot"] = (resp.text or "")[: dv.SNAPSHOT_CHAR_CAP]
+    except Exception as fetch_exc:                            # noqa: BLE001
+        out["error"] = f"fallback_fetch_failed:{type(fetch_exc).__name__}"
+    return out
+
+
 async def _fetch_snapshot_and_screenshot_meta(url: str, allowlist_host: str) -> dict:
     """Fresh BrowserContext per call — no stored credentials, no auth,
     no cookie injection (v1 boundary — "log into staging" is
@@ -101,7 +123,8 @@ async def _fetch_snapshot_and_screenshot_meta(url: str, allowlist_host: str) -> 
     import services.deploy_verify as dv
 
     out: dict = {"snapshot": "", "screenshot_meta": None, "error": None,
-                 "egress_attempts": []}
+                 "egress_attempts": [], "browser_available": True,
+                 "degraded_reason": None}
     launch_kwargs: dict = {"headless": True}
     exe = os.environ.get("PLAYWRIGHT_CHROME_EXECUTABLE_PATH")
     if exe:
@@ -118,7 +141,17 @@ async def _fetch_snapshot_and_screenshot_meta(url: str, allowlist_host: str) -> 
         await route.continue_()
 
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(**launch_kwargs)
+        try:
+            browser = await pw.chromium.launch(**launch_kwargs)
+        except Exception as e:
+            # C1 — same graceful degrade as deploy_verify: only when
+            # Chromium's own binary is missing, fall back to a plain
+            # httpx GET of the raw HTML (no rendered text, no
+            # screenshot). Any other launch failure still hard-fails.
+            if dv._is_browser_missing_error(e):
+                return await _browser_free_snapshot_fallback(url, e)
+            out["error"] = f"launch_failed:{type(e).__name__}"
+            return out
         try:
             context = await browser.new_context(
                 viewport=dv.DEVICE_VIEWPORTS["desktop"], accept_downloads=False,
@@ -157,6 +190,7 @@ async def run_web_inspect(url: str, question: str, *, db=None, user_id: str = ""
         "model": WEB_INSPECT_MODEL, "tokens_in": 0, "tokens_out": 0,
         "cost_usd": 0.0, "blocked_reason": None, "boundary_nonce": None,
         "snapshot_chars": 0, "screenshot_meta": None,
+        "browser_available": True, "degraded_reason": None,
     }
 
     safe, why = dv.validate_target_url(url)
@@ -179,6 +213,8 @@ async def run_web_inspect(url: str, question: str, *, db=None, user_id: str = ""
     out["snapshot_chars"] = len(pruned)
     out["screenshot_meta"] = fetch.get("screenshot_meta")
     out["boundary_nonce"] = nonce
+    out["browser_available"] = fetch.get("browser_available", True)
+    out["degraded_reason"] = fetch.get("degraded_reason")
 
     user_msg = (
         f"{boundary}\n\n"

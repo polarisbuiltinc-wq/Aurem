@@ -1200,3 +1200,64 @@ rows per installation weren't deduped) and `last_session_at` rendering as a
 1970 date (raw epoch-seconds float wasn't converted to ISO before reaching the
 frontend's `new Date()`).
 
+
+## 2026-08-30 — C1: Chromium production-diagnosis + browser-free graceful fallback (Option C)
+
+**Step 1 verdict (repo-file evidence only, no production shell access):**
+Chromium is NOT baked into the backend production image. `/app/backend/Dockerfile`
+(`FROM python:3.11-slim`) installs `curl nodejs npm wget gnupg ca-certificates`,
+MongoDB tools, ruff, eslint, and `pip install -r requirements.txt` (which
+includes `playwright==1.61.0`) — but there is no `playwright install chromium`
+step and none of Chromium's native `apt` deps (libnss3, libatk-bridge2.0-0,
+libgbm1, etc.) are installed. This matches the founder-reported production
+error (`chromium executable doesn't exist at /root/bin/chromium`) exactly:
+the Python *library* is present, the *browser binary* is not.
+Preview's `/root/bin/chromium` (set via `PLAYWRIGHT_CHROME_EXECUTABLE_PATH`
+in `backend/.env`) is a preview-pod-only binary provisioned by Emergent's
+agent-env base image — confirmed present at `/root/bin/chromium` in this pod
+— and is NOT proof anything equivalent exists in the production image built
+from this Dockerfile.
+→ **Option A (env var only) is not valid** for production as this repo's
+Dockerfile stands. **Option B (bake Chromium into the image)** is the correct
+long-term fix; the founder must add a Playwright/Chromium install step (and
+its apt deps) to `backend/Dockerfile` and redeploy.
+
+**Option C implemented in preview (backend only, no new deps — httpx already
+in requirements.txt):**
+- `services/deploy_verify.py`: added `_is_browser_missing_error()` (matches
+  only "executable doesn't exist", not any other launch/nav error) and
+  `_browser_free_fallback()`. `_run_verify_inner()`'s `pw.chromium.launch()`
+  is now wrapped — on a missing-Chromium error it returns a
+  `verdict="degraded"`, `browser_available=False`, `fail_reason=
+  "browser_unavailable"` result built from a plain `httpx` GET (status code
+  + raw-HTML `<h1>` signal only — no screenshots, no console/runtime checks,
+  no interactions). Any OTHER launch error still hard-fails exactly as
+  before (`verdict="fail"`, `browser_available` stays `True`) — narrowly
+  scoped, not a catch-all.
+- `services/web_inspect.py`: same pattern at its own launch site —
+  `_browser_free_snapshot_fallback()` returns raw HTML via `httpx` instead of
+  a rendered `innerText` snapshot, `screenshot_meta=None`,
+  `browser_available=False`, `degraded_reason="chromium_unavailable:<ExcType>"`.
+  `run_web_inspect()` surfaces both fields on its output — it still calls
+  the advisory LLM (using the raw-HTML fallback as context) so admins get an
+  answer, but the response is unmistakably labeled as degraded, not a full
+  rendered inspection.
+- `web_verify` (`run_web_verify`) needed no direct change — it's a thin
+  passthrough to `deploy_verify.run_verify`, so it inherits the fallback.
+
+**Tests:** new `tests/test_c1_browser_free_fallback_2026_08_30.py` (6 tests):
+missing-Chromium degrade (pass + fallback-request-also-fails), non-Chromium
+launch errors still hard-fail (boundary proof), exact founder-reported error
+string regression guard, `web_inspect`'s own fetch-site fallback, and a full
+`run_web_inspect` end-to-end degraded flow that still returns an advisory
+answer. 6/6 passed. Regression: `test_v1_deploy_verify_2026_08_30.py` +
+`test_web_inspect_2026_08_30.py` + `test_v1d_deploy_verify_wiring_2026_08_30.py`
+— 36/36 passed, no regressions.
+
+**NOT done (explicitly out of scope this round, per founder instruction):**
+no production deployment, no `/root/bin` changes, no Kit Phase 2, no new
+pip/npm dependencies, no Emergent support ticket sent (drafted only, on
+request). Preview code behavior is agent-tested; production Chromium
+provisioning remains unverified until the founder redeploys (Option B) and
+asks ORA in production to retry the homepage check — this cannot be verified
+from preview.

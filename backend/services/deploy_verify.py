@@ -85,6 +85,56 @@ def _truncate(s: Optional[str], cap: int = OUTPUT_TRUNCATE_CAP) -> str:
     return s if len(s) <= cap else s[:cap] + "...[truncated]"
 
 
+def _is_browser_missing_error(exc: Exception) -> bool:
+    """C1 — detects ONLY the 'no Chromium binary installed in this
+    environment' failure (Playwright's launch-time message), never
+    ordinary navigation/runtime errors. Those still hard-fail exactly
+    as before — this is not a catch-all."""
+    msg = str(exc).lower()
+    return "executable doesn't exist" in msg
+
+
+async def _browser_free_fallback(url: str, result: dict, exc: Exception) -> dict:
+    """C1 — graceful no-browser degrade. Only reached when Chromium's
+    own executable is missing at launch (see `_is_browser_missing_error`).
+    Runs a plain httpx GET — no screenshots, no console/runtime checks,
+    no JS execution, no interactions — and labels the result clearly as
+    `degraded` so nothing downstream mistakes it for a full verify."""
+    import httpx
+    result["verdict"] = "degraded"
+    result["browser_available"] = False
+    result["fail_reason"] = "browser_unavailable"
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+            resp = await client.get(url)
+        status_ok = 200 <= resp.status_code < 400
+        body = (resp.text or "")[:OUTPUT_TRUNCATE_CAP]
+        has_heading = "<h1" in body.lower()
+        result["checks"].append({
+            "name": "reachability_fallback", "pass": status_ok,
+            "evidence": f"HTTP {resp.status_code} via browser-free fallback "
+                        f"(Chromium unavailable: {type(exc).__name__})",
+        })
+        result["checks"].append({
+            "name": "content_signal_fallback", "pass": has_heading,
+            "evidence": ("found an <h1> in the raw HTML" if has_heading
+                         else "no <h1> found in the raw HTML — may be a JS-only shell"),
+        })
+    except Exception as fetch_exc:                            # noqa: BLE001
+        result["checks"].append({
+            "name": "reachability_fallback", "pass": False,
+            "evidence": f"browser-free fallback request failed: {type(fetch_exc).__name__}",
+        })
+    result["what_happened"] = (
+        "Chromium is not installed in this environment, so full browser "
+        "verification (screenshots, console/runtime errors, click "
+        "interactions) could not run. Ran a browser-free HTTP check "
+        "instead — this result does NOT confirm visual rendering, JS "
+        "runtime health, or interactivity."
+    )
+    return result
+
+
 async def _audit_log(db, **fields) -> None:
     """V1c rule 7 — every verify run logged (who/what/when/dur/result/
     tokens/egress), same append-only pattern as the webhook fence
@@ -122,8 +172,14 @@ async def run_verify(
     Returns:
       {url, build_match, checks:[{name, pass, evidence}],
        screenshots:{mobile_375, desktop}, trace_path, duration_ms,
-       console_errors:[], egress_attempts:[], verdict:pass|fail,
-       fail_reason, advisory_model}
+       console_errors:[], egress_attempts:[], verdict:pass|fail|degraded,
+       fail_reason, advisory_model, browser_available}
+
+    `verdict == "degraded"` (C1) means Chromium itself was not
+    installed in this environment — the checks that DID run are a
+    browser-free httpx fallback (reachability + raw-HTML signal only).
+    It is NOT a pass and NOT a full verify; `browser_available` is
+    `False` in that case so callers can render it distinctly.
     """
     t_start = time.time()
     run_id = uuid.uuid4().hex[:12]
@@ -132,7 +188,7 @@ async def run_verify(
         "checks": [], "screenshots": {}, "trace_path": None,
         "duration_ms": None, "console_errors": [], "egress_attempts": [],
         "verdict": "fail", "fail_reason": None, "advisory_model": None,
-        "what_happened": None,
+        "what_happened": None, "browser_available": True,
     }
 
     # V1c FIRST — the gate sequencing rule: fence before ANY run
@@ -214,7 +270,15 @@ async def _run_verify_inner(
         _exe = _os.environ.get("PLAYWRIGHT_CHROME_EXECUTABLE_PATH")
         if _exe:
             launch_kwargs["executable_path"] = _exe
-        browser = await pw.chromium.launch(**launch_kwargs)
+        try:
+            browser = await pw.chromium.launch(**launch_kwargs)
+        except Exception as e:
+            # C1 — graceful degrade ONLY for a missing Chromium binary.
+            # Any other launch failure still hard-fails via the outer
+            # run_verify() try/except, unchanged.
+            if _is_browser_missing_error(e):
+                return await _browser_free_fallback(url, result, e)
+            raise
         try:
             # V1c rule 4 — fresh, isolated context every run. No prior
             # session or saved credentials carried in, downloads off.
