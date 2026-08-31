@@ -1042,6 +1042,9 @@ async def chat_send(
         "repo_name":  getattr(bin_ctx, "repo_name", None)  if bin_ctx else None,
         "branch":     getattr(bin_ctx, "branch", None)     if bin_ctx else None,
         "findings_saved": result.get("findings_saved_this_turn") or [],
+        # Item 2 (2026-08-31) — palette nudges made this turn (before/after
+        # swatches rendered by PaletteNudgeBubble.jsx, no jargon).
+        "palette_nudges": result.get("palette_nudges") or [],
     }
 
 
@@ -3820,6 +3823,9 @@ async def chat_stream(
             # show a reliable "N issues found" teaser instead of
             # depending on the aurem-handoff fence to bundle them.
             "findings_saved": result.get("findings_saved_this_turn") or [],
+            # Item 2 (2026-08-31) — palette nudges made this turn (before/
+            # after swatches rendered by PaletteNudgeBubble.jsx, no jargon).
+            "palette_nudges": result.get("palette_nudges") or [],
         }
         yield f"data: {json.dumps(done_payload)}\n\n"
 

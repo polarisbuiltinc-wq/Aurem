@@ -184,3 +184,23 @@ def check_and_nudge_css(css_text: str, threshold: float = WCAG_AA_NORMAL_TEXT) -
     return {"content": content, "adjustments": adjustments, "ok": not adjustments or all(
         a["after_ratio"] >= threshold for a in adjustments
     )}
+
+
+def describe_nudge(adjustment: dict) -> str:
+    """Plain-English, one-line description of a single contrast nudge
+    for a NON-TECHNICAL owner — no 'WCAG'/'luminance'/'token'/var-name
+    jargon, ever (Item 2, 2026-08-31 — chat visibility for design
+    fixes). Deterministic: same adjustment always produces the same
+    sentence, no LLM involved."""
+    orig = adjustment.get("original_fg", "")
+    nudged = adjustment.get("nudged_fg", "")
+    before = adjustment.get("before_ratio", 0)
+    after = adjustment.get("after_ratio", 0)
+    try:
+        direction = "darker" if relative_luminance(nudged) < relative_luminance(orig) else "lighter"
+    except ValueError:
+        direction = "different"
+    return (
+        f"I made some text a touch {direction} — it wasn't easy to read "
+        f"against its background before (was {before:.1f}:1, now {after:.1f}:1)."
+    )

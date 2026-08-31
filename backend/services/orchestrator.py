@@ -2571,6 +2571,10 @@ async def chat_with_tools(
                 # calls (consumed by SystemSignalBanner + CitationGuard).
                 "system_signals": local_ctx.get("system_signals") or [],
                 "tool_calls":     local_ctx.get("tool_calls") or [],
+                # Item 2 (2026-08-31) — palette nudges made this turn,
+                # surfaced to chat.py so the owner SEES the before/after
+                # (see services/contrast_guard.py::describe_nudge).
+                "palette_nudges": local_ctx.get("palette_nudges") or [],
                 # 2026-08-23 — findings-to-fix bridge. critical/high
                 # `save_finding` saves this turn, so chat can surface a
                 # reliable teaser instead of depending on the fragile
@@ -2827,4 +2831,5 @@ async def chat_with_tools(
         "system_signals": local_ctx.get("system_signals") or [],
         "tool_calls":     local_ctx.get("tool_calls") or [],
         "findings_saved_this_turn": local_ctx.get("findings_saved_this_turn") or [],
+        "palette_nudges": local_ctx.get("palette_nudges") or [],
     }

@@ -928,6 +928,11 @@ function GitHubAppConfigCard() {
     app_id: "", app_slug: "", private_key: "", webhook_secret: "",
   });
   const [saving, setSaving] = useState(false);
+  // NEXT ROUND Item 1 (2026-09-01) — persistent (non-toast) save
+  // result so "did my paste take?" is answerable by looking at the
+  // card, not by catching a 3s-fading toast. Never silent: every
+  // save attempt ends in either {ok:true} or {ok:false, reason}.
+  const [saveResult, setSaveResult] = useState(null);
 
   async function refresh() {
     try {
@@ -949,6 +954,7 @@ function GitHubAppConfigCard() {
       private_key: "",       // never pre-fill secrets
       webhook_secret: "",    // never pre-fill secrets
     });
+    setSaveResult(null);
     setEditing(true);
   }
 
@@ -968,12 +974,12 @@ function GitHubAppConfigCard() {
       return;
     }
     setSaving(true);
+    setSaveResult(null);
     try {
       const r = await api.post("/admin/github-app-config", trimmed);
-      toast({
-        message: `GitHub App @${r.data.app_slug} validated & saved ✓`,
-        kind: "success",
-      });
+      const msg = `Saved. GitHub App @${r.data.app_slug} validated live.`;
+      toast({ message: msg, kind: "success" });
+      setSaveResult({ ok: true, message: msg });
       setEditing(false);
       setInputs({ app_id: "", app_slug: "", private_key: "", webhook_secret: "" });
       await refresh();
@@ -981,8 +987,9 @@ function GitHubAppConfigCard() {
       const d = e?.response?.data?.detail;
       const msg = typeof d === "string"
         ? d
-        : (d?.message || "Save failed");
+        : (d?.message || "Save failed — no reason returned (this itself is a bug, report it).");
       toast({ message: msg, kind: "error" });
+      setSaveResult({ ok: false, message: `Save failed: ${msg}` });
     } finally { setSaving(false); }
   }
 
@@ -1025,6 +1032,22 @@ function GitHubAppConfigCard() {
               : healthy   ? "connected"
               : "invalid"}
           </Badge>
+          {/* NEXT ROUND Item 1 (2026-09-01) — explicit, always-fresh
+              key state (never a saved/stale field — computed by the
+              backend on every GET, see admin_ops_config.py). */}
+          <span data-testid="gh-app-key-state"
+                style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: "0.04em",
+                  padding: "2px 8px", borderRadius: 4,
+                  color: data.key_state === "VALID" ? "#22c55e"
+                       : data.key_state === "MISSING" ? "var(--text-faint)"
+                       : "#ef4444",
+                  border: `1px solid ${data.key_state === "VALID" ? "#22c55e"
+                       : data.key_state === "MISSING" ? "var(--border)"
+                       : "#ef4444"}`,
+                }}>
+            KEY STATE: {data.key_state || "UNKNOWN"}
+          </span>
         </div>
         {!editing && (
           <button
@@ -1036,6 +1059,20 @@ function GitHubAppConfigCard() {
           </button>
         )}
       </div>
+
+      {/* NEXT ROUND Item 1 (2026-09-01) — persistent save result, so a
+          failed paste is never a silent no-op the founder has to guess
+          at from a fading toast. */}
+      {saveResult && (
+        <div data-testid="admin-github-app-save-result"
+             style={{ padding: "8px 12px", marginBottom: 10,
+                      background: saveResult.ok ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)",
+                      border: `1px solid ${saveResult.ok ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
+                      borderRadius: 8, fontSize: 12,
+                      color: saveResult.ok ? "#86efac" : "#fca5a5" }}>
+          {saveResult.message}
+        </div>
+      )}
 
       {!editing && (
         <>
@@ -1123,10 +1160,11 @@ function GitHubAppConfigCard() {
           </div>
 
           {data.updated_by && (
-            <div style={{ marginTop: 10, fontSize: 10, color: "var(--text-faint)",
+            <div data-testid="gh-app-key-updated"
+                 style={{ marginTop: 10, fontSize: 10, color: "var(--text-faint)",
                           fontFamily: "'JetBrains Mono', monospace" }}>
-              Last updated by {data.updated_by} at{" "}
-              {new Date((data.last_updated || 0) * 1000).toISOString()}
+              Key last updated: {new Date((data.last_updated || 0) * 1000).toISOString()}
+              {" "}(by {data.updated_by})
             </div>
           )}
         </>

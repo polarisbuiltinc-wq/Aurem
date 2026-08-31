@@ -561,6 +561,22 @@ async def admin_get_github_app_config(
     else:
         summary["live"] = {"ok": False, "error": "not configured"}
 
+    # NEXT ROUND Item 1 (2026-09-01) — make the key's live state
+    # VISIBLE and un-ambiguous, computed FRESH on every GET (never
+    # persisted as a stale "state" field) so the founder + agent can
+    # both see whether a paste actually landed AND still validates
+    # against GitHub, instead of guessing from a colored dot alone.
+    #   MISSING          — no credentials saved at all.
+    #   VALID             — configured AND GitHub accepts the JWT.
+    #   STALE-ON-GITHUB   — configured but GitHub rejects the JWT
+    #                        (revoked/rotated/mismatched key).
+    if not configured:
+        summary["key_state"] = "MISSING"
+    elif summary["live"].get("ok"):
+        summary["key_state"] = "VALID"
+    else:
+        summary["key_state"] = "STALE-ON-GITHUB"
+
     return summary
 
 

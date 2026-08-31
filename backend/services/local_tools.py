@@ -832,11 +832,25 @@ async def write_repo_file(ctx: dict, args: dict) -> dict:
     _contrast_note = None
     if re.search(r"\.(css|scss)$", path, re.IGNORECASE) or "theme" in path.lower():
         try:
-            from services.contrast_guard import check_and_nudge_css
+            from services.contrast_guard import check_and_nudge_css, describe_nudge
             _cg = check_and_nudge_css(content)
             if _cg["adjustments"]:
                 content = _cg["content"]
                 _contrast_note = _cg["adjustments"]
+                # Item 2 (2026-08-31) — surface this nudge to the owner
+                # IN CHAT, not just the logs. `ctx["palette_nudges"]` is
+                # harvested by orchestrator.py the same way
+                # `system_signals`/`tool_calls` already are, and rendered
+                # as a before/after swatch pair by PaletteNudgeBubble.jsx.
+                for _adj in _cg["adjustments"]:
+                    ctx.setdefault("palette_nudges", []).append({
+                        "path": path,
+                        "before_hex": _adj["original_fg"],
+                        "after_hex": _adj["nudged_fg"],
+                        "before_ratio": _adj["before_ratio"],
+                        "after_ratio": _adj["after_ratio"],
+                        "note": describe_nudge(_adj),
+                    })
         except Exception as _cg_e:
             logger.debug("contrast_guard skipped for %s: %r", path, _cg_e)
 

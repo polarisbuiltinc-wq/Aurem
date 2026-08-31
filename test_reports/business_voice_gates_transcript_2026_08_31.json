@@ -4,7 +4,7 @@
     {
       "turn": 1,
       "prompt": "hi, what can you do for my website?",
-      "reply": "I can help fix bugs, improve content, and go live with updates—just share your website's pages and what you need.",
+      "reply": "I can help fix issues, suggest improvements, and go live with updates directly to your content—just point me to your website's pages!",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -22,25 +22,7 @@
     {
       "turn": 2,
       "prompt": "please put our opening hours at the top of our main page",
-      "reply": "I'd love to make that happen — I just need one thing from you: **what are your opening hours?** (e.g. \"Mon–Fri 9am–5pm, Sat 10am–2pm, closed Sun\")\n\nOnce you share those, I'll put them right at the top of your main page.",
-      "checks": {
-        "no_jargon": true,
-        "jargon_hits": [],
-        "no_dead_end": true,
-        "dead_end_hits": [],
-        "ends_with_terminal_punct": true,
-        "no_dangling": true,
-        "has_handoff_fence": false
-      },
-      "provider": "glm-5.2",
-      "tier": "agentic",
-      "bail_reason": null,
-      "ship_suppressed": false
-    },
-    {
-      "turn": 3,
-      "prompt": "9am to 5pm every day",
-      "reply": "Got it! I'll add \"Open daily 9am–5pm\" to your page right away.",
+      "reply": "Got it—I'll update your main page with the opening hours at the top and send you the change to review.",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -51,14 +33,32 @@
         "has_handoff_fence": false
       },
       "provider": "intent-gateway-casual",
-      "tier": "casual",
+      "tier": "clarify",
+      "bail_reason": null,
+      "ship_suppressed": false
+    },
+    {
+      "turn": 3,
+      "prompt": "9am to 5pm every day",
+      "reply": "Perfect—I'll add those hours prominently at the top of your main page now. You'll see the change in just a moment.",
+      "checks": {
+        "no_jargon": true,
+        "jargon_hits": [],
+        "no_dead_end": true,
+        "dead_end_hits": [],
+        "ends_with_terminal_punct": true,
+        "no_dangling": true,
+        "has_handoff_fence": false
+      },
+      "provider": "intent-gateway-casual",
+      "tier": "clarify",
       "bail_reason": null,
       "ship_suppressed": false
     },
     {
       "turn": 4,
       "prompt": "add our phone number 1-800-555-0199 to the bottom of my main page",
-      "reply": "I can't add the phone number right now because no website is connected — I need you to **select your project from the sidebar** first, then I can update your page.\n\nOnce you've selected it, I'll add \"1-800-555-0199\" to the bottom of your main page along with the opening hours we discussed.",
+      "reply": "I can't see your website right now—looks like we need to connect it first. \n\n**But I can help you get set up:** just connect your website from the sidebar (look for a \"Select Project\" or similar option), and I'll be able to add that phone number to the bottom of your main page right away.\n\nOnce it's connected, I'll add **1-800-555-0199** to the footer along with the opening hours we discussed earlier.\n\nWhat else can I help with in the meantime?",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -137,7 +137,7 @@
   "regression": [
     {
       "prompt": "hello!",
-      "reply": "Hey! How can I help today?",
+      "reply": "Hey! How can I help you today? :)",
       "provider": "intent-gateway-casual",
       "tier": "casual"
     }

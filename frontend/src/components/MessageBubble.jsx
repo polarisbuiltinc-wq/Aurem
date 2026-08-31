@@ -26,6 +26,7 @@ import TaskLiveTape from "./TaskLiveTape";
 import TaskManagementPanel, { hasChecklist } from "./TaskManagementPanel";
 import RenderedMessage from "./RenderedMessage";
 import EditedFileBubble from "./EditedFileBubble";
+import PaletteNudgeBubble from "./PaletteNudgeBubble";
 import LoopProgressBubble, { isLoopProgressContent } from "./LoopProgressBubble"; // Iter 331
 import CollapsibleReply from "./CollapsibleReply"; // Iter 339d/339m
 import MermaidBlock from "./MermaidBlock";       // Iter 212m-61 /diagram
@@ -818,6 +819,17 @@ export default function MessageBubble({
             <div data-testid="ora-edited-files-list" style={{ marginTop: 10 }}>
               {m.edited_files.map((f, i) => (
                 <EditedFileBubble key={`${i}-${f.path}`} file={f} />
+              ))}
+            </div>
+          )}
+          {/* Item 2 (2026-08-31) — contrast-guard palette nudges made
+              this turn, shown inline as before/after swatches so the
+              owner SEES a design fix, not just "done" in prose. */}
+          {m.role === "assistant" && !m.streaming
+            && Array.isArray(m.paletteNudges) && m.paletteNudges.length > 0 && (
+            <div data-testid="palette-nudges-list" style={{ marginTop: 10 }}>
+              {m.paletteNudges.map((n, i) => (
+                <PaletteNudgeBubble key={i} nudge={n} />
               ))}
             </div>
           )}

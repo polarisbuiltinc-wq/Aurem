@@ -2689,6 +2689,10 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
               // surface, so it should turn on/off with the identical
               // gate rather than drift out of sync via a second flag).
               plainEnglishContractActive: !!d.plain_english_contract_active,
+              // Item 2 (2026-08-31) — palette nudges the contrast guard
+              // made this turn, shown as before/after swatches on the
+              // bubble (see components/PaletteNudgeBubble.jsx).
+              paletteNudges: Array.isArray(d.palette_nudges) ? d.palette_nudges : [],
             };
           }
           return copy;

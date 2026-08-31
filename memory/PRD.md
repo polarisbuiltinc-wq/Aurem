@@ -7510,3 +7510,87 @@ was marked passed against a real repo — labeled explicitly as partial.
 in `services/rollback_drill.py`'s auth-resolution pattern — same repo,
 same App).
 
+
+## 2026-09-01 — "NEXT ROUND" (3 things): Key Visibility + Chat-Visible Palette Nudges DONE · Gate 4 STILL BLOCKED (honest)
+
+**Item 1 — GitHub key state VISIBLE (DONE, tested):**
+`GET /api/aurem-dev/admin/github-app-config` now returns a
+`key_state` field — `MISSING` / `VALID` / `STALE-ON-GITHUB` —
+computed FRESH on every call from `configured` + the existing live
+JWT probe (never a saved/cached field). Frontend `GitHubAppConfigCard`
+(`AdminSettingsPage.jsx`) now shows this prominently
+(`data-testid="gh-app-key-state"`), a clearly labeled
+"Key last updated: <ISO date> (by <email>)" row
+(`gh-app-key-updated`), and a PERSISTENT (non-toast) save-result
+banner (`admin-github-app-save-result`) that always shows either
+"Saved. …" or "Save failed: <the real GitHub error>" — never silent.
+The POST validation path already existed and already returned the
+real GitHub error message; this round only added the missing
+VISIBILITY layer. 4/4 new tests pass
+(`tests/test_github_key_visibility_2026_09_01.py`): `t_key_state_shown_in_admin`
+(x2: MISSING/VALID), `t_key_state_not_stale` (two consecutive GETs
+with a flipping live-probe result produce different `key_state` —
+proves it's recomputed, not cached), `t_paste_failure_shows_reason`.
+
+**LIVE VERIFIED RIGHT NOW (2026-09-01):** `updated_at` = 2026-08-22
+(unchanged since the prior round), `live.ok` = false,
+GitHub's exact error = `"GitHub returned 401 — App ID and private key
+do not match."` → `key_state = STALE-ON-GITHUB`. This is a founder-
+side fix only (paste a fresh PEM at Admin → Settings → GitHub App);
+no further agent-side JWT debugging was attempted, per standing house
+rule. Likely contributing factor (not proven, stated as a caveat):
+preview Mongo is local-per-pod/ephemeral across forks, so a paste made
+in a different preview session may never reach THIS pod's DB.
+
+**Item 2 — Palette nudges VISIBLE in chat (DONE, tested):** when the
+existing contrast guard (`services/contrast_guard.py`) nudges a
+palette inside `write_repo_file`, the nudge is now threaded end-to-end
+into the chat reply instead of only the logs:
+`local_tools.py::write_repo_file` → `ctx["palette_nudges"]` →
+`orchestrator.py::chat_with_tools` (`result["palette_nudges"]`, both
+return paths) → `routers/chat.py` (`chat_send` response JSON +
+`chat_stream`'s `done_payload`) → `ChatPanel.jsx`'s `onDone` handler
+(`m.paletteNudges`) → new `components/PaletteNudgeBubble.jsx` rendered
+by `MessageBubble.jsx` (same pattern as the pre-existing
+`EditedFileBubble`). Each nudge shows a before/after color swatch pair
++ a plain-English note built by the new
+`contrast_guard.py::describe_nudge()` — e.g. *"I made some text a
+touch darker — it wasn't easy to read against its background before
+(was 2.1:1, now 4.5:1)"* — with zero WCAG/luminance/token jargon.
+7/7 new tests pass: `tests/test_palette_nudge_chat_visibility_2026_09_01.py`
+(`t_palette_nudge_shows_inline_before_after`, `t_palette_note_no_jargon`,
++ 1 determinism test) and `frontend/src/components/__tests__/
+PaletteNudgeBubble.test.jsx` (3, incl. the same 2 named tests as a DOM
+render, so a future UI change can't silently reintroduce jargon).
+Screenshot proof captured by temporarily routing the actual
+`PaletteNudgeBubble.jsx` under `/admin/_debug/...` (production allow-
+listed prefix), confirming real swatch colors + note render — route
+and scratch file removed immediately after.
+
+**Item 3 — Gate 4 real push: STILL BLOCKED, reported honestly, NOT
+faked.** `key_state = STALE-ON-GITHUB` (see Item 1 live check above)
+→ per the founder's own instruction, did not attempt the real
+redesign E2E push this round. Last round's dry-run (local fixture,
+same `contrast_guard` code, before/after screenshots) remains the
+only proof of the redesign+guard pipeline; it does not substitute for
+a real commit. **Next: the moment the founder confirms a fresh key
+paste, re-check `GET /api/aurem-dev/admin/github-app-config` for
+`key_state: VALID`, then run Gate 4 for real against
+`polarisbuiltinc-wq/aurem-rollback-testbed`.**
+
+**Regression:** re-ran `tests/test_business_owner_gates_2026_08_31.py`
+(Gates 1-3) — still 6/6. Full new-work suite (backend 29 + frontend 3
+= 32) all green. Ran a broader spot-check
+(`test_findings_teaser_bridge_2026_08_23.py`,
+`test_business_owner_voice_2026_08_31.py`,
+`test_citation_guard_persist_ordering.py`,
+`test_citation_guard_bin_ctx_wiring_2026_08_23.py` = 35 tests): one
+pre-existing failure (`test_persisted_turn_reflects_citation_guard_correction`)
+confirmed via `git stash` to fail identically on the untouched
+baseline — NOT a new regression from this round's changes.
+
+**No-silent-fail audit:** GitHub key paste failure → explicit reason
+shown inline + toast (never silent). Contrast-guard nudge → always
+surfaced in chat when it fires (never just logged). Gate 4 → reported
+blocked with the exact GitHub error, not faked.
+
