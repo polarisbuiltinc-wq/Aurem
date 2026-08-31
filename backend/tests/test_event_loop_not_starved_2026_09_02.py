@@ -10,8 +10,10 @@ Both tests below go through the REAL `write_repo_file` function
 (no mocking of the function itself) -- a deliberate syntax error in
 the submitted content makes the syntax gate block the commit and
 return BEFORE any real GitHub call is attempted, so no GitHub
-mocking is needed either. Only `subprocess.run` is mocked, to make
-the "slow tool" duration deterministic.
+mocking is needed either. Only `_run_subprocess_pgkill` (the
+process-group-aware subprocess runner `_run_syntax_check` calls
+into, 2026-09-04) is mocked, to make the "slow tool" duration
+deterministic.
 """
 from __future__ import annotations
 
@@ -71,7 +73,7 @@ async def test_t_event_loop_not_blocked_during_write():
             tick_gaps.append(now - last)
             last = now
 
-    with patch("subprocess.run", side_effect=_slow_subprocess_run):
+    with patch("services.local_tools._run_subprocess_pgkill", side_effect=_slow_subprocess_run):
         hb = asyncio.ensure_future(heartbeat())
         await asyncio.sleep(0.01)  # let the heartbeat start first
         result = await write_repo_file(_ctx(), _syntax_error_args("a.py"))
@@ -109,7 +111,7 @@ async def test_t_multifile_write_does_not_starve_poll():
             r = await write_repo_file(_ctx(), _syntax_error_args(f"f{i}.py"))
             assert r.get("error") == "syntax_gate_blocked"
 
-    with patch("subprocess.run", side_effect=_slow_subprocess_run):
+    with patch("services.local_tools._run_subprocess_pgkill", side_effect=_slow_subprocess_run):
         poll_task = asyncio.ensure_future(status_poll())
         await write_three_files()
         await poll_task

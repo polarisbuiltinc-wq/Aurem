@@ -306,15 +306,20 @@ class CheckoutBody(BaseModel):
     origin_url: Optional[str] = None  # falls back to FRONTEND_URL
 
 
-@router.post("/payments/checkout")
-async def create_checkout(
-    body: CheckoutBody,
-    http_request: Request,
-    authorization: Optional[str] = Header(None),
+# 2026-09-04 — extracted from `create_checkout` below so the confirm-
+# execution path (services/confirm_execution.py — a chat "yes please"
+# to a Root 4 upgrade offer) can start the SAME real Stripe checkout
+# session without duplicating this logic. The router endpoint below
+# is now a thin FastAPI wrapper around this function; behavior is
+# unchanged for existing callers.
+async def create_checkout_session(
+    user: dict, plan: str, origin_url: str = "",
 ) -> dict:
+    """Returns {url, checkout_url, session_id} on success. Raises
+    HTTPException on any failure (invalid plan, misconfigured price,
+    Stripe error) — same contract as the /payments/checkout route."""
     _require_stripe()
-    user = await current_dev(authorization)
-    plan = (body.plan or body.tier or "").strip().lower()
+    plan = (plan or "").strip().lower()
     if plan not in STRIPE_PRICES:
         raise HTTPException(400, f"Invalid plan `{plan}` — expected starter|pro|team")
     price_id = STRIPE_PRICES[plan]()
@@ -324,25 +329,9 @@ async def create_checkout(
             f"Stripe price ID for `{plan}` not configured "
             f"(set STRIPE_{plan.upper()}_PRICE_ID).",
         )
-
-    # Iter 212m-15 — sanity-check the configured price BEFORE attempting
-    # Checkout. If a misconfigured env var points at a test-mode price
-    # while the key is live (or a deleted / one-time / inactive price),
-    # the canonical Stripe error is `No such price` — but on some prod
-    # pods the failure mode was a worker crash that returned Cloudflare
-    # 502 HTML instead of clean JSON (this hit the founder live on
-    # monthly plans while annual variants worked, proving it's the env
-    # vars, not the code path). Pre-flighting `Price.retrieve` lets us
-    # return a clean diagnostic JSON instead.
-    # Iter 335 — pre-flight now also self-heals stale env IDs via live
-    # price auto-discovery (see _preflight_price).
     price_id = await _preflight_price(plan, price_id)
 
-    origin = (
-        (body.origin_url or "").rstrip("/")
-        or _frontend_url()
-        or str(http_request.base_url).rstrip("/")
-    )
+    origin = (origin_url or "").rstrip("/") or _frontend_url()
     success_url = f"{origin}/settings?session_id={{CHECKOUT_SESSION_ID}}&upgraded=1"
     cancel_url  = f"{origin}/settings?cancelled=1#pricing"
 
@@ -368,9 +357,6 @@ async def create_checkout(
         logger.warning("stripe checkout create failed: %r", e)
         raise HTTPException(502, f"Stripe error: {getattr(e, 'user_message', str(e))}")
     except Exception as e:
-        # Iter 179 — final defensive net so the worker never bubbles a
-        # raw exception up to uvicorn/Cloudflare (which would turn it
-        # into a generic 502 HTML page).
         logger.exception("checkout create unexpected failure: %r", e)
         raise HTTPException(
             502,
@@ -390,15 +376,6 @@ async def create_checkout(
         "created_at":  time.time(),
     })
 
-    # Iter 183 — Stripe sometimes returns the new `/g/pay/` (Guest /
-    # Link-optimized) checkout URL which currently renders a generic
-    # "Something went wrong … the link might be expired" page for our
-    # account (live, subscription mode). The exact same session_id
-    # loads perfectly at the canonical `/c/pay/` hosted-Checkout path,
-    # so we rewrite the URL before returning to the client. This is
-    # safe — both routes accept the same session token in the URL
-    # fragment — and it's the difference between "broken checkout" and
-    # "user can actually pay us" for affected sessions.
     checkout_url = session.url or ""
     if "/g/pay/" in checkout_url:
         checkout_url = checkout_url.replace("/g/pay/", "/c/pay/", 1)
@@ -407,6 +384,18 @@ async def create_checkout(
         )
 
     return {"url": checkout_url, "checkout_url": checkout_url, "session_id": session.id}
+
+
+@router.post("/payments/checkout")
+async def create_checkout(
+    body: CheckoutBody,
+    http_request: Request,
+    authorization: Optional[str] = Header(None),
+) -> dict:
+    user = await current_dev(authorization)
+    plan = (body.plan or body.tier or "").strip().lower()
+    origin = (body.origin_url or "").rstrip("/") or _frontend_url() or str(http_request.base_url).rstrip("/")
+    return await create_checkout_session(user, plan, origin)
 
 
 # ── /payments/status — frontend poll after the redirect ─────────────────

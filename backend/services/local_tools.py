@@ -81,6 +81,83 @@ def _is_safe_repo_path(path: str) -> bool:
 # (timeout, missing binary) so we never block a commit on local
 # infra flake — better to ship than to deadlock.
 
+# 2026-09-04 — DIAGNOSIS + FIX for the "promise-then-silence" hang.
+#
+# Root cause, confirmed by direct reproduction (not assumed): `npx tsc`
+# spawns a 2-level-deep process tree — `npx` → `sh -c "tsc ..."` → the
+# actual `node .../tsc` process. `subprocess.run(cmd, timeout=N)`'s
+# internal TimeoutExpired handler calls `process.kill()` on the
+# **direct child only** (`npx`) — the grandchild `node tsc` process,
+# which holds the CPU and the stdout/stderr pipes, is NEVER killed and
+# keeps running, orphaned, until it finishes on its own. Verified live
+# in this pod: killing the `npx` Popen object left the grandchild
+# `node /usr/bin/tsc ...` process alive and running 0.3s+ later
+# (`pgrep -a node` still showed it). `python -m py_compile` and
+# `node --check` do NOT have this problem (no shell/grandchild layer)
+# — only the `npx tsc` path is vulnerable.
+#
+# Why this produces "promise-then-silence" across ALL requests, not
+# just edits: this backend runs as a SINGLE uvicorn worker (one
+# process, one event loop). Every leaked orphan `tsc` process is a
+# real, separate, CPU-hungry OS process competing for the same cores
+# as the event loop itself. Under real production edit traffic
+# (repeated `.ts`/`.tsx` writes), these orphans accumulate — nothing
+# ever reaps them — and each can run for a long time on a large/slow
+# TypeScript check. Enough accumulated orphans starve the container's
+# CPU, which slows down or stalls EVERY concurrent request on that one
+# worker (any mode, even a simple question with no tools at all),
+# matching the reported "worsened after the to_thread offload, hits
+# almost every request, both modes, intermittent" pattern exactly —
+# the to_thread change (2026-09-02) let MULTIPLE syntax checks run
+# concurrently off the event loop, which is correct for the event loop
+# but also means multiple orphans can now leak IN PARALLEL where
+# before they were serialized on a single blocking call.
+# Additionally: `chat_stream`'s 180s watchdog calls `worker_t.cancel()`
+# on timeout, which does NOT stop an in-flight `asyncio.to_thread`
+# call — asyncio task cancellation cannot reach into a
+# ThreadPoolExecutor worker already running a blocking syscall. So
+# even after the user sees a timeout message, the underlying orphaned
+# subprocess keeps running and leaking in the background regardless.
+#
+# THE FIX: run every syntax-check subprocess in its OWN process group
+# (`start_new_session=True`) and, on timeout, kill the WHOLE group
+# with `os.killpg()` — not just the direct child. This reaches the
+# grandchild `tsc` node process too, so nothing survives the timeout.
+def _run_subprocess_pgkill(cmd: list[str], timeout: float):
+    """Same contract as `subprocess.run(cmd, capture_output=True,
+    text=True, timeout=timeout)` (returns a CompletedProcess, raises
+    `subprocess.TimeoutExpired` on timeout) — except on timeout it
+    kills the ENTIRE process group, not just the direct child, so a
+    shell-wrapped grandchild (e.g. `npx` → `sh -c` → `node tsc`) can
+    never survive and leak. See the module-level 2026-09-04 comment
+    above for the full diagnosis this fixes."""
+    import os
+    import signal
+    import subprocess
+
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, start_new_session=True,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+        try:
+            proc.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()
+            except Exception:                              # noqa: BLE001
+                pass
+            proc.communicate()
+        raise
+
+
 def _run_syntax_check(*, content: str, file_path: str, ext: str) -> dict:
     """Returns {has_errors: bool, errors: str, skipped: bool, reason: str?}."""
     import os
@@ -104,9 +181,8 @@ def _run_syntax_check(*, content: str, file_path: str, ext: str) -> dict:
     try:
         if ext == ".py":
             try:
-                result = subprocess.run(
-                    ["python", "-m", "py_compile", tmp_path],
-                    capture_output=True, text=True, timeout=10,
+                result = _run_subprocess_pgkill(
+                    ["python", "-m", "py_compile", tmp_path], timeout=10,
                 )
             except (subprocess.TimeoutExpired, FileNotFoundError) as e:
                 return {"has_errors": False, "errors": "",
@@ -118,9 +194,8 @@ def _run_syntax_check(*, content: str, file_path: str, ext: str) -> dict:
                         "skipped": False}
         elif ext in (".js", ".jsx"):
             try:
-                result = subprocess.run(
-                    ["node", "--check", tmp_path],
-                    capture_output=True, text=True, timeout=10,
+                result = _run_subprocess_pgkill(
+                    ["node", "--check", tmp_path], timeout=10,
                 )
             except (subprocess.TimeoutExpired, FileNotFoundError) as e:
                 return {"has_errors": False, "errors": "",
@@ -134,12 +209,11 @@ def _run_syntax_check(*, content: str, file_path: str, ext: str) -> dict:
             # tsc may be slow; cap at 15 s and run with the frontend
             # tsconfig so JSX / module resolution match the project.
             try:
-                result = subprocess.run(
+                result = _run_subprocess_pgkill(
                     ["npx", "tsc", "--noEmit", "--allowJs",
                      "--jsx", "preserve", "--target", "ES2020",
                      "--module", "esnext", "--moduleResolution", "node",
-                     tmp_path],
-                    capture_output=True, text=True, timeout=15,
+                     tmp_path], timeout=15,
                 )
             except (subprocess.TimeoutExpired, FileNotFoundError) as e:
                 return {"has_errors": False, "errors": "",

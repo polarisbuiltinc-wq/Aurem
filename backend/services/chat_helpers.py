@@ -57,6 +57,56 @@ def retrieved_context_for_grounding(extra_sys: str | None, result: dict | None) 
     return "\n".join(parts)
 
 
+# 2026-09-04 · confirm-execution round — DRY: the 4 near-identical
+# output-guard blocks in routers/chat.py (chat_send + chat_stream,
+# each running the same 4 guards in the same order) are now ONE
+# shared function. `skip=True` (set by confirm_execution's
+# `maybe_execute_pending` via `result["_skip_output_guards"]`) bypasses
+# ALL of them — a deterministic, already-verified-real completion
+# message ("Done — updated your opening hours...") must never be
+# rewritten by `apply_no_false_success_guard` just because the user's
+# message was a confirmation reply; that guard's premise (a chat reply
+# can never legitimately claim success because shipping was always a
+# separate button-triggered flow) no longer holds for a turn that DID
+# just execute for real.
+def apply_output_guards(
+    user_message: str, content: str, prior_fix_signal: bool,
+    retrieved_context: str, *, skip: bool = False,
+) -> str:
+    # 2026-09-05 · Commit-Boundary — runs even when the rest of the
+    # chain is skipped (a deterministic completion message never
+    # contains a dangling fence promise, so this is a cheap no-op for
+    # it); the real target is a raw model reply that slipped a
+    # "ready when you approve?" question in AFTER a real
+    # ```aurem-handoff fence (see services/commit_boundary.py).
+    if content:
+        from services.commit_boundary import strip_false_confirm_promise
+        content = strip_false_confirm_promise(content)
+    if skip or not content:
+        return content
+    try:
+        from services.response_confidence import apply_no_false_success_guard
+        content = apply_no_false_success_guard(user_message or "", content, prior_fix_signal)
+    except Exception as e:                                # noqa: BLE001
+        logger.debug("no_false_success guard skipped: %r", e)
+    try:
+        from services.response_confidence import apply_no_edit_deadend_guard
+        content = apply_no_edit_deadend_guard(content)
+    except Exception as e:                                # noqa: BLE001
+        logger.debug("no_edit_deadend guard skipped: %r", e)
+    try:
+        from services.response_confidence import apply_no_orphan_confirm_guard
+        content = apply_no_orphan_confirm_guard(content)
+    except Exception as e:                                # noqa: BLE001
+        logger.debug("no_orphan_confirm guard skipped: %r", e)
+    try:
+        from services.ora_chat.grounding_check import apply_fabricated_content_guard
+        content = apply_fabricated_content_guard(content, retrieved_context)
+    except Exception as e:                                # noqa: BLE001
+        logger.debug("fabricated_content guard skipped: %r", e)
+    return content
+
+
 async def _deduct_tokens(user_id: str, reply: str) -> int:
     """Deduct ~1 token per 3 words from the user's wallet. Returns new balance."""
     db = get_db()
@@ -429,7 +479,8 @@ async def _persist_turn(user_id: str, session_id: str, user_prompt: str,
                         shipped_task_id: Optional[str] = None,
                         steps: Optional[list] = None,
                         low_confidence: bool = False,
-                        ship_suppressed: bool = False) -> None:
+                        ship_suppressed: bool = False,
+                        bin_ctx=None) -> None:
     """Append user+assistant turns to db.chat_sessions, capped at 40 turns.
     Tags the session with the project it belongs to (None == Home/global).
     Iter 51 — when `shipped_task_id` is set (e.g. Mode D→C auto-handoff),
@@ -522,6 +573,22 @@ async def _persist_turn(user_id: str, session_id: str, user_prompt: str,
             _asyncio.create_task(maybe_update_summary(db, session_id, user_id))
         except Exception:
             pass
+        # 2026-09-05 · Commit-Boundary — propose a PendingAction (this
+        # is the ONE place every turn is persisted from, both
+        # /chat/send and /chat/stream, so this fires exactly once per
+        # turn regardless of caller). See services/commit_boundary.py
+        # (flag-gated: COMMIT_BOUNDARY_ENABLED routes to the new
+        # deterministic services/actions/pending_action.py machine;
+        # OFF falls back to the prior services/confirm_execution.py
+        # guard-based behavior).
+        try:
+            from services.commit_boundary import propose_from_turn
+            await propose_from_turn(
+                db, session_id=session_id, user_id=user_id, project_id=project_id,
+                provider=provider, assistant_reply=assistant_reply, bin_ctx=bin_ctx,
+            )
+        except Exception as e:                             # noqa: BLE001
+            logger.debug("pending_action registration skipped: %r", e)
     except Exception as e:
         logger.warning("persist_turn failed: %r", e)
 

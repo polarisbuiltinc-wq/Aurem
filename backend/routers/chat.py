@@ -40,7 +40,7 @@ from services.chat_helpers import (
     _persist_turn,
     _build_failed_followup, _build_blocked_followup, _build_done_fallback,
     _FOLLOWUP_SYS, _generate_done_followup,
-    retrieved_context_for_grounding,
+    retrieved_context_for_grounding, apply_output_guards,
 )
 # NOTE: `build_url_context` (eager URL scraper) was REMOVED.
 # URL fetching is now handled exclusively via the `fetch_url` tool
@@ -604,6 +604,20 @@ async def chat_send(
         or (user.get("tier") == "founder")
         or _is_fnd_email(user.get("email"))
     )
+    # 2026-09-04 · confirm-execution round — checked BEFORE intent
+    # classification / tier routing: if the user just confirmed
+    # ("yes please update it" / "approve" / "go ahead") a REAL pending
+    # action (a held aurem-handoff proposal or a Root 4 upgrade
+    # offer), EXECUTE it deterministically here and skip the rest of
+    # this turn's routing entirely — never re-ask the orchestrator to
+    # regenerate a fresh (and possibly differently-worded) proposal.
+    # See services/confirm_execution.py's module docstring for the
+    # founder's explicit 2026-09-04 call reversing Iter 212m-26.
+    from services.commit_boundary import resolve_turn_start
+    result = await resolve_turn_start(
+        _db, user=user, session_id=body.session_id, project_id=body.project_id,
+        prompt=body.prompt or "", bin_ctx=bin_ctx,
+    )
     # 2026-08-25 — intent-gateway wiring (root-cause fix, Engineering
     # Gaps #1/#3). This was previously ONLY wired into /chat/stream —
     # /chat/send is EQUALLY a real "Main chat" surface (see
@@ -649,13 +663,20 @@ async def chat_send(
         _tier, req_mode, account_has_pro=_account_has_pro,
     )
     req_mode = resolve_model_mode(_tier, req_mode, account_has_pro=_account_has_pro)
-    result = None
+    # 2026-09-04 — `result` may already be set by the confirm-execution
+    # short-circuit above; the upgrade-offer / self-bug / casual /
+    # agentic checks below are all already individually gated by
+    # `if result is None:` or an equivalent "only set if unset" guard,
+    # so simply not re-initializing `result` here is enough to
+    # preserve it.
     # 2026-09-03 · Root 4 — the honest upgrade offer short-circuits
     # BEFORE tier routing, deterministic + zero LLM spend: a real
     # edit request on a free/starter account never silently escalates
     # (Path B) AND never dead-ends into a false "nothing pending" —
-    # it gets a real, concrete next step every time.
-    if _needs_upgrade_offer and not body.ora_panel:
+    # it gets a real, concrete next step every time. `result is None`
+    # check added 2026-09-04 so this never overwrites a result already
+    # produced by the confirm-execution short-circuit above.
+    if result is None and _needs_upgrade_offer and not body.ora_panel:
         result = {
             "ok": True,
             "content": UPGRADE_OFFER_MESSAGE,
@@ -672,7 +693,7 @@ async def chat_send(
     # possessive guard) short-circuits BEFORE tier routing, deterministic
     # + zero LLM spend, straight to the guaranteed self-bug reply pattern
     # (ownership + no blame + a path forward — see self_bug_reply_guard.py).
-    if not body.ora_panel:
+    if result is None and not body.ora_panel:
         from services.user_report_classifier import is_user_reporting_ora_bug
         if is_user_reporting_ora_bug(body.prompt or ""):
             from services.self_bug import emit as _emit_self_bug
@@ -751,20 +772,60 @@ async def chat_send(
                 )
     if result is None:
         _max_iters_eff = 3 if _tier == "query" else min(body.max_tool_iters, 4)
-        result = await chat_with_tools(
-            prompt=body.prompt,
-            jwt_token=jwt_token,
-            system=(extra_sys + "\n\n" if extra_sys else None),
-            max_iters=_max_iters_eff,
-            session_id=body.session_id,
-            mongo_client=None,
-            user_id=user["user_id"],
-            project_id=body.project_id,
-            mode=req_mode,
-            task_type=body.task_type or _infer_task_type(body.prompt),
-            is_founder=_is_fnd,
-            bin_ctx=bin_ctx,
-        )
+        # 2026-09-04 — FIX for the "promise-then-silence" hang
+        # (diagnosis in services/local_tools.py's module-level
+        # 2026-09-04 comment): unlike chat_stream (which has a real
+        # 180s/48s watchdog via its worker+ticker+queue pattern),
+        # chat_send had NO overarching wall-clock ceiling around this
+        # call at all — if the orchestrator ever stalled (a slow LLM
+        # round-trip, a CPU-starved to_thread call, anything), this
+        # endpoint would hang with zero server-side protection,
+        # indefinitely, for any request type on any mode (this is the
+        # plain JSON endpoint, not stream-specific). Reuses the exact
+        # same CHAT_HARD_TIMEOUT_S env var and build_timeout_message
+        # helper chat_stream already uses, for a consistent, honest
+        # timeout reply instead of an unbounded hang.
+        _hard_timeout_s = float(os.getenv("CHAT_HARD_TIMEOUT_S", "180"))
+        try:
+            result = await asyncio.wait_for(
+                chat_with_tools(
+                    prompt=body.prompt,
+                    jwt_token=jwt_token,
+                    system=(extra_sys + "\n\n" if extra_sys else None),
+                    max_iters=_max_iters_eff,
+                    session_id=body.session_id,
+                    mongo_client=None,
+                    user_id=user["user_id"],
+                    project_id=body.project_id,
+                    mode=req_mode,
+                    task_type=body.task_type or _infer_task_type(body.prompt),
+                    is_founder=_is_fnd,
+                    bin_ctx=bin_ctx,
+                ),
+                timeout=_hard_timeout_s,
+            )
+        except asyncio.TimeoutError:
+            from services.orchestrator import build_timeout_message
+            _timeout_content, _slow_api = build_timeout_message(
+                0, _hard_timeout_s, "",
+            )
+            logger.warning(
+                "chat_send hard-timeout fired after %.0fs — see "
+                "local_tools.py 2026-09-04 comment for the orphan-"
+                "process diagnosis this guards against",
+                _hard_timeout_s,
+            )
+            result = {
+                "ok":               True,
+                "content":          _timeout_content,
+                "provider":         "aurem-timeout-guard",
+                "iterations":       0,
+                "tool_calls_run":   0,
+                "meta":             {"timed_out": True, "slow_api": _slow_api},
+                "council":          None,
+                "task_type":        None,
+                "findings_saved_this_turn": [],
+            }
     if isinstance(result, dict):
         # Pre-existing gap fix (2026-08-31, confirmed via
         # test_intent_gateway_casual_boundary_2026_01.py) — chat_stream
@@ -876,50 +937,18 @@ async def chat_send(
     # 2026-08-28 · NEW P0 Task 2 — final defense-in-depth: no reply to
     # a bare confirmation may claim a ship/approve action already
     # happened unless it also carries a real aurem-handoff fence.
-    # Runs after the retry logic above so a hallucination on either
-    # draft is still caught.
-    try:
-        from services.response_confidence import apply_no_false_success_guard
-        content = apply_no_false_success_guard(body.prompt or "", content, _prior_fix_signal)
-    except Exception as _gce:
-        logger.debug("no_false_success guard skipped (chat_send): %r", _gce)
-
-    # 2026-09-02 — general (model-agnostic) dead-end guard: a real-
-    # edit-looking code block + a confirm question with NO valid
-    # aurem-handoff fence is never shown as-is — see
-    # response_confidence.py's docstring for the full class of bug.
-    try:
-        from services.response_confidence import apply_no_edit_deadend_guard
-        content = apply_no_edit_deadend_guard(content)
-    except Exception as _dge:
-        logger.debug("no_edit_deadend guard skipped (chat_send): %r", _dge)
-
-    # 2026-09-03 — orphan-confirm guard (Root 1, core-flow round): a
-    # fabricated discovery claim ("Found the ... section at line 42,
-    # current ... shows ...") + a confirm question with no real fence
-    # is swapped for an honest message — see response_confidence.py's
-    # docstring for the full bug class.
-    try:
-        from services.response_confidence import apply_no_orphan_confirm_guard
-        content = apply_no_orphan_confirm_guard(content)
-    except Exception as _ocg:
-        logger.debug("no_orphan_confirm guard skipped (chat_send): %r", _ocg)
-
-    # 2026-09-03 — Root 2 (core-flow round): grounding wired into the
-    # MAIN chat surface for the first time — previously
-    # `grounding_check.py` was only reachable from the admin ORA
-    # panel, never from here. A specific quoted-content claim tied to
-    # a line number ("line 42 shows '10am-5pm'") is only honest if
-    # that exact text was actually retrieved this turn (repo/brain
-    # context or a real tool-call result) — otherwise it's
-    # fabrication, not just "unverified", and must never reach the
-    # user as a factual claim.
-    try:
-        from services.ora_chat.grounding_check import apply_fabricated_content_guard
-        _retrieved_ctx = retrieved_context_for_grounding(extra_sys, result)
-        content = apply_fabricated_content_guard(content, _retrieved_ctx)
-    except Exception as _fcg:
-        logger.debug("fabricated_content guard skipped (chat_send): %r", _fcg)
+    # 2026-09-02/03 — plus the no-edit-deadend, no-orphan-confirm, and
+    # fabricated-content guards. 2026-09-04 — consolidated into ONE
+    # shared helper (chat_helpers.apply_output_guards); `skip=True`
+    # when this turn's result came from confirm_execution's
+    # deterministic real-execution path (see that module's docstring
+    # for why the false-success guard's premise no longer applies
+    # there).
+    content = apply_output_guards(
+        body.prompt or "", content, _prior_fix_signal,
+        retrieved_context_for_grounding(extra_sys, result),
+        skip=bool(result.get("_skip_output_guards")),
+    )
 
     # 2026-08-27 · Output Guard (Phase 1 net, "Show the Outcome, Never
     # the Engine"). Runs AFTER the mismatch/retry/fallback resolution
@@ -1016,7 +1045,8 @@ async def chat_send(
                         body.prompt, content, provider, watchdog=watchdog,
                         project_id=body.project_id,
                         low_confidence=_low_confidence,
-                        ship_suppressed=_ship_suppressed)
+                        ship_suppressed=_ship_suppressed,
+                        bin_ctx=bin_ctx)
     if body.session_id:
         asyncio.create_task(
             _maybe_set_title(user["user_id"], body.session_id, body.prompt)
@@ -2520,6 +2550,21 @@ async def chat_stream(
                         # Fall through to the AUREM/orchestrator path below.
 
                 activity["label"] = "thinking…"
+                # 2026-09-04 · confirm-execution round — checked before
+                # tier routing (see chat_send's identical comment for
+                # the full rationale). Returns immediately if it fires
+                # so none of the routing/thinking-frame logic below
+                # runs for an already-handled confirmation.
+                if not body.ora_panel:
+                    from services.commit_boundary import resolve_turn_start
+                    _confirm_result = await resolve_turn_start(
+                        get_db(), user=user, session_id=body.session_id,
+                        project_id=body.project_id, prompt=body.prompt or "",
+                        bin_ctx=bin_ctx,
+                    )
+                    if _confirm_result is not None:
+                        await q.put({"type": "result", "result": _confirm_result})
+                        return
                 # Iter 153 — clamp mode to tier-allowed set for this stream.
                 from services.subscription_tiers import allowed_modes_for_tier as _allowed_modes
                 _allowed_s = _allowed_modes((user or {}).get("tier") or "free")
@@ -3523,44 +3568,14 @@ async def chat_stream(
         except Exception as _rce:
             logger.debug("response_confidence gate skipped (chat_stream): %r", _rce)
 
-        # 2026-08-28 · NEW P0 Task 2 — final defense-in-depth: no
-        # reply to a bare confirmation may claim a ship/approve action
-        # already happened unless it also carries a real
-        # aurem-handoff fence. Runs after the retry logic above so a
-        # hallucination on either draft is still caught, and BEFORE
-        # the token-streaming loop below so nothing false is ever
-        # streamed to the user.
-        try:
-            from services.response_confidence import apply_no_false_success_guard
-            content = apply_no_false_success_guard(body.prompt or "", content, _prior_fix_signal)
-        except Exception as _gce:
-            logger.debug("no_false_success guard skipped (chat_stream): %r", _gce)
-
-        # 2026-09-02 — general dead-end guard (see chat_send's
-        # identical comment above).
-        try:
-            from services.response_confidence import apply_no_edit_deadend_guard
-            content = apply_no_edit_deadend_guard(content)
-        except Exception as _dge:
-            logger.debug("no_edit_deadend guard skipped (chat_stream): %r", _dge)
-
-        # 2026-09-03 — orphan-confirm guard (see chat_send's identical
-        # comment above).
-        try:
-            from services.response_confidence import apply_no_orphan_confirm_guard
-            content = apply_no_orphan_confirm_guard(content)
-        except Exception as _ocg:
-            logger.debug("no_orphan_confirm guard skipped (chat_stream): %r", _ocg)
-
-        # 2026-09-03 — Root 2 (core-flow round): grounding wired into
-        # the MAIN chat surface (see chat_send's identical comment
-        # above for the full rationale).
-        try:
-            from services.ora_chat.grounding_check import apply_fabricated_content_guard
-            _retrieved_ctx = retrieved_context_for_grounding(extra_sys, result)
-            content = apply_fabricated_content_guard(content, _retrieved_ctx)
-        except Exception as _fcg:
-            logger.debug("fabricated_content guard skipped (chat_stream): %r", _fcg)
+        # 2026-08-28 · NEW P0 Task 2 — final defense-in-depth (see
+        # chat_send's identical comment for the full rationale).
+        # 2026-09-04 — consolidated into ONE shared helper.
+        content = apply_output_guards(
+            body.prompt or "", content, _prior_fix_signal,
+            retrieved_context_for_grounding(extra_sys, result),
+            skip=bool(result.get("_skip_output_guards")),
+        )
 
         # 2026-08-27 · Output Guard (Phase 1 net) — runs AFTER the
         # mismatch/fallback resolution above (so it nets whatever text
@@ -3863,7 +3878,8 @@ async def chat_stream(
                             shipped_task_id=handoff_task_id,
                             steps=collected_steps,
                             low_confidence=_low_confidence,
-                            ship_suppressed=_ship_suppressed)
+                            ship_suppressed=_ship_suppressed,
+                            bin_ctx=bin_ctx)
 
         # Fire-and-forget audit row — never block the response.
         try:

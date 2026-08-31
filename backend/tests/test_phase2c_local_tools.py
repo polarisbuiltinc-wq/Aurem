@@ -144,7 +144,7 @@ class TestRunSyntaxCheck:
         fake_result = subprocess.CompletedProcess(
             args=[], returncode=1, stdout="x.ts(1,1): error TS1005: ';' expected.",
             stderr="")
-        with patch("subprocess.run", return_value=fake_result):
+        with patch("services.local_tools._run_subprocess_pgkill", return_value=fake_result):
             result = m._run_syntax_check(content="const x =", file_path="x.ts", ext=".ts")
         assert result["has_errors"] is True
 
@@ -154,7 +154,7 @@ class TestRunSyntaxCheck:
         fake_result = subprocess.CompletedProcess(
             args=[], returncode=1,
             stdout="x.ts(1,1): error TS2322: Type mismatch.", stderr="")
-        with patch("subprocess.run", return_value=fake_result):
+        with patch("services.local_tools._run_subprocess_pgkill", return_value=fake_result):
             result = m._run_syntax_check(content="const x: number = 'a';",
                                          file_path="x.ts", ext=".ts")
         assert result["has_errors"] is False
@@ -168,7 +168,7 @@ class TestRunSyntaxCheck:
 
     def test_tool_missing_falls_open(self):
         from services import local_tools as m
-        with patch("subprocess.run", side_effect=FileNotFoundError()):
+        with patch("services.local_tools._run_subprocess_pgkill", side_effect=FileNotFoundError()):
             result = m._run_syntax_check(content="x=1", file_path="x.py", ext=".py")
         assert result["has_errors"] is False
         assert result["skipped"] is True
@@ -177,7 +177,7 @@ class TestRunSyntaxCheck:
     def test_tool_timeout_falls_open(self):
         from services import local_tools as m
         import subprocess
-        with patch("subprocess.run",
+        with patch("services.local_tools._run_subprocess_pgkill",
                   side_effect=subprocess.TimeoutExpired(cmd="node", timeout=10)):
             result = m._run_syntax_check(content="x=1", file_path="x.js", ext=".js")
         assert result["skipped"] is True

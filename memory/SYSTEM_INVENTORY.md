@@ -899,3 +899,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 
 - `services/github_bulk_revoke.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-30T12:59:52.525263Z] <!-- inv:service:services/github_bulk_revoke.py -->
 - `services/session_summary.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-08-30T21:43:10.524620Z] <!-- inv:service:services/session_summary.py -->
+
+### Iter 0 · 2026-08-31
+
+- `EDIT_TIER_MODE` — auto-detected in backend/services/mode_routing.py (verify) (default: unset) [Iter 0, 2026-08-31T19:22:57.660278Z] <!-- inv:envvar:EDIT_TIER_MODE -->
