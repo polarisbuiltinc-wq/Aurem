@@ -44,6 +44,12 @@ class _Coll:
             return True
         return _Cursor([r for r in self._rows if _match(r)])
 
+    async def find_one(self, query, projection=None):
+        for row in self._rows:
+            if all(row.get(k) == v for k, v in query.items()):
+                return dict(row)
+        return None
+
     async def insert_one(self, *a, **k):
         raise AssertionError("diagnostic endpoint must never write")
 
@@ -73,6 +79,7 @@ def _stub_admin(monkeypatch):
 async def test_diagnostic_returns_all_named_state(monkeypatch):
     now = time.time()
     data = {
+        "dev_users": [{"user_id": "u_mike", "email": "mike@example.com"}],
         "github_installations": [
             {"installation_id": 9001, "user_id": "u_mike", "github_login": "mikef",
              "active": True, "installed_at": now - 1000, "linked_at": now - 999,
@@ -101,6 +108,8 @@ async def test_diagnostic_returns_all_named_state(monkeypatch):
     out = await diag.connect_flow_diagnostic(user_id="u_mike", authorization="Bearer x")
 
     assert out["user_id"] == "u_mike"
+    assert out["dev_user_found"] is True
+    assert out["dev_user_email"] == "mike@example.com"
     assert len(out["github_installations"]) == 1
     assert out["github_installations"][0]["user_id"] == "u_mike"
     assert out["github_installations"][0]["repo_full_names"] == ["mikef/site"]
@@ -125,3 +134,21 @@ async def test_diagnostic_is_read_only_and_scoped(monkeypatch):
     assert out["github_installations"] == []
     assert out["projects"]["count"] == 0
     assert out["ordered_event_stream"] == []
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_flags_wrong_id_vs_real_but_quiet_account(monkeypatch):
+    """The exact bug the founder hit: a mistyped/mismatched user_id
+    and a real-but-quiet account both look all-empty. `dev_user_found`
+    must tell them apart."""
+    monkeypatch.setattr(diag, "require_db", lambda: _FakeDB({
+        "dev_users": [{"user_id": "u_real", "email": "real@example.com"}],
+    }))
+
+    wrong_id = await diag.connect_flow_diagnostic(user_id="u_typo", authorization="Bearer x")
+    assert wrong_id["dev_user_found"] is False
+    assert wrong_id["dev_user_email"] is None
+
+    real_id = await diag.connect_flow_diagnostic(user_id="u_real", authorization="Bearer x")
+    assert real_id["dev_user_found"] is True
+    assert real_id["dev_user_email"] == "real@example.com"

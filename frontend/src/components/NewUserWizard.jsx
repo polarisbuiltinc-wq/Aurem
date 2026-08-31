@@ -686,13 +686,50 @@ export default function NewUserWizard({ onComplete }) {
                       )}
                       {appPickerActive && appInstalls.length > 0 && (
                         <div data-testid="wizard-app-repo-picker">
-                          <div style={{ fontSize: 12, marginBottom: 8,
-                                        color: "var(--ok, #6dd4a1)",
-                                        display: "flex", alignItems: "center",
-                                        gap: 6 }}>
-                            <Github size={11} />
-                            App installed. Pick a repo below to connect.
-                          </div>
+                          {appInstalls.every((i) => (i.repositories || []).length === 0) ? (
+                            // 2026-09-01 — CONFIRMED FIX (connect-flow
+                            // investigation): the install itself already
+                            // succeeded (that's why we're in this branch
+                            // at all) — GitHub's repo-list API is just
+                            // still propagating, sometimes for well over
+                            // an hour in real production cases. Say so
+                            // plainly instead of rendering an empty
+                            // "pick a repo" header with nothing under it,
+                            // which is indistinguishable from broken.
+                            <div data-testid="wizard-app-repos-syncing" style={{
+                              fontSize: 12, color: "var(--text-faint)",
+                              display: "flex", alignItems: "center", gap: 8,
+                              padding: "8px 0",
+                            }}>
+                              <Loader2 size={13} className="spin" color="#ff9d5c" />
+                              <span>
+                                App installed — GitHub is still syncing your
+                                repo list. This can take a few minutes;
+                                they'll show up here automatically.
+                              </span>
+                              <button
+                                type="button"
+                                data-testid="wizard-app-repos-refresh-btn"
+                                onClick={refreshGhConnectStatus}
+                                style={{
+                                  padding: "3px 9px", fontSize: 10.5,
+                                  background: "transparent",
+                                  border: "1px solid rgba(255,255,255,0.2)",
+                                  color: "var(--text-dim)", borderRadius: 4,
+                                  cursor: "pointer", whiteSpace: "nowrap",
+                                }}>
+                                Check now
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 12, marginBottom: 8,
+                                          color: "var(--ok, #6dd4a1)",
+                                          display: "flex", alignItems: "center",
+                                          gap: 6 }}>
+                              <Github size={11} />
+                              App installed. Pick a repo below to connect.
+                            </div>
+                          )}
                           {appInstalls.map((inst) => (
                             <div key={inst.installation_id} style={{ marginBottom: 8 }}>
                               <div style={{ fontSize: 11, color: "var(--text-faint)",

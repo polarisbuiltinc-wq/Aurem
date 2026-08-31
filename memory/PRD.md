@@ -7688,3 +7688,31 @@ retroactive trigger for users who already crossed that gate.
 `hooks/useGitHubConnectStatus.js`, and the Revoots state-recovery
 logic (2026-08-27) are all UNTOUCHED this round.
 
+
+## 2026-09-01 (later still) — Connect-Flow: root cause CONFIRMED from real production state + FIXED + tested. Diagnostic tool's own bug found + fixed.
+
+**Diagnostic tool bug found + fixed first (blocking trust in everything else):** Justin/Jolene's diagnostic pulls came back all-empty despite both having real, confirmed projects visible in `/admin/users`. Root cause: an all-empty response for a WRONG/mistyped `user_id` looks identical to an all-empty response for a real-but-quiet account — the tool gave no way to tell them apart. Fixed: `admin_connect_diagnostic.py` now also queries `dev_users` and returns `dev_user_found` (bool) + `dev_user_email`, so a bad ID is now immediately visible instead of masquerading as "no data." 3/3 tests pass (was 2, added `test_diagnostic_flags_wrong_id_vs_real_but_quiet_account`), live-curled and confirmed working against both a real and a fake user_id in preview. **Founder: re-run the diagnostic for Justin/Jolene with this updated tool — check `dev_user_found` first to know if it was an ID typo or something deeper.**
+
+**Bug-2 (Mike Froedge) + Bug-3 (Michael Pelletier) — CONFIRMED shared root, from real production state, FIXED:**
+Michael's real pulled state: `github_installations` fully active with 5 real repos, `installed_at: 11:44:17`, but `updated_at: 13:34:52` (~1h50m later) — his own event stream shows him clicking "Connect Repo" (source: banner) three times (11:54, 11:58, 13:25) with **zero** subsequent events each time. Mike's real state: `installation_active: true`, `repository_selection: "all"`, but `repo_ids: []` — confirmed empty **at the exact moment the install-callback itself ran** (the `app_installed` funnel event, generated server-side at install time, already shows `repo_count: 0`).
+
+Traced this through `hooks/useGitHubConnectStatus.js` + `routers/github_app.py` + `NewUserWizard.jsx`:
+- `GET /github/app/status`'s `state` only becomes `"connected"` once GitHub's `list_installation_repos()` returns a non-empty list.
+- The poll loop only checked `state === "connected"` to declare success; if the popup closed (the success bridge auto-closes it in 400ms) while GitHub's own repo-list API was still lagging, the poll treated a **fully successful** install exactly like a denial (`app_install_denied`) — because it never distinguished "installed, repos still syncing" from "installed, repos are here."
+- Michael's `updated_at` jump (11:44→13:34, ~1h50m) is direct, real-world proof that this lag can last far longer than any reasonable timeout — his repeated clicks (11:54, 11:58) landed squarely inside that window, so the repo-picker rendered its "App installed" header with **zero repo buttons under it** (silently empty, indistinguishable from broken) each time.
+- **Root confirmed as ONE shared cause** (per the brief's Item A hypothesis): the client cannot tell "install failed" apart from "install succeeded, GitHub's repo list just hasn't caught up yet" — and the UI gives no visible signal for the second case.
+
+**Fix (root-level, no band-aids):**
+1. `hooks/useGitHubConnectStatus.js` — the poll loop now exits successfully on `data.installation_active` (GitHub confirming the grant itself), not on `state === "connected"` (which additionally requires the repo list). If repos aren't populated yet, a new bounded background poll (`startBackgroundRepoSync`, 5s interval, 2min cap) keeps quietly refreshing `status` until they show up — no more false `app_install_denied` for a real success. The popup-closed → denied path is now only reached when `!data?.installation_active` (a genuine non-install) — verified this preserves true-denial behavior.
+2. `components/NewUserWizard.jsx` — the repo picker now explicitly shows "App installed — GitHub is still syncing your repo list… + Check now" when every installation has zero repos, instead of a silently-empty "pick a repo" header with nothing to click.
+3. The existing Revoots orphan-recovery (`user_id`-null linking, 2026-08-27) in `github_app.py` is completely untouched — this is a distinct, sibling gap in the same fragile area, not a regression of that fix.
+
+**Tests (3, `hooks/__tests__/useGitHubConnectStatus.repoSyncLag.test.js`):**
+`t_no_false_denied_when_installation_active_but_repos_still_empty` (Michael/Mike-class: no false denial + `app_install_granted` fires + background sync starts), `t_denied_still_fires_when_truly_no_installation` (regression guard — real denial still works), `t_background_sync_keeps_polling_until_repos_populate_then_stops` (repos populate automatically, sync stops once connected — verified via mocked poll count). All 3 pass.
+
+**Bug-1 (Justin/Jolene) recap:** already fixed + tested in the prior entry above (missing onboarding nudge) — unaffected by this round's connect-flow fix.
+
+**Regression:** full backend suite (49 tests: diagnostic, onboarding-nudge, Gates 1-3, contrast guard, self-bug dashboard) + frontend (6 tests: repo-sync-lag hook, palette bubble) — all green. `routers/github_app.py` untouched; Revoots state-recovery logic untouched. No prod flags flipped, no new deps.
+
+**Fix location:** this preview only (testable). Founder deploys to production when ready — per the brief, do NOT DM Michael/Mike "try again" until it's actually live in production.
+

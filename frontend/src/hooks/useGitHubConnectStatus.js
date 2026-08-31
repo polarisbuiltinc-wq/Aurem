@@ -19,6 +19,15 @@ import { trackFunnel } from "../lib/githubFunnel";
 
 const POLL_INTERVAL_MS = 2500;
 const MAX_WAIT_MS = 60_000;
+// 2026-09-01 — CONFIRMED FIX (connect-flow investigation, Bug-2/Bug-3
+// shared root): once GitHub confirms the install itself
+// (`installation_active`), keep a slow background refresh going for
+// up to this long so a repo list that's still propagating on GitHub's
+// side (confirmed in real production data to lag well past 60s) fills
+// in on its own instead of leaving the picker looking permanently
+// empty/broken.
+const BACKGROUND_SYNC_INTERVAL_MS = 5_000;
+const BACKGROUND_SYNC_MAX_MS = 2 * 60_000;
 
 const IDLE_STATUS = {
   installation_active: false,
@@ -36,6 +45,7 @@ export default function useGitHubConnectStatus() {
   const [denied, setDenied] = useState(false);
   const popupRef = useRef(null);
   const pollRef = useRef(null);
+  const bgSyncRef = useRef(null);
   const startRef = useRef(0);
 
   const fetchStatus = useCallback(async () => {
@@ -48,6 +58,27 @@ export default function useGitHubConnectStatus() {
     }
   }, []);
 
+  const stopBackgroundSync = useCallback(() => {
+    if (bgSyncRef.current) { clearInterval(bgSyncRef.current); bgSyncRef.current = null; }
+  }, []);
+
+  // 2026-09-01 — Bug-2/Bug-3 fix, part 2: `installation_active` means
+  // GitHub confirmed the grant — the connect flow itself is DONE.
+  // `state !== "connected"` at that point means only the repo LIST is
+  // still propagating on GitHub's side (real-world lag observed well
+  // past 60s), not that anything failed. Keep quietly re-checking so
+  // the picker fills in without the user having to do anything.
+  const startBackgroundRepoSync = useCallback(() => {
+    if (bgSyncRef.current) return;
+    const startedAt = Date.now();
+    bgSyncRef.current = setInterval(async () => {
+      const data = await fetchStatus();
+      if ((data && data.state === "connected") || Date.now() - startedAt > BACKGROUND_SYNC_MAX_MS) {
+        stopBackgroundSync();
+      }
+    }, BACKGROUND_SYNC_INTERVAL_MS);
+  }, [fetchStatus, stopBackgroundSync]);
+
   // Initial check on mount — so a wizard that opens for a user who is
   // ALREADY connected (e.g. adding a 2nd project) sees that immediately,
   // no popup needed.
@@ -57,7 +88,7 @@ export default function useGitHubConnectStatus() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }, []);
 
-  useEffect(() => () => stopPolling(), [stopPolling]);
+  useEffect(() => () => { stopPolling(); stopBackgroundSync(); }, [stopPolling, stopBackgroundSync]);
 
   const startConnect = useCallback(() => {
     const token = getToken();
@@ -91,18 +122,36 @@ export default function useGitHubConnectStatus() {
     setConnecting(true);
     startRef.current = Date.now();
     stopPolling();
+    stopBackgroundSync();
     pollRef.current = setInterval(async () => {
       const data = await fetchStatus();
-      if (data && data.state === "connected") {
+      // 2026-09-01 — CONFIRMED FIX (connect-flow investigation,
+      // Bug-2 Mike Froedge / Bug-3 Michael Pelletier — one shared
+      // root, confirmed from real production state pulls): exit on
+      // `installation_active`, NOT `state === "connected"`.
+      // `installation_active` is GitHub confirming the grant itself;
+      // `state === "connected"` ADDITIONALLY requires the repo-list
+      // API to have returned a non-empty list, which real production
+      // data showed can lag for well over an hour after a genuinely
+      // successful install. The old code only checked `state`, so a
+      // real success + a closed popup (the bridge auto-closes in
+      // 400ms) during that lag fired a FALSE app_install_denied and
+      // stranded the user on an empty repo picker with nothing to
+      // click — indistinguishable from "nothing happened".
+      if (data && data.installation_active) {
         stopPolling();
         setConnecting(false);
         try { popupRef.current?.close?.(); } catch { /* cross-origin */ }
         trackFunnel("app_install_granted", "wizard");
+        if (data.state !== "connected") {
+          startBackgroundRepoSync();
+        }
         return;
       }
       // GitHub Apps have no real "deny" callback (unlike OAuth Apps) —
-      // the popup just closing without ever reaching "connected" is
-      // the only observable signal that the user backed out.
+      // the popup just closing without ever reaching an active
+      // installation is the only observable signal that the user
+      // backed out (a real success is caught above BEFORE this runs).
       if (popupRef.current?.closed) {
         stopPolling();
         setConnecting(false);
@@ -118,7 +167,7 @@ export default function useGitHubConnectStatus() {
       }
     }, POLL_INTERVAL_MS);
     return { ok: true };
-  }, [fetchStatus, stopPolling]);
+  }, [fetchStatus, stopPolling, stopBackgroundSync, startBackgroundRepoSync]);
 
   const retry = useCallback(() => startConnect(), [startConnect]);
 

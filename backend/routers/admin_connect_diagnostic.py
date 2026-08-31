@@ -67,6 +67,17 @@ async def connect_flow_diagnostic(
     await require_admin(authorization)
     db = require_db()
 
+    # ── 0. Does this user_id even resolve to a real account? ──────────
+    # 2026-09-01 — added after the diagnostic returned all-empty for
+    # 2 of the 4 investigated users while their real data WAS visible
+    # via /admin/users/{user_id} (the exact same collections/field).
+    # An all-empty response for a WRONG/mistyped user_id looks
+    # identical to an all-empty response for a real-but-quiet account
+    # — that ambiguity is itself a diagnostic gap. Surface it plainly.
+    dev_user = await db.dev_users.find_one(
+        {"user_id": user_id}, {"_id": 0, "email": 1, "name": 1, "user_id": 1},
+    )
+
     # ── 1. github_installations rows for this user ────────────────────
     install_rows = await db.github_installations.find(
         {"user_id": user_id},
@@ -192,6 +203,8 @@ async def connect_flow_diagnostic(
 
     return {
         "user_id":                user_id,
+        "dev_user_found":         dev_user is not None,
+        "dev_user_email":         (dev_user or {}).get("email"),
         "github_installations":   installations,
         "projects": {
             "count": len(projects),
