@@ -291,6 +291,74 @@ def extract_line_claims(reply: str) -> list[tuple[str, int]]:
             out.append((fname, int(line)))
     return out[:10]
 
+# ─── 2026-09-03 · Root 2 (core-flow round) — CONTENT-value claim ────
+# check, wired into the MAIN business-owner chat surface (`routers/
+# chat.py`), not just the admin ORA panel (`routers/ora_chat.py`).
+#
+# Real founder repro: "Found the opening hours section at line 42,
+# current hours show 10am-5pm." The line/section EXISTENCE checks
+# above (`extract_line_claims`, `classify_claims`) only ever validate
+# whether a FILE/PATH exists — they say nothing about whether the
+# quoted CONTENT actually appears anywhere in what was retrieved this
+# turn. "line 42 has X text" is only a true statement when "X" is a
+# substring of the real retrieved lines; if it isn't, that is
+# FABRICATION, not merely "unverified" (unverified means the file is
+# real but we didn't happen to read it this turn — this is a stronger,
+# harder claim about specific content that was never observed at all).
+_LINE_CONTENT_CLAIM_RE = re.compile(
+    r"\bline\s+(\d+)[^.\n]{0,40}?(?:has|shows?|contains?|says?|is|reads?)"
+    r"[^.\n]{0,10}[\"'`]([^\"'`]{1,200})[\"'`]"
+    r"|[\"'`]([^\"'`]{1,200})[\"'`][^.\n]{0,40}?(?:at|on)\s+line\s+(\d+)",
+    re.IGNORECASE,
+)
+
+FABRICATED_CONTENT_MESSAGE = (
+    "I don't actually have that line open right now, so I shouldn't "
+    "claim what it says. Tell me what you'd like it to say and I'll "
+    "take a real look before proposing anything."
+)
+
+
+def extract_line_content_claims(reply: str) -> list[tuple[int, str]]:
+    """Extract (line_number, quoted_text) pairs from claims like
+    'line 42 shows "10am-5pm"' or '"10am-5pm" at line 42'. Only
+    matches an EXPLICIT quoted value tied to a line number — a bare
+    "line 42" mention with no quoted content is left to
+    `extract_line_claims` above."""
+    out: list[tuple[int, str]] = []
+    for m in _LINE_CONTENT_CLAIM_RE.finditer(reply or ""):
+        if m.group(1) and m.group(2):
+            out.append((int(m.group(1)), m.group(2)))
+        elif m.group(3) and m.group(4):
+            out.append((int(m.group(4)), m.group(3)))
+    return out[:10]
+
+
+def contains_fabricated_content_claim(reply: str, retrieved_context: str) -> bool:
+    """True iff `reply` quotes SPECIFIC content at a specific line
+    number that does NOT appear anywhere in `retrieved_context` (the
+    real file/tool-call content actually seen this turn). Grounded
+    iff the exact quoted substring is present somewhere in what was
+    retrieved — deliberately not line-position-exact (retrieved
+    context is often a plain blob, not a numbered listing), but the
+    substring itself must be real, not invented."""
+    claims = extract_line_content_claims(reply)
+    if not claims:
+        return False
+    ctx = retrieved_context or ""
+    return any(text not in ctx for _, text in claims)
+
+
+def apply_fabricated_content_guard(reply: str, retrieved_context: str) -> str:
+    """Swaps the ENTIRE reply for an honest message when it quotes
+    specific line content that was never actually retrieved this
+    turn — same "replace the whole turn, don't patch it" posture as
+    `response_confidence.apply_no_orphan_confirm_guard` (the false
+    claim, not just a confirm question, is the problem)."""
+    if not contains_fabricated_content_claim(reply, retrieved_context):
+        return reply
+    return FABRICATED_CONTENT_MESSAGE
+
 
 def extract_unknown_commands(reply: str) -> list[str]:
     """Slash-command tokens in the reply that are NOT real ORA

@@ -1472,3 +1472,78 @@ chat surface), Root 3 (broadening intent_gateway's casual-seed
 override to check agentic verbs anywhere, not just the first token),
 Root 4 (config-gating `mode_routing.py`'s tier-escalation default per
 founder's "honest upgrade" preference). See ROADMAP.md P0 entry.
+
+## 2026-09-03 — Core-flow dead-end Root 2 (grounding), Root 3 (escalation), Root 4 (tier-gated paths)
+
+Continuation of the same day's Root 1 + E2E round (see entry above).
+Founder confirmed Swift IS the free/starter tier's only mode
+(`services/subscription_tiers.py`: `TIER_LIMITS[FREE]["modes"]` and
+`TIER_LIMITS[STARTER]["modes"]` are both `["swift"]` only; pro/team/
+founder include "pro") — this fact answered the founder's own open
+question and set Root 4's default to Path B (gated).
+
+**Root 2 — grounding wired into main chat.** Confirmed via grep that
+`grounding_check.run_post_response_check` was reachable ONLY from the
+admin ORA panel (`routers/ora_chat.py`), never from the main
+business-owner chat surface. Added `extract_line_content_claims()`,
+`contains_fabricated_content_claim(reply, retrieved_context)`,
+`apply_fabricated_content_guard()`, `FABRICATED_CONTENT_MESSAGE` to
+`grounding_check.py` — checks a SPECIFIC quoted content claim tied to
+a line number ("line 42 shows '10am-5pm'") against what was actually
+retrieved this turn (system context + real tool-call results), not
+just file/path existence. New `chat_helpers.retrieved_context_for_grounding()`
+joins `extra_sys` + every `tool_invocations[*]["result"]` from this
+turn. Wired into both `/chat/send` and `/chat/stream` right after
+Root 1's orphan-confirm guard.
+
+**Root 3 — escalation broadened.** `intent_gateway._AGENTIC_VERBS`
+gained content-edit synonyms (change/edit/correct/modify/revise/
+adjust/replace/swap/hide/reword). `_classify_heuristic`'s
+casual-seed short-circuit now also checks for an agentic verb
+ANYWHERE in a short greeting/filler-prefixed message (not just the
+first token) before falling to the tool-less casual tier — fixes
+"hi, can you update our opening hours" misrouting.
+
+**Root 4 — two config-gated tier-edit paths, both coded.**
+Rewrote `services/mode_routing.py`: `resolve_model_mode(tier, req_mode,
+*, account_has_pro=True)` + new `needs_edit_upgrade_offer(...)` +
+`edit_tier_mode()` reading `EDIT_TIER_MODE` env (new key added to
+`backend/.env`, default `gated`). Path A ("transparent") = silent
+escalation for everyone (the pre-2026-09-03 behavior). Path B
+("gated", DEFAULT) = a free/starter account (no Pro access) making a
+real edit request gets `UPGRADE_OFFER_MESSAGE` (honest, mentions
+upgrading to Pro) instead of a silent switch or a dead end; an
+account that already has Pro access is never gated in either path.
+`account_has_pro` defaults to `True` so the original
+`test_mode_auto_escalation_2026_09_02.py` assertions stay green
+UNCHANGED (existing callers that don't pass it keep the original
+behavior) — chat.py's two call sites now explicitly compute and pass
+`account_has_pro` from `"pro" in allowed_modes_for_tier(...)`. Wired
+as a deterministic, zero-LLM-spend short-circuit before tier routing
+in both `/chat/send` and `/chat/stream`.
+
+New tests: `test_grounding_content_claim_2026_09_03.py` (7, incl.
+`t_fabricated_content_not_shown`), `test_edit_tier_path_2026_09_03.py`
+(13, `t_tier_edit_path`, both paths + backward-compat default),
+`_AGENTIC_VERBS`/classifier coverage added inline to existing intent
+gateway suites. Testing agent (`iteration_root2_3_4_grounding_escalation_gated_2026_09_03.json`)
+added `test_iter2026_09_03_live_verification.py` (10 more live
+checks incl. the FINAL GATE: the exact founder-repro run 3x live,
+free-tier honest-upgrade-offer for 3 different edit verbs, pro/
+founder never gated) — **74/74 pass, 0 critical/minor issues**.
+Confirmed live: `free-gate-test-0822@aurem.dev` (free tier) asking
+"update my opening hours" now gets `provider: edit-tier-upgrade-offer`
+with the honest upgrade message; `test@aurem.dev` (founder/Pro) still
+gets transparent escalation.
+
+Regression: re-ran response_confidence/intent_gateway/grounding/
+business-owner-gates suites (239/240 + 194/196 + 153/155, all
+failures confirmed pre-existing via `git stash` before/after — 4
+total unrelated baseline failures, none touched by this round's files).
+
+**Known, accepted follow-up (not fixed, out of scope this round)**:
+after the gated upgrade offer, "yes please" hits the generic
+`NO_PENDING_FIX_MESSAGE` instead of addressing the upgrade question —
+tracked in ROADMAP.md. **Deferred by founder's own explicit
+ordering**: fabrication-pattern audit of past transcripts to widen
+Root 2's guard beyond line/content claims.

@@ -32,6 +32,31 @@ def _detect_mode(prompt: str) -> str:
     return "code" if any(h in p for h in _CODE_HINTS) else "chat"
 
 
+# 2026-09-03 · Root 2 (core-flow round) — real "what did we actually
+# retrieve this turn" context for the grounding/fabrication guards
+# (services/ora_chat/grounding_check.py), wired into the MAIN chat
+# surface for the first time (that module was previously wired ONLY
+# into the admin ORA panel, routers/ora_chat.py). Joins the system
+# context assembled for the LLM call (repo/brain context, already a
+# string) with every real tool-call RESULT that fired this turn
+# (`tool_invocations[*]["result"]`, populated by chat_with_tools —
+# see services/orchestrator.py). This is deliberately the SAME
+# "grounded iff it's a substring of something real we saw" contract
+# `grounding_check.py` already uses elsewhere — no new philosophy,
+# just a new call site.
+def retrieved_context_for_grounding(extra_sys: str | None, result: dict | None) -> str:
+    parts: list[str] = []
+    if extra_sys:
+        parts.append(extra_sys)
+    for inv in (result or {}).get("tool_invocations") or []:
+        if not isinstance(inv, dict):
+            continue
+        res = inv.get("result")
+        if res:
+            parts.append(str(res))
+    return "\n".join(parts)
+
+
 async def _deduct_tokens(user_id: str, reply: str) -> int:
     """Deduct ~1 token per 3 words from the user's wallet. Returns new balance."""
     db = get_db()

@@ -61,6 +61,15 @@ _AGENTIC_VERBS = {
     "implement", "add", "remove", "update", "patch",
     "configure", "wire", "install", "uninstall", "import",
     "export", "publish",
+    # 2026-09-03 · Root 3 (core-flow round) — non-technical business-
+    # owner content-edit verbs ("change our hours", "correct the
+    # phone number", "swap the photo"). These are real edits, not
+    # code-specific, but were missing here even though the parallel
+    # set in response_confidence.py's _FIX_INTENT_TOKENS already had
+    # some of them for a different check — this gap let a content
+    # edit fall through to the tool-less casual path.
+    "change", "edit", "correct", "modify", "revise", "adjust",
+    "replace", "swap", "hide", "reword",
 }
 
 #  Question / read-only words that signal a query (Tier 2).
@@ -246,6 +255,32 @@ def _classify_heuristic(message: str, pending_fix: bool = False) -> dict[str, An
                 "reasoning":  (
                     "Bare confirmation word with a pending fix from the "
                     "prior turn — continuing the fix, not chit-chat."
+                ),
+            }
+        # 2026-09-03 · Root 3 (core-flow round) — a greeting/filler-
+        # prefixed message that still contains a real content/code
+        # edit verb ANYWHERE ("hi, and can you update our hours") must
+        # not be swallowed into casual chit-chat just because the
+        # FIRST token happened to be a greeting/ack. The casual path
+        # is tool-free and can never register a real pending action
+        # (Root 1) — real founder repro: the exact class of message
+        # that silently misrouted before this fix. Excludes bare
+        # confirmation replies ("yes", "go ahead") — those are
+        # legitimately handled by the pending_fix override above or
+        # stay casual otherwise; only fires when a genuine edit verb
+        # is present alongside the greeting/filler.
+        _agentic_anywhere = [t for t in tokens if t in _AGENTIC_VERBS]
+        if _agentic_anywhere and not _first_is_ack:
+            signals.append(f"agentic_verb_after_greeting:{_agentic_anywhere[0]}")
+            return {
+                "tier":       TIER_AGENTIC,
+                "confidence": 0.85,
+                "method":     "heuristic",
+                "signals":    signals,
+                "reasoning":  (
+                    f"Greeting/filler-prefixed message but contains a "
+                    f"real edit verb '{_agentic_anywhere[0]}' — routing "
+                    f"to the tool-having pipeline, not chit-chat."
                 ),
             }
         if casual_seed:

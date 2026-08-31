@@ -40,6 +40,7 @@ from services.chat_helpers import (
     _persist_turn,
     _build_failed_followup, _build_blocked_followup, _build_done_fallback,
     _FOLLOWUP_SYS, _generate_done_followup,
+    retrieved_context_for_grounding,
 )
 # NOTE: `build_url_context` (eager URL scraper) was REMOVED.
 # URL fetching is now handled exclusively via the `fetch_url` tool
@@ -634,9 +635,38 @@ async def chat_send(
     # code dead end (see response_confidence.py's
     # apply_no_edit_deadend_guard for the safety net when this still
     # slips through on any other model).
-    from services.mode_routing import resolve_model_mode
-    req_mode = resolve_model_mode(_tier, req_mode)
+    # 2026-09-03 · Root 4 (core-flow round) — TWO config-gated paths
+    # (see mode_routing.py's docstring): Path A ("transparent") keeps
+    # the behavior above for every account; Path B ("gated", DEFAULT)
+    # shows a free/starter account an HONEST upgrade offer instead of
+    # silently escalating — an account that already has Pro access
+    # (`_account_has_pro`) is never gated, regardless of path.
+    from services.mode_routing import (
+        resolve_model_mode, needs_edit_upgrade_offer, UPGRADE_OFFER_MESSAGE,
+    )
+    _account_has_pro = "pro" in _allowed
+    _needs_upgrade_offer = needs_edit_upgrade_offer(
+        _tier, req_mode, account_has_pro=_account_has_pro,
+    )
+    req_mode = resolve_model_mode(_tier, req_mode, account_has_pro=_account_has_pro)
     result = None
+    # 2026-09-03 · Root 4 — the honest upgrade offer short-circuits
+    # BEFORE tier routing, deterministic + zero LLM spend: a real
+    # edit request on a free/starter account never silently escalates
+    # (Path B) AND never dead-ends into a false "nothing pending" —
+    # it gets a real, concrete next step every time.
+    if _needs_upgrade_offer and not body.ora_panel:
+        result = {
+            "ok": True,
+            "content": UPGRADE_OFFER_MESSAGE,
+            "provider": "edit-tier-upgrade-offer",
+            "iterations": 0,
+            "tool_calls_run": 0,
+            "meta": {},
+            "council": None,
+            "task_type": None,
+            "findings_saved_this_turn": [],
+        }
     # P7-D (2026-08-31) — the user reporting ORA's OWN UI/reply/panel
     # as broken (never their own website — see user_report_classifier's
     # possessive guard) short-circuits BEFORE tier routing, deterministic
@@ -874,6 +904,22 @@ async def chat_send(
         content = apply_no_orphan_confirm_guard(content)
     except Exception as _ocg:
         logger.debug("no_orphan_confirm guard skipped (chat_send): %r", _ocg)
+
+    # 2026-09-03 — Root 2 (core-flow round): grounding wired into the
+    # MAIN chat surface for the first time — previously
+    # `grounding_check.py` was only reachable from the admin ORA
+    # panel, never from here. A specific quoted-content claim tied to
+    # a line number ("line 42 shows '10am-5pm'") is only honest if
+    # that exact text was actually retrieved this turn (repo/brain
+    # context or a real tool-call result) — otherwise it's
+    # fabrication, not just "unverified", and must never reach the
+    # user as a factual claim.
+    try:
+        from services.ora_chat.grounding_check import apply_fabricated_content_guard
+        _retrieved_ctx = retrieved_context_for_grounding(extra_sys, result)
+        content = apply_fabricated_content_guard(content, _retrieved_ctx)
+    except Exception as _fcg:
+        logger.debug("fabricated_content guard skipped (chat_send): %r", _fcg)
 
     # 2026-08-27 · Output Guard (Phase 1 net, "Show the Outcome, Never
     # the Engine"). Runs AFTER the mismatch/retry/fallback resolution
@@ -2543,8 +2589,33 @@ async def chat_stream(
                 _tier = _intent_result.get("tier") or "agentic"
                 # 2026-09-02 — same auto-escalation as chat_send (see
                 # that function's identical comment for reasoning).
-                from services.mode_routing import resolve_model_mode
-                req_mode_stream = resolve_model_mode(_tier, req_mode_stream)
+                # 2026-09-03 · Root 4 — same config-gated 2-path
+                # routing as chat_send (see mode_routing.py).
+                from services.mode_routing import (
+                    resolve_model_mode, needs_edit_upgrade_offer, UPGRADE_OFFER_MESSAGE,
+                )
+                _account_has_pro = "pro" in _allowed_s
+                _needs_upgrade_offer = needs_edit_upgrade_offer(
+                    _tier, req_mode_stream, account_has_pro=_account_has_pro,
+                )
+                req_mode_stream = resolve_model_mode(
+                    _tier, req_mode_stream, account_has_pro=_account_has_pro,
+                )
+                if _needs_upgrade_offer and not body.ora_panel:
+                    result = {
+                        "ok":               True,
+                        "content":          UPGRADE_OFFER_MESSAGE,
+                        "provider":         "edit-tier-upgrade-offer",
+                        "fallback_chain":   ["edit_tier_upgrade_offer"],
+                        "iterations":       0,
+                        "tool_calls_run":   0,
+                        "tool_invocations": [],
+                        "intent":           _intent_result,
+                        "tier":             _tier,
+                        "mode":             "chat",
+                    }
+                    await q.put({"type": "result", "result": result})
+                    return
                 # P7-D (2026-08-31) — same self-bug short-circuit as
                 # chat_send, before tier routing (see that function's
                 # comment for the full reasoning).
@@ -3480,6 +3551,16 @@ async def chat_stream(
             content = apply_no_orphan_confirm_guard(content)
         except Exception as _ocg:
             logger.debug("no_orphan_confirm guard skipped (chat_stream): %r", _ocg)
+
+        # 2026-09-03 — Root 2 (core-flow round): grounding wired into
+        # the MAIN chat surface (see chat_send's identical comment
+        # above for the full rationale).
+        try:
+            from services.ora_chat.grounding_check import apply_fabricated_content_guard
+            _retrieved_ctx = retrieved_context_for_grounding(extra_sys, result)
+            content = apply_fabricated_content_guard(content, _retrieved_ctx)
+        except Exception as _fcg:
+            logger.debug("fabricated_content guard skipped (chat_stream): %r", _fcg)
 
         # 2026-08-27 · Output Guard (Phase 1 net) — runs AFTER the
         # mismatch/fallback resolution above (so it nets whatever text

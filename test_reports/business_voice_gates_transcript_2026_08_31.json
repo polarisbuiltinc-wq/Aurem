@@ -4,7 +4,7 @@
     {
       "turn": 1,
       "prompt": "hi, what can you do for my website?",
-      "reply": "I can help fix bugs, improve performance, and implement new features for your website—just share the website's pages link and what you'd like done!",
+      "reply": "I can analyze your website's pages, fix issues, and go live with improvements as updates or Review requests!",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -22,7 +22,7 @@
     {
       "turn": 2,
       "prompt": "please put our opening hours at the top of our main page",
-      "reply": "I'd love to add your opening hours to the top of your main page! I just need one thing from you:\n\n**What are your opening hours?** For example: \"Mon–Fri 9am–5pm, Sat 10am–2pm, Sun closed.\"\n\nOnce you give me those, I'll get them placed right at the top of your main page.",
+      "reply": "Got it. I'll add your opening hours prominently at the top of the main page and submit it for your review.",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -32,33 +32,33 @@
         "no_dangling": true,
         "has_handoff_fence": false
       },
-      "provider": "glm-5.2",
-      "tier": "agentic",
+      "provider": "intent-gateway-casual",
+      "tier": "clarify",
       "bail_reason": null,
       "ship_suppressed": false
     },
     {
       "turn": 3,
       "prompt": "9am to 5pm every day",
-      "reply": "Got it! I'll add \"Open daily 9am–5pm\" to the top of your main page right away. 🚀",
+      "reply": "Perfect, I'll add \"Open daily from 9am to 5pm\" to the top of the main page.",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
         "no_dead_end": true,
         "dead_end_hits": [],
-        "ends_with_terminal_punct": false,
+        "ends_with_terminal_punct": true,
         "no_dangling": true,
         "has_handoff_fence": false
       },
       "provider": "intent-gateway-casual",
-      "tier": "casual",
+      "tier": "clarify",
       "bail_reason": null,
       "ship_suppressed": false
     },
     {
       "turn": 4,
       "prompt": "add our phone number 1-800-555-0199 to the bottom of my main page",
-      "reply": "I can't see your website's pages right now — it looks like no project is connected. But I can still help! Here's what we need to do:\n\n**Connect your website** so I can add both your opening hours (9am–5pm daily) and your phone number (1-800-555-0199) to your main page. \n\nLook for a \"Connect Project\" or \"Select Project\" option in the sidebar, or if you're working with a Your website's connection website's pages, you can connect it and I'll make both updates right away.\n\nOnce it's connected, I'll place the hours at the top and the phone number at the bottom of your main page — all in one go. What do you see in the sidebar?",
+      "reply": "I can't see your website right now — looks like no project is connected. \n\n**But I can help you as soon as you connect it:** Click the project selector in the sidebar and choose your website. Once that's done, I'll add \"1-800-555-0199\" to the bottom of your main page right away.\n\nWhat else can I help with once we're connected?",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -137,8 +137,8 @@
   "regression": [
     {
       "prompt": "hello!",
-      "reply": "Hi there! Let’s build something great. 👋",
-      "provider": "intent-gateway-casual",
+      "reply": "Hey! I'm ORA, by Aurem. I'm your AI engineer — I read your connected Your website's connection website's pages, fix real issues, and go live with changes as updates or Review requests.\n\nWhat are we working on today?",
+      "provider": "glm-5.2",
       "tier": "casual"
     }
   ]
