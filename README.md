@@ -3,8 +3,7 @@
 
 > No IDE. No token billing. No broken loops. Just code that ships.
 
-[![Founders 500](https://img.shields.io/badge/Founders-500-orange)]()
-[![94+ Commits Shipped](https://img.shields.io/badge/Commits%20Shipped-94%2B-orange)]()
+[![Founders 500](https://img.shields.io/badge/Founders-500-orange)](https://auremcto.com/)
 [![$9/month](https://img.shields.io/badge/Price-%249%2Fmonth-orange)]()
 [![OSS Core](https://img.shields.io/badge/OSS%20core-ora--grounding-brightgreen)](https://github.com/polarisbuiltinc-wq/ora-grounding)
 
@@ -16,7 +15,7 @@ Live: **[auremcto.com](https://auremcto.com)** · Sister app: **[aurem.live](htt
 
 - [What ORA is](#what-ora-is)
 - [Architecture Map](#architecture-map)
-- [Feature Log — What Actually Ships Today](#feature-log)
+- [Feature Log — Prod-Live vs Rolling Out](#feature-log)
 - [Open Source](#open-source)
 - [Pricing / Tiers](#pricing--tiers)
 - [Head-to-head](#head-to-head)
@@ -114,9 +113,36 @@ tool-call emissions are absorbed by a lenient extractor in
 
 ---
 
-## Feature Log — What Actually Ships Today <a id="feature-log"></a>
+## Feature Log — Prod-Live vs Rolling Out <a id="feature-log"></a>
+
+Every feature below is labeled with its **actual** current availability,
+not "ships today" as a blanket claim:
+- **🟢 PROD-LIVE** — running in production for real users right now.
+- **🟡 ROLLING OUT** — built and tested on preview; deploying to
+  production, or still behind a safety gate pending its own
+  verification. See "Two environments" further down: every fix lands
+  on preview first, production catches up on the next redeploy.
+
+### 🔀 Ship-via-PR — never direct push
+**Status: 🟡 ROLLING OUT**
+Built and tested on preview; still gated **OFF** in production
+(`ship_via_pr` flag — no prod row means off, no env override) pending
+its own safety sign-off. An internal risk memo (Aug 2026) flagged real
+rollback-on-merge gaps — squash/rebase-merge revert accuracy and
+stale-SHA drift — that must be closed before this reaches real users.
+**Today's live production default is still a direct commit to your
+branch** (see "commits directly to your branches" above) — this
+section describes the safer mechanism being rolled out, not what every
+user gets today.
+- Ships as a **draft PR to a throwaway branch**, never a direct push to
+  your base branch — you review and merge yourself
+- Rollback closes/retracts the PR if it was never merged, or reverts
+  the merge commit if it was
+- The safety model itself (PR-only by default) is not something other
+  AI coding tools ship
 
 ### 🛡️ Vanguard Security Scanner
+**Status: 🟢 PROD-LIVE**
 - 25-pattern pre-commit security scan on every commit
 - Detects: secrets, SQL/NoSQL injection, JWT replay, XSS, CSRF, path
   traversal, IDOR, missing auth, SSTI, ReDoS, LPDoS
@@ -127,6 +153,7 @@ tool-call emissions are absorbed by a lenient extractor in
   CVE-2025-48757 (April 2026).
 
 ### 🔄 Loop Mode — Verified Execution
+**Status: 🟢 PROD-LIVE**
 - PLAN → EXECUTE → VERIFY → SECURITY SCAN → SHIP
 - Plan shown before any code is written; user approves
 - Files written one at a time with live progress
@@ -136,6 +163,7 @@ tool-call emissions are absorbed by a lenient extractor in
   `StreamHealthPill` feedback prevents stuck runs
 
 ### 🏥 Codebase Health Scanner — 7 categories
+**Status: 🟢 PROD-LIVE**
 - Security · Performance · Code Quality · Dependencies · Database ·
   HTTP Headers · Docker CIS
 - Individual fix buttons per finding (micro-satisfaction loop)
@@ -144,6 +172,7 @@ tool-call emissions are absorbed by a lenient extractor in
   gate + 3× auto-retry
 
 ### 💬 Chat-native Scan Commands *(Iter 212m-190)*
+**Status: 🟢 PROD-LIVE**
 Type `/` in the composer:
 - `/scan` — all 4 scanners
 - `/health-scan` · `/security-scan` · `/bug-hunt` · `/docker-scan`
@@ -155,6 +184,7 @@ v2 preview page, which stays a hardcoded visual mock per its own
 docstring).
 
 ### 📮 Founder Suggestion Box *(Iter 212m-193)*
+**Status: 🟢 PROD-LIVE**
 - `POST /suggestions` — JWT-auth, body `{text}` only. User identity
   and active project come from the server, not the client.
 - **Date-based** rate limit (1 per user per UTC day) — session
@@ -171,15 +201,18 @@ docstring).
   `decided_by` for audit.
 
 ### ⚡ 4-Hop LLM Fallback Chain
+**Status: 🟢 PROD-LIVE**
 - OpenRouter primary → DeepSeek direct → OR free chain → Groq
 - Provenance tags show which hop served each response
 - Silent failover — user never notices
 
 ### 🧠 ORA Council — self-learning
+**Status: 🟢 PROD-LIVE**
 Every interaction is captured across five modes (Chat / Advice /
 Code / Debug / Audit). Fine-tune threshold: 1000 interactions.
 
 ### 🔐 Security posture
+**Status: 🟢 PROD-LIVE**
 - JWT tokens include `jti` + `iat`
 - NoSQL operator sanitizer ASGI middleware blocks `$where`/`$expr`
 - Request body size limit — LPDoS shield
@@ -187,6 +220,7 @@ Code / Debug / Audit). Fine-tune threshold: 1000 interactions.
   `frontend_errors`
 
 ### 🎨 UI polish
+**Status: 🟢 PROD-LIVE**
 - Token-by-token streaming
 - Skeleton loading (no "Loading 80%" fake bar)
 - Syntax highlighting + copy button on all code blocks
@@ -195,17 +229,74 @@ Code / Debug / Audit). Fine-tune threshold: 1000 interactions.
 - Inline loop progress: PLAN✓ → EXECUTE⏳ → VERIFY○ → SCAN○ → SHIP○
 
 ### 📊 SEO / GEO / AEO
+**Status: 🟢 PROD-LIVE**
 - Meta Pixel on every page
 - JSON-LD: SoftwareApplication · Organization · FAQPage · WebSite
 - `llms.txt` for AI-crawler discovery
 - `robots.txt` explicitly allows every major AI crawler
 - OG image + preview cards for social sharing
 
+*(Static site meta tags above. The customer-facing scan-and-fix product
+built on top of these same primitives is the AI-Visibility Kit below.)*
+
+### 📈 AI-Visibility Kit (SEO + GEO + AEO)
+**Status: 🟢 PROD-LIVE**
+Scans any connected site for how visible it is to AI answer engines and
+crawlers, scores it 0–100, and ships fixes as a **draft PR (PR-only,
+never a direct push)**:
+- **Preferred Sources badge** — a generated on-site badge/asset
+- **`robots.txt` AI-crawler policy** — blocks AI *training* crawlers
+  (GPTBot, ClaudeBot, Google-Extended, CCBot), explicitly allows AI
+  *retrieval* crawlers (OAI-SearchBot, Claude-SearchBot, PerplexityBot)
+- **JSON-LD structured data** — Organization (stable `@id`) + WebSite +
+  FAQPage + Person
+- **`llms.txt` generation** — honestly scoped: Google ignores this file
+  for Search/AI Overviews; it helps Claude, ChatGPT, and coding agents
+  that do read it
+- **Sitemap automation**
+- **3 advisory-only checklists** (never auto-applied, no Google OAuth/
+  API used): Google Business Profile, Search Console + GBP, Google
+  Platforms
+- The 0–100 score is a **preparedness score**, not a live count of AI
+  citations — AUREM doesn't track whether any AI engine has actually
+  cited you
+
+### 🤖 ORA Admin Copilot
+**Status: 🟡 ROLLING OUT**
+Built and tested on preview; not yet confirmed running against the
+production environment. A founder-facing ops assistant with its own
+guardrails, separate from customer-facing ORA:
+- **Approve/reject action catalog** — every admin action (toggle a
+  flag, trigger a digest, edit the backlog) is proposed first, applied
+  only after an explicit approve, and logged to an audit trail
+- **Live `web_verify` / `web_inspect` tools** — the admin can ask ORA to
+  check any deployed URL in the same chat; degrades gracefully (a clear
+  "browser unavailable — text check only" badge) instead of a silent
+  skip if server-side Chromium isn't available
+- **Budget + rate-limit guardrails** — hard USD-per-call caps and a
+  request-rate ceiling, same enforcement layer as customer chat
+
+### 🩻 Deploy Verify engine
+**Status: 🟡 ROLLING OUT**
+The browser-free fallback path is live everywhere; full browser-based
+verification (screenshots, console errors) is confirmed working on
+preview only — production is missing the Chromium binary as of this
+writing, pending a Dockerfile fix + redeploy. Server-side headless-
+browser verification of any deployed URL:
+- Reachability, build-identity match, console/runtime error capture,
+  mobile + desktop screenshots
+- **Graceful browser-free fallback** — if Chromium itself isn't
+  installed in an environment, falls back to a plain HTTP check
+  (status code + raw-HTML signal) and labels the result `degraded`
+  instead of hard-failing or silently skipping
+
 ### 🔌 Integrations
+**Status: 🟢 PROD-LIVE**
 Claude Desktop · Claude Code · Cursor · VS Code · Ollama (offline) ·
 LM Studio · GitHub · MCP 2.4
 
 ### 🩺 Ops surface *(Iter 212m-192)*
+**Status: 🟢 PROD-LIVE**
 - `GET /api/aurem-dev/admin/council/health` — live Council A status
 - Persistent probe history in `council_health_probes`
 - Admin banner + "LLM PROVIDER STATUS" pane on `/admin` overview
@@ -214,6 +305,7 @@ LM Studio · GitHub · MCP 2.4
   repo visibility
 
 ### 🛡️ ORA Chat Hallucination Defence Stack *(Iter 264 → 270)*
+**Status: 🟢 PROD-LIVE**
 
 Multi-layer defence against the LLM confidently making things up.
 Every layer is deterministic (regex / set-membership) or strictly
@@ -313,6 +405,11 @@ Source of truth: `backend/services/subscription_tiers.py`.
 
 **Rule:** 1 fix = 1 task, regardless of severity. Scan-fix quota
 rolls into the same monthly meter as chat tasks (`services/usage.py`).
+
+**AI-Visibility Kit pricing:** not yet published. `subscription_tiers.py`
+has no Kit tier/add-on wired in today — the Kit's readiness scan is
+viewable, but there is no enforced billing price for it yet, so none is
+listed here. Coming once it's wired into the tiers file.
 
 ---
 

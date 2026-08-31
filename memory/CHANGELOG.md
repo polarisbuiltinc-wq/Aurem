@@ -1339,3 +1339,19 @@ from preview's `/root/bin/chromium`), it should be removed/unset —
 it would incorrectly override the new working default. Cannot build/
 verify the Docker image from preview (no prod build access) — founder
 must redeploy to prove it.
+
+## 2026-08-31 — README.md: 3 new feature sections + honest PROD-LIVE/ROLLING-OUT split
+
+Added "Ship-via-PR" (🟡 ROLLING OUT — gated OFF in prod per R10-ROLLBACK-PR-GAP.md,
+today's live default is still direct commit), "AI-Visibility Kit" (🟢 PROD-LIVE,
+per explicit instruction), "ORA Admin Copilot" (🟡 ROLLING OUT — no prod
+confirmation), "Deploy Verify engine" (🟡 ROLLING OUT — Chromium missing in
+prod as of this session). All pre-existing Feature Log entries labeled
+🟢 PROD-LIVE (kept as-is per instruction). Fixed dead "Founders 500" badge
+link → https://auremcto.com/ (verified real: `founder_offer.py`,
+TOTAL_SPOTS=500). Removed unsourced "94+ Commits Shipped" badge (git log
+= 2394 commits total, no defensible source for "94"). Verified pricing
+table against `subscription_tiers.py` — all 5 tiers match exactly
+(Free $0/10, Starter $9/50, Pro $19/300, Team $49/400, Founder $0/∞); added
+a caveat that Kit pricing isn't wired into the tiers file yet, so no Kit
+price is published.
