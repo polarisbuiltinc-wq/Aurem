@@ -99,11 +99,22 @@ async def _browser_free_fallback(url: str, result: dict, exc: Exception) -> dict
     own executable is missing at launch (see `_is_browser_missing_error`).
     Runs a plain httpx GET — no screenshots, no console/runtime checks,
     no JS execution, no interactions — and labels the result clearly as
-    `degraded` so nothing downstream mistakes it for a full verify."""
+    `degraded` so nothing downstream mistakes it for a full verify.
+
+    2026-08-31 — surfaces the RAW launch error (`str(exc)`), which
+    Playwright always includes the attempted executable path in
+    ("Executable doesn't exist at <path>"). Founder-reported: a first
+    Dockerfile fix (baking Chromium in via `PLAYWRIGHT_BROWSERS_PATH`)
+    redeployed but the error persisted — without the exact attempted
+    path surfaced here, diagnosing "still using a stale
+    PLAYWRIGHT_CHROME_EXECUTABLE_PATH env override" vs "the new default
+    path itself is wrong" required digging through raw build logs.
+    Now it's visible directly in ORA's own answer."""
     import httpx
     result["verdict"] = "degraded"
     result["browser_available"] = False
     result["fail_reason"] = "browser_unavailable"
+    result["chromium_launch_error"] = str(exc)[:400]
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
             resp = await client.get(url)
@@ -113,7 +124,7 @@ async def _browser_free_fallback(url: str, result: dict, exc: Exception) -> dict
         result["checks"].append({
             "name": "reachability_fallback", "pass": status_ok,
             "evidence": f"HTTP {resp.status_code} via browser-free fallback "
-                        f"(Chromium unavailable: {type(exc).__name__})",
+                        f"(Chromium launch failed: {str(exc)[:200]})",
         })
         result["checks"].append({
             "name": "content_signal_fallback", "pass": has_heading,
@@ -126,11 +137,15 @@ async def _browser_free_fallback(url: str, result: dict, exc: Exception) -> dict
             "evidence": f"browser-free fallback request failed: {type(fetch_exc).__name__}",
         })
     result["what_happened"] = (
-        "Chromium is not installed in this environment, so full browser "
-        "verification (screenshots, console/runtime errors, click "
-        "interactions) could not run. Ran a browser-free HTTP check "
-        "instead — this result does NOT confirm visual rendering, JS "
-        "runtime health, or interactivity."
+        "Chromium is not installed (or not launchable) in this "
+        "environment, so full browser verification (screenshots, "
+        "console/runtime errors, click interactions) could not run. "
+        f"Exact launch error: {str(exc)[:300]!r} — check whether "
+        "PLAYWRIGHT_CHROME_EXECUTABLE_PATH is set to a stale/wrong path "
+        "in this environment's env vars; if unset, Playwright falls "
+        "back to PLAYWRIGHT_BROWSERS_PATH's default resolution. Ran a "
+        "browser-free HTTP check instead — this result does NOT "
+        "confirm visual rendering, JS runtime health, or interactivity."
     )
     return result
 

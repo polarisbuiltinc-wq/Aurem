@@ -81,6 +81,14 @@ async def test_run_verify_degrades_when_chromium_missing(monkeypatch):
     assert "browser-free fallback" in names["reachability_fallback"]["evidence"]
     assert names["content_signal_fallback"]["pass"] is True
     assert "Chromium is not installed" in result["what_happened"]
+    # 2026-08-31 — the RAW launch error (with the exact attempted path
+    # Playwright tried) must be surfaced, not just the exception type,
+    # so a stale env-var path vs a wrong default path can be told apart
+    # from the response alone, no build-log digging required.
+    assert result["chromium_launch_error"] == str(_missing_chromium_exc())[:400]
+    assert "/root/bin/chromium" in result["chromium_launch_error"]
+    assert "/root/bin/chromium" in result["what_happened"]
+    assert "/root/bin/chromium" in names["reachability_fallback"]["evidence"]
 
 
 @pytest.mark.asyncio
@@ -145,6 +153,7 @@ async def test_fetch_snapshot_degrades_when_chromium_missing():
 
     assert out["browser_available"] is False
     assert out["degraded_reason"] and out["degraded_reason"].startswith("chromium_unavailable:")
+    assert "/root/bin/chromium" in out["degraded_reason"]  # exact attempted path, not just the type
     assert out["screenshot_meta"] is None
     assert "raw html" in out["snapshot"]
     assert out["error"] is None
@@ -162,7 +171,10 @@ async def test_run_web_inspect_full_flow_degraded_still_answers(monkeypatch):
 
     monkeypatch.setattr(dv, "validate_target_url", lambda url: (True, ""))
 
+    captured_user_msg = {}
+
     async def _fake_call_openrouter_model(model, system, user, **kw):
+        captured_user_msg["user"] = user
         return "Advisory answer from the raw-HTML fallback."
 
     class _FakeAudit:
@@ -187,3 +199,9 @@ async def test_run_web_inspect_full_flow_degraded_still_answers(monkeypatch):
     assert out["answer"] == "Advisory answer from the raw-HTML fallback."
     assert out["browser_available"] is False
     assert out["degraded_reason"].startswith("chromium_unavailable:")
+    # 2026-08-31 — ORA (the LLM) must actually SEE the exact launch
+    # error + attempted path via a trusted system note, so a founder
+    # asking "check homepage" gets the real path back, not a bare
+    # "browser_unavailable" with nothing to act on.
+    assert "SYSTEM NOTE" in captured_user_msg["user"]
+    assert "/root/bin/chromium" in captured_user_msg["user"]

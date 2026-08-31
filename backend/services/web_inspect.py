@@ -94,13 +94,22 @@ async def _browser_free_snapshot_fallback(url: str, exc: Exception) -> dict:
     Returns raw HTML fetched via httpx (NOT a rendered innerText
     snapshot) — no screenshot, no JS execution. `browser_available`
     and `degraded_reason` let `run_web_inspect` surface this plainly
-    instead of pretending it inspected a rendered page."""
+    instead of pretending it inspected a rendered page.
+
+    2026-08-31 — `degraded_reason` carries the RAW launch error message
+    (not just the exception type name), since Playwright always
+    includes the attempted executable path in it ("Executable doesn't
+    exist at <path>"). `run_web_inspect` feeds this to ORA as a
+    trusted note so a founder asking "check homepage" gets the exact
+    attempted path back in ORA's own answer — no build-log digging
+    needed to tell "still pointed at a stale env override" apart from
+    "the new default path itself is wrong"."""
     import httpx
     import services.deploy_verify as dv
 
     out: dict = {"snapshot": "", "screenshot_meta": None, "error": None,
                  "egress_attempts": [], "browser_available": False,
-                 "degraded_reason": f"chromium_unavailable:{type(exc).__name__}"}
+                 "degraded_reason": f"chromium_unavailable: {str(exc)[:300]}"}
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
             resp = await client.get(url)
@@ -216,10 +225,26 @@ async def run_web_inspect(url: str, question: str, *, db=None, user_id: str = ""
     out["browser_available"] = fetch.get("browser_available", True)
     out["degraded_reason"] = fetch.get("degraded_reason")
 
+    degraded_note = ""
+    if not out["browser_available"] and out["degraded_reason"]:
+        # 2026-08-31 — trusted note (OUTSIDE the untrusted PAGE_CONTENT
+        # boundary), NOT part of the page's own content, so ORA can
+        # tell the founder the exact attempted Chromium path instead
+        # of a bare "browser_unavailable" with no actionable detail.
+        degraded_note = (
+            f"\n\n[SYSTEM NOTE — trusted, not page content]: Chromium "
+            f"was unavailable for this check, so this is a browser-free "
+            f"HTTP-only fallback (no screenshot, no JS/console check). "
+            f"Exact launch error: {out['degraded_reason']}. If asked "
+            f"about screenshots/visual/console checks, say this plainly "
+            f"and quote the exact launch error above so it can be "
+            f"diagnosed without build logs."
+        )
+
     user_msg = (
         f"{boundary}\n\n"
         f"Admin's question (trusted, OUTSIDE the untrusted PAGE_CONTENT "
-        f"above): {question}"
+        f"above): {question}{degraded_note}"
     )
 
     from services.ora_chat.cost_tracker import compute_cost_usd

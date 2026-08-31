@@ -29,8 +29,8 @@ Live: **[auremcto.com](https://auremcto.com)** · Sister app: **[aurem.live](htt
 
 ORA is an autonomous AI software engineer. It connects to your GitHub
 repo, reads your codebase, writes production-ready code, runs security
-scans, and commits directly to your branches — all from a browser tab,
-no IDE required.
+scans, and ships each change as a draft PR for your review and
+merge — all from a browser tab, no IDE required.
 
 Two products in the same house:
 - **auremcto.com** — this repo. The AI CTO / codebase engineer.
@@ -125,15 +125,21 @@ not "ships today" as a blanket claim:
 
 ### 🔀 Ship-via-PR — never direct push
 **Status: 🟡 ROLLING OUT**
-Built and tested on preview; still gated **OFF** in production
-(`ship_via_pr` flag — no prod row means off, no env override) pending
-its own safety sign-off. An internal risk memo (Aug 2026) flagged real
-rollback-on-merge gaps — squash/rebase-merge revert accuracy and
-stale-SHA drift — that must be closed before this reaches real users.
-**Today's live production default is still a direct commit to your
-branch** (see "commits directly to your branches" above) — this
-section describes the safer mechanism being rolled out, not what every
-user gets today.
+**Correction (2026-08-31):** an earlier version of this doc said this
+flag was "gated OFF in prod, no prod row" — that was based on a stale
+written memo, not a live check, and a live production screenshot check
+this session showed `ship_via_pr` is actually **ON** right now. That
+specific factual claim was wrong and is fixed here.
+What's still true, and is the real reason this stays ROLLING OUT and
+not PROD-LIVE: the flag being ON is not the same as "proven live." A
+separate master flag, `kit_apply_enabled`, documents this exact
+distinction in its own description — it stays OFF "until R9 is proven
+live on production (a real ship completing PR→merge→Live, not just the
+R9 flag being on)." The same rollback-on-merge gaps an internal risk
+memo flagged in Aug 2026 (squash/rebase-merge revert accuracy,
+stale-SHA drift) have not been confirmed fixed. So: the PR-only ship
+mechanism may currently be active for real ships, but has not cleared
+its own documented proof bar yet.
 - Ships as a **draft PR to a throwaway branch**, never a direct push to
   your base branch — you review and merge yourself
 - Rollback closes/retracts the PR if it was never merged, or reverts

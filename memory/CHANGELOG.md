@@ -1355,3 +1355,41 @@ table against `subscription_tiers.py` — all 5 tiers match exactly
 (Free $0/10, Starter $9/50, Pro $19/300, Team $49/400, Founder $0/∞); added
 a caveat that Kit pricing isn't wired into the tiers file yet, so no Kit
 price is published.
+
+## 2026-08-31 — Correction: ship_via_pr flag state in README
+
+Founder live-checked production (screenshot evidence) and found
+`ship_via_pr` is actually **ON**, contradicting my earlier claim
+("gated OFF, no prod row") which was based on the R10-ROLLBACK-PR-GAP.md
+memo text, not a live check — I have no production DB/shell access to
+verify this myself. Corrected the README's Ship-via-PR section: removed
+the wrong "OFF" claim, kept the 🟡 ROLLING OUT status but for the
+accurate reason — a separate `kit_apply_enabled` master flag documents
+the "flag-on ≠ proven-live" distinction itself and stays OFF until a
+real PR→merge→Live cycle is proven; the R10 rollback-on-merge gaps
+(squash/rebase revert accuracy, stale-SHA drift) are not confirmed
+fixed regardless of flag state.
+
+## 2026-08-31 — Chromium fallback diagnostics enriched (founder confirmed fix didn't take after redeploy)
+
+Founder redeployed with the Dockerfile Chromium fix (5de7cfd7a840) and
+live-tested via ORA Admin "check homepage" — still `browser_unavailable`.
+Root cause unconfirmed (need founder to check prod env vars / build logs),
+but the C1 fallback previously only surfaced `type(exc).__name__` (e.g.
+"Error") — useless for diagnosing WHICH path Chromium tried to launch at.
+Enriched both fallbacks (`deploy_verify.py::_browser_free_fallback`,
+`web_inspect.py::_browser_free_snapshot_fallback`) to surface the RAW
+launch error string (Playwright always includes the attempted path,
+e.g. "Executable doesn't exist at /root/bin/chromium") in
+`chromium_launch_error` / `degraded_reason` / `what_happened`, and fed it
+to ORA as a trusted system note in `run_web_inspect`'s prompt so a
+founder asking "check homepage" gets the EXACT attempted path back in
+ORA's own answer — no build-log digging needed to tell "still pointed at
+a stale PLAYWRIGHT_CHROME_EXECUTABLE_PATH env override" apart from "the
+new PLAYWRIGHT_BROWSERS_PATH default itself is wrong." 42/42 tests pass
+(existing + 5 new assertions for the raw-path surfacing).
+
+Top suspect flagged to founder: production env vars may still have
+`PLAYWRIGHT_CHROME_EXECUTABLE_PATH=/root/bin/chromium` set (copied from
+preview), which would override the new `PLAYWRIGHT_BROWSERS_PATH`
+default and explain the fix not taking even after a real redeploy.
