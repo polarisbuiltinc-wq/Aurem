@@ -604,31 +604,14 @@ async def chat_send(
         or (user.get("tier") == "founder")
         or _is_fnd_email(user.get("email"))
     )
-    # 2026-09-04 · confirm-execution round — checked BEFORE intent
-    # classification / tier routing: if the user just confirmed
-    # ("yes please update it" / "approve" / "go ahead") a REAL pending
-    # action (a held aurem-handoff proposal or a Root 4 upgrade
-    # offer), EXECUTE it deterministically here and skip the rest of
-    # this turn's routing entirely — never re-ask the orchestrator to
-    # regenerate a fresh (and possibly differently-worded) proposal.
-    # See services/confirm_execution.py's module docstring for the
-    # founder's explicit 2026-09-04 call reversing Iter 212m-26.
-    from services.commit_boundary import resolve_turn_start
-    result = await resolve_turn_start(
-        _db, user=user, session_id=body.session_id, project_id=body.project_id,
-        prompt=body.prompt or "", bin_ctx=bin_ctx,
-    )
-    # 2026-08-25 — intent-gateway wiring (root-cause fix, Engineering
-    # Gaps #1/#3). This was previously ONLY wired into /chat/stream —
-    # /chat/send is EQUALLY a real "Main chat" surface (see
-    # AdminHouseRules.jsx:262) and was calling chat_with_tools
-    # unconditionally for every message, casual chit-chat included.
-    # Mirrors the /chat/stream branch below exactly: casual/clarify
-    # (uncertain → safe default, not "give it tools") get a direct,
-    # no-tool LLM reply; query gets a capped tool budget; agentic gets
-    # the full budget. On any failure this falls through to the
-    # original unconditional chat_with_tools call — never blank-screens.
-    from core.intent_gateway import classify as _classify_intent_send
+    # 2026-09-06 · Phase 1 chat.py refactor (the "load-bearing dedup") —
+    # this ONE call replaces what used to be 5 independently
+    # hand-copied pre-LLM checks (confirm-boundary / intent-classify /
+    # upgrade-offer / self-bug / casual-direct-reply-or-honest-no-op).
+    # chat_stream calls the exact same function below — see
+    # routers/chat_pre_llm.py's module docstring for the full
+    # rationale and the 3 pre-existing, intentionally-preserved
+    # asymmetries this refactor does NOT silently fix.
     from services.response_confidence import (
         prior_turn_had_fix_signal as _ptfs_send,
         prior_turn_context_text as _ptct_send,
@@ -637,139 +620,18 @@ async def chat_send(
     _prior_fix_signal = await _ptfs_send(_db, body.session_id, user["user_id"])
     _prior_turn_text = await _ptct_send(_db, body.session_id, user["user_id"])
     _session_summary = await _gss_send(_db, body.session_id, user["user_id"])
-    _intent_result = await _classify_intent_send(
-        body.prompt or "", history=[], pending_fix=_prior_fix_signal,
+    from routers.chat_pre_llm import resolve_pre_llm
+    _pre = await resolve_pre_llm(
+        db=_db, user=user, body=body, bin_ctx=bin_ctx,
+        prior_fix_signal=_prior_fix_signal, prior_turn_text=_prior_turn_text,
+        session_summary=_session_summary,
+        allowed_modes=_allowed, req_mode=req_mode,
+        ora_panel=bool(body.ora_panel),
     )
-    _tier = _intent_result.get("tier") or "agentic"
-    # 2026-09-02 — auto-escalate: a genuine code-edit (agentic tier)
-    # on Swift transparently uses the reliable model so real edits
-    # land correctly; quick chat/query turns stay on the fast/cheap
-    # Swift model. No manual mode switch, no jargon — the user never
-    # sees this happen, they just get a real edit instead of a raw-
-    # code dead end (see response_confidence.py's
-    # apply_no_edit_deadend_guard for the safety net when this still
-    # slips through on any other model).
-    # 2026-09-03 · Root 4 (core-flow round) — TWO config-gated paths
-    # (see mode_routing.py's docstring): Path A ("transparent") keeps
-    # the behavior above for every account; Path B ("gated", DEFAULT)
-    # shows a free/starter account an HONEST upgrade offer instead of
-    # silently escalating — an account that already has Pro access
-    # (`_account_has_pro`) is never gated, regardless of path.
-    from services.mode_routing import (
-        resolve_model_mode, needs_edit_upgrade_offer, UPGRADE_OFFER_MESSAGE,
-    )
-    _account_has_pro = "pro" in _allowed
-    _needs_upgrade_offer = needs_edit_upgrade_offer(
-        _tier, req_mode, account_has_pro=_account_has_pro,
-    )
-    req_mode = resolve_model_mode(_tier, req_mode, account_has_pro=_account_has_pro)
-    # 2026-09-04 — `result` may already be set by the confirm-execution
-    # short-circuit above; the upgrade-offer / self-bug / casual /
-    # agentic checks below are all already individually gated by
-    # `if result is None:` or an equivalent "only set if unset" guard,
-    # so simply not re-initializing `result` here is enough to
-    # preserve it.
-    # 2026-09-03 · Root 4 — the honest upgrade offer short-circuits
-    # BEFORE tier routing, deterministic + zero LLM spend: a real
-    # edit request on a free/starter account never silently escalates
-    # (Path B) AND never dead-ends into a false "nothing pending" —
-    # it gets a real, concrete next step every time. `result is None`
-    # check added 2026-09-04 so this never overwrites a result already
-    # produced by the confirm-execution short-circuit above.
-    if result is None and _needs_upgrade_offer and not body.ora_panel:
-        result = {
-            "ok": True,
-            "content": UPGRADE_OFFER_MESSAGE,
-            "provider": "edit-tier-upgrade-offer",
-            "iterations": 0,
-            "tool_calls_run": 0,
-            "meta": {},
-            "council": None,
-            "task_type": None,
-            "findings_saved_this_turn": [],
-        }
-    # P7-D (2026-08-31) — the user reporting ORA's OWN UI/reply/panel
-    # as broken (never their own website — see user_report_classifier's
-    # possessive guard) short-circuits BEFORE tier routing, deterministic
-    # + zero LLM spend, straight to the guaranteed self-bug reply pattern
-    # (ownership + no blame + a path forward — see self_bug_reply_guard.py).
-    if result is None and not body.ora_panel:
-        from services.user_report_classifier import is_user_reporting_ora_bug
-        if is_user_reporting_ora_bug(body.prompt or ""):
-            from services.self_bug import emit as _emit_self_bug
-            from services.self_bug_reply_guard import compose_self_bug_reply
-            await _emit_self_bug(
-                "user_reported", (body.prompt or "")[:300],
-                {"session_id": body.session_id, "user_id": user["user_id"]},
-                source="user_report_classifier",
-            )
-            result = {
-                "ok": True,
-                "content": compose_self_bug_reply("user_reported"),
-                "provider": "self-bug-reply",
-                "iterations": 0,
-                "tool_calls_run": 0,
-                "meta": {},
-                "council": None,
-                "task_type": None,
-                "findings_saved_this_turn": [],
-            }
-    if result is not None:
-        pass
-    elif _tier in ("casual", "clarify") and not body.ora_panel:
-        from services.response_confidence import is_confirmation_reply, NO_PENDING_FIX_MESSAGE
-        if is_confirmation_reply(body.prompt or "") and not _prior_fix_signal:
-            # 2026-08-28 · NEW P0 Task 2 — a bare confirmation with
-            # NOTHING pending must never hit the free-form casual LLM,
-            # which can improvise a false "Approved!"/"Shipped!" reply
-            # with zero real action behind it (the exact founder
-            # repro). Deterministic, honest, zero LLM spend.
-            result = {
-                "ok": True,
-                "content": NO_PENDING_FIX_MESSAGE,
-                "provider": "intent-gateway-no-pending-fix",
-                "iterations": 0,
-                "tool_calls_run": 0,
-                "meta": {},
-                "council": None,
-                "task_type": None,
-                "findings_saved_this_turn": [],
-            }
-        else:
-            try:
-                from services.intent_gateway_casual_reply import casual_direct_reply
-                from services.response_confidence import apply_no_false_success_guard
-                from services.business_voice_filter import apply_business_owner_guards
-                _casual_reply_text = await casual_direct_reply(
-                    body.prompt, prior_assistant_text=_prior_turn_text,
-                    session_summary=_session_summary,
-                )
-                _casual_reply_text = apply_no_false_success_guard(
-                    body.prompt or "", _casual_reply_text, _prior_fix_signal,
-                )
-                # R1/R2 (2026-08-31) — single guard chain (see
-                # apply_business_owner_guards docstring).
-                _casual_reply_text = await apply_business_owner_guards(
-                    getattr(body, "ora_panel", False), _casual_reply_text,
-                    body.prompt or "",
-                    session_id=body.session_id, user_id=user["user_id"],
-                )
-                result = {
-                    "ok": True,
-                    "content": _casual_reply_text,
-                    "provider": "intent-gateway-casual",
-                    "iterations": 1,
-                    "tool_calls_run": 0,
-                    "meta": {},
-                    "council": None,
-                    "task_type": None,
-                    "findings_saved_this_turn": [],
-                }
-            except Exception as _ce:
-                logger.warning(
-                    "intent_gateway %s path failed (%r) — falling through "
-                    "to chat_with_tools (chat_send)", _tier, _ce,
-                )
+    result = _pre.result
+    _intent_result = _pre.intent_result
+    _tier = _pre.tier
+    req_mode = _pre.mode
     if result is None:
         _max_iters_eff = 3 if _tier == "query" else min(body.max_tool_iters, 4)
         # 2026-09-04 — FIX for the "promise-then-silence" hang
@@ -2550,22 +2412,16 @@ async def chat_stream(
                         # Fall through to the AUREM/orchestrator path below.
 
                 activity["label"] = "thinking…"
-                # 2026-09-04 · confirm-execution round — checked before
-                # tier routing (see chat_send's identical comment for
-                # the full rationale). Returns immediately if it fires
-                # so none of the routing/thinking-frame logic below
-                # runs for an already-handled confirmation.
-                if not body.ora_panel:
-                    from services.commit_boundary import resolve_turn_start
-                    _confirm_result = await resolve_turn_start(
-                        get_db(), user=user, session_id=body.session_id,
-                        project_id=body.project_id, prompt=body.prompt or "",
-                        bin_ctx=bin_ctx,
-                    )
-                    if _confirm_result is not None:
-                        await q.put({"type": "result", "result": _confirm_result})
-                        return
-                # Iter 153 — clamp mode to tier-allowed set for this stream.
+                # 2026-09-06 · Phase 1 chat.py refactor (the "load-bearing
+                # dedup") — this ONE call replaces what used to be 5
+                # independently hand-copied pre-LLM checks (confirm-
+                # boundary / intent-classify / upgrade-offer / self-bug /
+                # casual-direct-reply-or-honest-no-op). chat_send calls
+                # the exact same function above — see
+                # routers/chat_pre_llm.py's module docstring for the
+                # full rationale and the pre-existing asymmetries this
+                # refactor intentionally preserves rather than silently
+                # "fixing".
                 from services.subscription_tiers import allowed_modes_for_tier as _allowed_modes
                 _allowed_s = _allowed_modes((user or {}).get("tier") or "free")
                 req_mode_stream = body.mode if (body.mode in _allowed_s) else _allowed_s[-1]
@@ -2583,28 +2439,11 @@ async def chat_stream(
                 # generic "thinking…" tick.
                 _step("🤔 Thinking…")
 
-                # Iter 212m-149 — Intent Gateway routing.
-                # 3-tier classifier replaces the binary loop toggle.
-                #   casual  → bypass tools, single LLM reply (target <1s)
-                #   query   → tools with low max_iters (target <2s)
-                #   agentic → full pipeline (current default)
-                #   clarify → confidence <0.72; we still let the pipeline
-                #             run but the UI is informed so it can render
-                #             a "looks ambiguous" hint next to the reply.
-                from core.intent_gateway import classify as _classify_intent
                 # 2026-08-24 — Guard 22 fix: strip the internal
-                # `LOOP_PHASE:plan\n` / `LOOP_PHASE:execute\n` marker
-                # (prepended by the frontend on Loop Mode turns,
-                # BEFORE the user's actual message) before handing
-                # text to the classifier. Left in, "LOOP_PHASE:plan\n
-                # Ship a change..." tokenizes with "loop" as the first
-                # word instead of the user's real verb "ship", masking
-                # a clearly agentic message as ambiguous. Confirmed
-                # live-reproducible 2026-08-24; did not block the Loop
-                # pipeline itself (PLAN needs 0 tool calls) but would
-                # wrongly cap max_iters on the regular chat_with_tools
-                # path for any non-Loop turn that happened to carry a
-                # similar internal prefix.
+                # `LOOP_PHASE:plan\n` marker before classification — see
+                # routers/chat_pre_llm.py's `intent_probe_text` param
+                # (this asymmetry with chat_send is pre-existing and
+                # intentionally preserved, not silently unified).
                 _intent_probe_text = re.sub(
                     r"^LOOP_PHASE:\w+\s*\n", "", body.prompt or "", count=1,
                 )
@@ -2614,169 +2453,31 @@ async def chat_stream(
                 _prior_fix_signal = await _ptfs_stream(get_db(), body.session_id, user_id)
                 _prior_turn_text = await _ptct_stream(get_db(), body.session_id, user_id)
                 _session_summary = await _gss_stream(get_db(), body.session_id, user_id)
-                _intent_result = await _classify_intent(
-                    _intent_probe_text,
-                    history=[],   # full conversation context is heavy
-                                  # for the 2 s budget; we rely on the
-                                  # heuristic + the message itself.
-                    db=get_db(),
-                    user_id=user_id,
-                    project_id=body.project_id,
-                    pending_fix=_prior_fix_signal,
+                from routers.chat_pre_llm import resolve_pre_llm
+                _pre = await resolve_pre_llm(
+                    db=get_db(), user=user, body=body, bin_ctx=bin_ctx,
+                    prior_fix_signal=_prior_fix_signal, prior_turn_text=_prior_turn_text,
+                    session_summary=_session_summary,
+                    allowed_modes=_allowed_s, req_mode=req_mode_stream,
+                    run_confirm_boundary=not body.ora_panel,
+                    ora_panel=bool(body.ora_panel),
+                    intent_probe_text=_intent_probe_text,
+                    log_ctx={"db": get_db(), "user_id": user_id, "project_id": body.project_id},
                 )
+                _intent_result = _pre.intent_result
+                _tier = _pre.tier
+                req_mode_stream = _pre.mode
                 # Emit an SSE `intent` frame so the chat UI can render
-                # the tier dot + clarifying probe inline.
+                # the tier dot + clarifying probe inline — same position
+                # (right after classification, before any short-circuit
+                # result) as before this refactor.
                 await q.put({
                     "type":   "intent",
                     "intent": _intent_result,
                 })
-
-                _tier = _intent_result.get("tier") or "agentic"
-                # 2026-09-02 — same auto-escalation as chat_send (see
-                # that function's identical comment for reasoning).
-                # 2026-09-03 · Root 4 — same config-gated 2-path
-                # routing as chat_send (see mode_routing.py).
-                from services.mode_routing import (
-                    resolve_model_mode, needs_edit_upgrade_offer, UPGRADE_OFFER_MESSAGE,
-                )
-                _account_has_pro = "pro" in _allowed_s
-                _needs_upgrade_offer = needs_edit_upgrade_offer(
-                    _tier, req_mode_stream, account_has_pro=_account_has_pro,
-                )
-                req_mode_stream = resolve_model_mode(
-                    _tier, req_mode_stream, account_has_pro=_account_has_pro,
-                )
-                if _needs_upgrade_offer and not body.ora_panel:
-                    result = {
-                        "ok":               True,
-                        "content":          UPGRADE_OFFER_MESSAGE,
-                        "provider":         "edit-tier-upgrade-offer",
-                        "fallback_chain":   ["edit_tier_upgrade_offer"],
-                        "iterations":       0,
-                        "tool_calls_run":   0,
-                        "tool_invocations": [],
-                        "intent":           _intent_result,
-                        "tier":             _tier,
-                        "mode":             "chat",
-                    }
-                    await q.put({"type": "result", "result": result})
+                if _pre.result is not None:
+                    await q.put({"type": "result", "result": _pre.result})
                     return
-                # P7-D (2026-08-31) — same self-bug short-circuit as
-                # chat_send, before tier routing (see that function's
-                # comment for the full reasoning).
-                if not body.ora_panel:
-                    from services.user_report_classifier import is_user_reporting_ora_bug
-                    if is_user_reporting_ora_bug(body.prompt or ""):
-                        from services.self_bug import emit as _emit_self_bug
-                        from services.self_bug_reply_guard import compose_self_bug_reply
-                        await _emit_self_bug(
-                            "user_reported", (body.prompt or "")[:300],
-                            {"session_id": body.session_id, "user_id": user_id},
-                            source="user_report_classifier",
-                        )
-                        result = {
-                            "ok":               True,
-                            "content":          compose_self_bug_reply("user_reported"),
-                            "provider":         "self-bug-reply",
-                            "fallback_chain":   ["self_bug_user_reported"],
-                            "iterations":       0,
-                            "tool_calls_run":   0,
-                            "tool_invocations": [],
-                            "intent":           _intent_result,
-                            "tier":             _tier,
-                            "mode":             "chat",
-                        }
-                        await q.put({"type": "result", "result": result})
-                        return
-                # Iter 212m-211 — HARD GUARDRAIL: `ora_panel=true` MUST
-                # always take the advisor-direct path (built below at
-                # `if body.ora_panel:`) so it inherits house_rules
-                # (role="advisor") + ADVISOR CONTEXT injection + zero
-                # tool exposure.  If we let the intent-gateway `casual`
-                # branch return here for an advisor turn, the reply
-                # would ship with a generic ORA-copilot system prompt
-                # instead of the advisor rules — a silent house-rules
-                # violation.  Skip the casual short-circuit when
-                # ora_panel is on.
-                #
-                # 2026-08-25 — safe-default fix (Engineering Gap #1,
-                # real bug): `clarify` (confidence <0.72, genuinely
-                # uncertain) used to fall through to the FULL agentic
-                # tool-enabled pipeline below — the opposite of the
-                # safe-default principle. It now takes the exact same
-                # no-tools direct-LLM branch as `casual` instead of a
-                # separate path — uncertain must never mean "give it
-                # tools," it should mean "answer carefully, no risk."
-                if _tier in ("casual", "clarify") and not body.ora_panel:
-                    from services.response_confidence import is_confirmation_reply, NO_PENDING_FIX_MESSAGE
-                    if is_confirmation_reply(body.prompt or "") and not _prior_fix_signal:
-                        # 2026-08-28 · NEW P0 Task 2 — bare confirmation
-                        # with NOTHING pending: never let the free-form
-                        # casual LLM improvise a false "Approved!"/
-                        # "Shipped!" reply. Deterministic, honest.
-                        result = {
-                            "ok":               True,
-                            "content":          NO_PENDING_FIX_MESSAGE,
-                            "provider":         "intent-gateway-no-pending-fix",
-                            "fallback_chain":   ["intent_casual_no_pending_fix"],
-                            "iterations":       0,
-                            "tool_calls_run":   0,
-                            "tool_invocations": [],
-                            "intent":           _intent_result,
-                            "tier":             _tier,
-                            "mode":             "chat",
-                        }
-                        await q.put({"type": "result", "result": result})
-                        return
-                    # Direct LLM reply path — no tool calls, fast.
-                    try:
-                        from services.intent_gateway_casual_reply import casual_direct_reply
-                        from services.response_confidence import apply_no_false_success_guard
-                        from services.business_voice_filter import apply_business_owner_guards
-                        _casual_reply_text = await casual_direct_reply(
-                            body.prompt, prior_assistant_text=_prior_turn_text,
-                            session_summary=_session_summary,
-                        )
-                        _casual_reply_text = apply_no_false_success_guard(
-                            body.prompt or "", _casual_reply_text, _prior_fix_signal,
-                        )
-                        # R1/R2 (2026-08-31) — single guard chain (see
-                        # apply_business_owner_guards docstring).
-                        _casual_reply_text = await apply_business_owner_guards(
-                            getattr(body, "ora_panel", False), _casual_reply_text,
-                            body.prompt or "",
-                            session_id=body.session_id, user_id=user.get("user_id"),
-                        )
-                        # Iter 212m-155 — BUG FIX: previously set `reply`
-                        # here, but the SSE worker downstream reads
-                        # `result["content"]` (line ~2081) to stream
-                        # tokens.  Key mismatch caused every casual
-                        # "hi" greeting on PROD to render as an empty
-                        # assistant bubble (caught by iter 212m-154
-                        # PROD chat E2E).  Switching to the canonical
-                        # `content` key — same shape as every other
-                        # mode (B/D/F/orchestrator).
-                        result = {
-                            "ok":               True,
-                            "content":          _casual_reply_text,
-                            "provider":         "intent-gateway-casual",
-                            "fallback_chain":   ["intent_casual"],
-                            "iterations":       1,
-                            "tool_calls_run":   0,
-                            "tool_invocations": [],
-                            "intent":           _intent_result,
-                            "tier":             _tier,
-                            "mode":             "chat",
-                        }
-                        await q.put({"type": "result", "result": result})
-                        return
-                    except Exception as _ce:
-                        # If the cheap LLM trips, fall through to the
-                        # orchestrator path — never blank-screen the user.
-                        logger.warning(
-                            "intent_gateway %s path failed (%r) — "
-                            "falling through to orchestrator", _tier, _ce,
-                        )
 
                 if _tier == "query":
                     # Iter 388k — Bug 12 fix. Bumped from 2 → 3.  At 2

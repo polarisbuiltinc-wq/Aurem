@@ -262,14 +262,33 @@ def test_t_no_duplicate_guard_wiring():
     `services.commit_boundary.resolve_turn_start` (which itself
     dispatches to THIS module's `maybe_execute_pending` only when
     COMMIT_BOUNDARY_ENABLED=false) -- so chat.py itself no longer
-    references `maybe_execute_pending` directly; the call-site-count
-    invariant moves to `resolve_turn_start`."""
-    import routers.chat as chat_mod
-    src = inspect.getsource(chat_mod)
+    references `maybe_execute_pending` directly.
 
-    assert src.count("resolve_turn_start(") == 2, (
+    2026-09-06 Phase 1 chat.py refactor (the "load-bearing dedup"):
+    the confirm-boundary check is now ONE OF FIVE pre-LLM checks
+    (confirm-boundary / intent-classify / upgrade-offer / self-bug /
+    casual-direct-reply) collapsed into ONE shared function,
+    `routers.chat_pre_llm.resolve_pre_llm`, that both chat_send and
+    chat_stream call identically -- so `resolve_turn_start(` itself
+    no longer appears directly in routers/chat.py at all (it now
+    lives inside `resolve_pre_llm`); the call-site-count invariant
+    moves to `resolve_pre_llm(`."""
+    import routers.chat as chat_mod
+    import routers.chat_pre_llm as pre_llm_mod
+    src = inspect.getsource(chat_mod)
+    pre_llm_src = inspect.getsource(pre_llm_mod)
+
+    assert src.count("resolve_pre_llm(") == 2, (
         "expected exactly 2 call sites (chat_send + chat_stream), "
-        f"found {src.count('resolve_turn_start(')}"
+        f"found {src.count('resolve_pre_llm(')}"
+    )
+    assert src.count("resolve_turn_start(") == 0, (
+        "the confirm-boundary check should no longer be called "
+        "directly from routers/chat.py -- it now lives inside the "
+        "single shared routers.chat_pre_llm.resolve_pre_llm()"
+    )
+    assert pre_llm_src.count("resolve_turn_start(") == 1, (
+        "resolve_pre_llm should call the confirm-boundary exactly once"
     )
     assert src.count("maybe_execute_pending(") == 0, (
         "chat.py should no longer call the legacy confirm_execution "
@@ -280,18 +299,18 @@ def test_t_no_duplicate_guard_wiring():
         f"found {src.count('apply_output_guards(')}"
     )
     # The individual guards are no longer called ad-hoc in chat.py
-    # outside the shared helper -- except the 2 deliberate EARLY
-    # casual-branch applications of apply_no_false_success_guard,
-    # which predate this round and apply to an intermediate draft
-    # before it becomes `result`, not a duplicate of the final
-    # universal guard chain.
+    # outside the shared helper. The 2 EARLY casual-branch
+    # applications of apply_no_false_success_guard (pre-dating this
+    # round, applying to an intermediate draft before it becomes
+    # `result`) moved into resolve_pre_llm() along with the rest of
+    # the casual-direct-reply branch in the 2026-09-06 refactor.
     assert src.count("apply_no_edit_deadend_guard(") == 0
     assert src.count("apply_no_orphan_confirm_guard(") == 0
     assert src.count("apply_fabricated_content_guard(") == 0
-    assert src.count("apply_no_false_success_guard(") == 2, (
-        "expected exactly 2 EARLY casual-branch applications "
-        "(pre-dating this round); the universal chain now goes "
-        "through apply_output_guards() instead"
+    assert src.count("apply_no_false_success_guard(") == 0
+    assert pre_llm_src.count("apply_no_false_success_guard(") == 1, (
+        "expected exactly 1 EARLY casual-branch application inside "
+        "the single shared resolve_pre_llm()"
     )
 
     import services.chat_helpers as ch_mod
