@@ -29,7 +29,10 @@ BACKEND_PUBLIC = (os.environ.get("REACT_APP_BACKEND_URL")
                   ).rstrip("/") + "/api/aurem-dev"
 
 CTO_ROUTER = Path("/app/backend/routers/cto_projects.py")
-CHAT_ROUTER = Path("/app/backend/routers/chat.py")
+# 2026-09-08 StreamState refactor — Mode D/E dispatch moved from
+# stream.py's inline _worker() into worker.py's `_mode_d_e()`
+# (mechanical move, same source lines).
+CHAT_ROUTER = Path("/app/backend/routers/chat/worker.py")
 ADMIN_USERS_ROUTER = Path("/app/backend/routers/admin_users.py")
 
 

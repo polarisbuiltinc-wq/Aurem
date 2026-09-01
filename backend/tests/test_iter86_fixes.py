@@ -64,7 +64,7 @@ def test_chat_hard_timeout_is_env_configurable():
     the real p95 for GitHub-heavy prompts; the assertion tracks the
     current default. The env-configurable contract (the ONLY thing
     the test actually cares about) is preserved."""
-    src = _read("backend/routers/chat.py")
+    src = _read("backend/routers/chat/stream.py")
     # Old flat literal must be gone.
     assert "HARD_TIMEOUT_S = 90.0" not in src, (
         "HARD_TIMEOUT_S still hardcoded to 90 — real user repos blow "
@@ -76,29 +76,29 @@ def test_chat_hard_timeout_is_env_configurable():
         r'os\.getenv\(\s*"CHAT_HARD_TIMEOUT_S"\s*,\s*"1[58]0"\s*\)',
         src,
     ), (
-        "routers/chat.py must set HARD_TIMEOUT_S via "
+        "routers/chat/stream.py must set HARD_TIMEOUT_S via "
         'os.getenv("CHAT_HARD_TIMEOUT_S", "150" or "180") — the '
         "env-configurable contract is what Iter 86 locked in."
     )
     # The file must actually import os so the getenv call doesn't NameError.
     assert re.search(r"^import os$", src, re.MULTILINE), (
-        "routers/chat.py uses os.getenv but doesn't `import os` — that "
+        "routers/chat/stream.py uses os.getenv but doesn't `import os` — that "
         "would NameError at startup"
     )
 
 
 def test_chat_hard_timeout_default_is_a_real_float():
-    """Smoke-import the module and inspect the runtime resolved value
-    with no env override set."""
-    import importlib
-    # Make sure we get a fresh import with no override.
+    """Confirm the env knob round-trips via the module's symbol table.
+    (Value is defined inside an async generator so it can't be
+    inspected directly at import time — checked via source instead.
+    NOTE: do NOT importlib.reload(routers.chat) here — the package's
+    4 submodules share ONE `router` object via `from . import router`;
+    reloading __init__.py replaces that attribute with a fresh, empty
+    APIRouter and orphans every route registered by the submodules,
+    which silently 404s every chat endpoint in any test file that
+    runs after this one in the same session.)"""
     os.environ.pop("CHAT_HARD_TIMEOUT_S", None)
-    import routers.chat as chat_mod  # noqa: E402
-    importlib.reload(chat_mod)
-    # The value is defined inside an async generator so we can't
-    # inspect it directly — but we can confirm the env knob round-trips
-    # via the module's symbol table.
-    src = _read("backend/routers/chat.py")
+    src = _read("backend/routers/chat/stream.py")
     m = re.search(
         r'HARD_TIMEOUT_S\s*=\s*float\(os\.getenv\("CHAT_HARD_TIMEOUT_S",\s*"(\d+(?:\.\d+)?)"\)\)',
         src,

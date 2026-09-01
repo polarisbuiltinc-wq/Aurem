@@ -146,11 +146,8 @@ def test_chat_router_timeout_emits_tokens_not_just_error():
     """The 90s timeout used to emit `{"error": ...}` which the
     frontend renders red. Iter 55 emits proper `meta` + `token` SSE
     frames so the user gets a real assistant message."""
-    src_path = os.path.join(
-        os.path.dirname(__file__), "..", "routers", "chat.py"
-    )
-    with open(src_path, encoding="utf-8") as fh:
-        src = fh.read()
+    from tests._chat_pkg_src import chat_package_source
+    src = chat_package_source()
     # The old "AUREM timed out after Xs" error literal must be GONE.
     assert "AUREM timed out after" not in src, (
         "regression — the old red-error timeout banner is back. The "
@@ -176,9 +173,6 @@ def test_chat_with_tools_accepts_live_invocations_ref():
 
 
 def test_chat_router_passes_live_invocations_ref():
-    src_path = os.path.join(
-        os.path.dirname(__file__), "..", "routers", "chat.py"
-    )
-    with open(src_path, encoding="utf-8") as fh:
-        src = fh.read()
+    from tests._chat_pkg_src import chat_package_source
+    src = chat_package_source()
     assert "live_invocations_ref=_published" in src

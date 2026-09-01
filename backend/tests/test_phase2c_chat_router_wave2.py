@@ -112,18 +112,24 @@ def client(fake_db):
     from cto_services import db as _dbmod
 
     old_dbmod_get_db = _dbmod.get_db
-    old_get_db = router_mod.get_db
-    old_current_dev = router_mod.current_dev
+    # 2026-09-08 chat.py -> chat/ package split — get_db/current_dev are
+    # imported independently by each submodule; this shared fixture
+    # covers history/misc/stream endpoints, so patch all 4 submodules.
+    _submods = (router_mod.misc, router_mod.turn, router_mod.stream, router_mod.history)
+    _old_get_db = {m: m.get_db for m in _submods}
+    _old_current_dev = {m: m.current_dev for m in _submods}
 
     _dbmod.set_db(fake_db)
-    router_mod.get_db = lambda: fake_db
+    for m in _submods:
+        m.get_db = lambda: fake_db
 
     async def _fake_current_dev(authorization=None):
         if not authorization:
             from fastapi import HTTPException as _HE
             raise _HE(401, "Authorization header missing")
         return USER
-    router_mod.current_dev = _fake_current_dev
+    for m in _submods:
+        m.current_dev = _fake_current_dev
 
     app = FastAPI()
     app.include_router(router_mod.router, prefix="/api/aurem-dev")
@@ -131,15 +137,16 @@ def client(fake_db):
 
     _dbmod.set_db(None)
     _dbmod.get_db = old_dbmod_get_db
-    router_mod.get_db = old_get_db
-    router_mod.current_dev = old_current_dev
+    for m in _submods:
+        m.get_db = _old_get_db[m]
+        m.current_dev = _old_current_dev[m]
 
 
 # ── GET /chat/sessions ──────────────────────────────────────────────
 class TestChatSessionsList:
     def test_db_none_returns_empty(self, client, monkeypatch):
         from routers import chat as router_mod
-        monkeypatch.setattr(router_mod, "get_db", lambda: None)
+        monkeypatch.setattr(router_mod.history, "get_db", lambda: None)
         r = client.get("/api/aurem-dev/chat/sessions", headers=AUTH)
         assert r.status_code == 200
         assert r.json() == {"ok": True, "sessions": []}
@@ -189,7 +196,7 @@ class TestChatFeedback:
 
     def test_db_none_503(self, client, monkeypatch):
         from routers import chat as router_mod
-        monkeypatch.setattr(router_mod, "get_db", lambda: None)
+        monkeypatch.setattr(router_mod.misc, "get_db", lambda: None)
         r = client.post("/api/aurem-dev/chat/feedback", headers=AUTH,
                          json={"session_id": "s1", "turn_index": 0, "vote": "up"})
         assert r.status_code == 503
@@ -212,7 +219,7 @@ class TestChatFeedback:
 class TestChatSessionDelete:
     def test_db_none_503(self, client, monkeypatch):
         from routers import chat as router_mod
-        monkeypatch.setattr(router_mod, "get_db", lambda: None)
+        monkeypatch.setattr(router_mod.history, "get_db", lambda: None)
         r = client.delete("/api/aurem-dev/chat/sessions/s1", headers=AUTH)
         assert r.status_code == 503
 
@@ -232,7 +239,7 @@ class TestChatSessionDelete:
 class TestChatSessionClearMessages:
     def test_db_none_503(self, client, monkeypatch):
         from routers import chat as router_mod
-        monkeypatch.setattr(router_mod, "get_db", lambda: None)
+        monkeypatch.setattr(router_mod.history, "get_db", lambda: None)
         r = client.delete("/api/aurem-dev/chat/sessions/s1/messages", headers=AUTH)
         assert r.status_code == 503
 

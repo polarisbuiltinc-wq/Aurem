@@ -272,7 +272,8 @@ def test_orchestrator_fires_step_hook_on_tool_dispatch():
 
 
 def test_chat_sse_registers_step_callback():
-    src = (BACKEND / "routers" / "chat.py").read_text(encoding="utf-8")
+    from tests._chat_pkg_src import chat_package_source
+    src = chat_package_source()
     # SSE worker must define a `_step` callback that pushes to the queue
     # AND pass step_hook=_step into chat_with_tools.
     assert "def _step(" in src
@@ -282,7 +283,8 @@ def test_chat_sse_registers_step_callback():
 
 
 def test_chat_sse_forwards_step_events_to_client():
-    src = (BACKEND / "routers" / "chat.py").read_text(encoding="utf-8")
+    from tests._chat_pkg_src import chat_package_source
+    src = chat_package_source()
     # The consumer-side `while True:` loop must have a branch that
     # ships the step event back out as an SSE frame.
     assert 'ev["type"] == "step"' in src

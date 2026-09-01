@@ -125,15 +125,20 @@ def client(fake_db):
             raise _HE(401, "Authorization header missing")
         return USER
 
-    old_current_dev = router_mod.current_dev
-    router_mod.current_dev = _fake_current_dev
+    # 2026-09-08 chat.py -> chat/ package split — shared fixture covers
+    # both /chat/send (turn.py) and /chat/stream (stream.py) tests below.
+    _submods = (router_mod.misc, router_mod.turn, router_mod.stream, router_mod.history)
+    _old = {m: m.current_dev for m in _submods}
+    for m in _submods:
+        m.current_dev = _fake_current_dev
 
     app = FastAPI()
     app.include_router(router_mod.router, prefix="/api/aurem-dev")
     c = TestClient(app)
     yield c
 
-    router_mod.current_dev = old_current_dev
+    for m in _submods:
+        m.current_dev = _old[m]
     _dbmod.set_db(None)
 
 
@@ -164,10 +169,10 @@ class TestChatSendMoreExceptionSwallows:
              patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
              patch("services.ora_council_retriever.get_council_few_shot",
                   AsyncMock(side_effect=RuntimeError("council down"))), \
-             patch("routers.chat.chat_with_tools",
+             patch("routers.chat.turn.chat_with_tools",
                   AsyncMock(return_value={"content": "hi", "provider": "deepseek", "meta": {}})), \
              patch("services.response_confidence.response_seems_mismatched", return_value=False), \
-             patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)):
+             patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)):
             r = client.post("/api/aurem-dev/chat/send", headers=AUTH,
                             json={"prompt": "hello", "project_id": "home", "session_id": "s1"})
         assert r.status_code == 200, r.text
@@ -181,10 +186,10 @@ class TestChatSendMoreExceptionSwallows:
                   return_value="[RULES] Be nice"), \
              patch("services.house_rules.get_active_chat_prompt",
                   AsyncMock(return_value="Extra chat instructions")), \
-             patch("routers.chat.chat_with_tools",
+             patch("routers.chat.turn.chat_with_tools",
                   AsyncMock(return_value={"content": "hi", "provider": "deepseek", "meta": {}})), \
              patch("services.response_confidence.response_seems_mismatched", return_value=False), \
-             patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)):
+             patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)):
             r = client.post("/api/aurem-dev/chat/send", headers=AUTH,
                             json={"prompt": "hello", "project_id": "home", "session_id": "s1"})
         assert r.status_code == 200, r.text
@@ -194,11 +199,11 @@ class TestChatSendMoreExceptionSwallows:
              patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
              patch("services.response_confidence.response_seems_mismatched",
                   side_effect=RuntimeError("boom")), \
-             patch("routers.chat.chat_with_tools",
+             patch("routers.chat.turn.chat_with_tools",
                   AsyncMock(return_value={"content": "hi", "provider": "deepseek", "meta": {}})), \
-             patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)):
+             patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)):
             r = client.post("/api/aurem-dev/chat/send", headers=AUTH,
-                            json={"prompt": "hello", "project_id": "home", "session_id": "s1"})
+                            json={"prompt": "add a feature", "project_id": "home", "session_id": "s1"})
         assert r.status_code == 200, r.text
         assert r.json()["content"] == "hi"
 
@@ -206,12 +211,12 @@ class TestChatSendMoreExceptionSwallows:
         with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
              patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
              patch("services.loop_beta.assert_maxx_daily_budget", AsyncMock(return_value=None)), \
-             patch("routers.chat.chat_with_tools",
+             patch("routers.chat.turn.chat_with_tools",
                   AsyncMock(return_value={"content": "done", "provider": "claude", "meta": {}})), \
              patch("services.response_confidence.response_seems_mismatched", return_value=False), \
              patch("services.loop_beta.log_maxx_cost",
                   AsyncMock(side_effect=RuntimeError("cost log down"))), \
-             patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)):
+             patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)):
             r = client.post("/api/aurem-dev/chat/send", headers=AUTH,
                             json={"prompt": "add a feature", "project_id": "home",
                                   "session_id": "s1", "maxx_mode": True})
@@ -220,12 +225,12 @@ class TestChatSendMoreExceptionSwallows:
     def test_customer_cost_tracker_crash_is_swallowed(self, client, fake_db):
         with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
              patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-             patch("routers.chat.chat_with_tools",
+             patch("routers.chat.turn.chat_with_tools",
                   AsyncMock(return_value={"content": "hi", "provider": "deepseek", "meta": {}})), \
              patch("services.response_confidence.response_seems_mismatched", return_value=False), \
              patch("services.customer_cost_tracker.log_customer_chat_cost",
                   AsyncMock(side_effect=RuntimeError("cost tracker down"))), \
-             patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)):
+             patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)):
             r = client.post("/api/aurem-dev/chat/send", headers=AUTH,
                             json={"prompt": "hello", "project_id": "home", "session_id": "s1"})
         assert r.status_code == 200, r.text
@@ -239,11 +244,11 @@ class TestChatSendMoreExceptionSwallows:
 
         with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
              patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-             patch("routers.chat.chat_with_tools",
+             patch("routers.chat.turn.chat_with_tools",
                   AsyncMock(return_value={"content": "hi", "provider": "deepseek", "meta": {}})), \
              patch("services.response_confidence.response_seems_mismatched", return_value=False), \
-             patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)), \
-             patch.object(router_mod.logger, "info", side_effect=_boom_on_timing):
+             patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)), \
+             patch.object(router_mod.turn.logger, "info", side_effect=_boom_on_timing):
             r = client.post("/api/aurem-dev/chat/send", headers=AUTH,
                             json={"prompt": "hello", "project_id": "home", "session_id": "s1"})
         assert r.status_code == 200, r.text
@@ -255,12 +260,12 @@ class TestChatSendMoreExceptionSwallows:
         fake_db._cols["dev_users"] = _DevUsersColl()
         with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
              patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-             patch("routers.chat.chat_with_tools",
+             patch("routers.chat.turn.chat_with_tools",
                   AsyncMock(return_value={"content": "hi", "provider": "deepseek", "meta": {}})), \
              patch("services.response_confidence.response_seems_mismatched", return_value=False), \
              patch("services.signup_guards.emit_funnel_event",
                   AsyncMock(return_value=None)) as mock_emit, \
-             patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)):
+             patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)):
             r = client.post("/api/aurem-dev/chat/send", headers=AUTH,
                             json={"prompt": "hello", "project_id": "home", "session_id": "s1"})
         assert r.status_code == 200, r.text
@@ -301,7 +306,7 @@ class TestChatStreamSetupMore:
         # "an ineligible tier still gets downgraded" — use a free-tier
         # user (still ineligible) to keep testing that real behaviour.
         free_user = {**USER, "tier": "free"}
-        router_mod.current_dev = AsyncMock(return_value=free_user)
+        router_mod.stream.current_dev = AsyncMock(return_value=free_user)
         scope = {"type": "http", "client": ("1.2.3.4", 0), "headers": []}
         fake_request = Request(scope)
         body = router_mod.ChatBody(prompt="hello", project_id="home", session_id="s1",
@@ -310,8 +315,8 @@ class TestChatStreamSetupMore:
         async def go():
             with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-                 patch("routers.chat.is_founder_email", return_value=False), \
-                 patch("routers.chat._maybe_guard_shell_handoff_followup",
+                 patch("routers.chat.stream.is_founder_email", return_value=False), \
+                 patch("routers.chat.stream._maybe_guard_shell_handoff_followup",
                       AsyncMock(return_value=None)):
                 return await router_mod.chat_stream(fake_request, body, "Bearer u1")
 
@@ -324,7 +329,7 @@ class TestChatStreamSetupMore:
         from starlette.requests import Request
         from routers import chat as router_mod
         founder_user = {**USER, "tier": "founder"}
-        router_mod.current_dev = AsyncMock(return_value=founder_user)
+        router_mod.stream.current_dev = AsyncMock(return_value=founder_user)
         scope = {"type": "http", "client": ("1.2.3.4", 0), "headers": []}
         fake_request = Request(scope)
         body = router_mod.ChatBody(prompt="hello", project_id="home", session_id="s1",
@@ -333,7 +338,7 @@ class TestChatStreamSetupMore:
         async def go():
             with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-                 patch("routers.chat._maybe_guard_shell_handoff_followup",
+                 patch("routers.chat.stream._maybe_guard_shell_handoff_followup",
                       AsyncMock(return_value=None)):
                 return await router_mod.chat_stream(fake_request, body, "Bearer u1")
 
@@ -372,8 +377,8 @@ class TestChatStreamSetupMore:
         async def go():
             with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-                 patch("routers.chat.is_founder_email", return_value=False), \
-                 patch("routers.chat._maybe_guard_shell_handoff_followup",
+                 patch("routers.chat.stream.is_founder_email", return_value=False), \
+                 patch("routers.chat.stream._maybe_guard_shell_handoff_followup",
                       AsyncMock(return_value=None)):
                 return await router_mod.chat_stream(fake_request, body, "Bearer u1")
 
@@ -400,7 +405,7 @@ class TestChatStreamClarifyAndBrainContext:
         async def go():
             with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-                 patch("routers.chat._maybe_guard_shell_handoff_followup",
+                 patch("routers.chat.stream._maybe_guard_shell_handoff_followup",
                       AsyncMock(return_value="Did you mean to run `npm install`?")):
                 resp = await router_mod.chat_stream(fake_request, body, "Bearer u1")
             chunks = []
@@ -432,7 +437,7 @@ class TestChatStreamClarifyAndBrainContext:
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
                  patch("services.ora_context.build_ora_context",
                       AsyncMock(return_value={"repo_owner": "acme", "repo_name": "widgets"})), \
-                 patch("routers.chat._maybe_guard_shell_handoff_followup",
+                 patch("routers.chat.stream._maybe_guard_shell_handoff_followup",
                       AsyncMock(return_value=None)), \
                  patch("services.pat_vault.get_repo_token_or_error",
                       AsyncMock(return_value=("tok123", None, None))), \
@@ -460,7 +465,7 @@ class TestChatStreamClarifyAndBrainContext:
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
                  patch("services.ora_context.build_ora_context",
                       AsyncMock(return_value={"repo_owner": "acme", "repo_name": "widgets"})), \
-                 patch("routers.chat._maybe_guard_shell_handoff_followup",
+                 patch("routers.chat.stream._maybe_guard_shell_handoff_followup",
                       AsyncMock(return_value=None)), \
                  patch("services.pat_vault.get_repo_token_or_error",
                       AsyncMock(side_effect=RuntimeError("vault down"))), \
@@ -482,7 +487,7 @@ class TestChatStreamClarifyAndBrainContext:
         async def go():
             with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-                 patch("routers.chat._maybe_guard_shell_handoff_followup",
+                 patch("routers.chat.stream._maybe_guard_shell_handoff_followup",
                       AsyncMock(return_value=None)), \
                  patch("services.ora_council_retriever.get_council_few_shot",
                       AsyncMock(return_value=("recalled block", 3))), \
@@ -509,7 +514,7 @@ class TestChatStreamClarifyAndBrainContext:
         async def go():
             with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-                 patch("routers.chat._maybe_guard_shell_handoff_followup",
+                 patch("routers.chat.stream._maybe_guard_shell_handoff_followup",
                       AsyncMock(return_value=None)), \
                  patch("services.house_rules.get_active_house_rules",
                       AsyncMock(return_value="Advisor tone rule")), \
@@ -535,7 +540,7 @@ class TestSmallRemainingBranches:
 
     def test_chat_task_followup_db_none_503(self, client, monkeypatch):
         from routers import chat as router_mod
-        monkeypatch.setattr(router_mod, "get_db", lambda: None)
+        monkeypatch.setattr(router_mod.misc, "get_db", lambda: None)
         r = client.post("/api/aurem-dev/chat/task-followup", headers=AUTH,
                         json={"task_id": "t1", "session_id": "s1"})
         assert r.status_code == 503
@@ -565,7 +570,7 @@ class TestSmallRemainingBranches:
 
         async def _bad_created(authorization=None):
             return {**USER, "created_at": "not-a-number"}
-        router_mod.current_dev = _bad_created
+        router_mod.misc.current_dev = _bad_created
         with patch("services.llm.call_openrouter_model", AsyncMock(return_value="ok body")):
             r = client.post("/api/aurem-dev/chat/ora/draft-support-email", headers=AUTH,
                             json={"issue": "still broken"})
@@ -577,7 +582,7 @@ class TestSmallRemainingBranches:
 
         async def _no_created(authorization=None):
             return {"user_id": "u1", "email": "user@example.com", "tier": "pro"}
-        router_mod.current_dev = _no_created
+        router_mod.misc.current_dev = _no_created
         with patch("services.llm.call_openrouter_model", AsyncMock(return_value="ok body")):
             r = client.post("/api/aurem-dev/chat/ora/draft-support-email", headers=AUTH,
                             json={"issue": "still broken"})
@@ -601,10 +606,10 @@ class TestChatSendAndStreamRemainingSwallows:
              patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
              patch("services.house_rules.get_active_house_rules",
                   AsyncMock(side_effect=RuntimeError("house rules down"))), \
-             patch("routers.chat.chat_with_tools",
+             patch("routers.chat.turn.chat_with_tools",
                   AsyncMock(return_value={"content": "hi", "provider": "deepseek", "meta": {}})), \
              patch("services.response_confidence.response_seems_mismatched", return_value=False), \
-             patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)):
+             patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)):
             r = client.post("/api/aurem-dev/chat/send", headers=AUTH,
                             json={"prompt": "hello", "project_id": "home", "session_id": "s1"})
         assert r.status_code == 200, r.text
@@ -621,7 +626,7 @@ class TestChatSendAndStreamRemainingSwallows:
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
                  patch("services.llm.reset_last_provider",
                       side_effect=RuntimeError("boom")), \
-                 patch("routers.chat._maybe_guard_shell_handoff_followup",
+                 patch("routers.chat.stream._maybe_guard_shell_handoff_followup",
                       AsyncMock(return_value=None)):
                 return await router_mod.chat_stream(fake_request, body, "Bearer u1")
 
@@ -639,9 +644,9 @@ class TestChatSendAndStreamRemainingSwallows:
         async def go():
             with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-                 patch("routers.chat.get_repo_context",
+                 patch("routers.chat.stream.get_repo_context",
                       AsyncMock(side_effect=asyncio.TimeoutError)), \
-                 patch("routers.chat._maybe_guard_shell_handoff_followup",
+                 patch("routers.chat.stream._maybe_guard_shell_handoff_followup",
                       AsyncMock(return_value=None)):
                 return await router_mod.chat_stream(fake_request, body, "Bearer u1")
 
@@ -666,7 +671,7 @@ class TestChatSendAndStreamRemainingSwallows:
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
                  patch("services.ora_context.build_ora_context",
                       AsyncMock(return_value={"repo_owner": "acme", "repo_name": "widgets"})), \
-                 patch("routers.chat._maybe_guard_shell_handoff_followup",
+                 patch("routers.chat.stream._maybe_guard_shell_handoff_followup",
                       AsyncMock(return_value=None)):
                 return await router_mod.chat_stream(fake_request, body, "Bearer u1")
 
@@ -684,7 +689,7 @@ class TestChatSendAndStreamRemainingSwallows:
         async def go():
             with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-                 patch("routers.chat._maybe_guard_shell_handoff_followup",
+                 patch("routers.chat.stream._maybe_guard_shell_handoff_followup",
                       AsyncMock(return_value=None)), \
                  patch("services.ora_council_retriever.get_council_few_shot",
                       AsyncMock(side_effect=RuntimeError("council down"))):
@@ -704,7 +709,7 @@ class TestChatSendAndStreamRemainingSwallows:
         async def go():
             with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-                 patch("routers.chat._maybe_guard_shell_handoff_followup",
+                 patch("routers.chat.stream._maybe_guard_shell_handoff_followup",
                       AsyncMock(return_value=None)), \
                  patch("services.house_rules.get_active_house_rules",
                       AsyncMock(side_effect=RuntimeError("house rules down"))):
@@ -725,7 +730,7 @@ class TestChatSendAndStreamRemainingSwallows:
         async def go():
             with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-                 patch("routers.chat._maybe_guard_shell_handoff_followup",
+                 patch("routers.chat.stream._maybe_guard_shell_handoff_followup",
                       AsyncMock(return_value=None)), \
                  patch("services.house_rules.get_active_house_rules",
                       AsyncMock(side_effect=RuntimeError("house rules down"))):

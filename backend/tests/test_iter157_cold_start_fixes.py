@@ -111,9 +111,8 @@ def test_chat_context_builders_parallelised_and_bounded():
     forced fetch_url pre-fetch path, so this test no longer pins
     `build_url_context`. We still pin _safe(get_repo_context()).
     """
-    src = open(os.path.join(
-        os.path.dirname(__file__), "..", "routers", "chat.py"
-    )).read()
+    from tests._chat_pkg_src import chat_package_source
+    src = chat_package_source()
     assert "_safe(get_repo_context(" in src
     # Eager URL scraper removed — must NOT appear in chat.py routes.
     assert "_safe(build_url_context(" not in src

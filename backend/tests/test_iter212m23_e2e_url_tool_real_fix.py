@@ -237,7 +237,7 @@ class TestSourceCodeRemovalOfEagerScraper:
     """P0 — chat.py must not call build_url_context() live."""
 
     def test_build_url_context_only_in_comments(self):
-        path = "/app/backend/routers/chat.py"
+        path = "/app/backend/routers/chat/stream.py"
         with open(path, "r", encoding="utf-8") as fh:
             lines = fh.readlines()
         live_calls = []
@@ -250,7 +250,7 @@ class TestSourceCodeRemovalOfEagerScraper:
             f"build_url_context( still called live in chat.py: {live_calls}"
 
     def test_no_eager_import_of_build_url_context(self):
-        path = "/app/backend/routers/chat.py"
+        path = "/app/backend/routers/chat/stream.py"
         with open(path, "r", encoding="utf-8") as fh:
             src = fh.read()
         # Acceptable: the literal string appears in a NOTE comment.

@@ -255,8 +255,8 @@ def test_chat_py_dispatches_maybe_log_ora_escalation():
     """Static assurance: `routers/chat.py` still fires the shadow-log
     coroutine on the normal chat path. Prevents future refactors from
     silently disconnecting the pipeline."""
-    chat_py = Path(__file__).resolve().parent.parent / "routers" / "chat.py"
-    src = chat_py.read_text(encoding="utf-8")
+    from tests._chat_pkg_src import chat_package_source
+    src = chat_package_source()
     assert "from services.ora_learning import maybe_log_ora_escalation" in src, (
         "routers/chat.py no longer imports maybe_log_ora_escalation — "
         "shadow-learning pipeline is disconnected."

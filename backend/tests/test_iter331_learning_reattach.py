@@ -7,7 +7,7 @@ fine-tuning corpus)."""
 import re
 from pathlib import Path
 
-SRC = Path("/app/backend/routers/chat.py").read_text(encoding="utf-8")
+SRC = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history"))
 
 
 def test_mode_filter_accepts_chat_label():

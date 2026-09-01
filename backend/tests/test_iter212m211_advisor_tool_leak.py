@@ -290,7 +290,7 @@ async def test_advisor_house_rules_round_trip():
 def test_advisor_source_level_guardrails():
     """Fast source-string checks so a future refactor cannot silently
     remove the code-level guarantees.  Runs offline, no DB needed."""
-    src = open("/app/backend/routers/chat.py", encoding="utf-8").read()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history"))
     # 1. Sentinel log for house_rules(advisor) injection.
     assert "advisor_house_rules: injected=" in src, (
         "house_rules(advisor) injection sentinel log removed — "

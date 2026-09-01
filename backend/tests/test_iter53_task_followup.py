@@ -139,7 +139,7 @@ def test_endpoint_checks_followup_message_cache():
     generating — second call must return the cached text, not re-bill
     the LLM."""
     src_path = os.path.join(
-        os.path.dirname(__file__), "..", "routers", "chat.py"
+        os.path.dirname(__file__), "..", "routers", "chat", "misc.py"
     )
     with open(src_path, encoding="utf-8") as fh:
         src = fh.read()

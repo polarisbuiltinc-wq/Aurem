@@ -171,15 +171,22 @@ def client(fake_db):
             raise _HE(401, "Authorization header missing")
         return USER
 
-    old_current_dev = router_mod.current_dev
-    router_mod.current_dev = _fake_current_dev
+    # 2026-09-08 chat.py -> chat/ package split — `current_dev` is
+    # imported independently by each of the 4 submodules, so this
+    # shared fixture (used across every endpoint class in this file)
+    # must patch it on all 4, not just the __init__ shim.
+    _submods = (router_mod.misc, router_mod.turn, router_mod.stream, router_mod.history)
+    _old = {m: m.current_dev for m in _submods}
+    for m in _submods:
+        m.current_dev = _fake_current_dev
 
     app = FastAPI()
     app.include_router(router_mod.router, prefix="/api/aurem-dev")
     c = TestClient(app)
     yield c
 
-    router_mod.current_dev = old_current_dev
+    for m in _submods:
+        m.current_dev = _old[m]
     _dbmod.set_db(None)
 
 
@@ -304,7 +311,7 @@ class TestChatTaskFollowup:
         fake_db.chat_sessions.rows.append({
             "session_id": "s1", "user_id": "u1", "turns": [],
         })
-        with patch("routers.chat.call_llm_with_meta",
+        with patch("routers.chat.misc.call_llm_with_meta",
                   AsyncMock(return_value={"content": "✅ Done — button added."})):
             r = client.post("/api/aurem-dev/chat/task-followup", headers=AUTH,
                             json=self._body())
@@ -388,14 +395,14 @@ class TestChatTurnShipped:
 
     def test_db_not_connected(self, client, fake_db):
         from routers import chat as router_mod
-        router_mod.get_db = lambda: None
+        router_mod.misc.get_db = lambda: None
         try:
             r = client.post("/api/aurem-dev/chat/turn/shipped", headers=AUTH,
                             json=self._body())
             assert r.status_code == 503
         finally:
             from cto_services.db import get_db as real_get_db
-            router_mod.get_db = real_get_db
+            router_mod.misc.get_db = real_get_db
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -404,7 +411,7 @@ class TestChatTurnShipped:
 
 class TestSmallEndpoints:
     def test_list_agents_non_founder_no_ora(self, client):
-        with patch("services.usage.is_founder_email", return_value=False):
+        with patch("routers.chat.misc.is_founder_email", return_value=False):
             r = client.get("/api/aurem-dev/chat/agents/list", headers=AUTH)
         assert r.status_code == 200
         body = r.json()
@@ -412,7 +419,7 @@ class TestSmallEndpoints:
         assert all(a["id"] != "ora" for a in body["agents"])
 
     def test_list_agents_founder_with_ora_available(self, client):
-        with patch("services.usage.is_founder_email", return_value=True), \
+        with patch("routers.chat.misc.is_founder_email", return_value=True), \
              patch("services.ora_client.is_ora_available", return_value=True):
             r = client.get("/api/aurem-dev/chat/agents/list", headers=AUTH)
         assert r.status_code == 200
@@ -456,14 +463,14 @@ class TestChatSend:
     def test_happy_path_home_no_project(self, client, fake_db):
         with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
              patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-             patch("routers.chat.chat_with_tools",
+             patch("routers.chat.turn.chat_with_tools",
                   AsyncMock(return_value={"content": "Hi! How can I help?",
                                           "provider": "deepseek", "meta": {}})), \
              patch("services.response_confidence.response_seems_mismatched",
                   return_value=False), \
-             patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)):
+             patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)):
             r = client.post("/api/aurem-dev/chat/send", headers=AUTH,
-                            json={"prompt": "hello there", "project_id": "home",
+                            json={"prompt": "add a login page", "project_id": "home",
                                   "session_id": "s1"})
         assert r.status_code == 200, r.text
         body = r.json()
@@ -473,16 +480,16 @@ class TestChatSend:
     def test_low_confidence_mismatch_retries_then_falls_back(self, client, fake_db):
         with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
              patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-             patch("routers.chat.chat_with_tools",
+             patch("routers.chat.turn.chat_with_tools",
                   AsyncMock(return_value={"content": "Here's a ship suggestion...",
                                           "provider": "claude", "meta": {}})), \
              patch("services.response_confidence.response_seems_mismatched",
                   return_value=True), \
-             patch("routers.chat._regenerate_without_recall",
+             patch("routers.chat.turn._regenerate_without_recall",
                   AsyncMock(return_value=("", "claude"))), \
              patch("services.response_confidence.has_ship_suggestion",
                   return_value=True), \
-             patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)):
+             patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)):
             r = client.post("/api/aurem-dev/chat/send", headers=AUTH,
                             json={"prompt": "fix my bug", "project_id": "home",
                                   "session_id": "s1"})
@@ -495,17 +502,17 @@ class TestChatSend:
              patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
              patch("services.loop_beta.assert_maxx_daily_budget",
                   AsyncMock(return_value=None)), \
-             patch("routers.chat.chat_with_tools",
+             patch("routers.chat.turn.chat_with_tools",
                   AsyncMock(return_value={"content": "added the feature",
                                           "provider": "claude",
                                           "meta": {"deepseek_cost_usd": 0.01,
                                                    "claude_cost_usd": 0.05}})), \
              patch("services.response_confidence.response_seems_mismatched",
                   return_value=False), \
-             patch("routers.chat.call_emergent_watchdog",
+             patch("routers.chat.turn.call_emergent_watchdog",
                   AsyncMock(return_value={"ok": True})), \
              patch("services.loop_beta.log_maxx_cost", AsyncMock(return_value=None)), \
-             patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)):
+             patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)):
             r = client.post("/api/aurem-dev/chat/send", headers=AUTH,
                             json={"prompt": "add a feature", "project_id": "home",
                                   "session_id": "s1", "maxx_mode": True})
@@ -518,16 +525,16 @@ class TestChatSend:
              patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
              patch("services.ora_context.build_ora_context",
                   AsyncMock(return_value={"repo_owner": "acme", "repo_name": "widgets"})), \
-             patch("routers.chat.get_repo_context",
+             patch("routers.chat.turn.get_repo_context",
                   AsyncMock(side_effect=_aio.TimeoutError)), \
              patch("services.ora_council_retriever.get_council_few_shot",
                   AsyncMock(return_value=("recalled block", 2))), \
-             patch("routers.chat.chat_with_tools",
+             patch("routers.chat.turn.chat_with_tools",
                   AsyncMock(return_value={"content": "here's the fix", "provider": "deepseek",
                                           "meta": {}})), \
              patch("services.response_confidence.response_seems_mismatched",
                   return_value=False), \
-             patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)):
+             patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)):
             r = client.post("/api/aurem-dev/chat/send", headers=AUTH,
                             json={"prompt": "fix the bug", "project_id": "p1",
                                   "session_id": "s1"})
@@ -896,7 +903,7 @@ class TestChatStreamSetup:
         from routers import chat as router_mod
 
         founder_user = {**USER, "tier": "founder"}
-        router_mod.current_dev = AsyncMock(return_value=founder_user)
+        router_mod.stream.current_dev = AsyncMock(return_value=founder_user)
 
         scope = {"type": "http", "client": ("1.2.3.4", 0), "headers": []}
         fake_request = Request(scope)
@@ -925,7 +932,7 @@ class TestChatStreamSetup:
         async def go():
             with patch("services.usage.assert_has_budget", AsyncMock(return_value=None)), \
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
-                 patch("routers.chat.detect_prompt_injection", return_value="jailbreak_marker"):
+                 patch("routers.chat.stream.detect_prompt_injection", return_value="jailbreak_marker"):
                 return await router_mod.chat_stream(fake_request, body, "Bearer u1")
 
         with pytest.raises(Exception) as exc_info:

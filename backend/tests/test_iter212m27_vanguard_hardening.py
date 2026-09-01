@@ -37,7 +37,7 @@ import os
 import re
 
 ROOT     = os.path.join(os.path.dirname(__file__), "..")
-CHAT_PY  = os.path.join(ROOT, "routers", "chat.py")
+from tests._chat_pkg_src import chat_package_source as _chat_src
 ORCH_PY  = os.path.join(ROOT, "services", "orchestrator.py")
 
 
@@ -60,7 +60,7 @@ def test_chat_send_checks_project_ownership_before_repo_ctx():
     Also — the reference now uses `get_db().cto_projects.find_one`
     instead of the older module-level `_db` alias.
     """
-    src = open(CHAT_PY).read()
+    src = _chat_src()
     # cto_projects (the real project collection) — either alias.
     assert "cto_projects.find_one(" in src
     # Ownership check MUST include user_id AND project_id.
@@ -86,7 +86,7 @@ def test_chat_send_checks_project_ownership_before_repo_ctx():
 def test_chat_send_wraps_get_repo_context_in_12s_timeout():
     """A hung GitHub call must not hold the chat turn for the full
     90 s LLM budget. 12 s ceiling with graceful empty-context degrade."""
-    src = open(CHAT_PY).read()
+    src = _chat_src()
     assert "asyncio.wait_for(\n                get_repo_context(" in src
     assert "timeout=12.0," in src
     # Must catch asyncio.TimeoutError (NOT bare except) and degrade.
@@ -109,7 +109,7 @@ def test_chat_send_uses_parameterised_logging_not_fstrings():
     call in chat.py that mentions pid/user_id MUST use %r/%s
     placeholders, never f-strings.
     """
-    src = open(CHAT_PY).read()
+    src = _chat_src()
     # The 12s-exceeded log line (proof that at least one surviving
     # hot-path log line uses parameterised format).
     assert (

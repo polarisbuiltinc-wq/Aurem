@@ -103,7 +103,7 @@ class TestIsUserAllowedUnit:
 
 class TestChatRouterGateWired:
     def test_chat_router_uses_loop_beta_gate(self):
-        p = pathlib.Path(BACKEND_DIR) / "routers" / "chat.py"
+        p = pathlib.Path(BACKEND_DIR) / "routers" / "chat" / "stream.py"
         src = p.read_text()
         # The fix must import and call the shared gate.
         assert "loop_beta" in src, "routers/chat.py must reference loop_beta"
@@ -114,7 +114,7 @@ class TestChatRouterGateWired:
 
     def test_chat_router_downgrade_still_happens_for_disallowed(self):
         """Confirm the disallowed → prompt downgrade branch still exists."""
-        p = pathlib.Path(BACKEND_DIR) / "routers" / "chat.py"
+        p = pathlib.Path(BACKEND_DIR) / "routers" / "chat" / "stream.py"
         src = p.read_text()
         # The fix explicitly sets execution_mode = "prompt" when not allowed.
         assert 'body.execution_mode = "prompt"' in src or \

@@ -120,7 +120,7 @@ def pro_token(mongo):
 
 class TestChatRouterKillSwitchWired:
     def test_chat_stream_calls_kill_switch(self):
-        p = pathlib.Path(BACKEND_DIR) / "routers" / "chat.py"
+        p = pathlib.Path(BACKEND_DIR) / "routers" / "chat" / "stream.py"
         src = p.read_text()
         # The new delta.
         assert "is_kill_switch_on_async" in src, (
@@ -136,7 +136,7 @@ class TestChatRouterKillSwitchWired:
         """The kill-switch on /chat/stream must ONLY silently downgrade
         execution_mode to 'prompt'. It MUST NOT raise HTTPException(403)
         — that would break non-loop chat when the switch is flipped."""
-        p = pathlib.Path(BACKEND_DIR) / "routers" / "chat.py"
+        p = pathlib.Path(BACKEND_DIR) / "routers" / "chat" / "stream.py"
         src = p.read_text()
         # Grab the loop-gate block and confirm no 403 inside it.
         idx = src.find("Iter 212m-181")

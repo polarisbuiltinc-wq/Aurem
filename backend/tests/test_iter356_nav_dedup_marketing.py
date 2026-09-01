@@ -19,7 +19,8 @@ FRONTEND = BACKEND.parent / "frontend" / "src"
 # ── Static locks ─────────────────────────────────────────────────────────
 
 def test_sessions_list_filters_e2e_prefix():
-    src = (BACKEND / "routers" / "chat.py").read_text()
+    from tests._chat_pkg_src import chat_package_source
+    src = chat_package_source()
     m = re.search(r"def chat_sessions_list.*?(?=\n@router|\nclass )", src, re.S)
     assert m, "chat_sessions_list not found"
     assert "E2E_SESSION_PREFIX_RE" in m.group(0), \

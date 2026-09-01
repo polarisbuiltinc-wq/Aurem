@@ -357,5 +357,6 @@ def test_parliament_untouched_by_iter_152():
 
 
 def test_chat_router_untouched_by_iter_152():
-    text = (_BACKEND / "routers" / "chat.py").read_text()
+    from tests._chat_pkg_src import chat_package_source
+    text = chat_package_source()
     assert "tool_router" not in text

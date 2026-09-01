@@ -140,7 +140,7 @@ def test_chat_stream_emits_task_handoff_frame_format():
     assert the literal frame string the source code emits matches the
     contract the frontend `api.js` consumer expects."""
     src_path = os.path.join(
-        os.path.dirname(__file__), "..", "routers", "chat.py"
+        os.path.dirname(__file__), "..", "routers", "chat", "stream.py"
     )
     with open(src_path, encoding="utf-8") as fh:
         src = fh.read()

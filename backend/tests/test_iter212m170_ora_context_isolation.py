@@ -305,8 +305,8 @@ def test_10_stream_route_no_silent_degrade():
     """Test 10 — Stream route must build ORAContext or BINContext at
     entry; must not contain the removed auto-infer log line.
     """
-    src = Path(__file__).resolve().parents[1] / "routers" / "chat.py"
-    text = src.read_text()
+    from tests._chat_pkg_src import chat_package_source
+    text = chat_package_source()
     assert "build_ora_context(" in text
     assert "chat.stream: auto-inferred sole project" not in text
 
@@ -352,8 +352,8 @@ def test_12_orchestrator_accepts_bin_ctx_kwarg():
 
 def test_13_chat_router_forwards_ctx_both_callsites():
     """Test 13 — Non-stream + stream call sites forward bin_ctx."""
-    src = Path(__file__).resolve().parents[1] / "routers" / "chat.py"
-    text = src.read_text()
+    from tests._chat_pkg_src import chat_package_source
+    text = chat_package_source()
     starts = [
         i for i in range(len(text))
         if text.startswith("chat_with_tools(", i)

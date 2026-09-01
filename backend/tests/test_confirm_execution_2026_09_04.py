@@ -275,7 +275,8 @@ def test_t_no_duplicate_guard_wiring():
     moves to `resolve_pre_llm(`."""
     import routers.chat as chat_mod
     import routers.chat_pre_llm as pre_llm_mod
-    src = inspect.getsource(chat_mod)
+    src = "".join(inspect.getsource(m) for m in
+                   (chat_mod.misc, chat_mod.turn, chat_mod.stream, chat_mod.history, chat_mod.worker))
     pre_llm_src = inspect.getsource(pre_llm_mod)
 
     assert src.count("resolve_pre_llm(") == 2, (

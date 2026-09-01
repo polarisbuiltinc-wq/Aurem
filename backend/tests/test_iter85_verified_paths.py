@@ -50,7 +50,8 @@ def test_orchestrator_returns_verified_paths_on_happy_path():
 
 
 def test_chat_done_frame_propagates_verified_paths():
-    src = _read("backend/routers/chat.py")
+    from tests._chat_pkg_src import chat_package_source
+    src = chat_package_source()
     assert '"verified_paths": result.get("verified_paths") or []' in src
 
 

@@ -24,7 +24,10 @@ import pathlib
 import re
 
 
-CHAT_ROUTER = pathlib.Path(__file__).resolve().parents[1] / "routers" / "chat.py"
+# 2026-09-08 StreamState refactor — the deadline-check loop moved
+# from stream.py's inline gen() while-loop into watchdog.py's
+# `consume_worker_queue()` (mechanical move, same source lines).
+CHAT_ROUTER = pathlib.Path(__file__).resolve().parents[1] / "routers" / "chat" / "watchdog.py"
 
 
 def _src() -> str:

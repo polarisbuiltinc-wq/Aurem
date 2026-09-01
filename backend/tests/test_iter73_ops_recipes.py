@@ -52,7 +52,8 @@ def test_looks_like_ops_request_rejects_codebase_requests():
 # ── chat.py wiring ────────────────────────────────────────────────────
 
 def test_chat_emits_ops_redirect_sse_event():
-    src = _read("backend/routers/chat.py")
+    from tests._chat_pkg_src import chat_package_source
+    src = chat_package_source()
     assert "looks_like_ops_request" in src
     assert '"type": "ops_redirect"' in src
     assert '"url": "/admin/ops"' in src

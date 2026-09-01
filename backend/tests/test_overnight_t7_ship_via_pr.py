@@ -254,3 +254,79 @@ class TestDeleteShipBranchNamespaced:
         )
         assert ok is True
         assert err is None
+
+
+
+# ── t_status_chip_pr_status_field (Wave 2, 2026-09-08) ───────────────
+# The frontend status chip (LoopLiveFeed.jsx::ShippedRow) polls
+# GET /loop/{id}/status to learn whether the opened PR has since been
+# merged/closed on GitHub. loop_status() must surface loop_outcomes'
+# pr_status (written by dispatch_pull_request_webhook, matched by
+# ship_branch) as an additive `pr_status` field — omitted when the
+# loop never went through ship_via_pr.
+class TestPrStatusChipField:
+    @pytest.mark.asyncio
+    async def test_pr_status_defaults_to_open_when_no_outcome_row_yet(self):
+        import routers.loop as loop_router
+
+        db = FakeDB()
+        db.loop_outcomes = FakeCollection()  # empty — webhook hasn't fired yet
+
+        async def fake_load_session(_db, loop_id):
+            return {
+                "loop_id": loop_id, "user_id": "u1", "state": "completed",
+                "context": {"commit": {"pr_branch": "auremcto/ship-x-1"}},
+            }
+
+        with respx.mock:
+            pass  # no HTTP calls expected
+
+        import unittest.mock as mock
+        with mock.patch.object(loop_router, "current_dev", new=mock.AsyncMock(return_value={"user_id": "u1"})), \
+             mock.patch.object(loop_router, "get_db", return_value=db), \
+             mock.patch.object(loop_router.eng, "load_session", new=fake_load_session), \
+             mock.patch("services.feature_flags.is_enabled", new=mock.AsyncMock(return_value=False)):
+            result = await loop_router.loop_status("loop-x", authorization="Bearer t")
+        assert result["pr_status"] == "open"
+
+    @pytest.mark.asyncio
+    async def test_pr_status_reflects_merged_outcome(self):
+        import routers.loop as loop_router
+        import unittest.mock as mock
+
+        db = FakeDB()
+        await db.loop_outcomes.insert_one({"ship_branch": "auremcto/ship-x-2", "pr_status": "merged"})
+
+        async def fake_load_session(_db, loop_id):
+            return {
+                "loop_id": loop_id, "user_id": "u1", "state": "completed",
+                "context": {"commit": {"pr_branch": "auremcto/ship-x-2"}},
+            }
+
+        with mock.patch.object(loop_router, "current_dev", new=mock.AsyncMock(return_value={"user_id": "u1"})), \
+             mock.patch.object(loop_router, "get_db", return_value=db), \
+             mock.patch.object(loop_router.eng, "load_session", new=fake_load_session), \
+             mock.patch("services.feature_flags.is_enabled", new=mock.AsyncMock(return_value=False)):
+            result = await loop_router.loop_status("loop-x", authorization="Bearer t")
+        assert result["pr_status"] == "merged"
+
+    @pytest.mark.asyncio
+    async def test_pr_status_omitted_for_direct_commit_ship(self):
+        """No pr_branch on the session (ship_via_pr never fired) ->
+        no pr_status key at all — the chip must not render for
+        direct-commit ships."""
+        import routers.loop as loop_router
+        import unittest.mock as mock
+
+        db = FakeDB()
+
+        async def fake_load_session(_db, loop_id):
+            return {"loop_id": loop_id, "user_id": "u1", "state": "completed",
+                    "context": {"commit": {"sha": "abc1234"}}}
+
+        with mock.patch.object(loop_router, "current_dev", new=mock.AsyncMock(return_value={"user_id": "u1"})), \
+             mock.patch.object(loop_router, "get_db", return_value=db), \
+             mock.patch.object(loop_router.eng, "load_session", new=fake_load_session), \
+             mock.patch("services.feature_flags.is_enabled", new=mock.AsyncMock(return_value=False)):
+            result = await loop_router.loop_status("loop-x", authorization="Bearer t")
+        assert "pr_status" not in result

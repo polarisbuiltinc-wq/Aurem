@@ -222,8 +222,8 @@ def test_module_exports_constants():
 
 def test_chat_stream_uses_intent_gateway():
     """chat.py must import the gateway and emit an `intent` SSE frame."""
-    src = Path(__file__).resolve().parent.parent / "routers" / "chat.py"
-    text = src.read_text()
+    from tests._chat_pkg_src import chat_package_source
+    text = chat_package_source()
     assert "from core.intent_gateway import classify" in text
     # Allow flexible whitespace ("type": "intent" / "type":   "intent").
     import re as _re
@@ -235,8 +235,8 @@ def test_chat_stream_uses_intent_gateway():
 
 def test_classify_intent_endpoint_exposed():
     """The dedicated POST /chat/classify-intent endpoint exists."""
-    src = Path(__file__).resolve().parent.parent / "routers" / "chat.py"
-    text = src.read_text()
+    from tests._chat_pkg_src import chat_package_source
+    text = chat_package_source()
     assert '@router.post("/classify-intent")' in text
     assert "escalate_to_llm=False" in text, \
         "Live UI endpoint must skip LLM for instant response"

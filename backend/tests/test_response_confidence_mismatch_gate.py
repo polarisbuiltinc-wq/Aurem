@@ -75,7 +75,8 @@ def _make_fake_chat_with_tools(reply_text):
 
 @pytest.fixture
 def client_factory(monkeypatch):
-    monkeypatch.setattr(chat_mod, "current_dev", _fake_current_dev)
+    monkeypatch.setattr(chat_mod.turn, "current_dev", _fake_current_dev)
+    monkeypatch.setattr(chat_mod.stream, "current_dev", _fake_current_dev)
 
     async def _noop(*a, **kw):
         return None
@@ -97,7 +98,12 @@ def client_factory(monkeypatch):
     monkeypatch.setattr("core.intent_gateway.classify", _force_query)
 
     def _build(reply_text):
-        monkeypatch.setattr(chat_mod, "chat_with_tools", _make_fake_chat_with_tools(reply_text))
+        monkeypatch.setattr(chat_mod.turn, "chat_with_tools", _make_fake_chat_with_tools(reply_text))
+        monkeypatch.setattr(chat_mod.stream, "chat_with_tools", _make_fake_chat_with_tools(reply_text))
+        # 2026-09-08 StreamState refactor — chat_stream's dispatch now
+        # runs through worker.py's own `chat_with_tools` import (its
+        # own bound name, separate from stream.py's).
+        monkeypatch.setattr(chat_mod.worker, "chat_with_tools", _make_fake_chat_with_tools(reply_text))
         # The auto-retry-without-recall path (services/chat_helpers.py,
         # added 2026-08-21) imports chat_with_tools directly from
         # services.orchestrator rather than via routers.chat's
@@ -226,7 +232,7 @@ def test_mismatch_auto_retry_resolves_silently(monkeypatch, client_factory):
     and low_confidence must be False (self-corrected, not a fallback)."""
     fake, calls = _make_stateful_chat_with_tools(MISMATCHED_REPLY, "5 + 5 = 10.")
     client = client_factory("unused")  # placeholder, overridden below
-    monkeypatch.setattr(chat_mod, "chat_with_tools", fake)
+    monkeypatch.setattr(chat_mod.turn, "chat_with_tools", fake)
     # Retry path (services/chat_helpers.py) imports chat_with_tools
     # directly from services.orchestrator — patch there too so the
     # SAME stateful fake sees both the first call and the retry.

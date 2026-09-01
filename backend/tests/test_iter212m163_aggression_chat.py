@@ -191,10 +191,11 @@ def test_block_7_7_tool_router_filter(founder_token, founder_project_id):
 
 # -------- BLOCK 6.3 / 8.x — source inspection only --------
 def test_block_6_3_cascade_source_exists():
-    """Verify Groq + DeepSeek cascade exists in chat router."""
-    with open("/app/backend/routers/chat.py") as fh:
+    """Verify Groq + DeepSeek cascade exists in chat router. 2026-09-08
+    StreamState refactor — the advisor cascade moved to worker.py's
+    `_ora_agent_cascade()` (mechanical move, same source lines)."""
+    with open("/app/backend/routers/chat/worker.py") as fh:
         src = fh.read()
-    assert "_call_groq(" in src, "Groq cascade fn missing"
     assert "_call_deepseek(" in src, "DeepSeek cascade fn missing"
     # advisor section 1695-1880
     advisor_section = src[1695*50:1880*200] if len(src) > 100000 else src

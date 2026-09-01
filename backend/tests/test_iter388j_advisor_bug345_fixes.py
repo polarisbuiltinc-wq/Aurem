@@ -104,7 +104,10 @@ def test_advisor_context_never_raises_from_missing_repo():
 
 def test_data_honesty_rule_present_in_advisor_directive():
     from routers import chat as chat_mod
-    src = Path(chat_mod.__file__).read_text()
+    # 2026-09-08 StreamState refactor — the advisor directive moved
+    # from stream.py's inline ora_panel block into worker.py's
+    # `_advisor_panel()` (mechanical move, same source lines).
+    src = Path(chat_mod.worker.__file__).read_text()
     # The literal marker string that identifies the rule block.
     assert "DATA HONESTY (highest priority):" in src
     # Anti-fabrication essentials — these three phrases must appear.
@@ -115,7 +118,7 @@ def test_data_honesty_rule_present_in_advisor_directive():
 
 def test_screenshot_vision_carveout_present():
     from routers import chat as chat_mod
-    src = Path(chat_mod.__file__).read_text()
+    src = Path(chat_mod.worker.__file__).read_text()
     assert "_is_data_chip" in src
     assert "diagnose failed run" in src.lower()
     assert "if body.screenshot_b64 and not _is_data_chip" in src

@@ -171,7 +171,7 @@ async def test_cross_user_ownership_still_404():
 def test_chat_prompt_has_infra_guard_source():
     """Prompt-injection rule is enforced by source inspection so a
     future refactor can't quietly delete it and pass CI."""
-    src = open("/app/backend/routers/chat.py", encoding="utf-8").read()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history","worker"))
     assert "INFRA GUARD" in src, "chat.py lost the non-founder infra guard rule"
     assert "_is_founder_view" in src, \
         "chat.py must gate council/deploy prompt lines by founder role"

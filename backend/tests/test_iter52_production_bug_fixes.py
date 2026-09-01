@@ -129,16 +129,14 @@ def test_bug4_retry_task_propagates_maxx_mode():
 # ─── BUG 5 — chat.py council logger only A/B ────────────────────────────
 
 def test_bug5_council_logger_skips_mode_d_e():
-    src_path = os.path.join(
-        os.path.dirname(__file__), "..", "routers", "chat.py"
-    )
-    with open(src_path, encoding="utf-8") as fh:
-        src = fh.read()
+    from tests._chat_pkg_src import chat_package_source
+    src = chat_package_source()
     # The block must be guarded on _classified_mode in ("A","B"). The
     # exact tuple includes None so the legacy path (no mode set) still
-    # logs as A.
+    # logs as A. 2026-08-27 Iter 331 widened it to also accept "chat"
+    # (casual/advisor label) — see routers/chat/stream.py comment.
     assert "_classified_mode" in src
-    assert '_classified_mode in (None, "A", "B")' in src, (
+    assert '_classified_mode in (None, "A", "B", "chat")' in src, (
         "BUG 5 regression — Mode D/E replies could land in ora_council_logs."
     )
 

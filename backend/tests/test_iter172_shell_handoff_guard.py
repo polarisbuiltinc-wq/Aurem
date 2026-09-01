@@ -146,14 +146,14 @@ class TestFollowupGuard(unittest.IsolatedAsyncioTestCase):
         body = _make_body(prompt)
         from routers import chat as chat_mod
         db = _stub_db_with_handoff_message(handoff)
-        orig = chat_mod.get_db
-        chat_mod.get_db = lambda: db
+        orig = chat_mod.handoff_guard.get_db
+        chat_mod.handoff_guard.get_db = lambda: db
         try:
             return await _maybe_guard_shell_handoff_followup(
                 body=body, user_id="u1",
             )
         finally:
-            chat_mod.get_db = orig
+            chat_mod.handoff_guard.get_db = orig
 
     async def test_short_followup_after_shell_handoff_intercepted(self):
         # All of these are the patterns the user actually typed that
@@ -199,15 +199,15 @@ class TestFollowupGuard(unittest.IsolatedAsyncioTestCase):
         empty_db = MagicMock()
         empty_db.chat_sessions = MagicMock()
         empty_db.chat_sessions.find_one = AsyncMock(return_value={"messages": []})
-        orig = chat_mod.get_db
-        chat_mod.get_db = lambda: empty_db
+        orig = chat_mod.handoff_guard.get_db
+        chat_mod.handoff_guard.get_db = lambda: empty_db
         try:
             r = await _maybe_guard_shell_handoff_followup(
                 body=body, user_id="u1",
             )
             self.assertIsNone(r)
         finally:
-            chat_mod.get_db = orig
+            chat_mod.handoff_guard.get_db = orig
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ import re
 
 HR_PY     = pathlib.Path(__file__).resolve().parent.parent / "services" / "house_rules.py"
 ADMIN_PY  = pathlib.Path(__file__).resolve().parent.parent / "routers"  / "admin.py"
-CHAT_PY   = pathlib.Path(__file__).resolve().parent.parent / "routers"  / "chat.py"
+from tests._chat_pkg_src import chat_package_source as _chat_src
 
 
 def test_advisor_fields_present_in_singleton_default() -> None:
@@ -75,7 +75,7 @@ def test_chat_router_dispatches_on_admin_llm_choice() -> None:
     """The Ask Advisor branch in chat.py MUST honour the admin's
     LLM selection (5 branches: glm / claude / deepseek-chat /
     deepseek-direct / groq) — not always call _call_glm."""
-    src = CHAT_PY.read_text()
+    src = _chat_src()
     # Find the Ask Advisor branch (agent='ora').
     assert "Iter 212m-53 — Ask Advisor dedicated config" in src
     # All five LLM branches must be present.
@@ -93,7 +93,7 @@ def test_chat_router_injects_dedicated_advisor_prompt() -> None:
     """The admin-set advisor prompt must be prepended to the system
     prompt FIRST (highest priority), independent of the combined
     house rules block."""
-    src = CHAT_PY.read_text()
+    src = _chat_src()
     assert "get_active_advisor_prompt" in src
     assert "get_active_advisor_llm" in src
     # The advisor header must come BEFORE extra_sys + ORA_PANEL_TONE

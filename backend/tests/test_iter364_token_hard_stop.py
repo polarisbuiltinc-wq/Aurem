@@ -180,7 +180,8 @@ async def test_founder_never_blocked_even_when_over_limit():
 # will trip this.
 
 _MUST_GATE = {
-    "/app/backend/routers/chat.py":     ["chat_send", "chat_stream"],
+    "/app/backend/routers/chat/turn.py":   ["chat_send"],
+    "/app/backend/routers/chat/stream.py": ["chat_stream"],
     "/app/backend/routers/diagram.py":  ["generate_diagram"],
     "/app/backend/routers/upload.py":   ["upload_convert"],
 }

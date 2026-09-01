@@ -44,7 +44,7 @@ def test_loop_endpoint_exists_in_backend():
 
 
 def test_chat_history_endpoint_exists():
-    src = _read_be("routers/chat.py")
+    src = _read_be("routers/chat/history.py")
     assert "@router.get" in src
     # The /history route ChatPanel calls
     assert "/history" in src or "/chat/history" in src

@@ -70,9 +70,8 @@ def test_chat_router_caps_iters() -> None:
     routes cap max_tool_iters at the orchestrator's budget so a stray
     body parameter can't lift the ceiling."""
     import pathlib
-    src = (
-        pathlib.Path(__file__).resolve().parents[1] / "routers" / "chat.py"
-    ).read_text(encoding="utf-8")
+    from tests._chat_pkg_src import chat_package_source
+    src = chat_package_source()
     # Non-streaming path: must cap at the same budget.
     assert "min(body.max_tool_iters, 4)" in src or \
            "min(body.max_tool_iters, 5)" in src or \

@@ -292,8 +292,8 @@ def test_8_stream_route_no_silent_degrade_source_check():
     has been REMOVED (search should find zero hits of the auto-infer
     log line).
     """
-    src = Path(__file__).resolve().parents[1] / "routers" / "chat.py"
-    text = src.read_text()
+    from tests._chat_pkg_src import chat_package_source
+    text = chat_package_source()
     # New wiring: ora_context OR bin_context factory must be called.
     assert (
         "build_ora_context(" in text or "build_bin_context(" in text
@@ -382,8 +382,8 @@ def test_12_chat_router_forwards_bin_ctx_both_callsites():
     """Test 12 — pro/maxx both go through the SAME chat_with_tools
     call sites (send + stream); both must forward bin_ctx.
     """
-    src = Path(__file__).resolve().parents[1] / "routers" / "chat.py"
-    text = src.read_text()
+    from tests._chat_pkg_src import chat_package_source
+    text = chat_package_source()
     starts = [
         i for i in range(len(text))
         if text.startswith("chat_with_tools(", i)

@@ -143,8 +143,8 @@ def test_chat_router_passes_is_founder_to_orchestrator():
     at BOTH call sites (send + stream)."""
     from pathlib import Path
 
-    src = Path(__file__).resolve().parents[1] / "routers" / "chat.py"
-    text = src.read_text()
+    from tests._chat_pkg_src import chat_package_source
+    text = chat_package_source()
 
     # A non-greedy `.*?` regex breaks on inner `)` chars from things
     # like `system=(extra_sys + "\n\n" if extra_sys else None)`.  Walk

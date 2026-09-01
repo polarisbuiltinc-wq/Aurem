@@ -852,6 +852,19 @@ async def loop_status(loop_id: str,
     # allowlist test_admin_001). Gates the new countdown + Expired-card
     # UI so nothing changes for anyone else until the founder reviews.
     doc["workcard_enabled"] = await is_enabled("workcard_loop_receipts", user_id=user["user_id"])
+    # Wave 2 — PR status chip (2026-09-08). `dispatch_pull_request_webhook`
+    # writes the LIVE PR state ("open"/"merged"/"closed") to
+    # `loop_outcomes.pr_status`, keyed by `ship_branch` — a different
+    # collection than `loop_sessions`, so it was never surfaced to the
+    # frontend poll before. Additive-only field, same pattern as the
+    # `expires_at` field above (Build Prompt v4 · Phase C D4) — omitted
+    # when this loop never went through the ship_via_pr path.
+    pr_branch = ((doc.get("context") or {}).get("commit") or {}).get("pr_branch")
+    if pr_branch:
+        outcome = await db.loop_outcomes.find_one(
+            {"ship_branch": pr_branch}, {"_id": 0, "pr_status": 1},
+        )
+        doc["pr_status"] = (outcome or {}).get("pr_status") or "open"
     return doc
 
 

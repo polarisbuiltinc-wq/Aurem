@@ -27,7 +27,7 @@ ROOT = os.path.join(os.path.dirname(__file__), "..")
 LLM_PY   = os.path.join(ROOT, "services", "llm", "__init__.py")
 LLM_ROUTING_PY = os.path.join(ROOT, "services", "llm", "_routing.py")
 ORCH_PY  = os.path.join(ROOT, "services", "orchestrator.py")
-CHAT_PY  = os.path.join(ROOT, "routers", "chat.py")
+from tests._chat_pkg_src import chat_package_source as _chat_src
 
 
 # ── 1. Token cap raise ──────────────────────────────────────────────
@@ -75,7 +75,7 @@ def test_maybe_ship_shortcut_function_is_gone():
     """The auto-shipping helper must not exist anywhere in chat.py.
     Only mentions allowed are in NOTE comments documenting the
     removal."""
-    src = open(CHAT_PY).read()
+    src = _chat_src()
     # No live function definition.
     assert "async def _maybe_ship_shortcut" not in src
     # No call site (any occurrence outside a `#` comment line).
@@ -92,7 +92,7 @@ def test_maybe_ship_shortcut_function_is_gone():
 def test_ship_confirmations_keyword_set_is_gone():
     """The hard-coded keyword set (yes / ok / fix / ship / go…) that
     triggered auto-ship is removed."""
-    src = open(CHAT_PY).read()
+    src = _chat_src()
     assert "_SHIP_CONFIRMATIONS = {" not in src
     assert "_looks_like_ship_confirmation" not in src
     assert "_normalise_confirmation" not in src
@@ -101,7 +101,7 @@ def test_ship_confirmations_keyword_set_is_gone():
 def test_clarify_short_fix_guard_is_gone():
     """The sibling clarify guard depended on the same keyword
     detection and is also gone."""
-    src = open(CHAT_PY).read()
+    src = _chat_src()
     assert "async def _maybe_clarify_short_fix" not in src
     assert "_maybe_clarify_short_fix(" not in src
 
@@ -109,14 +109,14 @@ def test_clarify_short_fix_guard_is_gone():
 def test_shell_handoff_guard_still_present():
     """The shell-command handoff guard is orthogonal (non-shipping)
     and must remain so the worker doesn't hang on pip-install briefs."""
-    src = open(CHAT_PY).read()
+    src = _chat_src()
     assert "async def _maybe_guard_shell_handoff_followup" in src
     assert "_maybe_guard_shell_handoff_followup(" in src
 
 
 def test_handoff_fence_regex_still_present():
     """The shell guard reuses _HANDOFF_FENCE_RE; it must survive."""
-    src = open(CHAT_PY).read()
+    src = _chat_src()
     assert "_HANDOFF_FENCE_RE = re.compile(" in src
     assert "aurem-handoff" in src
 
@@ -140,6 +140,6 @@ def test_no_orphan_auto_ship_imports():
     """Sanity: nothing in chat.py imports from a non-existent
     `_maybe_ship_shortcut` module (defensive against partial
     revert)."""
-    src = open(CHAT_PY).read()
+    src = _chat_src()
     assert "from .ship_shortcut" not in src
     assert "import _maybe_ship_shortcut" not in src

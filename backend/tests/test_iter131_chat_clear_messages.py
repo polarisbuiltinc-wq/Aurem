@@ -12,7 +12,7 @@ import pathlib
 import re
 
 
-CHAT_ROUTER = pathlib.Path(__file__).resolve().parents[1] / "routers" / "chat.py"
+CHAT_ROUTER = pathlib.Path(__file__).resolve().parents[1] / "routers" / "chat" / "history.py"
 
 
 def _src() -> str:

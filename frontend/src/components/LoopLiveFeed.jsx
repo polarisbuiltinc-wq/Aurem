@@ -110,6 +110,35 @@ export function ShippedRow({ loopId, ship, onDone, onRollbackStarted }) {
   const [phase, setPhase] = useState(() =>
     _rollbackInFlight.get(loopId) ? "handed-off" : "idle");
   const [error, setError] = useState(null);
+  // Wave 2 (2026-09-08) — the PR status chip. Static "PR opened" never
+  // updated after the ship, even once the PR was merged/closed on
+  // GitHub. Poll /loop/{id}/status (already used by the rollback flow)
+  // every 5s until the chip reaches a terminal state, capped at 2min —
+  // same bounded-poll shape used elsewhere (background repo sync).
+  const [prStatus, setPrStatus] = useState("open");
+  useEffect(() => {
+    if (!ship.prUrl) return undefined;
+    let cancelled = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 24; // 24 * 5s = 2min
+    const poll = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      try {
+        const data = await getLoopStatus(loopId);
+        const live = data?.pr_status;
+        if (!cancelled && live) setPrStatus(live);
+        if (live === "merged" || live === "closed") return; // terminal, stop
+      } catch (_) {
+        // transient — keep polling, chip just stays at last-known state
+      }
+      if (!cancelled && attempts < MAX_ATTEMPTS) {
+        setTimeout(poll, 5000);
+      }
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, [loopId, ship.prUrl]);
   // Iter 362 · Bug B — in-app themed rollback confirmation modal.
   // Replaces the previous native window.confirm() (which rendered a
   // plain-white browser dialog pinned below the address bar, broke
@@ -257,6 +286,24 @@ export function ShippedRow({ loopId, ship, onDone, onRollbackStarted }) {
           <Info size={12} strokeWidth={2.5} />
         </span>
       )}
+      {ship.prUrl && (
+        <span
+          data-testid={`loop-shipped-pr-status-chip-${ship.shortSha}`}
+          data-pr-status={prStatus}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 3,
+            fontSize: 10, fontWeight: 600, padding: "1px 6px",
+            borderRadius: 999, whiteSpace: "nowrap",
+            color: prStatus === "merged" ? "#22C55E"
+                 : prStatus === "closed" ? "#9aa0a8" : "#eab308",
+            background: prStatus === "merged" ? "#22C55E22"
+                      : prStatus === "closed" ? "#9aa0a822" : "#eab30822",
+          }}
+        >
+          {prStatus === "merged" && <Check size={9} strokeWidth={3} />}
+          {prStatus === "merged" ? "Merged" : prStatus === "closed" ? "Closed" : "Open"}
+        </span>
+      )}
       {ship.prUrl ? (
         <a
           data-testid={`loop-shipped-pr-link-${ship.shortSha}`}
@@ -395,7 +442,7 @@ import {
   Check, AlertTriangle, AlertOctagon, Loader2, ExternalLink, RotateCcw,
   ChevronDown, ChevronUp, GitPullRequest, Info,
 } from "lucide-react";
-import { rollbackLoop } from "../lib/loopApi";
+import { rollbackLoop, getLoopStatus } from "../lib/loopApi";
 import OperationHistory from "./OperationHistory";
 import RollbackConfirmModal from "./RollbackConfirmModal";
 import { PreferredSourceButton } from "./PreferredSourceButton";

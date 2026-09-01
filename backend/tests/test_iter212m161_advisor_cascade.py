@@ -44,7 +44,7 @@ def test_advisor_temperature_in_config_map():
 def test_advisor_no_hardcoded_max_tokens_2500_in_chat_router():
     """The literal `max_tokens=2500` must no longer appear in the
     advisor block — every call must read from `cap_for('advisor')`."""
-    src = pathlib.Path("/app/backend/routers/chat.py").read_text()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history","worker"))
     # Slice the advisor block so we don't get false positives from
     # other parts of the file (which may legitimately use 2500
     # elsewhere — defensive).
@@ -61,7 +61,7 @@ def test_advisor_no_hardcoded_max_tokens_2500_in_chat_router():
 
 
 def test_advisor_block_imports_cap_and_temperature_helpers():
-    src = pathlib.Path("/app/backend/routers/chat.py").read_text()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history","worker"))
     # The new imports must be present in the advisor block.
     assert "cap_for, temperature_for" in src
     assert "_adv_max_tokens  = cap_for(\"advisor\")" in src
@@ -71,7 +71,7 @@ def test_advisor_block_imports_cap_and_temperature_helpers():
 def test_advisor_cascade_uses_groq_then_deepseek_no_claude_rescue():
     """The cascade must wire Groq (free) FIRST, then DeepSeek V3
     (cheap).  Claude must NOT appear as a rescue step (too expensive)."""
-    src = pathlib.Path("/app/backend/routers/chat.py").read_text()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history","worker"))
     start = src.find("Ask Advisor multi-model cascade")
     end   = src.find("activity[\"label\"] = \"thinking…\"", start)
     block = src[start:end]
@@ -93,7 +93,7 @@ def test_advisor_cascade_uses_groq_then_deepseek_no_claude_rescue():
 def test_advisor_self_rescue_guards():
     """When the admin-selected primary IS Groq, the Groq-rescue step
     must skip (no self-rescue).  Same for DeepSeek as primary."""
-    src = pathlib.Path("/app/backend/routers/chat.py").read_text()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history","worker"))
     start = src.find("Ask Advisor multi-model cascade")
     end   = src.find("activity[\"label\"] = \"thinking…\"", start)
     block = src[start:end]
@@ -108,7 +108,7 @@ def test_advisor_fallback_chain_field_populated():
     """The result emitted must include `fallback_chain` as a real list
     (not just `[provider_tag]`), so the SSE meta frame and Langfuse
     span surface the actual cascade walked at runtime."""
-    src = pathlib.Path("/app/backend/routers/chat.py").read_text()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history","worker"))
     start = src.find("Ask Advisor multi-model cascade")
     end   = src.find("activity[\"label\"] = \"thinking…\"", start)
     block = src[start:end]
@@ -121,7 +121,7 @@ def test_advisor_fallback_chain_field_populated():
 def test_advisor_provider_tag_marks_rescue():
     """Provider/model tags must distinguish a primary-success from a
     rescue-success so dashboards can compute rescue rate per primary."""
-    src = pathlib.Path("/app/backend/routers/chat.py").read_text()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history","worker"))
     start = src.find("Ask Advisor multi-model cascade")
     end   = src.find("activity[\"label\"] = \"thinking…\"", start)
     block = src[start:end]

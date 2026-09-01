@@ -86,7 +86,7 @@ def test_t_voice_aurem_handoff_exemption_guard_present_in_chat_py():
     # fence, or extractHandoffBrief()'s file-path gate breaks and the
     # Approve button silently stops rendering. Source-text lock so a
     # future edit can't remove the guard without this test failing.
-    src = open("routers/chat.py").read()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history"))
     guarded_blocks = src.count('"aurem-handoff" not in content')
     assert guarded_blocks >= 2, (
         "expected the aurem-handoff exemption guard at both chat_send "

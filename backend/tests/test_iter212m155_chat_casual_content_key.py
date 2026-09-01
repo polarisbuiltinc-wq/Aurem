@@ -31,7 +31,8 @@ def test_casual_branch_uses_content_key():
     chat_stream, testing_agent code-review flag on single-surface
     drift risk). The result-dict shape (content key, provider tag)
     still lives at the chat.py call sites. Check both."""
-    chat_text = (_BACKEND / "routers" / "chat.py").read_text()
+    from tests._chat_pkg_src import chat_package_source
+    chat_text = chat_package_source()
     reply_text = (_BACKEND / "services" / "intent_gateway_casual_reply.py").read_text()
     sys_anchor = 'For this casual message, respond naturally and briefly'
     assert sys_anchor in reply_text
@@ -69,7 +70,7 @@ def test_sse_worker_has_empty_content_safety_net():
     """The SSE worker's token-streaming loop now guards against an
     empty `result.content` so the agentic "thinking…" hang found in
     iter 212m-154 QA can never silently produce a blank bubble."""
-    text = (_BACKEND / "routers" / "chat.py").read_text()
+    text = (_BACKEND / "routers" / "chat" / "stream.py").read_text()
     # The new safety net mentions both 'empty content fallback' (in
     # the logger.warning) and 'wasn't able to produce a reply' (in
     # the user-visible fallback string).

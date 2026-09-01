@@ -1,5 +1,11 @@
 # AUREM CTO — Changelog (append-only)
 
+- **Wave 2 (PR-gate) status-chip gap closed (2026-09-08)** — discovered most of Wave 2 (branch `auremcto/ship-{slug}`, draft PR, `aura:ship` webhook dispatch, merge_commit_sha-correct rollback, fail-closed PR-state checks, drift detection) was ALREADY built + tested in an earlier round (2026-08-28/08-30, "Overnight T7"/"T2/R10"), flag ON in Preview, OFF in prod. The one real gap: no live status chip on the shipped-PR row. Added:
+  - `routers/loop.py::loop_status` — additive `pr_status` field (reads `loop_outcomes` by `ship_branch`, omitted for direct-commit ships). 3 new backend tests (`test_overnight_t7_ship_via_pr.py`).
+  - `LoopLiveFeed.jsx::ShippedRow` — polls `getLoopStatus` every 5s (2min cap) while a PR is open, renders an Open/Merged/Closed chip next to the "Review PR on GitHub" link. 4 new frontend tests (`LoopLiveFeed.wave2_pr_status_chip.test.jsx`). All 56 LoopLiveFeed tests green, zero regressions.
+  - Live drill (GATE 2, real disposable repo) still pending founder-provided fixture repo + GitHub App installation.
+
+
 - **Wave 1 (guardrail remediation) CLOSED + test-baseline honesty triage (2026-09-08)**
   - **R2 (path guard on git-binary worker):** `write_guard.check_write_paths()` now runs in `_run_task_with_git` (routers/cto_projects.py) before any file touches disk — same deny-list the API worker (`github_api_writer.commit_files`) already used. Test: `test_git_binary_worker_path_guard_rejects_denied_path` — PASS.
   - **R23 (cost/usage log):** verified ON + admin-visible, live numbers pulled from preview Mongo: `ora_chat_usage` 1,729 rows (866 last 7d, 1.09M in / 158K out tokens), `customer_chat_cost` 5,253 rows (3,788 last 7d, 1.48M in / 317K out tokens). Admin views: `/admin/bi/inference-metrics`, `/admin/token-pnl`.

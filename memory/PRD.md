@@ -1,3 +1,106 @@
+## 2026-09-08 — `routers/chat/stream.py` StreamState refactor — COMPLETE, agent-tested, full-suite baseline-diffed clean
+
+**WHAT:** Finished the `stream.py` closure refactor the founder explicitly
+paused on. The former ~1,100-line `_worker()` closure (nested inside
+`chat_stream()`'s `gen()`) is now split into 4 new cohesive modules,
+all under `backend/routers/chat/`:
+
+- `stream_state.py` (78 lines) — `StreamState` dataclass. Replaces the
+  ~20-variable closure formerly shared between `gen()`/`_ticker()`/
+  `_worker()`. `q: asyncio.Queue` and `stop_event: asyncio.Event` use
+  `field(default_factory=...)` — verified per-instance (two `StreamState`
+  objects never share a queue/event; see test below).
+- `watchdog.py` (194 lines) — `consume_worker_queue()`: the queue-drain
+  loop + soft/hard timeout race + tick/step/mode SSE frame emission.
+  Mechanical move of the former inline `while True` loop in `gen()`.
+- `retries.py` (130 lines) — `run_confidence_gate()`: the
+  cold-start/recall-mismatch retry-once-then-bail logic. Mechanical
+  move.
+- `worker.py` (1,230 lines total, but NO god-function — max function
+  is `_advisor_panel` at 353 lines, a documented one-piece exception
+  for the Ask-Advisor-panel block; everything else is ≤207 lines):
+  `run_worker()` (63-line dispatcher) calls, in the original cascade
+  order: `_mode_d_fast_path` → `_mode_broadcast` → `_mode_d_e` →
+  `_mode_b` → `_mode_f` → `_ora_agent_cascade` → `_prep_pre_llm` →
+  `_advisor_panel` (ora_panel=true branch) OR `_run_orchestrator`
+  (default `chat_with_tools` cascade, includes the ora_panel leak-guard
+  scrub).
+
+`stream.py` itself shrank from 2,517 → 1,139 lines. It now owns only:
+context-building (pre-`gen()`), the SSE glue in `gen()` (StreamState
+construction, ticker, meta/done frames, output guards, citation guard,
+persist_turn, audit log) — i.e. exactly the thin-glue role the founder
+asked for, just not split into a separate `sse_stream.py` file (kept
+in `stream.py` to avoid an extra layer of mock-binding risk; no test
+patches `routers.chat.stream.*` bindings that moved elsewhere without
+being updated — see below).
+
+**GOLDEN REGRESSION** (`tests/test_stream_golden_regression.py`,
+harness in `tests/_stream_golden_harness.py`, fixture
+`tests/_golden/stream_refactor_2026_09_08.json` captured BEFORE the
+refactor): 6 scenarios — `plain_agentic`, `mode_d_fast_path`,
+`mode_f_engage`, `confidence_retry`, `soft_timeout`, `hard_timeout`.
+All 6 pass byte-identical against the pre-refactor fixture. Every
+clock source in the generator (`time.monotonic()`, `asyncio.wait_for`
+timeouts) is exercised for real in the timeout scenarios (real sleep +
+tiny env-configured timeout, not a faked clock — verified no leaked
+`"never seen"` fallback content).
+
+**MOVED-BINDING FIXES (the exact risk the founder flagged):** `worker.py`
+imports its OWN `chat_with_tools`, `classify_intent`, `get_db` (separate
+bindings from `stream.py`'s). ~10 existing test files patched
+`chat_mod.stream.chat_with_tools` etc. and would have silently let real
+network/DB calls through post-move. Fixed by adding matching
+`chat_mod.worker.*` patches in each: `_stream_golden_harness.py`,
+`test_response_confidence_mismatch_gate.py`,
+`test_citation_guard_persist_ordering.py`. Also fixed ~15 source-grep-
+lock tests (`test_iter136`, `test_iter164`, `test_iter212m*`,
+`test_iter388*`, `test_iter60`, `test_iter70`(n/a-unrelated),
+`test_iter_vanguard`, `test_iter_ambiguity`(n/a-unrelated), `_chat_pkg_src.py`
+helper) that hardcoded `routers/chat/{stream,history,...}.py` file
+lists or read `stream.py` directly — updated to include `worker.py`/
+`watchdog.py` per the actual new home of each asserted string.
+
+**VERIFICATION:**
+- `python -m py_compile` on all 5 touched/new chat modules: clean.
+- Router mount check: prefix `/chat`, 14 routes — unchanged.
+- `StreamState` per-instance check: `s1.q is not s2.q`, `s1.stop_event
+  is not s2.stop_event` for two constructed instances — passes.
+- Golden regression: 6/6 pass.
+- ~28 targeted test files (192+ tests) covering hard/soft timeout,
+  confidence-mismatch gate, mock short-circuit, shell-handoff guard,
+  advisor cascade, mode D/E/F, pending-fix-task IDOR, phase2c chat
+  router: all pass.
+- **Full backend suite, run twice** (`pytest tests/ -q
+  --ignore=tests/test_ora_chat_deep_research.py`, ~26-27 min each):
+  final run = 6,638 passed / 378 failed / 76 skipped / 16 errors.
+  Baseline-diffed against `backend/test-baseline.txt`: **16/16 errors
+  match baseline exactly (0 new). 7 failures not in baseline — all 7
+  confirmed unrelated to this refactor** (2 are `services/orchestrator.py`
+  content-drift / dependency-CVE-scanner tests untouched by this work;
+  5 are `test_iter_ambiguity_and_mode_d_gates.py` hitting `/cto/tasks/
+  submit` with a live-GitHub-connection 403 — a different router,
+  matches the baseline's own documented "full-suite-run-only test-order
+  flakiness" caveat). **Net: 0 new-vs-baseline failures caused by the
+  stream refactor, 0 missed-mock real-call/hang/timeout symptoms.**
+
+**PROVENANCE:** agent-tested (golden regression + targeted suite + 2x
+full-suite baseline diff). NOT yet founder-confirmed — stopping here
+per the founder's explicit instruction to pause for review before
+`cto_projects.py`.
+
+**NOT DONE / explicitly deferred:** `sse_stream.py` was proposed in the
+original design sketch but not created — the founder's approval
+message only required the numbered 7-step plan (compile → golden →
+targeted → full-suite → report → stop), which didn't mandate it, and
+creating it would have added another mock-binding migration surface
+for no behavior change. `cto_projects.py` split: NOT started, per
+explicit founder instruction to stop for review first.
+
+---
+
+## 2026-09-08 — Phase 2 (cto_projects.py safety fix) — SAFETY HOLE CLOSED + proven · file-split (Step 3) BLOCKED, not attempted, reason below
+
 ## 2026-09-08 — Phase 2 (cto_projects.py safety fix) — SAFETY HOLE CLOSED + proven · file-split (Step 3) BLOCKED, not attempted, reason below
 
 **WHAT:** `backend/routers/cto_projects.py` — five new shared, module-

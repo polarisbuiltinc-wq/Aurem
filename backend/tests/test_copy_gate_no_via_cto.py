@@ -25,7 +25,12 @@ _ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
 
 USER_FACING_FILES = [
     os.path.join(_ROOT, "backend", "services", "mode_d_debugger.py"),
-    os.path.join(_ROOT, "backend", "routers", "chat.py"),
+    # 2026-09-08 — routers/chat.py (4184-line god-file) was split into
+    # a package; scan every submodule instead of the old single file.
+    os.path.join(_ROOT, "backend", "routers", "chat", "misc.py"),
+    os.path.join(_ROOT, "backend", "routers", "chat", "turn.py"),
+    os.path.join(_ROOT, "backend", "routers", "chat", "stream.py"),
+    os.path.join(_ROOT, "backend", "routers", "chat", "history.py"),
     os.path.join(_ROOT, "backend", "services", "orchestrator.py"),
     os.path.join(_ROOT, "frontend", "src", "components", "ShipDialog.jsx"),
     os.path.join(_ROOT, "frontend", "src", "components", "ShipConfirmModal.jsx"),

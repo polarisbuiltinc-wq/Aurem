@@ -82,7 +82,8 @@ def test_brain_swallows_github_api_failures():
 
 def test_brain_callers_pass_github_token():
     """The two main callers that hold a PAT must thread it through."""
-    chat_src = _read("backend/routers/chat.py")
+    from tests._chat_pkg_src import chat_package_source
+    chat_src = chat_package_source()
     proj_src = _read("backend/routers/cto_projects.py")
     # chat.py best-effort decrypts the PAT and forwards it
     assert "github_token=_pat" in chat_src

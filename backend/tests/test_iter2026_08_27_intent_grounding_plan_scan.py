@@ -231,7 +231,7 @@ def test_chat_py_pending_scan_write_has_upsert_true():
     session's first-ever turn, so a non-upserting update is a
     guaranteed silent no-op (this is exactly what P6's live drive
     caught)."""
-    src = open("/app/backend/routers/chat.py").read()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history","worker"))
     idx = src.index('"$set": {"pending_scan": {')
     # Look at the update_one(...) call this $set lives inside — the
     # matching `upsert=True,` must appear before its closing `)`.

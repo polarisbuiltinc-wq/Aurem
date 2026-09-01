@@ -70,7 +70,8 @@ def auth_token() -> str:
 
 @pytest.fixture(scope="module")
 def chat_src() -> str:
-    return (BACKEND_DIR / "routers" / "chat.py").read_text(encoding="utf-8")
+    from tests._chat_pkg_src import chat_package_source
+    return chat_package_source()
 
 
 def _stream_ask_advisor(token: str, prompt: str, timeout: int = 120) -> dict:

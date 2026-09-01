@@ -326,7 +326,7 @@ def test_chat_router_auto_infers_sole_project_on_null_body_pid():
     inference at the top of the handler so brain_ctx / repo_ctx /
     council retrieval ALL get the right project_id — not just the
     tool resolution layer."""
-    src = Path("/app/backend/routers/chat.py").read_text(encoding="utf-8")
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history"))
     # Must reference 212m-139 marker so future agents understand why
     # this block exists.
     assert "Iter 212m-139" in src, (

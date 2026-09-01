@@ -24,9 +24,8 @@ from __future__ import annotations
 
 import os
 
-CHAT_PY = os.path.join(
-    os.path.dirname(__file__), "..", "routers", "chat.py"
-)
+from tests._chat_pkg_src import chat_package_source as _chat_src
+
 ORCH_PY = os.path.join(
     os.path.dirname(__file__), "..", "services", "orchestrator.py"
 )
@@ -36,7 +35,7 @@ ORCH_PY = os.path.join(
 
 def test_chat_py_does_not_import_build_url_context():
     """The eager URL scraper is gone — only NOTE comments may remain."""
-    src = open(CHAT_PY).read()
+    src = _chat_src()
     # No live import.
     assert "from services.url_fetcher import build_url_context" not in src
     # No live call site (any occurrence outside a `#` comment line).
@@ -53,7 +52,7 @@ def test_chat_py_does_not_import_build_url_context():
 def test_chat_py_does_not_join_url_ctx_into_extra_sys_via_eager_fetch():
     """The /send path used to join `url_ctx` from a parallel
     `build_url_context()` await. That eager call must be gone."""
-    src = open(CHAT_PY).read()
+    src = _chat_src()
     assert "url_ctx_task = asyncio.create_task(build_url_context" not in src
     assert "asyncio.gather(repo_ctx_task, url_ctx_task)" not in src
 

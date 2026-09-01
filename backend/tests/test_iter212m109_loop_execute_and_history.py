@@ -72,7 +72,7 @@ def test_loop_ship_has_attempt_and_result_logs():
 
 
 def test_chat_history_returns_last_200_not_100_or_20():
-    src = _read_be("routers/chat.py")
+    src = _read_be("routers/chat/history.py")
     # Iter 330 chat-vanish fix bumped the read slice 100 → 200. The
     # actual line is `turns = ((doc or {}).get("turns") or [])[-200:]`
     # so we assert the slice token directly.

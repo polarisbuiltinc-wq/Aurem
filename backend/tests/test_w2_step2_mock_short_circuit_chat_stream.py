@@ -40,7 +40,7 @@ async def test_mock_short_circuit_live_chat(monkeypatch):
     async def _fake_current_dev(auth):
         return {"user_id": "diag-mock-user", "email": "diag@example.com", "tier": "free"}
 
-    monkeypatch.setattr(chat_router, "current_dev", _fake_current_dev)
+    monkeypatch.setattr(chat_router.stream, "current_dev", _fake_current_dev)
 
     body = chat_router.ChatBody(prompt="fix the readme", session_id="diag-mock-sess")
     resp = await chat_router.chat_stream(request=None, body=body, authorization="Bearer x")

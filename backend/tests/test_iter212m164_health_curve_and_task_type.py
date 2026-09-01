@@ -162,7 +162,7 @@ def test_orchestrator_returns_council_in_result():
 
 def test_chat_router_threads_task_type_into_chat_with_tools():
     """Both /chat and /chat/stream call sites must pass body.task_type."""
-    src = pathlib.Path("/app/backend/routers/chat.py").read_text()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history"))
     # Two chat_with_tools(...) call sites both pass task_type.
     assert src.count("task_type=body.task_type") >= 2, (
         f"expected ≥2 task_type=body.task_type call sites, "

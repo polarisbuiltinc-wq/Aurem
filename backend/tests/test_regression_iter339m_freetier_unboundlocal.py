@@ -13,7 +13,7 @@ never re-grows an unaliased local import of `is_founder_email`.
 import ast
 from pathlib import Path
 
-CHAT_PY = Path(__file__).resolve().parents[1] / "routers" / "chat.py"
+CHAT_PY = Path(__file__).resolve().parents[1] / "routers" / "chat" / "stream.py"
 
 
 def _functions(tree):

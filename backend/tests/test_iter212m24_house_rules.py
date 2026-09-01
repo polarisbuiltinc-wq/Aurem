@@ -15,9 +15,8 @@ import os
 import asyncio
 import pytest
 
-CHAT_PY = os.path.join(
-    os.path.dirname(__file__), "..", "routers", "chat.py"
-)
+from tests._chat_pkg_src import chat_package_source as _chat_src
+
 ADMIN_PY = os.path.join(
     os.path.dirname(__file__), "..", "routers", "admin.py"
 )
@@ -154,7 +153,7 @@ def test_admin_router_uses_pydantic_payload():
 # ── 3. chat.py injects the block at the TOP of extra_sys ──────────────
 
 def test_chat_send_injects_house_rules_at_top():
-    src = open(CHAT_PY).read()
+    src = _chat_src()
     # The injection block is tagged with the iter marker.
     assert "Iter 212m-24" in src
     assert "from services.house_rules import" in src
@@ -166,7 +165,7 @@ def test_chat_send_injects_house_rules_at_top():
 
 
 def test_chat_stream_injects_house_rules_for_main_and_advisor():
-    src = open(CHAT_PY).read()
+    src = _chat_src()
     # Stream path injects for `target="chat"` when ora_panel is False.
     assert 'if not body.ora_panel:' in src
     # And re-resolves for `target="advisor"` when ora_panel is True.
@@ -176,6 +175,6 @@ def test_chat_stream_injects_house_rules_for_main_and_advisor():
 def test_house_rules_block_uses_prepend_not_append():
     """The rules MUST land BEFORE the rest of extra_sys, otherwise
     they're not "read first" — the whole point of the feature."""
-    src = open(CHAT_PY).read()
+    src = _chat_src()
     # The format helper output goes on the LEFT side of the concatenation.
     assert "format_house_rules_block(_hr_prompt)\n                + (\"\\n\\n\" + extra_sys" in src

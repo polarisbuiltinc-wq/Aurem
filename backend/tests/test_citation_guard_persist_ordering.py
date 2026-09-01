@@ -65,8 +65,11 @@ async def _fake_call_llm(messages=None, system="", **kwargs):
 
 @pytest.fixture
 def client(monkeypatch):
-    monkeypatch.setattr(chat_mod, "current_dev", _fake_current_dev)
-    monkeypatch.setattr(chat_mod, "chat_with_tools", _fake_chat_with_tools)
+    monkeypatch.setattr(chat_mod.stream, "current_dev", _fake_current_dev)
+    monkeypatch.setattr(chat_mod.stream, "chat_with_tools", _fake_chat_with_tools)
+    # 2026-09-08 StreamState refactor — worker.py owns the live
+    # `chat_with_tools` binding used by chat_stream's dispatch.
+    monkeypatch.setattr(chat_mod.worker, "chat_with_tools", _fake_chat_with_tools)
     monkeypatch.setattr(llm_mod, "call_llm", _fake_call_llm)
 
     async def _noop(*a, **kw):

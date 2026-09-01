@@ -187,7 +187,8 @@ def test_t2_blocked_followup_handles_missing_fields():
 def test_t2_chat_task_followup_accepts_blocked_status():
     """The endpoint must no longer 409 on status='blocked', and must
     route to the blocked builder, not the failed one."""
-    src = open(os.path.join(BACKEND, "routers", "chat.py")).read()
+    src = open(os.path.join(
+        BACKEND, "routers", "chat", "misc.py")).read()
     idx = src.find('@router.post("/task-followup")')
     assert idx > -1
     region = src[idx: idx + 3000]

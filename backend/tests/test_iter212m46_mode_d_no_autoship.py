@@ -11,14 +11,14 @@ from __future__ import annotations
 import os
 import re
 
-CHAT_PY      = os.path.join(os.path.dirname(__file__), "..", "routers", "chat.py")
+from tests._chat_pkg_src import chat_package_source as _chat_src
 MODE_D_PY    = os.path.join(os.path.dirname(__file__), "..", "services", "mode_d_debugger.py")
 
 
 def test_mode_d_fast_path_does_not_enqueue() -> None:
     """The is_fix_confirmation fast path MUST NOT call
     `_enqueue_cto_task` — that bypassed the user's Ship click."""
-    src = open(CHAT_PY).read()
+    src = _chat_src()
     # Find the fast-path block (everything between the iter 212m-46
     # marker and the matching `return` that closes it).
     marker = "Iter 212m-46 — KILL auto-ship on Mode D fix-confirm"
@@ -26,10 +26,15 @@ def test_mode_d_fast_path_does_not_enqueue() -> None:
     block_start = src.index(marker)
     # Look at the next ~3 KB of source — the fast path itself.
     block = src[block_start:block_start + 3000]
-    # Strip Python comments so we don't false-match on doc text like
-    # "NO _enqueue_cto_task call here".
+    # Strip Python comments AND doc prose so we don't false-match on
+    # text like "NO _enqueue_cto_task call here" (2026-09-08
+    # StreamState refactor moved this block into a function whose own
+    # docstring CONTAINS the marker — `block` therefore starts
+    # mid-docstring, so the first `"""` we see is the closing
+    # delimiter, not an opening one; strip through it).
+    non_docstring = re.sub(r'^.*?"""', "", block, count=1, flags=re.DOTALL)
     non_comment = "\n".join(
-        ln for ln in block.splitlines() if not ln.lstrip().startswith("#")
+        ln for ln in non_docstring.splitlines() if not ln.lstrip().startswith("#")
     )
     assert "_enqueue_cto_task" not in non_comment, (
         "Mode D fix-confirm fast path must not call _enqueue_cto_task. "

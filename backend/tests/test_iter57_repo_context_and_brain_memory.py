@@ -115,7 +115,8 @@ def test_chat_router_injects_brain_context():
     """The chat stream handler must read `get_brain_context` and stitch
     it into `extra_sys`. Without this, brain memory only flows into the
     CTO worker, never into the user-facing chat."""
-    src = _read("routers/chat.py")
+    from tests._chat_pkg_src import chat_package_source
+    src = chat_package_source()
     assert "get_brain_context" in src
     # The injection must happen inside chat_stream — anchor on the
     # extra_sys assembly to make sure the brain is part of the system

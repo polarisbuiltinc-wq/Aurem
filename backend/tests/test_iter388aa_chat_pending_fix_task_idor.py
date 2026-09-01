@@ -33,15 +33,19 @@ import re
 from pathlib import Path
 
 
-CHAT_ROUTER = Path(__file__).resolve().parent.parent / "routers" / "chat.py"
+# 2026-09-08 StreamState refactor — the Mode-D pending_fix_task guard
+# moved from stream.py's inline _worker() into worker.py's
+# `_mode_d_fast_path()` (mechanical move, same source lines).
+CHAT_ROUTER = Path(__file__).resolve().parent.parent / "routers" / "chat" / "worker.py"
 
 
 def _extract_pending_fix_block() -> str:
     src = CHAT_ROUTER.read_text()
-    # Anchor: from `is_fix_confirmation` guard down to the next @router
-    # decorator (roughly 60 lines).
+    # Anchor: from `is_fix_confirmation` guard down to the next
+    # function boundary (`_mode_d_fast_path` closing → `async def
+    # _mode_broadcast`'s "Decide A/B/C/D" docstring line).
     m = re.search(
-        r"if body\.session_id and is_fix_confirmation.*?(?=\n\s+#\s*Decide A/B/C/D)",
+        r"if body\.session_id and is_fix_confirmation.*?(?=\n\s*(?:#\s*)?[\"']*\s*Decide A/B/C/D)",
         src, re.DOTALL,
     )
     assert m, "Could not locate Mode-D pending_fix_task guard block"

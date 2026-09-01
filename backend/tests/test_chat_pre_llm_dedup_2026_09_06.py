@@ -210,7 +210,8 @@ def test_dedup_single_call_site_each_endpoint():
     canonical assertion lives in test_confirm_execution_2026_09_04.py
     ::test_t_no_duplicate_guard_wiring, updated this round)."""
     import routers.chat as chat_mod
-    src = inspect.getsource(chat_mod)
+    src = "".join(inspect.getsource(m) for m in
+                   (chat_mod.misc, chat_mod.turn, chat_mod.stream, chat_mod.history, chat_mod.worker))
     assert src.count("resolve_pre_llm(") == 2
     assert src.count("resolve_turn_start(") == 0
 
@@ -273,11 +274,11 @@ async def test_north_star_confirm_is_state_transition_through_real_endpoint(
 
     monkeypatch.setattr("services.local_tools.read_repo_file", _fake_read)
     monkeypatch.setattr("services.local_tools.write_repo_file", _fake_write)
-    monkeypatch.setattr("routers.chat.chat_with_tools", _fake_chat_with_tools)
-    monkeypatch.setattr("routers.chat.current_dev", _fake_current_dev)
+    monkeypatch.setattr("routers.chat.turn.chat_with_tools", _fake_chat_with_tools)
+    monkeypatch.setattr("routers.chat.turn.current_dev", _fake_current_dev)
     monkeypatch.setattr("services.usage.assert_has_budget", AsyncMock(return_value=None))
     monkeypatch.setattr("services.usage.assert_has_task_budget", AsyncMock(return_value=None))
-    monkeypatch.setattr("routers.chat._deduct_tokens", AsyncMock(return_value=500))
+    monkeypatch.setattr("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500))
 
     try:
         await propose_action(
@@ -308,10 +309,10 @@ async def test_north_star_confirm_no_pending_is_honest_through_real_endpoint(rea
     async def _fake_current_dev(authorization=None):
         return USER
 
-    monkeypatch.setattr("routers.chat.current_dev", _fake_current_dev)
+    monkeypatch.setattr("routers.chat.turn.current_dev", _fake_current_dev)
     monkeypatch.setattr("services.usage.assert_has_budget", AsyncMock(return_value=None))
     monkeypatch.setattr("services.usage.assert_has_task_budget", AsyncMock(return_value=None))
-    monkeypatch.setattr("routers.chat._deduct_tokens", AsyncMock(return_value=500))
+    monkeypatch.setattr("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500))
 
     try:
         body = ChatBody(prompt="approve", project_id="home", session_id=session_id)

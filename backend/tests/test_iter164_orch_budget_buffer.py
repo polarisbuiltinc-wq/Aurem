@@ -18,7 +18,7 @@ import re
 
 
 ORCH_PATH = Path(__file__).parent.parent / "services" / "orchestrator.py"
-CHAT_PATH = Path(__file__).parent.parent / "routers" / "chat.py"
+CHAT_PATH = Path(__file__).parent.parent / "routers" / "chat" / "stream.py"
 
 
 def _read_int(src: str, pattern: str) -> int:

@@ -252,11 +252,12 @@ class TestPoint6LoggerWiring:
         assert doc2.get("low_confidence") is False  # default
 
     def test_chat_stream_passes_low_confidence_to_logger(self):
-        """chat_stream's log_conversational call site must pass
-        low_confidence=_low_confidence."""
-        with open("/app/backend/routers/chat.py", "r") as f:
+        """chat_stream's log_conversational call site must pass the
+        turn's low_confidence flag through. 2026-09-08 StreamState
+        refactor renamed the closure var `_low_confidence` to the
+        `state.low_confidence` field — same value, same wiring."""
+        with open("/app/backend/routers/chat/stream.py", "r") as f:
             src = f.read()
-        # Find the chat_stream function body region.
         m = re.search(r"async def chat_stream\(", src)
         assert m, "chat_stream not found"
         # From here to next @router. or 'async def '
@@ -264,7 +265,7 @@ class TestPoint6LoggerWiring:
         end = re.search(r"\n@router\.|\nasync def [a-z_]+\(", rest[1:])
         stream_body = rest[: end.start() + 1] if end else rest
         assert "log_conversational" in stream_body
-        # Find the call block and confirm low_confidence=_low_confidence is passed.
+        # Find the call block and confirm low_confidence is passed.
         call_match = re.search(
             r"log_conversational\((.*?)\)",
             stream_body,
@@ -272,7 +273,8 @@ class TestPoint6LoggerWiring:
         )
         assert call_match, "no log_conversational(...) call in chat_stream"
         args = call_match.group(1)
-        assert "low_confidence=_low_confidence" in args, (
+        assert "low_confidence=_low_confidence" in args or \
+               "low_confidence=state.low_confidence" in args, (
             f"low_confidence not wired into chat_stream logger call. Got:\n{args[:500]}"
         )
 
@@ -280,7 +282,7 @@ class TestPoint6LoggerWiring:
         """Confirmed pre-existing scope boundary: chat_send never logs
         to ora_council_logs. This is NOT a regression; just guard against
         someone accidentally adding it without matching wiring."""
-        with open("/app/backend/routers/chat.py", "r") as f:
+        with open("/app/backend/routers/chat/turn.py", "r") as f:
             src = f.read()
         m = re.search(r"async def chat_send\(", src)
         assert m

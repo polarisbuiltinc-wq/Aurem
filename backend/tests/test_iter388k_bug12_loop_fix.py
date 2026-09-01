@@ -86,7 +86,7 @@ def test_query_tier_max_iters_bumped_to_three():
     someone reverts the fix to `_max_iters_eff = 2` this assertion
     fires.  We match on the source since the value is set inline in
     the SSE handler."""
-    src = Path("/app/backend/routers/chat.py").read_text()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history","worker"))
     assert 'if _tier == "query":' in src
     # The literal that has to be present.
     assert "_max_iters_eff = 3" in src

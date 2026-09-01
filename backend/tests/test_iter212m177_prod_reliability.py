@@ -297,7 +297,8 @@ def test_p0_3_analysis_routes_to_b_and_code_stays_a():
 
 
 def test_p0_3_chat_endpoints_apply_inference():
-    src = (BACKEND / "routers" / "chat.py").read_text()
+    from tests._chat_pkg_src import chat_package_source
+    src = chat_package_source()
     assert src.count("_infer_task_type(body.prompt)") >= 2
 
 
@@ -396,7 +397,8 @@ def test_p1_5_zero_file_scans_never_persisted_and_last_filtered():
 # ─────────────────────────────────────────────────────────────────────
 
 def test_p1_6_all_pre_gen_awaits_have_hard_timeouts():
-    src = (BACKEND / "routers" / "chat.py").read_text()
+    from tests._chat_pkg_src import chat_package_source
+    src = chat_package_source()
     for pattern in [
         r"asyncio\.wait_for\(build_ora_context\(",
         r"asyncio\.wait_for\(\s*_maybe_guard_shell_handoff_followup\(",

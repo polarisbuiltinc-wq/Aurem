@@ -78,7 +78,7 @@ def test_chat_router_wires_council_before_mode_f():
     early-return so order decides who wins on a Mode B message that
     also matches a Mode F pattern."""
     base = os.path.join(os.path.dirname(__file__), "..")
-    with open(os.path.join(base, "routers/chat.py"), encoding="utf-8") as fh:
+    with open(os.path.join(base, "routers/chat/stream.py"), encoding="utf-8") as fh:
         src = fh.read()
     assert "from services.mode_b_council import" in src
     assert "is_council_request" in src

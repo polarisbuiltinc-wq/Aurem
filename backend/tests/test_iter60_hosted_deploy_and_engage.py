@@ -133,7 +133,10 @@ def test_chat_stream_routes_mode_F():
     """The chat router must dispatch Mode F to run_engage before falling
     through to the generic orchestrator (which would burn tokens on a
     full tool loop for a market question)."""
-    src = _read("routers/chat.py")
+    # 2026-09-08 StreamState refactor — Mode F dispatch moved from
+    # stream.py's inline _worker() into worker.py's `_mode_f()`
+    # (mechanical move, same source lines).
+    src = _read("routers/chat/worker.py")
     assert "Mode F (Engage" in src or "_mode == \"F\"" in src
     assert "from services.mode_f_engage import run_engage" in src
     assert '"mode": "F"' in src

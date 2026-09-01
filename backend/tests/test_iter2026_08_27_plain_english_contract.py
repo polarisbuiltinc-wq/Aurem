@@ -51,8 +51,8 @@ def _make_client(current_user: dict):
             raise _HE(401, "Authorization header missing")
         return current_user
 
-    old_current_dev = router_mod.current_dev
-    router_mod.current_dev = _fake_current_dev
+    old_current_dev = router_mod.turn.current_dev
+    router_mod.turn.current_dev = _fake_current_dev
     app = FastAPI()
     app.include_router(router_mod.router, prefix="/api/aurem-dev")
     c = TestClient(app)
@@ -83,9 +83,9 @@ class TestPlainEnglishContractInjection:
                        AsyncMock(return_value=("", 0))), \
                  patch("services.feature_flags.is_enabled",
                        AsyncMock(side_effect=_flag_side_effect("test_admin_001"))), \
-                 patch("routers.chat.chat_with_tools", _spy_chat_with_tools), \
+                 patch("routers.chat.turn.chat_with_tools", _spy_chat_with_tools), \
                  patch("services.response_confidence.response_seems_mismatched", return_value=False), \
-                 patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)):
+                 patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)):
                 r = client.post(
                     "/api/aurem-dev/chat/send",
                     headers={"Authorization": "Bearer test_admin_001"},
@@ -93,7 +93,7 @@ class TestPlainEnglishContractInjection:
                           "project_id": "home", "session_id": "s1"},
                 )
         finally:
-            router_mod.current_dev = old_dev
+            router_mod.turn.current_dev = old_dev
             _dbmod.set_db(None)
 
         assert r.status_code == 200, r.text
@@ -115,9 +115,9 @@ class TestPlainEnglishContractInjection:
                        AsyncMock(return_value=("", 0))), \
                  patch("services.feature_flags.is_enabled",
                        AsyncMock(side_effect=_flag_side_effect("test_admin_001"))), \
-                 patch("routers.chat.chat_with_tools", _spy_chat_with_tools), \
+                 patch("routers.chat.turn.chat_with_tools", _spy_chat_with_tools), \
                  patch("services.response_confidence.response_seems_mismatched", return_value=False), \
-                 patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)):
+                 patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)):
                 r = client.post(
                     "/api/aurem-dev/chat/send",
                     headers={"Authorization": "Bearer test_admin_001"},
@@ -125,7 +125,7 @@ class TestPlainEnglishContractInjection:
                           "project_id": "home", "session_id": "s1"},
                 )
         finally:
-            router_mod.current_dev = old_dev
+            router_mod.turn.current_dev = old_dev
             _dbmod.set_db(None)
 
         assert r.status_code == 200, r.text
@@ -147,9 +147,9 @@ class TestPlainEnglishContractInjection:
                        AsyncMock(return_value=("", 0))), \
                  patch("services.feature_flags.is_enabled",
                        AsyncMock(side_effect=_flag_side_effect("test_admin_001"))), \
-                 patch("routers.chat.chat_with_tools", _spy_chat_with_tools), \
+                 patch("routers.chat.turn.chat_with_tools", _spy_chat_with_tools), \
                  patch("services.response_confidence.response_seems_mismatched", return_value=False), \
-                 patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)):
+                 patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)):
                 r = client.post(
                     "/api/aurem-dev/chat/send",
                     headers={"Authorization": "Bearer u_regular"},
@@ -157,7 +157,7 @@ class TestPlainEnglishContractInjection:
                           "project_id": "home", "session_id": "s1"},
                 )
         finally:
-            router_mod.current_dev = old_dev
+            router_mod.turn.current_dev = old_dev
             _dbmod.set_db(None)
 
         assert r.status_code == 200, r.text
@@ -182,9 +182,9 @@ class TestPlainEnglishContractInjection:
                  patch("services.usage.assert_has_task_budget", AsyncMock(return_value=None)), \
                  patch("services.feature_flags.is_enabled",
                        AsyncMock(side_effect=_flag_side_effect("test_admin_001"))), \
-                 patch("routers.chat.chat_with_tools", _spy_chat_with_tools), \
+                 patch("routers.chat.turn.chat_with_tools", _spy_chat_with_tools), \
                  patch("services.response_confidence.response_seems_mismatched", return_value=False), \
-                 patch("routers.chat._deduct_tokens", AsyncMock(return_value=500)):
+                 patch("routers.chat.turn._deduct_tokens", AsyncMock(return_value=500)):
                 r = client.post(
                     "/api/aurem-dev/chat/send",
                     headers={"Authorization": "Bearer test_admin_001"},
@@ -192,7 +192,7 @@ class TestPlainEnglishContractInjection:
                           "project_id": "home", "session_id": "s1", "ora_panel": True},
                 )
         finally:
-            router_mod.current_dev = old_dev
+            router_mod.turn.current_dev = old_dev
             _dbmod.set_db(None)
 
         assert r.status_code == 200, r.text

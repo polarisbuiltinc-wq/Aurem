@@ -51,7 +51,8 @@ def test_telemetry_endpoint_registered_and_gated():
 
 
 def test_chat_py_fires_telemetry_logging():
-    src = _read("backend/routers/chat.py")
+    from tests._chat_pkg_src import chat_package_source
+    src = chat_package_source()
     assert "log_classification" in src
     # Wrapped in asyncio.create_task so it doesn't block the SSE stream
     assert "asyncio.create_task(" in src and "log_classification" in src

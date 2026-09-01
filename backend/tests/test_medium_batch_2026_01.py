@@ -50,7 +50,7 @@ def test_intent_gateway_regression_show_leads():
 
 # ---------- Chat classify_intent LOOP_PHASE strip ----------
 def test_chat_strips_loop_phase_prefix_source():
-    src = open("/app/backend/routers/chat.py", encoding="utf-8").read()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history"))
     # Confirm strip regex present near classify_intent call
     assert 'LOOP_PHASE:' in src
     assert 'r"^LOOP_PHASE:\\w+\\s*\\n"' in src

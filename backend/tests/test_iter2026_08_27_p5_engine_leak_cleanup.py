@@ -58,7 +58,7 @@ def test_aurem_handoff_fence_never_touched_by_output_guard_at_all():
     # strip_machinery_leak itself has no opinion on this — the actual
     # guarantee lives in routers/chat.py's `"aurem-handoff" not in
     # content` gate, which skips calling this function entirely.
-    src = open("/app/backend/routers/chat.py").read()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history"))
     assert '"aurem-handoff" not in content' in src, (
         "chat.py must exempt any content carrying a real ship handoff "
         "fence from the output guard entirely"
@@ -92,7 +92,7 @@ def test_council_field_is_a_real_label_not_a_boolean():
     """Root-cause regression: routers/chat.py used to send
     `"council": True` / `bool(result.get("council"))` — a bare
     boolean the frontend interpolated directly into visible copy."""
-    src = open("/app/backend/routers/chat.py").read()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history"))
     assert '"council": True' not in src
     assert '"council": bool(result.get("council"))' not in src
 
@@ -122,7 +122,7 @@ def test_engine_leak_stripping_is_universal_not_flag_gated():
     """P5 — founder explicitly asked these to apply to ALL users, not
     stay behind explain_plain_english_v1 (which is still allowlisted
     to test_admin_001 for the separate explain-mode enhancement)."""
-    src = open("/app/backend/routers/chat.py").read()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history"))
     assert 'if _plain_english_active and content:' not in src, (
         "leak-stripping must no longer be gated behind "
         "_plain_english_active — only length-capping stays gated"
@@ -198,5 +198,5 @@ def test_chat_py_call_sites_pass_universal_only_flag():
     """Both chat/send and chat/stream call sites must gate the
     explain-only tier behind _plain_english_active, never apply it
     unconditionally to every user."""
-    src = open("/app/backend/routers/chat.py").read()
+    src = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history"))
     assert src.count("universal_only=not _plain_english_active") == 2

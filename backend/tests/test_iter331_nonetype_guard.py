@@ -11,7 +11,7 @@ ORA reply with "'NoneType' object has no attribute 'get'". Two traps:
 import re
 from pathlib import Path
 
-CHAT = Path("/app/backend/routers/chat.py").read_text(encoding="utf-8")
+CHAT = "".join(open(f"/app/backend/routers/chat/{_f}.py", encoding="utf-8").read() for _f in ("__init__","misc","turn","stream","history"))
 ORCH = Path("/app/backend/services/orchestrator.py").read_text(encoding="utf-8")
 
 TRAP = re.compile(r"""\.get\((['"]\w+['"]),\s*\{\}\)\s*\.""")
