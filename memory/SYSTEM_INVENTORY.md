@@ -903,3 +903,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 ### Iter 0 · 2026-08-31
 
 - `EDIT_TIER_MODE` — auto-detected in backend/services/mode_routing.py (verify) (default: unset) [Iter 0, 2026-08-31T19:22:57.660278Z] <!-- inv:envvar:EDIT_TIER_MODE -->
+
+### Iter 0 · 2026-09-01
+
+| `routers/chat_pre_llm.py` | `(none)` | 0 | auto-detected new router (verify) (Iter 0, 2026-09-01T03:24:49.067155Z) | <!-- inv:router:routers/chat_pre_llm.py -->

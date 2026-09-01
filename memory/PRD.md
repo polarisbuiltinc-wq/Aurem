@@ -1,3 +1,139 @@
+## 2026-09-08 — Phase 2 (cto_projects.py safety fix) — SAFETY HOLE CLOSED + proven · file-split (Step 3) BLOCKED, not attempted, reason below
+
+**WHAT:** `backend/routers/cto_projects.py` — five new shared, module-
+level functions inserted right before `_run_task_via_api`:
+`_check_js_syntax`, `_syntax_errors` (hoisted verbatim from being local
+closures inside `_run_task_via_api` — zero logic change), and three
+new async gate functions `_run_hallucination_gate`, `_run_syntax_gate`,
+`_run_lint_gate` (each wraps the exact pre-existing retry-once-then-fail
+logic that used to be inline only in `_run_task_via_api`). Both workers
+(`_run_task_via_api` and `_run_task_with_git`) now call these SAME
+three functions, in the same relative order (right after the
+sensitive-path guard, right before Vanguard verify).
+
+**THE SAFETY FIX (S2, the centerpiece):** `_run_task_with_git` — the
+worker that actually runs on any host with `git` installed
+(`_GIT_AVAILABLE=True`, the real production runtime path) — previously
+committed to a customer's real repo with ZERO hallucination-gate,
+syntax-check, or lint-check protection (it only had the sensitive-path
+guard + Vanguard verify). It now runs the identical hallucination/
+syntax/lint gates the API-only fallback path always had. The commit
+MECHANISM stays intentionally different — `_run_task_via_api` still
+commits via `gh_api_commit` (GitHub Data API), `_run_task_with_git`
+still commits via the `git` binary (`git commit`/`git push`). Only the
+safety STAGES were unified, per the founder's explicit instruction.
+
+**BEHAVIOR:** `_run_task_via_api`'s own inline code for these 3 checks
+was REMOVED and replaced with calls to the new shared functions — same
+log/emit strings, same retry-once semantics, same failure wording,
+verified byte-identical via the existing test suite (see below). This
+is a refactor of already-safe code, not a new behavior.
+
+**NEW TESTS** (`tests/test_cto_worker_safety_pipeline_2026_09_08.py`,
+6 tests, all pass):
+- Step-1 before-snapshot, captured then updated in place (Phase-1
+  convention): documents the exact before-state (git worker: 0 hits
+  for hallucination/syntax/lint; API worker: full) and asserts the
+  after-state (both call the same 3 shared functions, in the same
+  relative order — a 4th test explicitly asserts
+  `sensitive-path-guard < hallucination-gate < syntax-gate < lint-gate
+  < vanguard-verify` ordering on BOTH workers, guarding the #1 named
+  risk of this phase: a subtle step reorder).
+- `test_git_worker_runs_full_safety_pipeline` — real run through
+  `_run_task_with_git` (mocked `_sh`/Vanguard, spied hallucination/
+  syntax/lint functions) proves all 3 gates are actually INVOKED, not
+  just present in source, and the task still reaches `status=done`.
+- `test_git_worker_rejects_bad_codegen` — **the direct proof.** Feeds
+  the git worker a syntactically-broken `FILE:` block (same broken
+  reply on the auto-retry too) → task fails with a syntax error, and
+  — the critical assertion — `git add`/`git commit`/`git push` are
+  NEVER called. Before this fix, this exact content would have
+  written to disk and pushed unblocked (no syntax gate existed).
+- `test_api_worker_still_full` — regression guard: the already-safe
+  API worker still runs all 3 gates + Vanguard and still reaches a
+  real (mocked) commit after the refactor.
+
+**REGRESSION:** ran the full targeted cto_projects/worker/rollback/
+task/sensitive-path/checkpoint-resume/vanguard-autofix/pin-check/
+subscription-tier suite (17 files, 313 tests incl. the 6 new ones) —
+**310 passed**, 3 failed. All 3 failures confirmed PRE-EXISTING via
+`git stash` A/B (`test_bug2_update_project_encrypts_pat`,
+`test_new_user_wizard_component_exists`,
+`test_wizard_wired_into_dashboard` — unrelated frontend/PAT checks,
+identical failure before and after this round's edit, not caused by
+it). Also ran `pytest --collect-only` on the full `backend/tests/`
+tree (7092 tests) — zero new import/collection errors from this
+change.
+
+**RISK:** the single named risk (a subtle step reorder on the
+customer-repo write path) is guarded by the 4 Step-1 tests above,
+specifically the explicit ordering assertion. All 6 new tests green.
+
+**BEFORE→AFTER:** `cto_projects.py` 4504 → 4599 lines (net +95: the 5
+new shared functions add ~230 lines, offset by removing ~135 lines of
+now-duplicate inline code from `_run_task_via_api`). `_run_task_via_api`
+shrank from ~1367 to ~1290 lines; `_run_task_with_git` grew from ~520
+to ~555 lines (3 new gate calls + a comment block). **Safety hole:
+before = git worker 0/3 gates; after = git worker 3/3 gates,
+identical to the API worker.**
+
+**SAFETY-PROOF:** `test_git_worker_rejects_bad_codegen` is green — bad
+codegen is refused on the git path, zero git writes attempted.
+
+---
+
+**STEP 3 (the file→package split) — NOT ATTEMPTED THIS ROUND. Blocked
+by a real technical finding, reported honestly rather than rushed:**
+
+Before touching the file layout, audited every test file referencing
+`routers/cto_projects.py` or `routers.cto_projects` (47 files). The
+overwhelming majority of cto-worker tests — including
+`test_phase2c_cto_projects_router.py` (71 references, the single
+biggest cto test file) — mock the worker pipeline via
+`patch.object(router_mod, "call_llm", ...)` / `"_sh"` / `"gh_api_
+fetch_file"` / `"_hallucination_reasons"` / `"_GIT_AVAILABLE"` /
+`"_run_task_with_git"` etc., where `router_mod = routers.cto_projects`.
+
+**The finding:** `unittest.mock.patch.object(module, name)` only takes
+effect for code that resolves `name` via THAT exact module's own
+`__dict__` (Python resolves bare names via the defining function's
+`__globals__` — i.e. its own module — not via any re-export in a
+parent package's `__init__.py`). If `_run_task_via_api`/`_run_task_
+with_git` physically move into `cto_projects/workers/api_worker.py` /
+`workers/git_worker.py` (per the requested package layout), then
+`patch.object(routers.cto_projects, "call_llm", ...)` (patching the
+`__init__.py` re-export) would **silently stop affecting** the real
+call inside `workers/api_worker.py` — the patch would appear to
+succeed but the mock would never actually intercept the call. This is
+not a simple "update the file path in a test" fix (which Phase 1's
+own precedent already covers) — it requires finding and rewriting
+EVERY `patch.object(router_mod, "X", ...)` call site across ~40+ test
+files to target the correct new module (`api_worker` vs `git_worker`
+vs `pipeline_steps`, per name), or those tests would either silently
+stop testing what they claim to (mock bypassed, real code path hit)
+or fail with confusing, unrelated errors (e.g. real network/LLM
+calls). That is a second undertaking at least as large as this
+round's safety fix itself, and rushing it risks exactly the kind of
+"tests pass but secretly don't verify anything" failure this whole
+refactor project exists to eliminate.
+
+**Not done, not silently skipped — explicitly flagged for the founder
+to decide:** run a dedicated follow-up pass that audits and rewrites
+every affected `patch.object(router_mod, ...)` call site alongside the
+physical move, OR accept a lighter split that keeps the worker
+functions themselves in one file (e.g. only extract `pipeline_steps.py`
+as its own importable module, while `_run_task_via_api`/`_run_task_
+with_git` stay in `cto_projects.py`) to preserve the existing mocking
+model. Founder's call — not decided unilaterally this round.
+
+**NEXT (as reported to founder):** Phase 2's safety fix is complete,
+tested, and proven — the safety hole is closed. The file split (Step
+3) needs an explicit founder decision on the above before proceeding,
+so Phase 2 is reported as safety-complete/split-deferred, not fully
+closed per the original 4-step template. Waiting for "next" before
+Phase 3 (`parliament.py`) either way, per standing instruction.
+
+
 ## 2026-09-05 — Commit-Boundary class fix (architectural replacement of confirm_execution.py's guard-based approach) — testing_agent verified, 19/19 new + 30/30 fallback + 91/92 regression (1 unchanged pre-existing flake)
 
 Founder rejected 4 rounds of prose/guard patches as insufficient after a live 3-turn repro (proposal -> "yes please update it" -> a SECOND, differently-worded proposal -> "approve" -> "nothing pending") plus a sibling bug (a Root-4 upgrade-offer confirm returned a generic clarification instead of starting real Stripe checkout). Explicit architectural ruling: **"A confirmation is a deterministic server-side state transition, not a model turn."**

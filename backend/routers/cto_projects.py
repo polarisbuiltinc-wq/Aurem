@@ -2614,6 +2614,235 @@ async def _persist_push_failed(task_id: str, e: "PushFailedError") -> str:
     return err
 
 
+# ─────────────────────────────────────────────────────────────────────
+# 2026-09-08 — Phase 2 safety fix. Shared safety-critical pipeline
+# stages, used by BOTH `_run_task_via_api` and `_run_task_with_git`.
+#
+# Audit finding (captured before this fix, see PRD.md Phase 2 entry
+# and tests/test_cto_worker_safety_pipeline_2026_09_08.py Step-1
+# before-snapshot): `_run_task_via_api` ran a hallucination-gate,
+# syntax-check, and lint-check before every commit; `_run_task_with_git`
+# — the worker that actually runs whenever the `git` binary is present
+# (i.e. the real production runtime path) — ran NONE of these three,
+# even though it already had the sensitive-path guard and Vanguard
+# verify. That meant real customer repos were committed to via the
+# git-binary path with LESS safety than the API-only fallback path.
+#
+# Fix: hoist the three missing gates (previously nested closures /
+# inline blocks only inside `_run_task_via_api`) to these module-level
+# functions, and call them from BOTH workers, in the same order. The
+# commit MECHANISM (GitHub Data API vs `git` binary) is intentionally
+# left different — only the safety STAGES are unified.
+# ─────────────────────────────────────────────────────────────────────
+
+def _check_js_syntax(filepath: str, content: str) -> Optional[str]:
+    """Return an error string for invalid JS/TS/JSX/TSX, None if
+    valid OR if neither esbuild nor node is installed (so we
+    degrade gracefully — never block on missing parsers).
+
+    Tries `esbuild` first (understands JSX/TSX/decorators), then
+    falls back to `node --check` (structural-only, no JSX).
+
+    Hoisted from a local closure inside `_run_task_via_api` to module
+    level so both workers share the exact same check — zero logic
+    change from the original closure."""
+    import subprocess as _sp_mod
+    import tempfile as _tf
+    import os as _os
+    suffix = _os.path.splitext(filepath)[1] or ".js"
+    tmp = None
+    try:
+        with _tf.NamedTemporaryFile(
+            suffix=suffix, mode="w", delete=False, encoding="utf-8",
+        ) as fh:
+            fh.write(content)
+            tmp = fh.name
+        # 1) esbuild — proper JSX-aware parser
+        try:
+            r = _sp_mod.run(
+                ["esbuild", tmp, "--bundle=false", "--log-level=error"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if r.returncode != 0 and (r.stderr or "").strip():
+                return (r.stderr or r.stdout).strip()[:300]
+            return None
+        except FileNotFoundError:
+            pass   # fall through to node
+        # 2) node --check — structural only, no JSX support
+        r = _sp_mod.run(
+            ["node", "--check", tmp],
+            capture_output=True, text=True, timeout=5,
+        )
+        if r.returncode != 0:
+            return (r.stderr or r.stdout).strip()[:200]
+        return None
+    except FileNotFoundError:
+        return None
+    except Exception:
+        return None
+    finally:
+        if tmp:
+            try:
+                _os.unlink(tmp)
+            except Exception:
+                pass
+
+
+def _syntax_errors(blocks: dict[str, str]) -> list[str]:
+    """Syntax validation — catch broken code before it reaches GitHub.
+    AST check for Python, `node --check`/esbuild for JS/TS, `json`
+    for JSON. Shared by both task workers (see `_run_syntax_gate`)."""
+    out: list[str] = []
+    for _spath, _scontent in blocks.items():
+        if not _scontent or not _scontent.strip():
+            continue
+        if _spath.endswith(".py"):
+            try:
+                import ast as _ast
+                _ast.parse(_scontent)
+            except SyntaxError as _se:
+                out.append(
+                    f"{_spath}: SyntaxError line {_se.lineno or 1}: {_se.msg}"
+                )
+        elif _spath.endswith((".js", ".jsx", ".ts", ".tsx")):
+            js_err = _check_js_syntax(_spath, _scontent)
+            if js_err:
+                out.append(f"{_spath}: {js_err}")
+        elif _spath.endswith(".json"):
+            try:
+                import json as _jparse
+                _jparse.loads(_scontent)
+            except Exception as _je:
+                out.append(f"{_spath}: invalid JSON: {_je}")
+    return out
+
+
+async def _run_hallucination_gate(task_id: str, edits: dict, contents: dict,
+                                   user_msg: str) -> tuple[dict, Optional[str]]:
+    """P0-4a HALLUCINATION GATE (pre-push, before Vanguard) — SHARED by
+    both task workers. If the model "rewrote" a file we actually read
+    but kept almost none of its real lines, the content is invented.
+    One targeted retry re-injects the REAL file; still bad -> returns
+    an error string (caller must fail the task, never commit).
+    Returns (possibly-updated edits, error_or_None)."""
+    _hallu = _hallucination_reasons(edits, contents)
+    if not _hallu:
+        return edits, None
+    await _log(task_id,
+               "🚧 hallucination gate tripped — regenerating with the "
+               "real file re-injected:\n  - " + "\n  - ".join(_hallu),
+               "warning")
+    _real_blob = "\n\n".join(
+        f"FILE: {p}\n```\n{contents.get(p) or contents.get(p.lstrip('./'))}\n```"
+        for p in edits
+        if (contents.get(p) or contents.get(p.lstrip("./"))))
+    _h_nudge = (
+        "Your previous edit did NOT match the real file — it "
+        "invented code that does not exist. Below is the REAL, "
+        "current content of each file. Re-apply the requested "
+        "change as a MINIMAL modification of this exact content. "
+        "Preserve every existing line unless the task requires "
+        "changing it.\n\n" + _real_blob
+    )
+    reply3 = await _retry(
+        lambda: call_llm(
+            messages=[{"role": "user",
+                       "content": user_msg + "\n\n" + _h_nudge}],
+            system=_AI_SYS, max_tokens=3500, temperature=0.0,
+        ),
+        what="AI hallucination-retry", task_id=task_id,
+    )
+    from services.llm_file_parser import parse_file_blocks as _pfb
+    _edits2 = _pfb(reply3)
+    if _edits2:
+        edits = _edits2
+    _hallu = _hallucination_reasons(edits, contents)
+    if _hallu:
+        err = ("AI kept producing content that does not match the "
+               "real file (refusing to push):\n  - "
+               + "\n  - ".join(_hallu))
+        return edits, err
+    await _log(task_id, "✅ hallucination-retry produced a faithful edit",
+               "success")
+    return edits, None
+
+
+async def _run_syntax_gate(task_id: str, edits: dict,
+                            user_msg: str) -> tuple[dict, Optional[str]]:
+    """Syntax validation — catch broken code before it reaches GitHub.
+    SHARED by both task workers. Runs `_syntax_errors`, auto-retries
+    once with the exact errors fed back, then returns an error string
+    on persistent failure (caller must fail the task, never commit).
+    Returns (possibly-updated edits, error_or_None)."""
+    await _emit(task_id, "Validating generated code…", kind="phase_verify", pct=78)
+    syntax_errors = _syntax_errors(edits)
+    if syntax_errors:
+        await _log(
+            task_id,
+            "⚠️ Syntax errors detected — auto-regenerating with feedback",
+            "warning",
+        )
+        await _emit(task_id, "Syntax errors found — regenerating…", pct=79)
+        _syn_nudge = (
+            "Your previous response generated code with these syntax "
+            "errors:\n  - "
+            + "\n  - ".join(syntax_errors)
+            + "\n\nRegenerate the COMPLETE corrected files in the same "
+            "FILE: <path>\\n```\\n…\\n``` format. Ensure every function, "
+            "class, and block is properly closed. Do not truncate any "
+            "file. Output ALL files you edited, not just the broken ones."
+        )
+        reply3 = await _retry(
+            lambda: call_llm(
+                messages=[{"role": "user",
+                           "content": user_msg + "\n\n" + _syn_nudge}],
+                system=_AI_SYS, max_tokens=3500, temperature=0.0,
+            ),
+            what="AI syntax-fix auto-retry", task_id=task_id,
+        )
+        new_edits: dict[str, str] = {}
+        from services.llm_file_parser import parse_file_blocks
+        new_edits.update(parse_file_blocks(reply3))
+        if new_edits:
+            edits = {**edits, **new_edits}
+        syntax_errors = _syntax_errors(edits)
+    if syntax_errors:
+        _err_str = "\n  - ".join(syntax_errors[:3])
+        err = (
+            "Generated code has syntax errors after auto-retry:\n  - "
+            + _err_str
+            + "\n\nTry rephrasing: specify the exact function or class "
+            "to change, or split the work into smaller files."
+        )
+        return edits, err
+    return edits, None
+
+
+async def _run_lint_gate(task_id: str, edits: dict) -> tuple[dict, dict, Optional[str]]:
+    """Design-linter gate — auto-fix safe issues (console.log,
+    transition: all), then block on any critical finding (hardcoded
+    secrets, etc). SHARED by both task workers. Returns
+    (possibly-auto-fixed edits, lint_result, blocking_error_or_None)."""
+    try:
+        from services.design_linter import lint_file_blocks, auto_fix_blocks
+        edits, fix_log = auto_fix_blocks(edits)
+        if fix_log:
+            total_fixes = sum(len(v) for v in fix_log.values())
+            await _log(task_id, f"🛠️ Auto-fixed {total_fixes} safe lint issue(s) across {len(fix_log)} file(s)", "info")
+        lint_result = lint_file_blocks(edits)
+    except Exception:
+        lint_result = {"blocked": False, "issues": [], "warnings": [], "summary": ""}
+    if lint_result.get("blocked"):
+        await _log(task_id, f"⛔ Linter blocked the commit: {len(lint_result['issues'])} critical issue(s)", "error")
+        for reason in lint_result.get("block_reasons", [])[:5]:
+            await _log(task_id, f"  • {reason}", "error")
+        err = ("Design linter blocked commit:\n" + lint_result.get("summary", ""))[:2000]
+        return edits, lint_result, err
+    if lint_result.get("warnings"):
+        await _log(task_id, f"⚠️ Linter: {len(lint_result['warnings'])} non-blocking warning(s)", "warning")
+    return edits, lint_result, None
+
+
 async def _run_task_via_api(task_id, proj, task, files, context, user_token, maxx_mode: bool = False,
                             resume_edits: Optional[dict] = None):
     """API-only worker — no `git` binary needed. Reads target files from
@@ -3042,50 +3271,14 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
                 return
 
         # ── Iter 212m-177 — P0-4a HALLUCINATION GATE (pre-push, before
-        # Vanguard). If the model "rewrote" a file we actually read but
-        # kept almost none of its real lines, the content is invented.
-        # One targeted retry re-injects the REAL file; still bad → fail.
-        _hallu = _hallucination_reasons(edits, contents)
-        if _hallu:
-            await _log(task_id,
-                       "🚧 hallucination gate tripped — regenerating with the "
-                       "real file re-injected:\n  - " + "\n  - ".join(_hallu),
-                       "warning")
-            _real_blob = "\n\n".join(
-                f"FILE: {p}\n```\n{contents.get(p) or contents.get(p.lstrip('./'))}\n```"
-                for p in edits
-                if (contents.get(p) or contents.get(p.lstrip("./"))))
-            _h_nudge = (
-                "Your previous edit did NOT match the real file — it "
-                "invented code that does not exist. Below is the REAL, "
-                "current content of each file. Re-apply the requested "
-                "change as a MINIMAL modification of this exact content. "
-                "Preserve every existing line unless the task requires "
-                "changing it.\n\n" + _real_blob
-            )
-            reply3 = await _retry(
-                lambda: call_llm(
-                    messages=[{"role": "user",
-                               "content": user_msg + "\n\n" + _h_nudge}],
-                    system=_AI_SYS, max_tokens=3500, temperature=0.0,
-                ),
-                what="AI hallucination-retry", task_id=task_id,
-            )
-            from services.llm_file_parser import parse_file_blocks as _pfb
-            _edits2 = _pfb(reply3)
-            if _edits2:
-                edits = _edits2
-            _hallu = _hallucination_reasons(edits, contents)
-            if _hallu:
-                err = ("AI kept producing content that does not match the "
-                       "real file (refusing to push):\n  - "
-                       + "\n  - ".join(_hallu))
-                await _log(task_id, f"🚫 {err}", "error")
-                await _set_status(task_id, status="failed", error=err[:2000],
-                                  completed_at=time.time())
-                return
-            await _log(task_id, "✅ hallucination-retry produced a faithful edit",
-                       "success")
+        # Vanguard). Shared gate — see `_run_hallucination_gate` above
+        # (also called by `_run_task_with_git`, 2026-09-08 Phase 2 fix).
+        edits, _hallu_err = await _run_hallucination_gate(task_id, edits, contents, user_msg)
+        if _hallu_err:
+            await _log(task_id, f"🚫 {_hallu_err}", "error")
+            await _set_status(task_id, status="failed", error=_hallu_err[:2000],
+                              completed_at=time.time())
+            return
 
         await _emit(task_id, "Running linter…", kind="phase_verify", pct=75)
         await _log(task_id, f"✅ {len(edits)} file{'' if len(edits) == 1 else 's'} "
@@ -3129,131 +3322,13 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
                 except Exception as _fe:
                     logger.warning("multi-file contract retry soft-failed: %r", _fe)
 
-        # ── Syntax validation — catch broken code before it reaches GitHub.
-        # AST check for Python, `node --check` for JS/TS when node is
-        # available (falls back silently if not — never blocks the
-        # pipeline on an env-level missing binary).  On failure, one
-        # auto-regen with the exact errors fed back (same nudge pattern
-        # used by the truncation gate above).
-        await _emit(task_id, "Validating generated code…", kind="phase_verify", pct=78)
-
-        def _check_js_syntax(filepath: str, content: str) -> Optional[str]:
-            """Return an error string for invalid JS/TS/JSX/TSX, None if
-            valid OR if neither esbuild nor node is installed (so we
-            degrade gracefully — never block on missing parsers).
-
-            Tries `esbuild` first (understands JSX/TSX/decorators), then
-            falls back to `node --check` (structural-only, no JSX)."""
-            import subprocess as _sp_mod
-            import tempfile as _tf
-            import os as _os
-            suffix = _os.path.splitext(filepath)[1] or ".js"
-            tmp = None
-            try:
-                with _tf.NamedTemporaryFile(
-                    suffix=suffix, mode="w", delete=False, encoding="utf-8",
-                ) as fh:
-                    fh.write(content)
-                    tmp = fh.name
-                # 1) esbuild — proper JSX-aware parser
-                try:
-                    r = _sp_mod.run(
-                        ["esbuild", tmp, "--bundle=false", "--log-level=error"],
-                        capture_output=True, text=True, timeout=5,
-                    )
-                    if r.returncode != 0 and (r.stderr or "").strip():
-                        return (r.stderr or r.stdout).strip()[:300]
-                    return None
-                except FileNotFoundError:
-                    pass   # fall through to node
-                # 2) node --check — structural only, no JSX support
-                r = _sp_mod.run(
-                    ["node", "--check", tmp],
-                    capture_output=True, text=True, timeout=5,
-                )
-                if r.returncode != 0:
-                    return (r.stderr or r.stdout).strip()[:200]
-                return None
-            except FileNotFoundError:
-                return None
-            except Exception:
-                return None
-            finally:
-                if tmp:
-                    try:
-                        _os.unlink(tmp)
-                    except Exception:
-                        pass
-
-        def _syntax_errors(blocks: dict[str, str]) -> list[str]:
-            out: list[str] = []
-            for _spath, _scontent in blocks.items():
-                if not _scontent or not _scontent.strip():
-                    continue
-                if _spath.endswith(".py"):
-                    try:
-                        import ast as _ast
-                        _ast.parse(_scontent)
-                    except SyntaxError as _se:
-                        out.append(
-                            f"{_spath}: SyntaxError line {_se.lineno or 1}: {_se.msg}"
-                        )
-                elif _spath.endswith((".js", ".jsx", ".ts", ".tsx")):
-                    js_err = _check_js_syntax(_spath, _scontent)
-                    if js_err:
-                        out.append(f"{_spath}: {js_err}")
-                elif _spath.endswith(".json"):
-                    try:
-                        import json as _jparse
-                        _jparse.loads(_scontent)
-                    except Exception as _je:
-                        out.append(f"{_spath}: invalid JSON: {_je}")
-            return out
-
-        syntax_errors = _syntax_errors(edits)
-        if syntax_errors:
-            await _log(
-                task_id,
-                "⚠️ Syntax errors detected — auto-regenerating with feedback",
-                "warning",
-            )
-            await _emit(task_id, "Syntax errors found — regenerating…", pct=79)
-            _syn_nudge = (
-                "Your previous response generated code with these syntax "
-                "errors:\n  - "
-                + "\n  - ".join(syntax_errors)
-                + "\n\nRegenerate the COMPLETE corrected files in the same "
-                "FILE: <path>\\n```\\n…\\n``` format. Ensure every function, "
-                "class, and block is properly closed. Do not truncate any "
-                "file. Output ALL files you edited, not just the broken ones."
-            )
-            reply3 = await _retry(
-                lambda: call_llm(
-                    messages=[{"role": "user",
-                               "content": user_msg + "\n\n" + _syn_nudge}],
-                    system=_AI_SYS, max_tokens=3500, temperature=0.0,
-                ),
-                what="AI syntax-fix auto-retry", task_id=task_id,
-            )
-            new_edits: dict[str, str] = {}
-            # Iter 212m-33 — tolerant FILE-block parser.
-            from services.llm_file_parser import parse_file_blocks
-            new_edits.update(parse_file_blocks(reply3))
-            if new_edits:
-                # Merge — preserve any files the retry didn't include.
-                edits = {**edits, **new_edits}
-            syntax_errors = _syntax_errors(edits)
-
-        if syntax_errors:
-            _err_str = "\n  - ".join(syntax_errors[:3])
-            err = (
-                "Generated code has syntax errors after auto-retry:\n  - "
-                + _err_str
-                + "\n\nTry rephrasing: specify the exact function or class "
-                "to change, or split the work into smaller files."
-            )
-            await _log(task_id, f"🚫 {err}", "error")
-            await _set_status(task_id, status="failed", error=err[:2000],
+        # ── Syntax validation — catch broken code before it reaches
+        # GitHub. Shared gate — see `_run_syntax_gate` above (also
+        # called by `_run_task_with_git`, 2026-09-08 Phase 2 fix).
+        edits, _syntax_err = await _run_syntax_gate(task_id, edits, user_msg)
+        if _syntax_err:
+            await _log(task_id, f"🚫 {_syntax_err}", "error")
+            await _set_status(task_id, status="failed", error=_syntax_err[:2000],
                               completed_at=time.time())
             await _emit(task_id, "Syntax error — task failed",
                         kind="fail", pct=100)
@@ -3289,25 +3364,12 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
         except Exception as _se:
             logger.warning("sandbox validation soft-failed: %r", _se)
 
-        # iter 41 — Design Linter (zero LLM cost, pure regex).
-        # Auto-fixes safe issues first (console.log, transition: all), then
-        # rejects commits with any "block" severity findings (hardcoded
-        # secrets, leftover console.log, etc.).
-        try:
-            from services.design_linter import lint_file_blocks, auto_fix_blocks
-            edits, fix_log = auto_fix_blocks(edits)
-            if fix_log:
-                total_fixes = sum(len(v) for v in fix_log.values())
-                await _log(task_id, f"🛠️ Auto-fixed {total_fixes} safe lint issue(s) across {len(fix_log)} file(s)", "info")
-            lint_result = lint_file_blocks(edits)
-        except Exception as _le:
-            lint_result = {"blocked": False, "issues": [], "warnings": [], "summary": ""}
-        if lint_result.get("blocked"):
-            await _log(task_id, f"⛔ Linter blocked the commit: {len(lint_result['issues'])} critical issue(s)", "error")
-            for reason in lint_result.get("block_reasons", [])[:5]:
-                await _log(task_id, f"  • {reason}", "error")
-            await _set_status(task_id, status="failed",
-                              error=("Design linter blocked commit:\n" + lint_result.get("summary", ""))[:2000],
+        # iter 41 — Design Linter (zero LLM cost, pure regex). Shared
+        # gate — see `_run_lint_gate` above (also called by
+        # `_run_task_with_git`, 2026-09-08 Phase 2 fix).
+        edits, lint_result, _lint_err = await _run_lint_gate(task_id, edits)
+        if _lint_err:
+            await _set_status(task_id, status="failed", error=_lint_err[:2000],
                               completed_at=time.time())
             # Council log the blocked attempt
             try:
@@ -3329,8 +3391,6 @@ async def _run_task_via_api(task_id, proj, task, files, context, user_token, max
             except Exception:
                 pass
             return
-        if lint_result.get("warnings"):
-            await _log(task_id, f"⚠️ Linter: {len(lint_result['warnings'])} non-blocking warning(s)", "warning")
 
         # iter 111 — VANGUARD VERIFY AGENT (separate-agent security pass)
         # ────────────────────────────────────────────────────────────
@@ -4172,6 +4232,42 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
                 await _set_status(task_id, status="failed", error=err,
                                   completed_at=time.time())
                 return
+
+
+        # 2026-09-08 — Phase 2 safety fix. `_run_task_with_git` — the
+        # worker that actually runs whenever the `git` binary is
+        # present (i.e. the real production runtime path) — previously
+        # committed to the customer's real repo WITHOUT the
+        # hallucination-gate, syntax-check, or lint-check that
+        # `_run_task_via_api` already ran (see PRD.md Phase 2 entry:
+        # 0 hits here vs 7/12/17 there, before this fix). These three
+        # gates (shared module-level functions, also used by
+        # `_run_task_via_api` above) now run identically on both
+        # workers, in the same order relative to the sensitive-path
+        # guard and Vanguard verify below. Only the COMMIT MECHANISM
+        # stays different (git binary here vs the GitHub Data API on
+        # the other path) — that difference is intentional, unchanged.
+        edits, _hallu_err = await _run_hallucination_gate(task_id, edits, contents, user_msg)
+        if _hallu_err:
+            await _log(task_id, f"🚫 {_hallu_err}", "error")
+            await _set_status(task_id, status="failed", error=_hallu_err[:2000],
+                              completed_at=time.time())
+            return
+
+        edits, _syntax_err = await _run_syntax_gate(task_id, edits, user_msg)
+        if _syntax_err:
+            await _log(task_id, f"🚫 {_syntax_err}", "error")
+            await _set_status(task_id, status="failed", error=_syntax_err[:2000],
+                              completed_at=time.time())
+            await _emit(task_id, "Syntax error — task failed",
+                        kind="fail", pct=100)
+            return
+
+        edits, lint_result, _lint_err = await _run_lint_gate(task_id, edits)
+        if _lint_err:
+            await _set_status(task_id, status="failed", error=_lint_err[:2000],
+                              completed_at=time.time())
+            return
 
 
         # iter 111 / 2026-08-25 parity fix — the git-subprocess path was
