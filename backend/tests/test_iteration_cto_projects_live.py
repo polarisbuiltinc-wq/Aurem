@@ -55,10 +55,17 @@ def test_list_projects_ok_and_no_token_leak(auth_headers):
 
 
 # ─── projects/add — rejection paths ────────────────────────────────────────
+# 2026-09-08 — TEST-ISOLATION fix: these two tests used a hardcoded
+# real repo URL (tjsandhu/aurem) which is already connected as a
+# leftover project ("Iter 330 history test") for this test user, so
+# the `already_connected` check (which runs before auth_required /
+# pat_not_supported in routers/cto_projects.py::add_project) fired
+# first and masked the behavior under test. A random, never-connected
+# fake repo URL per test run keeps each test isolated.
 def test_add_project_without_auth_returns_auth_required(auth_headers):
     body = {
         "name": f"TEST_noauth_{uuid.uuid4().hex[:6]}",
-        "github_url": "https://github.com/tjsandhu/aurem",
+        "github_url": f"https://github.com/tjsandhu/fake-{uuid.uuid4().hex[:10]}",
         "branch": "main",
     }
     r = requests.post(f"{API}/cto/projects/add", headers=auth_headers, json=body, timeout=15)
@@ -71,7 +78,7 @@ def test_add_project_without_auth_returns_auth_required(auth_headers):
 def test_add_project_with_pat_returns_pat_not_supported(auth_headers):
     body = {
         "name": f"TEST_pat_{uuid.uuid4().hex[:6]}",
-        "github_url": "https://github.com/tjsandhu/aurem",
+        "github_url": f"https://github.com/tjsandhu/fake-{uuid.uuid4().hex[:10]}",
         "branch": "main",
         "github_token": "ghp_fake_token_that_should_be_rejected_ffffffffffff",
     }
@@ -197,9 +204,12 @@ def test_rollback_correct_confirm_but_unknown_task_returns_404(auth_headers):
 
 # ─── tasks/submit — clean error when project doesn't belong to user ────────
 def test_submit_task_unknown_project_clean_error(auth_headers):
-    """Founder tier is unlimited so rate-limit path is skipped; we just
-    want to verify submit doesn't crash and returns a clean error when
-    project can't be found for this user."""
+    """2026-09-08 fix: ownership check now runs BEFORE the ambiguity/
+    clarify gate in routers/cto_projects.py::submit_task, so an unknown
+    project_id can no longer slip through to a 200 needs_clarification
+    response. build_bin_context() never distinguishes "doesn't exist"
+    from "wrong user" (by design, so as not to leak existence) — both
+    return 403."""
     body = {
         "project_id": f"p_{uuid.uuid4().hex[:10]}",
         "task": "TEST_noop",
@@ -207,7 +217,4 @@ def test_submit_task_unknown_project_clean_error(auth_headers):
         "context": "",
     }
     r = requests.post(f"{API}/cto/tasks/submit", headers=auth_headers, json=body, timeout=25)
-    # Clean 4xx (403/404) — not 500
-    assert 400 <= r.status_code < 500, (
-        f"submit crashed / unexpected 5xx: {r.status_code} {r.text[:300]}"
-    )
+    assert r.status_code == 403, r.text[:300]

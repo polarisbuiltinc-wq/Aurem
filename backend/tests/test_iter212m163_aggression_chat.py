@@ -203,7 +203,8 @@ def test_block_6_3_cascade_source_exists():
 
 
 def test_block_8_1_ceo_rescue_source():
-    with open("/app/backend/core/parliament.py") as fh:
+    # 2026-09-08 — moved to core/parliament/ceo.py (Phase 3 split).
+    with open("/app/backend/core/parliament/ceo.py") as fh:
         src = fh.read()
     assert "_ceo_judge_call_with_rescue" in src
     assert "parliament.ceo.rescue" in src or "ceo.rescue" in src or "deepseek" in src.lower()

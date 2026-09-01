@@ -99,7 +99,9 @@ async def test_emit_task_state_frame_shape():
 # ── T3 — node --check JS/TS syntax validation ─────────────────────────
 
 def test_syntax_check_uses_node_check():
-    src = _read("backend/routers/cto_projects.py")
+    # 2026-09-08 — moved to services/cto_pipeline_steps.py (shared by
+    # both task workers), cto_projects.py now imports it from there.
+    src = _read("backend/services/cto_pipeline_steps.py")
     assert "_check_js_syntax" in src
     # The real parser, not the old heuristic
     assert "node" in src and "--check" in src

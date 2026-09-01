@@ -147,13 +147,18 @@ def test_ceo_rescue_wrapper_exists():
 
 def test_ceo_judge_uses_rescue_wrapper():
     """CEO._llm_judge must delegate to the rescue wrapper, not call
-    _llm_call_protected directly."""
-    src = pathlib.Path("/app/backend/core/parliament.py").read_text()
+    _llm_call_protected directly.
+    2026-09-08 — moved to core/parliament/ceo.py (Phase 3 split);
+    `class SelfHeal` no longer shares this file (moved to
+    self_heal.py), so the end-boundary for the slice is simply the
+    next top-level def after `_llm_judge` (`_ceo_judge_call_with_rescue`
+    itself), same effective slice as before."""
+    src = pathlib.Path("/app/backend/core/parliament/ceo.py").read_text()
     # The _llm_judge function should reference the rescue wrapper.
     assert "_ceo_judge_call_with_rescue(" in src
     # And the OLD pattern (direct _llm_call_protected from _llm_judge with
     # trace_name="parliament.ceo.judge") must NOT exist anymore.
-    assert "_llm_call_protected(" not in src.split("class SelfHeal")[0].split("async def _llm_judge")[1].split("async def _ceo_judge_call_with_rescue")[0]
+    assert "_llm_call_protected(" not in src.split("async def _llm_judge")[1].split("async def _ceo_judge_call_with_rescue")[0]
 
 
 def test_ceo_rescue_disabled_uses_single_call(monkeypatch):
@@ -176,7 +181,7 @@ def test_ceo_rescue_disabled_uses_single_call(monkeypatch):
         calls.append(kwargs)
         return ("0", 50.0, None)
 
-    monkeypatch.setattr(parliament, "_llm_call_protected", fake_llm_call_protected)
+    monkeypatch.setattr(parliament.llm_call, "_llm_call_protected", fake_llm_call_protected)
     content, latency, err = asyncio.run(
         parliament._ceo_judge_call_with_rescue(
             system="s", user="u", max_tokens=8,
@@ -216,7 +221,7 @@ def test_ceo_rescue_fires_on_timeout(monkeypatch):
         # rescue
         return ("1", 80.0, None)
 
-    monkeypatch.setattr(parliament, "_llm_call_protected", fake_llm_call_protected)
+    monkeypatch.setattr(parliament.llm_call, "_llm_call_protected", fake_llm_call_protected)
     content, latency, err = asyncio.run(
         parliament._ceo_judge_call_with_rescue(
             system="s", user="u", max_tokens=8,
@@ -256,7 +261,7 @@ def test_ceo_rescue_fires_on_empty_primary(monkeypatch):
             return ("", 30.0, "empty")  # primary failed
         return ("2", 40.0, None)
 
-    monkeypatch.setattr(parliament, "_llm_call_protected", fake_llm_call_protected)
+    monkeypatch.setattr(parliament.llm_call, "_llm_call_protected", fake_llm_call_protected)
     content, latency, err = asyncio.run(
         parliament._ceo_judge_call_with_rescue(
             system="s", user="u", max_tokens=8,
@@ -290,7 +295,7 @@ def test_council_vote_trace_metadata_includes_primary_model(monkeypatch):
         captured.update(kwargs)
         return ("dummy", 10.0, None)
 
-    monkeypatch.setattr(parliament, "_llm_call_protected", fake_llm_call_protected)
+    monkeypatch.setattr(parliament.llm_call, "_llm_call_protected", fake_llm_call_protected)
     member = parliament.CouncilA.members[0]
     asyncio.run(member.cast_vote(task="task", context={"council": "A", "user_id": "u"}))
     md = captured.get("trace_metadata") or {}
@@ -398,8 +403,9 @@ def test_analysis_mode_routing_block_in_llm_py():
 
 def test_ceo_rescue_trace_name_distinct():
     """Rescue calls must use trace_name='parliament.ceo.rescue', NOT
-    'parliament.ceo.judge', so Langfuse can compute rescue_rate."""
-    src = pathlib.Path("/app/backend/core/parliament.py").read_text()
+    'parliament.ceo.judge', so Langfuse can compute rescue_rate.
+    2026-09-08 — moved to core/parliament/ceo.py (Phase 3 split)."""
+    src = pathlib.Path("/app/backend/core/parliament/ceo.py").read_text()
     assert 'trace_name="parliament.ceo.rescue"' in src
     assert 'trace_name="parliament.ceo.judge"' in src
 

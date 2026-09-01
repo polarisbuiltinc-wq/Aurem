@@ -95,7 +95,7 @@ async def test_parliament_falls_back_when_circuit_open(monkeypatch):
     async def _stub(*args, **kwargs):
         return ("def healed_fallback():\n    return 1\nimport os\nclass C: pass",
                 42.0, None)
-    monkeypatch.setattr(pl, "_llm_call_protected", _stub)
+    monkeypatch.setattr(pl.llm_call, "_llm_call_protected", _stub)
 
     parl = pl.Parliament(db=None)
     res = await parl.run(
@@ -113,7 +113,7 @@ async def test_parliament_records_failures_into_breaker(monkeypatch):
     """3 consecutive provider errors should trip the global breaker."""
     async def _err(*args, **kwargs):
         return ("", 5.0, "TimeoutError")
-    monkeypatch.setattr(pl, "_llm_call_protected", _err)
+    monkeypatch.setattr(pl.llm_call, "_llm_call_protected", _err)
 
     # Direct ping — bypass council fan-out: call the cast_vote of a
     # single member 3 times.
@@ -150,7 +150,7 @@ async def test_healer_never_increments_round_internally(monkeypatch):
     captured_rounds = []
     async def _stub(*args, **kwargs):
         return ("def healed(): return 1", 10.0, None)
-    monkeypatch.setattr(pl, "_llm_call_protected", _stub)
+    monkeypatch.setattr(pl.llm_call, "_llm_call_protected", _stub)
 
     h = pl.SelfHeal()
     for _ in range(5):

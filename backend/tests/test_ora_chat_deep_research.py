@@ -18,14 +18,33 @@ Run:
 """
 from __future__ import annotations
 
+# 2026-09-08 — DEAD MODULE, quarantined (Wave-1 baseline triage).
+# `_labels_to_source_tag` (and all Auto Deep-Research wiring into the
+# HTTP layer) was removed from routers/ora_chat.py in commit 2ce66e67
+# "ORA Chat v2 rebuild". No call site anywhere in routers/ora_chat.py
+# references deep_research/orchestrate/should_go_deep/_labels_to_source_tag
+# any more — the feature's HTTP glue is gone, only the orphaned
+# services/ora_chat/deep_research.py + router.py modules remain.
+# This is a dead test for a removed feature, not a live import bug.
+import pytest
+
+pytestmark = pytest.mark.skip(
+    reason="DEAD — Auto Deep-Research HTTP wiring removed in ORA Chat "
+           "v2 rebuild (commit 2ce66e67); _labels_to_source_tag no "
+           "longer exists in routers/ora_chat.py. Quarantined "
+           "2026-09-08 Wave-1 baseline triage."
+)
+
 import os
 from unittest.mock import patch, AsyncMock
 
-import pytest
-
 from services.ora_chat import deep_research as dr
 from services.ora_chat.router import all_route_names, resolve
-from routers.ora_chat import _labels_to_source_tag
+
+try:
+    from routers.ora_chat import _labels_to_source_tag  # noqa: F401
+except ImportError:
+    _labels_to_source_tag = None  # removed in ORA Chat v2 rebuild; module skipped above
 
 
 # ══════════════════════════════════════════════════════════════════

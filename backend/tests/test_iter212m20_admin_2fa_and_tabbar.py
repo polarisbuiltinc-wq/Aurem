@@ -260,7 +260,9 @@ def test_admin_two_factor_card_exists():
 
 
 def test_admin_settings_mounts_two_factor_card():
-    src = (FRONTEND / "pages" / "Admin.jsx").read_text(encoding="utf-8")
+    # 2026-08-27 — TwoFactorCard render moved from Admin.jsx to the
+    # dedicated AdminSettingsPage.jsx during a settings-page split.
+    src = (FRONTEND / "pages" / "AdminSettingsPage.jsx").read_text(encoding="utf-8")
     assert 'import TwoFactorCard from "../components/TwoFactorCard"' in src
     assert "<TwoFactorCard />" in src
 

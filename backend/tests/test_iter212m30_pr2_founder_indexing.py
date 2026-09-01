@@ -263,6 +263,12 @@ class _SingletonFakeMongo:
     # ── founder_offer collection ───────────────────────────────
     class _Offer:
         def __init__(self, outer): self._o = outer
+        def with_options(self, **_opts):
+            # 2026-09-08 — commit 36afb6cc added
+            # `.with_options(write_concern=...)` to founder_offer.py's
+            # real write (Atlas WTimeoutError fix). Passthrough so this
+            # fake stays a drop-in stand-in.
+            return self
         async def find_one(self, q):
             return dict(self._o._offer) if self._o._offer else None
         async def find_one_and_update(self, q, update, upsert=False, return_document=False):

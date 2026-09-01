@@ -34,6 +34,12 @@ class _FakeCol:
         self.inserted: list = []
         self.updated: list = []
 
+    def with_options(self, **_opts):
+        # 2026-09-08 — commit 36afb6cc added `.with_options(write_concern=...)`
+        # to the 3 real production write sites (Atlas WTimeoutError fix).
+        # Passthrough so this fake stays a drop-in stand-in.
+        return self
+
     async def find_one(self, q):
         return self.rows.get(q.get("_id"))
 

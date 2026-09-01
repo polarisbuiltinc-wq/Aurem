@@ -44,6 +44,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from routers import cto_projects as router_mod
+from services import cto_pipeline_steps as pipeline_mod
 from cto_services import db as _dbmod
 
 CTO_ROUTER = Path("/app/backend/routers/cto_projects.py")
@@ -247,14 +248,16 @@ class TestGitWorkerSafetyPipeline:
         resume_edits = {"edits": {"feature.py": "def add(a, b):\n    return a + b\n"},
                         "summary": "add helper"}
 
-        hallu_spy = MagicMock(wraps=router_mod._hallucination_reasons)
-        syntax_spy = MagicMock(wraps=router_mod._syntax_errors)
+        # 2026-09-08 follow-up: the 3 gates now live in
+        # services/cto_pipeline_steps.py — spy there, not on router_mod.
+        hallu_spy = MagicMock(wraps=pipeline_mod._hallucination_reasons)
+        syntax_spy = MagicMock(wraps=pipeline_mod._syntax_errors)
         from services import design_linter as _dl
         lint_spy = MagicMock(wraps=_dl.lint_file_blocks)
 
         with patch.object(router_mod, "_sh", side_effect=self._fake_sh_factory(repo_path)), \
-             patch.object(router_mod, "_hallucination_reasons", hallu_spy), \
-             patch.object(router_mod, "_syntax_errors", syntax_spy), \
+             patch.object(pipeline_mod, "_hallucination_reasons", hallu_spy), \
+             patch.object(pipeline_mod, "_syntax_errors", syntax_spy), \
              patch("services.design_linter.lint_file_blocks", lint_spy), \
              patch("services.vanguard_verify_agent.verify_patch",
                    AsyncMock(return_value={"pass": True, "summary": "clean", "findings": []})) as vg_mock:
@@ -304,6 +307,7 @@ class TestGitWorkerSafetyPipeline:
 
         with patch.object(router_mod, "_sh", side_effect=_fake_sh), \
              patch.object(router_mod, "call_llm", AsyncMock(return_value=BAD_REPLY)), \
+             patch.object(pipeline_mod, "call_llm", AsyncMock(return_value=BAD_REPLY)), \
              patch("asyncio.sleep", AsyncMock(return_value=None)):
             await router_mod._run_task_with_git(
                 task_id, PROJ, "add a broken helper", [], "",
@@ -322,6 +326,57 @@ class TestGitWorkerSafetyPipeline:
         assert write_calls == [], (
             f"safety hole NOT closed — git worker attempted to commit "
             f"bad code: {write_calls}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_git_binary_worker_path_guard_rejects_denied_path(self, fake_db, tmp_path, monkeypatch):
+        """Guardrail Wave 1 (#2 path-guard, 2026-09-08 follow-up): the
+        git-binary worker writes to disk + `git commit`/`git push`
+        directly — BYPASSING `github_api_writer.commit_files` (where
+        the write_guard deny-list already lived) entirely. In BLOCK
+        mode, a denied path (.env) must now be rejected on this path
+        too, and — the direct proof — no `git add`/`commit`/`push`
+        must ever fire."""
+        monkeypatch.setattr(router_mod, "WORKSPACE", tmp_path)
+        monkeypatch.setattr("cto_services.db.get_db", lambda: fake_db)
+        task_id = "safety_git_pathguard"
+        repo_path = tmp_path / task_id / "repo"
+
+        await fake_db.cto_tasks.insert_one({"task_id": task_id, "status": "queued"})
+        await fake_db.dev_users.insert_one({"user_id": "u_saf", "tier": "pro"})
+        await fake_db.cto_projects.insert_one(dict(PROJ))
+        from services import write_guard as wg
+        await fake_db.guard_config.update_one(
+            {"_id": wg.RULE_PATH_GUARD}, {"$set": {"mode": "block"}}, upsert=True,
+        )
+
+        resume_edits = {"edits": {".env": "SECRET=abc123\n"},
+                        "summary": "oops"}
+        sh_calls: list = []
+
+        def _fake_sh(cmd, cwd=None, timeout=None, **kwargs):
+            sh_calls.append(cmd)
+            if cmd[:2] == ["git", "clone"]:
+                repo_path.mkdir(parents=True, exist_ok=True)
+                (repo_path / "README.md").write_text("# widgets\n")
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        with patch.object(router_mod, "_sh", side_effect=_fake_sh), \
+             patch("services.vanguard_verify_agent.verify_patch",
+                   AsyncMock(return_value={"pass": True, "summary": "clean", "findings": []})):
+            await router_mod._run_task_with_git(
+                task_id, PROJ, "leak a secret", [], "",
+                "ghp_faketoken_pathguard", resume_edits=resume_edits,
+            )
+
+        task_row = await fake_db.cto_tasks.find_one({"task_id": task_id})
+        assert task_row is not None
+        assert task_row["status"] == "failed", f"expected failed, got {task_row}"
+        write_calls = [c for c in sh_calls if len(c) > 1 and c[1] in ("add", "commit", "push")]
+        assert write_calls == [], (
+            f"path-guard hole NOT closed — git worker attempted to "
+            f"commit a denied path: {write_calls}"
         )
 
 
@@ -352,15 +407,15 @@ class TestApiWorkerStillFull:
                                 author_name, author_email, progress=None):
             return {"sha": "abc1234", "full_sha": "abc1234" * 5}
 
-        hallu_spy = MagicMock(wraps=router_mod._hallucination_reasons)
-        syntax_spy = MagicMock(wraps=router_mod._syntax_errors)
+        hallu_spy = MagicMock(wraps=pipeline_mod._hallucination_reasons)
+        syntax_spy = MagicMock(wraps=pipeline_mod._syntax_errors)
         from services import design_linter as _dl
         lint_spy = MagicMock(wraps=_dl.lint_file_blocks)
 
         with patch.object(router_mod, "gh_api_fetch_file", AsyncMock(side_effect=_fake_fetch)), \
              patch.object(router_mod, "gh_api_commit", AsyncMock(side_effect=_fake_commit)), \
-             patch.object(router_mod, "_hallucination_reasons", hallu_spy), \
-             patch.object(router_mod, "_syntax_errors", syntax_spy), \
+             patch.object(pipeline_mod, "_hallucination_reasons", hallu_spy), \
+             patch.object(pipeline_mod, "_syntax_errors", syntax_spy), \
              patch("services.design_linter.lint_file_blocks", lint_spy), \
              patch("services.git_identity.resolve_git_identity",
                    AsyncMock(return_value=("Jane Dev", "jane@example.com"))), \

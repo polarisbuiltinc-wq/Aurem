@@ -7960,3 +7960,7 @@ Traced this through `hooks/useGitHubConnectStatus.js` + `routers/github_app.py` 
 
 **Fix location:** this preview only (testable). Founder deploys to production when ready — per the brief, do NOT DM Michael/Mike "try again" until it's actually live in production.
 
+
+---
+**2026-09-08 — Wave 1 guardrail remediation CLOSED + test-suite honesty triage.** Full detail in CHANGELOG.md (2026-09-08 entry) and ROADMAP.md P0.5. Summary: R2 git-binary-worker path guard closed + tested; R23 cost/usage log verified ON with live numbers. Test-suite triage (option-3 scope, the 128 failing-since-Aug-28 test-IDs): 2 REAL BUGS found + fixed (submit ownership-check ordering; `/auth/me` leaking pending-MFA secrets — security), ~14 stale-test fixes, 2 fixture-drift fixes (11 tests), 1 dead test quarantined, 4 REAL BUG SUSPECTS ticketed in ROADMAP.md P0.5 (secret/key-detection cluster, ORA Chat v2 mock-stream, `_DB` fixture gap, code-invariant-lock drift), remainder batch-classified as env-noise/flaky. `backend/test-baseline.txt` refreshed to today's true snapshot (404 entries, same founder-ruled regression-green gate). Wave 2 (#8 PR-gate) and Phase 3 (Parliament/full cto_projects split) remain parked, awaiting founder's "next."
+

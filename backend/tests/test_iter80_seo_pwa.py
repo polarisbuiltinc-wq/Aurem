@@ -102,10 +102,9 @@ def _parse_all_json_ld_blocks(src: str) -> list[dict]:
 
 
 def test_json_ld_pricing_is_current():
-    """The SoftwareApplication JSON-LD block's Offer must match the live
-    Founder Plan at $9/mo. Full four-tier pricing is not in JSON-LD
-    (only in llms.txt) — the LLM crawlers get the full grid, the
-    schema.org validator gets a single canonical Offer."""
+    """The SoftwareApplication JSON-LD block must expose the current
+    2-tier offer model: Free ($0, 10 tasks/mo) + Founder ($9/mo flat,
+    first 500 users) — not the old single-Offer or 4-tier structures."""
     src = _read("frontend/index.html")
     blobs = _parse_all_json_ld_blocks(src)
     assert blobs, "no JSON-LD blocks in index.html"
@@ -114,46 +113,47 @@ def test_json_ld_pricing_is_current():
         None,
     )
     assert app, "no SoftwareApplication JSON-LD block"
-    # 2026 refresh: single Offer for the Founder Plan, not a 4-tier array
-    offer = app["offers"]
-    assert isinstance(offer, dict), \
-        f"offers must be a single Offer object, got {type(offer).__name__}"
-    assert offer["@type"] == "Offer"
-    assert offer["price"] == "9"
-    assert offer["priceCurrency"] == "USD"
+    offers = app["offers"]
+    assert isinstance(offers, list) and len(offers) == 2, \
+        f"offers must be the 2-tier Free+Founder array, got: {offers}"
+    by_name = {o["name"]: o for o in offers}
+    assert by_name["Free"]["price"] == "0"
+    assert by_name["Founder"]["price"] == "9"
+    for o in offers:
+        assert o["priceCurrency"] == "USD"
 
 
 def test_json_ld_feature_list_covers_current_capabilities():
     src = _read("frontend/index.html")
-    # Case-sensitive substrings from the actual live featureList (2026-02):
+    # Case-sensitive substrings from the actual live featureList (2026-09):
     for must_mention in (
-        "direct GitHub commit",   # actual: "…direct GitHub commits via REST API"
-        "Project Brain",
-        "Vanguard",
-        "Maxx mode",
-        "Automations",
-        "Live Preview",            # actual: "Live Preview Panel — …"
-        "F12",
+        "Verified 5-phase Loop",
+        "Vanguard pre-commit security scanner",
+        "Self-heal on verify failure",
+        "One-click rollback",
+        "MCP 2.4 server",
+        "Flat monthly pricing",
     ):
         assert must_mention in src, f"JSON-LD missing feature: {must_mention}"
 
 
 def test_index_title_and_description_reflect_aurem_cto():
-    """Brand must be Title-Case 'Aurem CTO', not all-caps 'AUREM CTO'.
-    The product tag on Twitter + OG is 'ORA' (the flagship product
-    name) — 'Aurem CTO' is the parent brand referenced elsewhere in
-    the head + JSON-LD."""
+    """2026-08-13 P0 brand alignment (CHANGELOG) superseded the old
+    'Aurem CTO' product label with the current hierarchy: Legal name
+    Polaris Built Inc., trade name AUREM, product 'ORA by Aurem'.
+    The product tag on Twitter + OG must lead with 'ORA'."""
     src = _read("frontend/index.html")
-    # Canonical brand casing:
-    assert "Aurem CTO" in src, "brand 'Aurem CTO' (Title Case) missing"
-    # No leftover all-caps brand from the pre-refresh era:
+    # Canonical current brand phrase:
+    assert "ORA by Aurem" in src, "brand 'ORA by Aurem' missing"
+    # No leftover deprecated product label from the pre-P0-brand era:
     assert "AUREM CTO —" not in src, \
-        "old all-caps 'AUREM CTO —' brand still present"
+        "deprecated 'AUREM CTO —' product label still present"
     # Product tag on Twitter + OG — both must lead with the ORA
     # product name (2026-02 refresh preferred the short-tag).
     assert 'name="twitter:title" content="ORA' in src
     assert 'property="og:title" content="ORA' in src
-    # Explicit sanity — neither should embed the old all-caps brand.
+    # Explicit sanity — neither should embed the deprecated all-caps
+    # product label.
     assert 'name="twitter:title" content="AUREM' not in src
     assert 'property="og:title" content="AUREM' not in src
 
@@ -174,22 +174,19 @@ def test_robots_allows_modern_ai_crawlers():
 
 def test_llms_txt_has_current_pricing_and_capabilities():
     """llms.txt is the AI-crawler-facing canonical pricing + capability
-    reference. Team price is $49/mo per user (was $35 pre-refresh)."""
+    reference. 2026-08-30 rewrite: single $9/mo flat Founder Plan
+    (first 500 users) + a $0/10-tasks free tier — the old 4-tier
+    Free/Starter/Pro/Team grid was retired."""
     src = _read("frontend/public/llms.txt")
-    # Full four-tier pricing — current values only.
-    for tier in ("Free", "Starter", "$9/month", "Pro", "$19/month",
-                 "Team", "$49/month"):
-        assert tier in src, f"llms.txt missing pricing fragment: {tier}"
+    for fragment in ("$0 free tier", "10 tasks/month", "$9 founder flat",
+                     "$9/month flat"):
+        assert fragment in src, f"llms.txt missing pricing fragment: {fragment}"
     # Capabilities the model must be able to cite
-    for cap in ("Project Brain", "Vanguard", "Maxx", "MCP 2.4",
-                "GitHub", "OpenRouter"):
+    for cap in ("Vanguard", "MCP 2.4", "GitHub", "5-phase Loop"):
         assert cap in src, f"llms.txt missing capability: {cap}"
-    # No stale wording from the previous llms.txt.
-    assert "1,000 tokens" not in src
-    assert "50k tokens" not in src
-    assert "100k tokens" not in src
-    # Old $35 Team-plan number must be gone.
-    assert "$35" not in src, "stale $35 Team-plan price still in llms.txt"
+    # Stale tier names / prices from the retired 4-tier grid must be gone.
+    for stale in ("$19/month", "$49/month"):
+        assert stale not in src, f"stale retired-tier price still in llms.txt: {stale}"
 
 
 # ── SEO ────────────────────────────────────────────────────────────────

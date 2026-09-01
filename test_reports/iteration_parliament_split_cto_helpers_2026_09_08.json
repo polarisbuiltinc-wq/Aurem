@@ -1,0 +1,23 @@
+{
+  "summary": "Backend-only validation of two mechanical refactors: (1) cto_projects.py's 3 safety gates + 2 syntax helpers relocated to services/cto_pipeline_steps.py; (2) core/parliament.py (1389-line god-file) split into a 9-file core/parliament/ package. Verified backend boots, /api/aurem-dev/auth/login returns 200, all required package exports importable (Parliament, TaskRouter, CEO, SelfHeal, CouncilA/B/C, ParliamentCircuitBreaker, _GLOBAL_BREAKER, llm_call._llm_call_protected, detect_output_type, infer_task_type). Ran all targeted round-scope tests (12) and the full 14-file Parliament regression suite (160 tests). All 12 round-scope tests pass. Regression suite shows exactly the 5 pre-existing failures the main agent flagged and ZERO new failures. loop_engine.py still imports Parliament cleanly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/test_reports/pytest/parliament_suite_2026_09_08.xml",
+    "/app/backend/tests/test_parliament_e2e_guard_2026_09_08.py",
+    "/app/backend/tests/test_cto_worker_safety_pipeline_2026_09_08.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Refactor discipline was tight: dotted submodule access (from . import llm_call as _llm_call_mod; _llm_call_mod._llm_call_protected(...)) is exactly the right pattern to keep monkeypatch.setattr(parliament_module.llm_call, '_llm_call_protected', fake) working -- 11 call-site retargets done consistently.",
+    "Pre-existing failures (5) should be tracked separately: (a) 3x test_block_2_x/7_7 in test_iter212m163_aggression_chat.py -- GitHub App connectivity gap (403 'connection to website's code isn't available'); (b) test_block_8_2_circuit_breaker_source -- FileNotFoundError for services/llm.py, pre-existing package-vs-flat-file mismatch; (c) test_recent_commits_endpoint_registered in test_iter74_followup.py -- admin brain route not registered ('/admin/brain/{project_id}/recent-commits' missing from routes). None of these relate to this round's split."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (round-scope), 96.9% (155/160 in full regression -- 5 pre-existing failures unchanged)", "frontend": "n/a (backend-only)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! -- login returned 200",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Refactor round on parliament.py -> parliament/ package and cto_projects.py safety gates -> services/cto_pipeline_steps.py is CLEAN. Zero regressions attributable to this round. The 5 named pre-existing failures (3x test_block_2_x/7_7, test_block_8_2_circuit_breaker_source, test_recent_commits_endpoint_registered) remain and need main-agent attention if they matter for the roadmap, but they are NOT this round's fault (git-stash A/B by main agent confirmed identical failures pre-round). Round-scope tests passed: test_cto_worker_safety_pipeline_2026_09_08.py (6/6), test_iter74_followup::test_syntax_check_uses_node_check, test_iter74_gaps::test_pre_push_syntax_gate_present, test_iter75_gap_coverage::test_check_js_syntax_tries_esbuild_first, test_parliament_e2e_guard_2026_09_08.py (3/3).",
+  "rca of the issue": "n/a -- no new issues found. Pre-existing failure RCA (main agent already confirmed via git-stash A/B): GitHub App creds not present in preview pod, services/llm.py path shifted long ago, and admin brain recent-commits route was never registered in this preview build. All orthogonal to today's mechanical refactor."
+}

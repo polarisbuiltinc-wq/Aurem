@@ -68,8 +68,10 @@ def test_vanguard_passes_valid_python():
 
 
 def test_pre_push_syntax_gate_present():
-    """The worker pipeline must validate AST before pushing."""
-    src = _read("backend/routers/cto_projects.py")
+    """The worker pipeline must validate AST before pushing.
+    2026-09-08 — moved to services/cto_pipeline_steps.py (shared by
+    both task workers), cto_projects.py now imports it from there."""
+    src = _read("backend/services/cto_pipeline_steps.py")
     assert "Syntax validation" in src
     assert "_syntax_errors" in src
     # AST is the source of truth for Python

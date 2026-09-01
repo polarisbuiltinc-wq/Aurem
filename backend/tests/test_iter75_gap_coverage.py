@@ -93,7 +93,9 @@ def test_semantic_search_has_tfidf_fallback():
 # ── GAP 4 — esbuild + node --check fallback ──────────────────────────
 
 def test_check_js_syntax_tries_esbuild_first():
-    src = _read("backend/routers/cto_projects.py")
+    # 2026-09-08 — moved to services/cto_pipeline_steps.py (shared by
+    # both task workers), cto_projects.py now imports it from there.
+    src = _read("backend/services/cto_pipeline_steps.py")
     # esbuild attempted before node --check
     assert '"esbuild"' in src
     assert '"node"' in src and '"--check"' in src

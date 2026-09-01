@@ -67,17 +67,30 @@ def test_observability_uses_real_client_when_keys_set(monkeypatch):
 
 # ─── Parliament wired to observability ───────────────────────────────
 
+# 2026-09-08 — core/parliament.py was split into the core/parliament/
+# package (scoring.py, breaker.py, routing.py, llm_call.py, councils.py,
+# ceo.py, self_heal.py, parliament.py). These tests now read the whole
+# package's combined source instead of the old monolithic file.
+_PARLIAMENT_PKG = _BACKEND / "core" / "parliament"
+
+
+def _parliament_pkg_text() -> str:
+    return "\n".join(
+        p.read_text() for p in sorted(_PARLIAMENT_PKG.glob("*.py"))
+    )
+
+
 def test_parliament_uses_trace_llm():
     """Parliament must import and call trace_llm — proves the
     Langfuse wrappers are wired into every LLM call site."""
-    text = (_BACKEND / "core" / "parliament.py").read_text()
-    assert "from .observability import trace_llm" in text
+    text = _parliament_pkg_text()
+    assert "from ..observability import trace_llm" in text
     assert "trace_llm(" in text
 
 
 def test_parliament_traces_all_llm_call_sites():
     """Every call to `_llm_call_protected` must pass a `trace_name`."""
-    text = (_BACKEND / "core" / "parliament.py").read_text()
+    text = _parliament_pkg_text()
     # 4 expected sites: council member, CEO judge, self-heal, fallback.
     assert text.count("trace_name=") >= 4
     # Top-level Parliament.run uses the parent chain span.
@@ -87,7 +100,9 @@ def test_parliament_traces_all_llm_call_sites():
 # ─── /admin/system-stats endpoint shape ──────────────────────────────
 
 def test_system_stats_endpoint_defined():
-    text = (_BACKEND / "routers" / "admin.py").read_text()
+    # 2026-02-11 — system-stats moved from routers/admin.py to
+    # routers/admin_analytics.py during the Phase 2 admin.py split.
+    text = (_BACKEND / "routers" / "admin_analytics.py").read_text()
     assert "/system-stats" in text
     # Required top-level keys returned by the endpoint.
     for key in ("parliament", "intent_gateway", "tool_router",

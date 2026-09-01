@@ -92,6 +92,14 @@ def test_branding_present():
     assert "AUREM" in schema_gen._START and schema_gen._START in schema_block
 
 
+@pytest.mark.skip(
+    reason="DEAD — 2026-08-31 the Pro-tier paywall (402 upgrade_required) "
+           "in routers/visibility.py::apply_kit was replaced by a monthly "
+           "quota gate (services/scan_fix_quota.py::assert_can_fix, "
+           "same quota chat/scan fixes use). Free tier can now apply too; "
+           "there is no 402-on-free-tier path any more. Quarantined "
+           "2026-09-08 Wave-1 baseline triage."
+)
 @pytest.mark.asyncio
 async def test_billing_gate_free_plan_returns_402():
     from routers.visibility import apply_kit, ApplyBody

@@ -273,7 +273,7 @@ async def test_healer_escalates_temperature_across_rounds(monkeypatch):
     async def _spy(*args, **kwargs):
         captured_temps.append(kwargs.get("temperature"))
         return ("def f(): return 1", 5.0, None)
-    monkeypatch.setattr(pl, "_llm_call_protected", _spy)
+    monkeypatch.setattr(pl.llm_call, "_llm_call_protected", _spy)
 
     h = pl.SelfHeal()
     for r in range(0, 2):
@@ -291,7 +291,7 @@ async def test_healer_threads_prior_attempts_into_prompt(monkeypatch):
     async def _spy(*args, **kwargs):
         captured_user.append(kwargs.get("user") or "")
         return ("def f(): return 1", 5.0, None)
-    monkeypatch.setattr(pl, "_llm_call_protected", _spy)
+    monkeypatch.setattr(pl.llm_call, "_llm_call_protected", _spy)
 
     h = pl.SelfHeal()
     await h.heal(
@@ -312,7 +312,7 @@ async def test_healer_threads_prior_attempts_into_prompt(monkeypatch):
 async def test_healer_returns_retry_with_output(monkeypatch):
     async def _stub(*args, **kwargs):
         return ("def healed(): return 1", 5.0, None)
-    monkeypatch.setattr(pl, "_llm_call_protected", _stub)
+    monkeypatch.setattr(pl.llm_call, "_llm_call_protected", _stub)
 
     res = await pl.SelfHeal().heal(
         task="x", round_num=0, max_rounds=2,
@@ -326,7 +326,7 @@ async def test_healer_returns_retry_with_output(monkeypatch):
 async def test_healer_returns_escalate_on_empty_output(monkeypatch):
     async def _stub(*args, **kwargs):
         return ("", 5.0, None)
-    monkeypatch.setattr(pl, "_llm_call_protected", _stub)
+    monkeypatch.setattr(pl.llm_call, "_llm_call_protected", _stub)
 
     res = await pl.SelfHeal().heal(
         task="x", round_num=0, max_rounds=2,

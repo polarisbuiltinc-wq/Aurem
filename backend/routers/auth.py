@@ -731,7 +731,14 @@ async def me(authorization: Optional[str] = Header(None)) -> dict:
         # Found live on prod: /auth/me returned the TOTP `mfa_secret`,
         # hashed `mfa_backup_codes` and the raw GitHub `access_token`.
         # The frontend uses none of them (grep-verified).
-        for _secret_field in ("mfa_secret", "mfa_backup_codes", "password"):
+        # 2026-09-08 — Wave-1 baseline triage caught the SAME leak for
+        # the transient enrollment-in-progress fields: `mfa_secret_pending`
+        # (plaintext TOTP secret) and `mfa_backup_codes_pending` (bcrypt
+        # hashes) — set by routers/mfa.py::enroll-start and left on the
+        # user doc until enroll-verify/disable clears them. Live-verified
+        # leaking on test_admin_001 (stale unfinished enrollment).
+        for _secret_field in ("mfa_secret", "mfa_backup_codes", "password",
+                               "mfa_secret_pending", "mfa_backup_codes_pending"):
             user.pop(_secret_field, None)
         gh = user.get("github")
         if isinstance(gh, dict):
