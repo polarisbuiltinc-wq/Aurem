@@ -1,0 +1,44 @@
+{
+  "summary": "Preview-only regression + new-feature testing for the ORA browser diagnostic tool round. All 20 real (non-mocked) browser E2E tests pass (real navigations to https://example.com and https://httpbin.org/forms/post, real 500 capture, SSRF/scheme blocking for 127.0.0.1/10./172.16./192.168./169.254./localhost/[::1] and file://data:/ftp://, fresh-profile isolation, browser close on turn end, invalid/too-many-steps rejected, honest degradation when browser unavailable). Wiring audit (12), AskAdvisor unchanged (7), ship-meter (4), and the full -k filter regression (loop_safety | ship_meter | output_guard | pending_action | insert_edit | ask_advisor | browser_diagnostic | wiring_audit) all green: 85 passed / 12 skipped / 0 failed / 7246 deselected. Frontend vitest for Settings TrackSwitcher gate + /build routes alive: 5/5 passed. Frontend Settings visual smoke was NOT captured because preview login with test@aurem.dev / AuremTest2026! did not authenticate (redirected back to /login?next=/settings) — this appears to be a stale-credential issue not caused by this round's changes; the vitest DOM assertions already prove TRACK_SWITCHER_ENABLED=false gates the TrackSwitcher render, component definition is preserved, and /build + personal/* routes remain registered. Concurrency-lock (project_busy) path in services/browser_tools.py has no dedicated automated test — flagged as LOW-priority gap per request. Chromium binary production availability remains UNVERIFIED for the deployed image (disclosed risk, no Docker changes allowed).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "services/browser_tools.py::browser() lock-contention path (~lines 304-330)", "issue": "No dedicated automated test for the acquire-loop-lock wait → 'project_busy' error branch. All other paths (SSRF, scheme block, fresh profile, browser-close, degradation) are covered."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Preview login for visual Settings smoke", "issue": "Login with documented preview creds (test@aurem.dev / AuremTest2026!) did not succeed — POST kept user on /login. Not caused by this round; likely stale password in /app/memory/test_credentials.md. Vitest DOM assertions cover the actual behavior under test.", "affected_selectors": ["button[type='submit']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_browser_diagnostic_tool_2026_09_09.py",
+    "/app/backend/tests/test_iter212m6_wiring_audit.py",
+    "/app/backend/tests/test_iter212m22_ask_advisor_full_response.py",
+    "/app/backend/tests/test_overnight_t1_ship_meter.py",
+    "/app/frontend/src/pages/__tests__/Settings.track_switcher_hidden.test.js",
+    "/app/frontend/src/__tests__/App.build_routes_alive.test.js"
+  ],
+  "action_items": [
+    "OPTIONAL/LOW: add one focused unit test for services/browser_tools.py 'project_busy' lock-contention branch (mock acquire_loop_lock to stay held past _wait_for_project_lock budget and assert error='project_busy').",
+    "OPTIONAL: refresh /app/memory/test_credentials.md preview password if test@aurem.dev/AuremTest2026! is stale, or note the current working preview creds so future visual smokes can complete.",
+    "BLOCKER FOR 'DONE' (already disclosed): validate PLAYWRIGHT_CHROME_EXECUTABLE_PATH / Chromium binary presence in the production Kubernetes image after deploy before declaring the browser tool production-ready. This round is PREVIEW EVIDENCE ONLY."
+  ],
+  "critical_code_review_comments": [
+    "services/browser_tools.py SSRF gate correctly blocks all RFC1918, loopback (v4+v6), link-local (169.254/16) and non-http(s) schemes — verified by 11 SSRF/scheme tests. Good defense in depth.",
+    "Fresh browser profile + finally: await browser.close() per _run_steps invocation is a clean isolation model; test_t_browser_closes_after_turn confirms no cookie/localStorage bleed.",
+    "Concurrency safety correctly reuses services/loop_safety.acquire_loop_lock so a browser check and a Loop ship on the same project_id cannot race — but the 'project_busy' error branch itself has no direct test; add one to lock the behavior.",
+    "Tool wiring is coherent across the three registration points (LOCAL_TOOLS dispatch, TOOL_SPECS list, tools_bridge._KNOWN_TOOLS) — wiring_audit tests enforce spec↔handler bijection which will catch future drift.",
+    "AskAdvisor comment-only edit truly is behavior-preserving (6 tests including SSE thinking/done frames, GLM provider meta frame, and ORA-branch-does-not-fall-through-to-orchestrator all still pass)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (85/85 executed, 12 skipped by design)", "frontend": "100% (5/5 vitest)"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! from /app/memory/test_credentials.md — did NOT log in on preview during this run; flagged for main agent.",
+  "seed_data_creation": "None. Browser tests hit public https://example.com and https://httpbin.org — no seed data written to Mongo.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Preview-only verification pass. Next agent: (1) if Chromium binary reaches prod, re-run tests/test_browser_diagnostic_tool_2026_09_09.py on prod pod; (2) add the missing project_busy lock-contention test if founder wants full coverage; (3) if preview creds get refreshed, capture the actual Settings-page screenshot to visually confirm TrackSwitcher card absence. All other regression tests in the -k filter set are green baseline.",
+  "rca of the issue": "N/A — no bugs found this round. All targeted feature tests + regression buckets pass. Only gaps are the disclosed Chromium-binary-in-prod unknown and one missing unit test for the project_busy branch, neither of which is a code defect."
+}

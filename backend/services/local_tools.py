@@ -247,6 +247,7 @@ from .web_skills import (
     WEB_TOOLS as _WEB_TOOLS,
     WEB_TOOL_SPECS as _WEB_TOOL_SPECS,
 )
+from .browser_tools import browser as _browser_tool
 from .dev_skills import (
     DEV_TOOLS as _DEV_TOOLS,
     DEV_TOOL_SPECS as _DEV_TOOL_SPECS,
@@ -2559,6 +2560,35 @@ TOOL_SPECS: list[dict] = [
             "command": "string — the bash command to run (read-only only)",
         },
     },
+    {
+        "name": "browser",
+        "description": (
+            "2026-09 · REAL browser diagnostic tool — visits a PUBLIC page, "
+            "can click/fill/submit, and returns REAL evidence (accessibility "
+            "snapshot, console errors, network log, optional screenshot). "
+            "USE THIS whenever a user reports 'my form doesn't work' / 'my "
+            "button doesn't do anything' / 'my page doesn't load' — actually "
+            "TRY the interaction and report what really happened, don't "
+            "guess from code alone. Pass the FULL sequence of steps in ONE "
+            "call (e.g. navigate, fill, click submit, then console_errors + "
+            "network_log) — this runs as ONE browser session, not multiple "
+            "round-trips. PUBLIC pages only — no login/credentials, ever. "
+            "Blocked: localhost/private IPs, file://, data:, ftp. Max 3 "
+            "navigations per call."
+        ),
+        "args_spec": {
+            "steps": (
+                "array of step objects, each one of: "
+                "{action:'navigate', url} / {action:'click', sel} / "
+                "{action:'fill', sel, val} / {action:'submit', sel} / "
+                "{action:'wait_for', sel, timeout?} / {action:'back'} / "
+                "{action:'a11y_snapshot'} (text tree — PREFER this over "
+                "screenshot for reasoning) / {action:'console_errors'} / "
+                "{action:'network_log'} / {action:'screenshot'} (max 1/call) "
+                "/ {action:'close'}. `sel` is a CSS selector."
+            ),
+        },
+    },
 ] + _WEB_TOOL_SPECS + _DEV_TOOL_SPECS + _VERCEL_TOOL_SPECS
 
 # ── Dispatch table ────────────────────────────────────────────────────────────
@@ -2575,6 +2605,7 @@ LOCAL_TOOLS: dict[str, callable] = {
     "get_repo_info":        get_repo_info,
     "save_finding":         save_finding,
     "execute_bash":         execute_bash,
+    "browser":              _browser_tool,
     **_WEB_TOOLS,
     **_DEV_TOOLS,
     **_VERCEL_TOOLS,

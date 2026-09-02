@@ -30,6 +30,10 @@ Design contract
   hai" and MUST NOT guess.
 • Sub-second by design: 2–4 count/find operations, no aggregation
   pipelines.
+
+RULING (2026-09 · founder decision D1): AskAdvisor stays exactly as-is
+this round — no consent gate, no gating, no off-switch, no behavior
+change. This file is intentionally untouched beyond this comment.
 """
 
 # arch: allow-http — Ad-hoc GitHub fetches for Advisor snapshots (iter 212m-225)

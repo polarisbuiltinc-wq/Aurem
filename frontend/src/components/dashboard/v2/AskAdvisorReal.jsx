@@ -16,6 +16,11 @@
  *   • Enter to send, Shift+Enter for newline, ESC to collapse.
  *   • Per-session messages (not persisted across reloads — the panel
  *     is for ephemeral advice, not chat history).
+ *
+ * RULING (2026-09 · founder decision D1): AskAdvisor stays exactly
+ * as-is this round — no consent gate, no gating, no off-switch, no
+ * behavior change. This file is intentionally untouched beyond this
+ * comment.
  */
 import React, { useEffect, useRef, useState } from "react";
 import { cn } from "./cn";

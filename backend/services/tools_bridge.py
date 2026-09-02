@@ -271,6 +271,7 @@ def extract_tool_calls(text: str) -> list[dict]:
         "validate_syntax", "e2b_run_code", "execute_bash",
         "web_search", "fetch_url", "web_search_and_summarize",
         "firecrawl_scrape", "firecrawl_crawl_site",
+        "browser",
         # Session G · Batch 4c (Feb 2026) — 13 Vercel tools were
         # registered in LOCAL_TOOLS (services/local_tools.py) but
         # NEVER added to this gate. DeepSeek's Python-style
