@@ -6,6 +6,37 @@
     <meta name="theme-color" content="#0A0A0A" />
     <meta name="color-scheme" content="dark" />
 
+    <!-- 2026-09 mobile PageSpeed round 2 — shared helper so both Meta
+         Pixel and Google Ads gtag (the two biggest JS payloads on the
+         page, ~650 KiB combined) fire on the FIRST real user signal
+         (scroll/tap/keypress) instead of a fixed short timer, with an
+         idle-callback fallback (now 4.5s, was 2.5-3s) so tracking
+         still lands for a visitor who reads without touching
+         anything. Real visitors almost always scroll/tap within the
+         first second, so this pushes the third-party JS parse/eval
+         cost further past LCP/TBT measurement without losing
+         PageView/conversion data. -->
+    <script>
+    window.__auremDeferThirdParty = function(fn, idleTimeoutMs) {
+      var fired = false;
+      var events = ['scroll', 'pointerdown', 'touchstart', 'keydown', 'mousemove'];
+      var run = function() {
+        if (fired) return;
+        fired = true;
+        events.forEach(function(ev) { window.removeEventListener(ev, run); });
+        fn();
+      };
+      events.forEach(function(ev) {
+        window.addEventListener(ev, run, { passive: true, once: true });
+      });
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(run, { timeout: idleTimeoutMs });
+      } else {
+        setTimeout(run, idleTimeoutMs);
+      }
+    };
+    </script>
+
     <!-- Meta Pixel Code — Iter 388-ag (2026-02-14) · consent gate
          REMOVED per founder decision. The pixel now fires for EVERY
          visitor regardless of consent state or jurisdiction.
@@ -32,13 +63,13 @@
     // synchronously in <head>, which added ~250 ms of main-thread
     // script eval BEFORE the LCP paint on mobile (fbevents.js is
     // 110 KiB gzipped and its bootstrap logs a 192 ms long task per
-    // Lighthouse Mobile). Deferring to requestIdleCallback (with a
-    // 3 s setTimeout fallback for older browsers / Safari) moves that
-    // cost past LCP without dropping tracking — PageView is still
-    // sent well within the "first minute" window Meta expects and
-    // subsequent fbq('track', ...) calls (CompleteRegistration, Lead,
-    // Purchase — Iter 389) work identically because the fbq queue
-    // stub is created up-front and drained once fbevents.js loads.
+    // Lighthouse Mobile). 2026-09: now uses __auremDeferThirdParty
+    // (interaction-or-idle, see above) instead of a flat timer —
+    // PageView is still sent well within the "first minute" window
+    // Meta expects, and subsequent fbq('track', ...) calls
+    // (CompleteRegistration, Lead, Purchase — Iter 389) work
+    // identically because the fbq queue stub is created up-front and
+    // drained once fbevents.js loads.
     !function(f,b,e,v,n,t,s){
       if(f.fbq)return;
       n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};
@@ -51,8 +82,7 @@
         f.fbq('init','1571887197933821');
         f.fbq('track','PageView');
       };
-      if('requestIdleCallback' in f){ f.requestIdleCallback(boot,{timeout:3000}); }
-      else { setTimeout(boot,2500); }
+      window.__auremDeferThirdParty(boot, 4500);
     }(window, document,'script','https://connect.facebook.net/en_US/fbevents.js');
     </script>
     <!-- Note: <noscript> fallback for the pixel lives at the very top of
@@ -487,13 +517,14 @@
     <!--
       Iter 391 · Deferred Google Ads gtag bootstrap. The gtag.js file
       is 152 KiB and its parse alone costs ~103 ms of main-thread
-      time on the emulated Moto G Power. We defer the <script>
-      injection to requestIdleCallback (2.5 s setTimeout fallback)
-      while pre-creating the dataLayer + gtag stub in <head> so any
-      early trackSignup / trackPurchase call from analytics.js just
-      pushes into the queue and runs when the library lands. Consent
-      Mode v2 defaults are set on the stub so the queued events
-      inherit the DENY defaults exactly as before.
+      time on the emulated Moto G Power. 2026-09: uses the shared
+      __auremDeferThirdParty helper (interaction-or-idle, 4.5s
+      fallback, was a flat 2.5-3s timer) while pre-creating the
+      dataLayer + gtag stub in <head> so any early trackSignup /
+      trackPurchase call from analytics.js just pushes into the queue
+      and runs when the library lands. Consent Mode v2 defaults are
+      set on the stub so the queued events inherit the DENY defaults
+      exactly as before.
     -->
     <script>
       window.dataLayer = window.dataLayer || [];
@@ -518,8 +549,7 @@
           s.src='https://www.googletagmanager.com/gtag/js?id=AW-18239920865';
           document.head.appendChild(s);
         };
-        if('requestIdleCallback' in window){ window.requestIdleCallback(loadGtag,{timeout:3000}); }
-        else { setTimeout(loadGtag,2500); }
+        window.__auremDeferThirdParty(loadGtag, 4500);
       })();
     </script>
 

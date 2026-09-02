@@ -29,7 +29,15 @@ export default function WalkthroughPlayer({
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [tick, setTick] = useState(0);   // 0..1 progress within step
-  const [muted, setMuted] = useState(false);
+  // 2026-09 mobile PageSpeed fix — was `false`. Browsers block
+  // unmuted autoplay without a user gesture anyway, so the old
+  // default silently failed `.play()` while still eagerly `.load()`-
+  // ing every step's MP3 (~30 KiB each) the instant this component
+  // mounted on the landing page — flagged by mobile PSI as wasted
+  // network payload for visitors who never touch sound. Starting
+  // muted (standard "muted autoplay, click to unmute" pattern) means
+  // we skip the fetch entirely until the user actually opts in below.
+  const [muted, setMuted] = useState(true);
   const rafRef = useRef(null);
   const startedAtRef = useRef(null);
   const audioRef = useRef(null);        // Iter 212m-231 — <audio> element handle
@@ -48,6 +56,10 @@ export default function WalkthroughPlayer({
     if (!audioEnabled) return;
     const a = audioRef.current;
     if (!a) return;
+    // 2026-09 mobile PageSpeed fix — while muted, don't even fetch
+    // the MP3 (no `.src`/`.load()`); real playback + download only
+    // starts once the user clicks Unmute.
+    if (muted) { a.pause(); return; }
     const src = active?.audioSrc
       || (active?.id ? `${audioBaseUrl}/${active.id}.mp3` : null);
     if (!src) return;
@@ -55,7 +67,7 @@ export default function WalkthroughPlayer({
       a.src = src;
       a.load();
     }
-    if (playing && !muted) {
+    if (playing) {
       // Autoplay may reject on first paint; that's fine — the caption
       // is visible and the visual pipeline keeps running.
       a.currentTime = 0;
