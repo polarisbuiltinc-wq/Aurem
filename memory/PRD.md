@@ -1,3 +1,25 @@
+## 2026-09-09 (part 3) — PageSpeed performance fixes (Desktop score 73 → targeting render-blocking + LCP + image + console-error issues)
+
+**Founder shared:** https://pagespeed.web.dev/analysis/https-auremcto.com — Performance 73/100 (desktop), LCP 5.5s, TBT 140ms, CLS 0.078. Fetched the full report via crawl_tool.
+
+**Context found first:** `index.html` already has extensive prior perf-tuning (Iter 152/156/391 comments) — Meta Pixel + Google Ads gtag already deferred via `requestIdleCallback`, background images already preloaded with `fetchpriority=high`, F12ErrorCapture already `defer`red. Did NOT touch any of that (already correctly optimized; re-touching would risk regressing prior fixes).
+
+**Fixed this round:**
+1. **Render-blocking Google Fonts (est. 630ms savings, biggest lever)** — `src/index.css` had `@import url('fonts.googleapis.com/css2?...')` at the top, which is ALWAYS render-blocking and was serialized behind the main CSS bundle on the critical path (network dependency tree showed HTML→bundle.js→bundle.css→fonts-css→woff2, 1,246ms max latency). Moved it to `index.html` using the standard preload-as-style + `onload` swap-to-stylesheet pattern (with `<noscript>` fallback), same technique already used for the Jost woff2 preload right above it.
+2. **Oversized ORA icon (est. 14 KiB savings)** — `ora-icon@2x.webp`/`.png` were 256×256 serving a 67×67 (134×134 at 2x) slot. Resized all 4 variants (`ora-icon.webp/png`, `ora-icon@2x.webp/png`) to their actual displayed dimensions with PIL/LANCZOS. `ora-icon@2x.webp` dropped from 15.5 KiB → 6 KiB.
+3. **Real bug: unauthenticated `/cto/projects/list` 401 firing on the public landing page** (Lighthouse Best Practices flagged this as a logged browser error) — `components/useActiveProject.js`'s effect fired this API call unconditionally on mount with no auth check, so any anonymous visitor (including the PageSpeed crawler) got a guaranteed 401 + wasted network request. Added a `if (!getToken()) return;` guard before the fetch.
+
+**Deliberately NOT touched (documented reasoning):**
+- Facebook Pixel / Google Tag Manager "unused JS"/long-task numbers — already deferred via `requestIdleCallback`; further action would mean removing analytics, out of scope for a speed-only ask.
+- Static asset cache-lifetime (5 min TTL on `.webp` files) — no app-level cache-header config found (no `_headers`/vite cache plugin); likely controlled by the hosting layer, not something fixable via this repo's code without infra changes (out of scope per this round's constraints).
+- Non-composited CLS animation (a `top`/`left`-animated click-ripple element) — minor contributor (0.078 total CLS), left as-is to avoid a blind visual-risk change without a clear repro.
+- Own bundle's 123 KiB "unused JS" — would need deeper route-level code-splitting; higher effort/risk, deferred.
+
+**Verified:** screenshot of the live landing page post-fix — renders correctly (fonts visible, ORA icon crisp, zero console errors). `Shell.iter329_b1_race.test.jsx` (14/14, the only existing test touching `useActiveProject`) still passes.
+
+**PROVENANCE: preview-verified only.** Founder should redeploy and re-run the PageSpeed test on production to see the updated score — did not re-run PageSpeed myself (that tool targets the live production URL, not preview).
+
+
 ## 2026-09-09 (part 2) — Codebase Health scan crash fixed (real bug, self-reproduced) + ORA Self-Repair log checked (working, read-only, no bug found)
 
 **Founder report (terse):** "ORA Self-Repair ye kaam nhi kr rha... codebase health nhi kaam kr rha score show nhi ho rha updated". Founder skipped the clarifying-question round, so I self-tested both directly.

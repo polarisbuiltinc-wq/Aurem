@@ -1,5 +1,10 @@
 /* AUREM Dev — global styles */
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=JetBrains+Mono:wght@400;500&family=Jost:wght@300;400;500;600&display=swap');
+/* 2026-09-09 — Google Fonts moved OUT of this CSS `@import` and into an
+   async-loaded <link> in index.html (PageSpeed "Render-blocking
+   requests" + LCP "Resource load delay" flagged this: @import is
+   render-blocking and was serialized behind the main CSS bundle,
+   adding it to the critical path — HTML -> bundle.css -> fonts CSS ->
+   woff2). See index.html for the preload+swap replacement. */
 
 @tailwind base;
 @tailwind components;

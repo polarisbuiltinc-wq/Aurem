@@ -196,6 +196,27 @@
       crossorigin="anonymous"
     />
 
+    <!-- 2026-09-09 — the rest of the font family (Cinzel, JetBrains
+         Mono, and Jost's other weights) used to load via an `@import`
+         inside index.css, which is ALWAYS render-blocking and sat
+         serialized behind the main CSS bundle on the critical path
+         (PageSpeed: "Render-blocking requests", ~630ms est. savings).
+         Standard async-CSS pattern: preload as a stylesheet (fetches
+         in parallel, non-blocking), then flip `rel` to `stylesheet`
+         on load. `<noscript>` covers non-JS clients. -->
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=JetBrains+Mono:wght@400;500&family=Jost:wght@300;400;500;600&display=swap"
+      onload="this.onload=null;this.rel='stylesheet'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=JetBrains+Mono:wght@400;500&family=Jost:wght@300;400;500;600&display=swap"
+      />
+    </noscript>
+
     <!-- =============================================================== -->
     <!-- STRUCTURED DATA (Schema.org JSON-LD)                            -->
     <!--   Iter 212m-68 — SEO + GEO + AEO overhaul.                      -->

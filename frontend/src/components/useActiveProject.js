@@ -5,7 +5,7 @@
  * platform's file-size guard.
  */
 import { useEffect, useState } from "react";
-import { api } from "../lib/api";
+import { api, getToken } from "../lib/api";
 import { getActiveProjectId, setActiveProjectId } from "./activeProject";
 
 export function useActiveProject() {
@@ -33,6 +33,12 @@ export function useActiveProject() {
   }, []);
 
   useEffect(() => {
+    // 2026-09-09 — this hook can mount on public/unauthenticated routes
+    // (e.g. the landing page nav) via shared layout components. Without
+    // this guard it fires `/cto/projects/list` for every anonymous
+    // visitor, which always 401s — a console error PageSpeed flags and
+    // a wasted network request on the landing page's critical path.
+    if (!getToken()) return;
     if (!pid) {
       // Iter 212m-190 — even with no saved active id, still fetch the
       // list so we can AUTO-SEED the first wired project. This is the
