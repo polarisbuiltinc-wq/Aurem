@@ -12,6 +12,7 @@ existing test suite (`current_dev`, `get_db`, `require_db`,
 `_run_rollback_via_api`, `_run_rollback_with_git`) — see preview.py's
 module docstring for why.
 """
+import asyncio
 import logging
 import shutil
 import time
@@ -199,26 +200,36 @@ async def _run_rollback_with_git(task_id: str, proj: dict, commit_sha: str,
         await _set(rollback_status="running")
         await _rollback_log(task_id, f"Cloning {owner}/{repo}@{branch}…")
         # Full history needed (no --depth=1) so the revert can find the sha
-        r = _pkg._sh(["git", "clone", "--branch", branch, clone_url, str(repo_path)],
-                cwd=ws, timeout=120)
+        # 2026-09-09 — offloaded to a thread (asyncio.to_thread) so these
+        # synchronous `subprocess.run()` git calls (up to 120s) never block
+        # the shared event loop. This function runs via FastAPI
+        # BackgroundTasks on the SAME event loop as every other request
+        # (including the trivial /health probe) — a blocked clone/push here
+        # was the confirmed root cause of the nginx "/health upstream timed
+        # out" bursts that made K8s mark the pod unhealthy mid-deploy.
+        r = await asyncio.to_thread(
+            _pkg._sh, ["git", "clone", "--branch", branch, clone_url, str(repo_path)],
+            cwd=ws, timeout=120)
         if r.returncode != 0:
             raise RuntimeError(f"git clone failed: {_scrub(r.stderr)[:300]}")
         await _rollback_log(task_id, "✅ Cloned", "success")
 
-        _pkg._sh(["git", "config", "user.email", "cto@auremcto.com"], repo_path)
-        _pkg._sh(["git", "config", "user.name", "AUREM"], repo_path)
+        await asyncio.to_thread(_pkg._sh, ["git", "config", "user.email", "cto@auremcto.com"], repo_path)
+        await asyncio.to_thread(_pkg._sh, ["git", "config", "user.name", "AUREM"], repo_path)
 
         # Use `git revert` so we never force-push; it produces a new commit
         # that undoes the changes. `-m 1` lets us revert merge commits if
         # the original was a merge.
-        revert = _pkg._sh(
+        revert = await asyncio.to_thread(
+            _pkg._sh,
             ["git", "revert", "--no-edit", "-m", "1", commit_sha],
             repo_path, timeout=60,
         )
         if revert.returncode != 0:
             # Plain (non-merge) commits don't accept `-m`; retry without it
-            _pkg._sh(["git", "revert", "--abort"], repo_path)
-            revert = _pkg._sh(
+            await asyncio.to_thread(_pkg._sh, ["git", "revert", "--abort"], repo_path)
+            revert = await asyncio.to_thread(
+                _pkg._sh,
                 ["git", "revert", "--no-edit", commit_sha],
                 repo_path, timeout=60,
             )
@@ -228,11 +239,12 @@ async def _run_rollback_with_git(task_id: str, proj: dict, commit_sha: str,
             )
         await _rollback_log(task_id, f"✏️ Reverted {commit_sha}", "success")
 
-        push = _pkg._sh(["git", "push", "origin", branch], repo_path, timeout=90)
+        push = await asyncio.to_thread(_pkg._sh, ["git", "push", "origin", branch], repo_path, timeout=90)
         if push.returncode != 0:
             raise RuntimeError(f"git push failed: {_scrub(push.stderr)[:300]}")
 
-        new_sha = _pkg._sh(["git", "rev-parse", "--short", "HEAD"], repo_path).stdout.strip()
+        new_sha_r = await asyncio.to_thread(_pkg._sh, ["git", "rev-parse", "--short", "HEAD"], repo_path)
+        new_sha = new_sha_r.stdout.strip()
         await _rollback_log(task_id, f"🚀 pushed revert — {new_sha}", "success")
         await _set(
             rollback_status="done",

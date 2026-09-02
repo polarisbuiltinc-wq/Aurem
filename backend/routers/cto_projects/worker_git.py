@@ -55,8 +55,14 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
         # 1) clone
         await _pkg._set_status(task_id, status="pulling", started_at=time.time())
         await _pkg._log(task_id, f"Cloning {owner}/{repo}@{branch}…")
-        r = _pkg._sh(["git", "clone", "--depth=1", "--branch", branch, clone_url, str(repo_path)],
-                cwd=ws, timeout=120)
+        # 2026-09-09 — offloaded to a thread: see matching fix + rationale
+        # in rollback.py (confirmed root cause of the nginx "/health
+        # upstream timed out" bursts that made K8s mark the pod unhealthy
+        # mid-deploy — a synchronous git clone/push here blocks the SAME
+        # event loop that serves every other request, including /health).
+        r = await asyncio.to_thread(
+            _pkg._sh, ["git", "clone", "--depth=1", "--branch", branch, clone_url, str(repo_path)],
+            cwd=ws, timeout=120)
         if r.returncode != 0:
             raise RuntimeError(f"git clone failed: {_scrub(r.stderr)[:300]}")
         await _pkg._log(task_id, "✅ Cloned", "success")
@@ -418,20 +424,22 @@ async def _run_task_with_git(task_id, proj, task, files, context, user_token, ma
 
         # 5) commit + push
         await _pkg._set_status(task_id, status="pushing")
-        _pkg._sh(["git", "config", "user.email", "cto@auremcto.com"], repo_path)
-        _pkg._sh(["git", "config", "user.name", "AUREM"], repo_path)
-        _pkg._sh(["git", "add", "-A"], repo_path)
-        cm = _pkg._sh(["git", "commit", "-m", f"AUREM: {task[:60]}"], repo_path)
+        await asyncio.to_thread(_pkg._sh, ["git", "config", "user.email", "cto@auremcto.com"], repo_path)
+        await asyncio.to_thread(_pkg._sh, ["git", "config", "user.name", "AUREM"], repo_path)
+        await asyncio.to_thread(_pkg._sh, ["git", "add", "-A"], repo_path)
+        cm = await asyncio.to_thread(_pkg._sh, ["git", "commit", "-m", f"AUREM: {task[:60]}"], repo_path)
         if "nothing to commit" in cm.stdout:
             await _pkg._log(task_id, "ℹ️ no diff to commit", "info")
             await _pkg._set_status(task_id, status="done", result=summary,
                               completed_at=time.time())
             return
-        push = _pkg._sh(["git", "push", "origin", branch], repo_path, timeout=90)
+        push = await asyncio.to_thread(_pkg._sh, ["git", "push", "origin", branch], repo_path, timeout=90)
         if push.returncode != 0:
             raise RuntimeError(f"git push failed: {_scrub(push.stderr)[:300]}")
-        sha = _pkg._sh(["git", "rev-parse", "--short", "HEAD"], repo_path).stdout.strip()
-        commit_full_sha = _pkg._sh(["git", "rev-parse", "HEAD"], repo_path).stdout.strip()
+        sha_r = await asyncio.to_thread(_pkg._sh, ["git", "rev-parse", "--short", "HEAD"], repo_path)
+        sha = sha_r.stdout.strip()
+        commit_full_sha_r = await asyncio.to_thread(_pkg._sh, ["git", "rev-parse", "HEAD"], repo_path)
+        commit_full_sha = commit_full_sha_r.stdout.strip()
         await _pkg._log(task_id, f"🚀 pushed — {sha}", "success")
         await _pkg._set_status(task_id, status="done", result=summary,
                           commit_sha=sha,
