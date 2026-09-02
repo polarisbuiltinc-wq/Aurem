@@ -43,6 +43,7 @@ const REAL_ACTIVE_SHIP_PENDING = {
     },
   ],
   integrity_verdict: "clean",
+  vanguard_verdict: { ran: true, critical: 0, high: 0, total: 0 },
 };
 
 // -------------------- REAL SSE awaiting_ship shape ---------------
@@ -62,6 +63,7 @@ const REAL_SSE_DATA = {
     },
   ],
   integrity_verdict: "clean",
+  vanguard_verdict: { ran: true, critical: 0, high: 1, total: 1 },
 };
 
 
@@ -81,6 +83,11 @@ describe("mapShipPendingFromActive — the /loop/active rehydrate path", () => {
     expect(p.integrity_verdict).toBe("clean");
   });
 
+  it("preserves vanguard_verdict object (2026 audit Risk #1)", () => {
+    const p = mapShipPendingFromActive(REAL_ACTIVE_SHIP_PENDING);
+    expect(p.vanguard_verdict).toEqual({ ran: true, critical: 0, high: 0, total: 0 });
+  });
+
   it("still normalises files dict → array of paths", () => {
     const p = mapShipPendingFromActive(REAL_ACTIVE_SHIP_PENDING);
     expect(p.files).toEqual(["AUDIT.md"]);
@@ -96,9 +103,11 @@ describe("mapShipPendingFromActive — the /loop/active rehydrate path", () => {
     const legacy = { ...REAL_ACTIVE_SHIP_PENDING };
     delete legacy.files_diff;
     delete legacy.integrity_verdict;
+    delete legacy.vanguard_verdict;
     const p = mapShipPendingFromActive(legacy);
     expect(p.files_diff).toEqual([]);
     expect(p.integrity_verdict).toBeNull();
+    expect(p.vanguard_verdict).toBeNull();
     // Other fields still carry through.
     expect(p.owner).toBe("TJSNDHU");
   });
@@ -112,6 +121,11 @@ describe("mapShipPendingFromAwaitingShipEvent — the SSE path", () => {
     expect(p.files_diff[0].additions).toBe(35);
     expect(p.files_diff[0].deletions).toBe(34);
     expect(p.integrity_verdict).toBe("clean");
+  });
+
+  it("preserves vanguard_verdict from the SSE frame (2026 audit Risk #1)", () => {
+    const p = mapShipPendingFromAwaitingShipEvent(REAL_SSE_DATA, { message: "" });
+    expect(p.vanguard_verdict).toEqual({ ran: true, critical: 0, high: 1, total: 1 });
   });
 
   it("uses SSE event.message if present, falls back if missing", () => {
@@ -129,9 +143,11 @@ describe("mapShipPendingFromAwaitingShipEvent — the SSE path", () => {
     const legacy = { ...REAL_SSE_DATA };
     delete legacy.files_diff;
     delete legacy.integrity_verdict;
+    delete legacy.vanguard_verdict;
     const p = mapShipPendingFromAwaitingShipEvent(legacy, {});
     expect(p.files_diff).toEqual([]);
     expect(p.integrity_verdict).toBeNull();
+    expect(p.vanguard_verdict).toBeNull();
   });
 });
 
@@ -142,15 +158,17 @@ describe("mapShipPendingFromAwaitingShipEvent — the SSE path", () => {
 // eyeball fail: run the mapper on the raw wire shape, check the
 // output object literally includes both keys.
 describe("regression guard — the founder's exact eyeball trace", () => {
-  it("mapShipPendingFromActive output KEYS include files_diff + integrity_verdict", () => {
+  it("mapShipPendingFromActive output KEYS include files_diff + integrity_verdict + vanguard_verdict", () => {
     const p = mapShipPendingFromActive(REAL_ACTIVE_SHIP_PENDING);
     expect(Object.keys(p)).toContain("files_diff");
     expect(Object.keys(p)).toContain("integrity_verdict");
+    expect(Object.keys(p)).toContain("vanguard_verdict");
   });
 
-  it("mapShipPendingFromAwaitingShipEvent output KEYS include files_diff + integrity_verdict", () => {
+  it("mapShipPendingFromAwaitingShipEvent output KEYS include files_diff + integrity_verdict + vanguard_verdict", () => {
     const p = mapShipPendingFromAwaitingShipEvent(REAL_SSE_DATA, {});
     expect(Object.keys(p)).toContain("files_diff");
     expect(Object.keys(p)).toContain("integrity_verdict");
+    expect(Object.keys(p)).toContain("vanguard_verdict");
   });
 });

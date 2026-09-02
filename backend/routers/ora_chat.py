@@ -492,20 +492,49 @@ async def reset_house_rules(authorization: Optional[str] = Header(None)):
 # The route auremcto.com/ora is deliberately unauthenticated at the
 # HTML layer so the founder can bookmark it on any device and reach
 # ORA in one tap. Security lives in this endpoint:
-#   1. Rate-limited by IP — 5 attempts / hour, then hard 429
-#   2. PIN compared to `ORA_QUICK_PIN` env (constant-time hmac.compare_digest)
-#   3. On success, a real admin JWT is minted (7-day expiry, same as
-#      login flow) bound to the founder account resolved from Mongo.
-#   4. If no founder row is found (fresh install) we refuse — never
+#   1. IP allowlist (2026 audit Decision 2, R2 correction) — if
+#      `ORA_ALLOWED_IPS` is set (comma-separated), a non-allowed IP is
+#      rejected with 403 BEFORE the PIN is even checked. This closes
+#      the remote-brute-force vector: this endpoint takes NO
+#      Authorization header at all (confirmed live — the frontend's
+#      <PrivateRoute> only gates the page render, not this API), so
+#      the PIN was the ONLY gate. Left UNSET (fail-open, current
+#      behavior) until the founder supplies their own IP(s) — do not
+#      guess/set it, that would lock the founder out.
+#   2. Rate-limited by IP AND by account — 5 attempts / hour, then
+#      hard 429 (unchanged).
+#   3. PIN compared to `ORA_QUICK_PIN` env (constant-time hmac.compare_digest).
+#      Rotated 2026-09-08 from a 4-digit PIN to a 12-char PIN — see
+#      /app/memory/test_credentials.md for the new value.
+#   4. On success, a real admin JWT is minted (7-day expiry, same as
+#      login flow) bound to the founder account resolved from Mongo,
+#      and the mint is logged (ip + timestamp + identity) to
+#      `ora_pin_mint_log` — attributable, not a nameless "PIN was right".
+#   5. If no founder row is found (fresh install) we refuse — never
 #      auto-privilege escalate.
 class PinLoginBody(BaseModel):
-    pin: str = Field(..., min_length=1, max_length=16)
+    pin: str = Field(..., min_length=1, max_length=32)
+
+
+def _ora_ip_allowed(ip: str) -> bool:
+    """True if `ip` may attempt PIN login. Fail-open when
+    ORA_ALLOWED_IPS is unset (default, current behavior preserved)."""
+    raw = os.getenv("ORA_ALLOWED_IPS", "").strip()
+    if not raw:
+        return True
+    allowed = {x.strip() for x in raw.split(",") if x.strip()}
+    return ip in allowed
 
 
 @router.post("/pin-login")
 async def pin_login(body: PinLoginBody,
                      request: Request):
     ip = client_ip_from_request(request)
+    if not _ora_ip_allowed(ip):
+        raise HTTPException(403, {
+            "error":   "ip_not_allowed",
+            "message": "This IP is not on the /ora allowlist.",
+        })
     # Coarse hourly counter over `ora_chat_pin_attempts` — one aggregate.
     from cto_services.db import get_db
     import hmac, time as _time
@@ -592,6 +621,16 @@ async def pin_login(body: PinLoginBody,
         email=founder["email"],
         is_admin=True,
     )
+    # 2026 audit Decision 2 — attributable mint log (ip + timestamp +
+    # identity), separate from the attempt-counter row above so a
+    # successful admin-token mint is queryable on its own.
+    try:
+        await db.ora_pin_mint_log.insert_one({
+            "ip": ip, "user_id": founder["user_id"],
+            "email": founder["email"], "ts": _time.time(),
+        })
+    except Exception as e:                                    # noqa: BLE001
+        logger.warning("[ora pin-login] mint log write failed: %r", e)
     return {
         "ok":         True,
         "token":      token,

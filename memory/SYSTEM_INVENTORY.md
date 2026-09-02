@@ -907,3 +907,7 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 ### Iter 0 · 2026-09-01
 
 | `routers/chat_pre_llm.py` | `(none)` | 0 | auto-detected new router (verify) (Iter 0, 2026-09-01T03:24:49.067155Z) | <!-- inv:router:routers/chat_pre_llm.py -->
+
+### Iter 0 · 2026-09-02
+
+- `loop_run_log kind='task_handoff'` — auto-detected in backend/routers/cto_projects/tasks.py (verify) [Iter 0, 2026-09-02T02:36:18.589778Z] <!-- inv:loop_run_log_kind:task_handoff -->

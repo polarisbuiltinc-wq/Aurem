@@ -31,6 +31,7 @@ export function mapShipPendingFromActive(sp) {
     commit_message:    sp.commit_message,
     files_diff:        Array.isArray(sp.files_diff) ? sp.files_diff : [],
     integrity_verdict: sp.integrity_verdict || null,
+    vanguard_verdict:  sp.vanguard_verdict || null,
     message:           "Loop resumed — ready to ship.",
   };
 }
@@ -55,6 +56,7 @@ export function mapShipPendingFromAwaitingShipEvent(data, ev) {
     commit_message:    data.commit_message || "",
     files_diff:        Array.isArray(data.files_diff) ? data.files_diff : [],
     integrity_verdict: data.integrity_verdict || null,
+    vanguard_verdict:  data.vanguard_verdict || null,
     message:           (ev && ev.message) || "Ready to ship.",
   };
 }

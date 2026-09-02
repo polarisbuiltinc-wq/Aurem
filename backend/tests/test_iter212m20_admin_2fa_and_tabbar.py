@@ -192,6 +192,94 @@ def test_auth_router_has_2fa_verify_endpoint():
     assert "consume_backup_code(" in src
 
 
+# ── 2026 audit Risk #2 — live E2E coverage (was source-lock only) ──
+# The two tests above only grep routers/auth.py's source text; neither
+# actually drives a real admin through the two-step 2FA login and
+# checks the real HTTP responses. That's exactly the class of gap the
+# audit flagged for this whole file (/me, login, login_2fa_verify all
+# had thin/unit-only coverage despite being the highest-sensitivity
+# surface in the app, with a real leak fixed here 2026-09-08).
+import os
+import secrets as _secrets_mod
+
+
+def _unique_test_ip() -> str:
+    return (f"10.{_secrets_mod.randbelow(255)}."
+            f"{_secrets_mod.randbelow(255)}.{_secrets_mod.randbelow(255)}")
+
+
+@pytest.mark.asyncio
+async def test_live_two_step_2fa_login_issues_session_and_leaks_nothing():
+    """Full live round-trip: admin w/ mfa_enabled logs in (gets
+    mfa_required + mfa_token, NOT a session), completes the second
+    leg with a real TOTP code, receives a real session token, and
+    that token's /auth/me response carries no MFA secrets."""
+    from motor.motor_asyncio import AsyncIOMotorClient
+    import bcrypt
+    import httpx
+
+    db = AsyncIOMotorClient(os.environ["MONGO_URL"])[
+        os.environ.get("DB_NAME", "aurem_dev")
+    ]
+    email = f"2fa-e2e-test-{_secrets_mod.token_hex(4)}@aurem.test"
+    secret = generate_secret()
+    pw_hash = bcrypt.hashpw(b"TestPass2026!", bcrypt.gensalt()).decode()
+    user_id = f"u_2fa_e2e_{_secrets_mod.token_hex(6)}"
+    await db.dev_users.insert_one({
+        "user_id": user_id, "email": email, "password": pw_hash,
+        "name": "2FA E2E Test", "tier": "founder",
+        "is_admin": True, "mfa_enabled": True, "mfa_secret": secret,
+        "mfa_backup_codes": [],
+    })
+    try:
+        base = "http://localhost:8001/api/aurem-dev"
+        headers = {"X-Forwarded-For": _unique_test_ip()}
+        async with httpx.AsyncClient(timeout=20.0) as c:
+            # Leg 1 — single-step login must gate, NOT issue a session.
+            r1 = await c.post(f"{base}/auth/login", json={
+                "email": email, "password": "TestPass2026!",
+            }, headers=headers)
+            assert r1.status_code == 200, r1.text
+            body1 = r1.json()
+            assert body1.get("mfa_required") is True
+            assert "token" not in body1, (
+                "leg-1 login must NOT issue a real session token for "
+                "an mfa_enabled admin"
+            )
+            mfa_token = body1["mfa_token"]
+
+            # Leg 2 — real TOTP code trades the pending token for a
+            # real session.
+            code = pyotp.TOTP(secret).now()
+            r2 = await c.post(f"{base}/auth/login/2fa-verify", json={
+                "mfa_token": mfa_token, "code": code,
+            }, headers=headers)
+            assert r2.status_code == 200, r2.text
+            body2 = r2.json()
+            assert body2.get("ok") is True
+            session_token = body2["token"]
+            assert session_token
+
+            # A wrong code must be rejected (fresh pending token).
+            r1b = await c.post(f"{base}/auth/login", json={
+                "email": email, "password": "TestPass2026!",
+            }, headers=headers)
+            bad = await c.post(f"{base}/auth/login/2fa-verify", json={
+                "mfa_token": r1b.json()["mfa_token"], "code": "000000",
+            }, headers=headers)
+            assert bad.status_code == 401
+
+            # The real session must never leak the secret.
+            me = await c.get(f"{base}/auth/me", headers={
+                "Authorization": f"Bearer {session_token}"})
+            assert me.status_code == 200
+            user = me.json()["user"]
+            assert "mfa_secret" not in user
+            assert "mfa_backup_codes" not in user
+    finally:
+        await db.dev_users.delete_one({"user_id": user_id})
+
+
 # ── frontend: Home tab removed ─────────────────────────────────────
 
 

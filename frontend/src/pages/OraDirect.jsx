@@ -9,8 +9,9 @@
  *   - After first message → input slides to bottom-center; messages
  *     stream in the scrollable area above
  *
- * Auth: PIN pad (4 digits) → mints 7-day admin JWT via
- * /api/aurem-dev/ora-chat/pin-login. Reuses existing session /
+ * Auth: PIN input (alphanumeric, rotated 2026-09-08 from 4-digit
+ * numeric to 12+ chars — 2026 audit Decision 2) → mints 7-day admin
+ * JWT via /api/aurem-dev/ora-chat/pin-login. Reuses existing session /
  * streaming / budget / house-rules backend.
  */
 import React, { useEffect, useRef, useState, useCallback } from "react";
@@ -48,7 +49,6 @@ function findRenderableBlock(md) {
 }
 
 const BASE = `${process.env.REACT_APP_BACKEND_URL}/api/aurem-dev/ora-chat`;
-const PIN_LENGTH = 4;
 
 // Iter 212m-263 · Feb 2026 — Claude-style layout: single readable
 // column, generous white-space, no hard-edged card around assistant
@@ -134,25 +134,26 @@ function PinPad({ onSuccess }) {
   const [pin, setPin]   = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState(null);
+  const inputRef = useRef(null);
 
-  const submit = async (p) => {
-    if (p.length !== PIN_LENGTH || busy) return;
+  const submit = async (e) => {
+    e?.preventDefault?.();
+    if (!pin || busy) return;
     setBusy(true); setErr(null);
     try {
-      const r = await api.post("/ora-chat/pin-login", { pin: p });
+      const r = await api.post("/ora-chat/pin-login", { pin });
       setToken(r.data.token);
       onSuccess();
     } catch (e) {
       const d = e?.response?.data?.detail || e?.response?.data;
       if (d?.error === "too_many_attempts") setErr(d.message);
+      else if (d?.error === "ip_not_allowed") setErr("This device isn't on the allowlist.");
       else if (d?.error === "invalid_pin") setErr(`Wrong PIN. ${d.attempts_remaining} left.`);
       else setErr("Login failed. Check connection.");
       setPin("");
+      inputRef.current?.focus();
     } finally { setBusy(false); }
   };
-  const press = (d) => { if (pin.length >= PIN_LENGTH || busy) return;
-                          const n = pin + d; setPin(n);
-                          if (n.length === PIN_LENGTH) submit(n); };
 
   return (
     <div data-testid="ora-direct-pin"
@@ -173,69 +174,57 @@ function PinPad({ onSuccess }) {
         </div>
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6,
                         letterSpacing: -0.5 }}>ORA Chat</div>
-        <div style={{ fontSize: 13, color: PAL.muted, marginBottom: 32 }}>
-          Enter your 4-digit PIN
+        <div style={{ fontSize: 13, color: PAL.muted, marginBottom: 26 }}>
+          Enter your access PIN
         </div>
-        <div style={{ display: "flex", justifyContent: "center", gap: 14, marginBottom: 30 }}>
-          {[0,1,2,3].map(i => (
-            <div key={i} data-testid={`pin-dot-${i}`}
-                 style={{ width: 14, height: 14, borderRadius: "50%",
-                            background: pin.length > i ? PAL.accent : "transparent",
-                            border: `2px solid ${pin.length > i ? PAL.accent : PAL.border}`,
-                            transition: "all 0.1s" }} />
-          ))}
-        </div>
-        {err && (
-          <div data-testid="pin-error" style={{ fontSize: 12, color: "#c94a37",
-                                                   marginBottom: 20, minHeight: 16 }}>{err}</div>
-        )}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10,
-                       maxWidth: 280, margin: "0 auto" }}>
-          {["1","2","3","4","5","6","7","8","9"].map(d => (
-            <PadKey key={d} label={d} testId={`pin-key-${d}`}
-                     onClick={() => press(d)} disabled={busy} />
-          ))}
-          <PadKey label="C" testId="pin-key-clear" onClick={() => setPin("")} disabled={busy} muted />
-          <PadKey label="0" testId="pin-key-0" onClick={() => press("0")} disabled={busy} />
-          <PadKey label="⌫" testId="pin-key-back"
-                   onClick={() => setPin(pin.slice(0, -1))} disabled={busy} muted />
-        </div>
-        <div style={{ marginTop: 26, fontSize: 10, color: PAL.faint }}>
+        {/* Alphanumeric PIN input (2026 audit Decision 2 — PIN rotated
+            from 4-digit numeric to a longer alphanumeric value; a
+            fixed-length digit-only keypad can no longer represent
+            every valid PIN, so this is a plain masked input + submit,
+            matching the backend's PinLoginBody.pin (max_length=32). */}
+        <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <input
+            ref={inputRef}
+            data-testid="pin-input"
+            type="password"
+            inputMode="text"
+            autoComplete="off"
+            autoFocus
+            maxLength={32}
+            value={pin}
+            disabled={busy}
+            onChange={(e) => { setPin(e.target.value); setErr(null); }}
+            placeholder="PIN"
+            style={{ width: "100%", boxSizing: "border-box", padding: "14px 16px",
+                      fontSize: 18, letterSpacing: 2, textAlign: "center",
+                      borderRadius: 12, border: `1px solid ${PAL.border}`,
+                      background: PAL.accentBg, color: PAL.text, outline: "none",
+                      fontFamily: "inherit" }}
+          />
+          {err && (
+            <div data-testid="pin-error" style={{ fontSize: 12, color: "#c94a37",
+                                                     minHeight: 16 }}>{err}</div>
+          )}
+          <button
+            type="submit"
+            data-testid="pin-submit-btn"
+            disabled={busy || !pin}
+            style={{ padding: "13px 16px", borderRadius: 12, border: "none",
+                      background: (busy || !pin) ? PAL.border : PAL.accent,
+                      color: "#fff", fontSize: 15, fontWeight: 600,
+                      cursor: (busy || !pin) ? "default" : "pointer",
+                      touchAction: "manipulation", fontFamily: "inherit" }}
+          >
+            {busy ? "Checking…" : "Unlock"}
+          </button>
+        </form>
+        <div style={{ marginTop: 22, fontSize: 10, color: PAL.faint }}>
           5 wrong attempts per hour · Session lasts 7 days
         </div>
       </div>
     </div>
   );
 }
-function PadKey({ label, onClick, disabled, muted, testId }) {
-  // Iter 212m-244 — Mobile PIN reliability fix. Two problems seen on
-  // iOS Safari + Chrome Android:
-  //   (a) 300ms tap delay before click fires — touchAction:manipulation
-  //       eliminates it.
-  //   (b) The onMouseDown transform interfered with the click event
-  //       being registered on some touch devices — switched to :active
-  //       via inline CSS and dropped the mouse-only handlers.
-  return (
-    <button type="button" data-testid={testId} onClick={onClick} disabled={disabled}
-            style={{ aspectRatio: "1 / 1", fontSize: 22,
-                       fontWeight: 500, color: muted ? PAL.muted : PAL.text,
-                       background: PAL.card,
-                       border: `1px solid ${PAL.border}`, borderRadius: 12,
-                       cursor: disabled ? "not-allowed" : "pointer",
-                       transition: "background 120ms",
-                       touchAction: "manipulation",
-                       WebkitTapHighlightColor: "transparent",
-                       userSelect: "none",
-                       minHeight: 56,   // hits Apple/Google 44px+ tap-target guidance
-                       minWidth: 56 }}
-            onPointerDown={(e) => e.currentTarget.style.background = PAL.chip}
-            onPointerUp={(e)   => e.currentTarget.style.background = PAL.card}
-            onPointerLeave={(e)=> e.currentTarget.style.background = PAL.card}>
-      {label}
-    </button>
-  );
-}
-
 // ────────────────────────────────────────────────────────────────────
 // Chat shell (post-auth) — BuildHome-inspired aesthetic
 // ────────────────────────────────────────────────────────────────────

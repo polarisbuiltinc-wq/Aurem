@@ -37,6 +37,7 @@ const REAL_PAYLOAD = {
     diff_source: "line",
   }],
   integrity_verdict: "clean",
+  vanguard_verdict: { ran: true, critical: 0, high: 0, total: 0 },
 };
 
 
@@ -146,5 +147,56 @@ describe("ShipPendingCard — Deploy 2 enrichment renders (iter328)", () => {
     expect(chip).toHaveTextContent(/-?420B/);
     // No fake +/- line counts rendered.
     expect(chip.textContent).not.toMatch(/^\+\d+\s*−\d+/);
+  });
+
+  // -------------------------------------------------------------
+  // 2026 audit Risk #1 — safety regression: legacy ShipConfirmModal
+  // showed diff + Vanguard verdict before Ship; Loop-mode had no
+  // Vanguard signal at all (only the unrelated integrity guard).
+  // -------------------------------------------------------------
+  it("t_ship_card_shows_diff_and_verdict — diff + integrity + Vanguard verdict are ALL visible alongside an enabled Ship button (no blind ships)", () => {
+    render(<ShipPendingCard pending={REAL_PAYLOAD} busy={false} />);
+
+    // Diff must be visible.
+    const totalChip = screen.getByTestId("ship-total-diff-chip");
+    expect(totalChip).toHaveTextContent("+35");
+    expect(totalChip).toHaveTextContent("−34");
+    const row = screen.getByTestId("ship-pending-file-row");
+    expect(within(row).getByTestId("ship-file-diff-chip")).toBeInTheDocument();
+
+    // Both verdict pills must be visible.
+    const integrityPill = screen.getByTestId("ship-integrity-pill");
+    expect(integrityPill).toHaveAttribute("data-verdict", "clean");
+    const vanguardPill = screen.getByTestId("ship-vanguard-pill");
+    expect(vanguardPill).toHaveAttribute("data-verdict", "clean");
+    expect(vanguardPill).toHaveTextContent(/Vanguard: clean/i);
+
+    // Ship button must be present, enabled, and visible in the SAME
+    // render as the diff + both verdicts — never gated behind them,
+    // never rendered without them.
+    const shipBtn = screen.getByTestId("ship-to-github-btn");
+    expect(shipBtn).toBeInTheDocument();
+    expect(shipBtn).not.toBeDisabled();
+  });
+
+  it("Vanguard pill shows flagged critical/high counts when the diff-scan found findings", () => {
+    const flagged = {
+      ...REAL_PAYLOAD,
+      vanguard_verdict: { ran: true, critical: 1, high: 2, total: 3 },
+    };
+    render(<ShipPendingCard pending={flagged} busy={false} />);
+    const pill = screen.getByTestId("ship-vanguard-pill");
+    expect(pill).toHaveAttribute("data-verdict", "flagged");
+    expect(pill).toHaveTextContent(/1 critical, 2 high/i);
+  });
+
+  it("Vanguard pill shows 'unknown' when the scan verdict wasn't recorded (rehydrated pre-fix loop)", () => {
+    const noVerdict = { ...REAL_PAYLOAD };
+    delete noVerdict.vanguard_verdict;
+    render(<ShipPendingCard pending={noVerdict} busy={false} />);
+    expect(screen.queryByTestId("ship-vanguard-pill")).toBeNull();
+    // Integrity pill still renders independently (fields are
+    // independent, neither invents the other).
+    expect(screen.getByTestId("ship-integrity-pill")).toBeInTheDocument();
   });
 });

@@ -1,0 +1,33 @@
+{
+  "summary": "Round-3 verification of founder's two decisions: (a) Anti-Fabrication Regen port into ora_chat_v2/engine.py and (b) /ora PIN-login hardening (IP allowlist + 12-char PIN + mint audit log). Backend: all 5 named pytests pass; live smoke of POST /api/aurem-dev/ora-chat/pin-login with new PIN FefzrqxpCRQg returns 200 + valid admin JWT and writes a row to ora_pin_mint_log (verified {ip,user_id,email,ts}); wrong PIN returns 401 + attempts_remaining; ORA_ALLOWED_IPS confirmed unset in preview .env (fail-open, per instructions). Frontend: CRITICAL regression — PinPad UI in frontend/src/pages/OraDirect.jsx was NOT updated for the new alphanumeric 12-char PIN; PIN_LENGTH still hardcoded to 4, subtitle still 'Enter your 4-digit PIN', only 4 dot indicators, and pad exposes ONLY digit buttons 0-9 (no letters), so 'FefzrqxpCRQg' is physically un-enterable via the PIN pad. Founder's Decision 2 explicitly required this UI still work end-to-end.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PinPad (pages/OraDirect.jsx)", "issue": "PIN_LENGTH=4 hardcoded; subtitle 'Enter your 4-digit PIN'; only 4 pin-dot indicators; pad renders only digit keys 0-9 (plus C and backspace). The rotated ORA_QUICK_PIN 'FefzrqxpCRQg' is 12 chars WITH LETTERS and cannot be typed on this pad, breaking the end-to-end /ora PIN flow requested in Decision 2. Backend accepts it (verified via curl) — frontend simply cannot submit it.", "selector": "[data-testid=\"ora-direct-pin\"] / [data-testid^=\"pin-key-\"]", "priority": "CRITICAL"},
+      {"component": "OraDirect route", "issue": "Route /ora is wrapped in <PrivateRoute> (App.jsx:386) which redirects unauthenticated users to /login before OraDirect ever mounts, so a fresh visitor cannot reach the PinPad at all. Likely pre-existing (not this round) but blocks the founder's stated 'visit /ora, enter the new 12-char PIN' flow entirely. Confirmed: navigating to /ora unauthenticated lands on standard sign-in page.", "selector": "Route path=\"/ora\"", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_anti_fabrication_regen_admin.py",
+    "/app/backend/tests/test_ora_ip_allowlist_2026_09_08.py",
+    "/app/test_reports/pytest/iter_round3_ora.xml"
+  ],
+  "action_items": [
+    "MAIN AGENT: Rewrite PinPad component in frontend/src/pages/OraDirect.jsx to accept alphanumeric PIN input up to 32 chars (matches PinLoginBody.pin max_length=32). Replace fixed PIN_LENGTH=4 with a text/password input and Submit button (or extend the pad with a-z/A-Z keys). Update the 'Enter your 4-digit PIN' copy. Consider making PIN length UI-agnostic (submit on Enter, not on length).",
+    "MAIN AGENT (verify intent): /ora is behind <PrivateRoute>, so PinPad path is only reachable AFTER a normal login (i.e., PIN is a re-auth/elevation, not first-touch). If that's intentional, update docs/credentials note. If not, /ora needs to be a public route so the PIN pad is actually the entry point."
+  ],
+  "critical_code_review_comments": [
+    "Frontend and backend PIN contracts drifted: backend rotated PIN to alphanumeric-12 in the same round the frontend was left untouched — no regression test exists at the UI/e2e layer that would have caught this. Consider a lightweight Playwright test that posts the env-configured PIN and asserts 200 + ChatShell mount.",
+    "PinLoginBody.pin max_length=32 on backend is fine, but the frontend PIN input has no coordinated max/format constant — any future PIN rotation risks the same class of drift. Extract a shared config or at minimum call it out in test_credentials.md that both sides must be updated together."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "0% (PinPad unusable with new PIN)"},
+  "test_credentials": "Preview admin test@aurem.dev / AuremTest2026! ; /ora PIN FefzrqxpCRQg (backend accepts, frontend cannot submit).",
+  "seed_data_creation": "Cleared ora_chat_pin_attempts collection twice during smoke test to bypass hourly lockout accumulated from prior tests/curl attempts. No production-like data created. ora_pin_mint_log now has 2 real mint rows from this session — safe to leave, they are the intended audit trail.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend Decision 1 (anti-fabrication regen) and Decision 2 backend side (allowlist + rotated PIN + mint audit log) are all green — the 5 named pytests pass and live curl smoke confirms mint-log writes. The ONLY remaining gap is the PinPad UI not supporting alphanumeric/12-char input. After main agent updates PinPad, retest by navigating to /ora (authenticated, since it is behind PrivateRoute), entering FefzrqxpCRQg, and asserting ora-messages/ChatShell mount. If per-account or per-IP lockout kicks in during retest, clear db.ora_chat_pin_attempts before running.",
+  "rca of the issue": "Root cause: Decision 2 backend rotation from a 4-digit numeric PIN to a 12-char alphanumeric PIN was executed in backend/.env and backend router only; the coupled frontend PIN pad (originally designed for a 4-digit numeric PIN — see PIN_LENGTH=4 and digit-only keypad in pages/OraDirect.jsx:51,194) was never updated. Reproduction: (1) navigate to /ora with any valid session so PrivateRoute allows it; (2) the PinPad renders with 4 dots, 'Enter your 4-digit PIN' copy, and only 0-9 buttons; (3) it is impossible to enter FefzrqxpCRQg. Mitigation: replace the digit keypad with a masked alphanumeric input + explicit Submit; drop PIN_LENGTH=4 and instead submit on click/Enter; update the subtitle copy; keep backend contract as-is (PinLoginBody.pin max_length=32 is already correct)."
+}

@@ -14,6 +14,7 @@ from typing import AsyncIterator, Optional
 
 from services.ora_chat_v2 import llm_client, tools as tools_mod, catalog, audit
 from services.ora_chat_v2.state_block import build_state_block
+from services.ora_chat import grounding_check as ora_grounding
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +163,13 @@ async def run_turn(db, *, admin_id: str, session: dict, user_message: str,
     total_in = total_out = 0
     final_text_parts: list[str] = []
     resolved_model = resolved_label = None
+    # 2026 audit Decision 1 — ported from the v1 handler (Iter 264 Fix
+    # A5), which was silently orphaned when /message moved to this v2
+    # engine (v2 never got an equivalent grounding-check/regen pass —
+    # confirmed by grep: zero references anywhere in this package
+    # before this change). This is the TECHNICAL ENFORCEMENT of the
+    # product's core promise ("no fabrication") — not optional polish.
+    ungrounded: list[str] = []
 
     for round_idx in range(MAX_TOOL_ROUNDS):
         is_final_round_attempt = round_idx == MAX_TOOL_ROUNDS - 1
@@ -186,9 +194,67 @@ async def run_turn(db, *, admin_id: str, session: dict, user_message: str,
 
         if not tool_calls:
             # Final answer for this turn — stream it out for real.
-            for i in range(0, len(round_text), 40):
-                yield {"type": "delta", "content": round_text[i:i + 40]}
-            final_text_parts.append(round_text)
+            final_text = round_text
+            # 2026 audit Decision 1 — Anti-Fabrication Regen (ported
+            # from the v1 handler's Iter 264 Fix A5). One silent
+            # corrective retry when the draft cites a file that does
+            # not exist anywhere in the real codebase index — the
+            # fabricated draft never reaches the client.
+            regen_mode = os.getenv("ORA_REGEN_ON_FABRICATION", "0") == "1"
+            if regen_mode and final_text.strip():
+                try:
+                    grounding = await ora_grounding.run_post_response_check(
+                        user_id=admin_id,
+                        session_id=session.get("session_id", ""),
+                        query=user_message, reply=final_text,
+                        route="ora_chat_v2",
+                    )
+                except Exception as e:                      # noqa: BLE001
+                    logger.warning("ora v2 grounding check failed: %r", e)
+                    grounding = {"fabricated": []}
+                if grounding.get("fabricated"):
+                    corrective = (
+                        "Your previous draft cited these files, which do "
+                        "not exist in the repo: "
+                        + ", ".join(grounding["fabricated"])
+                        + ". Remove them or explicitly mark them as "
+                        "unverified. Rewrite the full answer."
+                    )
+                    regen_text = ""
+                    regen_err = None
+                    async for r_evt in llm_client.stream_chat(
+                            messages=messages + [
+                                {"role": "assistant", "content": final_text},
+                                {"role": "user", "content": corrective}],
+                            tools=None, reasoning=False, db=db,
+                            user_id=admin_id):
+                        if r_evt["type"] == "delta":
+                            regen_text += r_evt["content"]
+                        elif r_evt["type"] == "usage":
+                            total_in += r_evt.get("input_tokens", 0)
+                            total_out += r_evt.get("output_tokens", 0)
+                        elif r_evt["type"] == "error":
+                            regen_err = r_evt.get("error")
+                    if regen_text and not regen_err:
+                        final_text = regen_text
+                        try:
+                            grounding = await ora_grounding.run_post_response_check(
+                                user_id=admin_id,
+                                session_id=session.get("session_id", ""),
+                                query=user_message, reply=final_text,
+                                route="ora_chat_v2",
+                            )
+                        except Exception as e:               # noqa: BLE001
+                            logger.warning(
+                                "ora v2 post-regen grounding check failed: %r", e)
+                            grounding = {"fabricated": []}
+                    # Still fabricated after one regen (or regen call
+                    # itself failed) — surface what's left rather than
+                    # silently dropping it.
+                    ungrounded = grounding.get("fabricated") or []
+            for i in range(0, len(final_text), 40):
+                yield {"type": "delta", "content": final_text[i:i + 40]}
+            final_text_parts.append(final_text)
             break
 
         messages.append({"role": "assistant", "content": round_text or None,
@@ -257,7 +323,8 @@ async def run_turn(db, *, admin_id: str, session: dict, user_message: str,
 
     yield {"type": "final", "content": full_reply, "tokens_in": total_in,
            "tokens_out": total_out, "proposal_id": proposal_id,
-           "model": resolved_model, "config_label": resolved_label}
+           "model": resolved_model, "config_label": resolved_label,
+           "ungrounded": ungrounded}
 
 
 def _render_page_inspection(payload: dict) -> str:

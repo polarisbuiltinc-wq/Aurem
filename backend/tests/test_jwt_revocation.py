@@ -88,18 +88,41 @@ def _fresh_email() -> str:
     return f"revoke-test-{secrets.token_hex(4)}@aurem.test"
 
 
+def _unique_test_ip() -> str:
+    """Synthetic, unique-per-call IP for the X-Forwarded-For header.
+
+    Root-caused 2026 audit follow-up: /auth/login rate-limits by
+    client IP (`services/rate_limiter.py`'s `login-ip:<ip>` bucket) in
+    a SHARED, process-wide bucket that lives in the actual running
+    backend for the whole pytest session (this test hits the real
+    backend over HTTP, not an isolated TestClient app). In a
+    full-suite run, hundreds of other test files also call real
+    /auth/login and are seen by the backend as the same client IP
+    (127.0.0.1) — confirmed live: 5 rapid /auth/login calls from this
+    pod already return 429 on the 6th. That can exhaust this test's
+    own login budget before it runs, causing `assert
+    login_r.status_code == 200` to fail with a 429 instead — this is
+    test-isolation flakiness, NOT a revocation-logic bug (the barrier
+    itself passes 4/4 in isolation). Giving each call its own
+    synthetic IP via X-Forwarded-For (honored by
+    `client_ip_from_request`) removes the shared-bucket collision.
+    """
+    return f"10.{secrets.randbelow(255)}.{secrets.randbelow(255)}.{secrets.randbelow(255)}"
+
+
 async def _db():
     return AsyncIOMotorClient(os.environ["MONGO_URL"])[
         os.environ.get("DB_NAME", "aurem_dev")
     ]
 
 
-async def _signup_and_login(client, email: str) -> str:
+async def _signup_and_login(client, email: str, ip: str | None = None) -> str:
     """Return a valid JWT for a freshly-created user."""
+    headers = {"X-Forwarded-For": ip} if ip else {}
     r = await client.post(f"{API}/auth/signup", json={
         "email": email, "password": "TestPass2026!",
         "name": "Revoke Test User",
-    })
+    }, headers=headers)
     assert r.status_code == 200, f"signup failed: {r.text}"
     tok = r.json()["token"]
     assert tok
@@ -215,12 +238,19 @@ async def test_revoke_all_sessions_kills_every_token_for_user():
     """Founder-nuke flow: two independent tokens for the same user
     (issued in sequence) both start rejecting after a single call to
     /auth/revoke-all-sessions. Proves the per-user `session_barrier_at`
-    barrier works and doesn't need to enumerate individual jtis."""
+    barrier works and doesn't need to enumerate individual jtis.
+
+    Uses a dedicated synthetic IP (see `_unique_test_ip`) so this
+    test's own /auth/login calls never share the shared login-ip
+    rate-limit bucket with any other test file in a full-suite run —
+    root-caused 2026 audit follow-up, see that helper's docstring."""
     email = _fresh_email()
+    ip = _unique_test_ip()
+    h = {"X-Forwarded-For": ip}
     async with httpx.AsyncClient(timeout=10.0) as c:
         try:
             # First token from signup.
-            tok_a = await _signup_and_login(c, email)
+            tok_a = await _signup_and_login(c, email, ip=ip)
             # Sleep 1s so the SECOND token has a DIFFERENT iat, but
             # both are BEFORE the barrier we'll set below.
             await asyncio.sleep(1.1)
@@ -228,7 +258,7 @@ async def test_revoke_all_sessions_kills_every_token_for_user():
             # iat, same user_id.
             login_r = await c.post(f"{API}/auth/login", json={
                 "email": email, "password": "TestPass2026!",
-            })
+            }, headers=h)
             assert login_r.status_code == 200, login_r.text
             tok_b = login_r.json()["token"]
             assert tok_a != tok_b, "second login must issue a fresh token"
@@ -273,11 +303,86 @@ async def test_revoke_all_sessions_kills_every_token_for_user():
             await asyncio.sleep(1.1)
             fresh = await c.post(f"{API}/auth/login", json={
                 "email": email, "password": "TestPass2026!",
-            })
+            }, headers=h)
             assert fresh.status_code == 200, fresh.text
             tok_c = fresh.json()["token"]
             after = await c.get(f"{API}/auth/me",
                                 headers={"Authorization": f"Bearer {tok_c}"})
             assert after.status_code == 200, after.text
+        finally:
+            await _cleanup_user(email)
+
+
+@pytest.mark.asyncio
+@_requires_backend
+async def test_t_revoke_all_sessions_actually_kills_all():
+    """Named regression test (2026 audit Risk #2).
+
+    Root-cause finding: `test_revoke_all_sessions_kills_every_token_
+    for_user` was failing ONLY in full-suite runs, never standalone.
+    Confirmed live: 6 rapid /auth/login calls from this pod's own IP
+    already return 429 on the 6th (`login-ip:<ip>` bucket, shared
+    process-wide across every test file that hits the real backend
+    over HTTP for the whole pytest session) — NOT a revocation-logic
+    bug. This test proves BOTH halves directly:
+      1. Deliberately exhausts an UNRELATED throwaway IP's login
+         bucket (simulating full-suite noise) to prove the mechanism
+         really does rate-limit as expected.
+      2. Runs the exact revoke-all-sessions flow on this test's OWN
+         isolated IP at the same time and proves it still gets a
+         clean 200/401 signal — i.e. the barrier/revocation logic
+         itself was never broken, only test isolation was.
+    """
+    noise_ip = _unique_test_ip()
+    async with httpx.AsyncClient(timeout=10.0) as c:
+        # 1) Exhaust a throwaway IP's login-rate bucket (6 attempts;
+        # limiter default is well under that per the live probe above).
+        statuses = []
+        for _ in range(8):
+            r = await c.post(f"{API}/auth/login", json={
+                "email": "no-such-user@aurem.test", "password": "wrong",
+            }, headers={"X-Forwarded-For": noise_ip})
+            statuses.append(r.status_code)
+        assert 429 in statuses, (
+            f"expected the noise IP to get rate-limited, got {statuses} — "
+            "if this assertion itself starts failing, the rate-limiter "
+            "config changed and the original flake theory needs re-checking"
+        )
+
+        # 2) The REAL revoke-all-sessions flow, on ITS OWN isolated IP,
+        # must be completely unaffected by the noise IP's exhaustion.
+        email = _fresh_email()
+        ip = _unique_test_ip()
+        h = {"X-Forwarded-For": ip}
+        try:
+            tok_a = await _signup_and_login(c, email, ip=ip)
+            await asyncio.sleep(1.1)
+            login_r = await c.post(f"{API}/auth/login", json={
+                "email": email, "password": "TestPass2026!",
+            }, headers=h)
+            assert login_r.status_code == 200, (
+                f"login must succeed on an isolated IP even though a "
+                f"DIFFERENT IP was just rate-limited: {login_r.text}"
+            )
+            tok_b = login_r.json()["token"]
+
+            pre_b = await c.get(f"{API}/auth/me",
+                                headers={"Authorization": f"Bearer {tok_b}"})
+            user_id = pre_b.json()["user"]["user_id"]
+            await asyncio.sleep(1.1)
+            nuke = await c.post(
+                f"{API}/auth/revoke-all-sessions",
+                headers={"Authorization": f"Bearer {tok_b}"},
+                json={"user_id": user_id, "reason": "test_t_named_regression"},
+            )
+            assert nuke.status_code == 200, nuke.text
+            assert nuke.json()["sessions_nuked"] == 1
+
+            post_a = await c.get(f"{API}/auth/me",
+                                 headers={"Authorization": f"Bearer {tok_a}"})
+            post_b = await c.get(f"{API}/auth/me",
+                                 headers={"Authorization": f"Bearer {tok_b}"})
+            assert post_a.status_code == 401, post_a.text
+            assert post_b.status_code == 401, post_b.text
         finally:
             await _cleanup_user(email)

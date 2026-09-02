@@ -44,6 +44,7 @@ const REAL_LOOP_ACTIVE_SHIP_PENDING = {
     },
   ],
   integrity_verdict: "clean",
+  vanguard_verdict: { ran: true, critical: 0, high: 0, total: 0 },
 };
 
 const REAL_SSE_AWAITING_SHIP = {
@@ -62,6 +63,7 @@ const REAL_SSE_AWAITING_SHIP = {
     },
   ],
   integrity_verdict: "clean",
+  vanguard_verdict: { ran: true, critical: 0, high: 0, total: 0 },
 };
 
 
@@ -71,12 +73,15 @@ describe("wire → mapper → ShipPendingCard render (integration)", () => {
     // Sanity — mapper must have carried the fields through.
     expect(pending.files_diff.length).toBe(1);
     expect(pending.integrity_verdict).toBe("clean");
+    expect(pending.vanguard_verdict).toEqual({ ran: true, critical: 0, high: 0, total: 0 });
     // Now mount the REAL component with that exact object.
     render(<ShipPendingCard pending={pending} busy={false} />);
 
     const pill = screen.getByTestId("ship-integrity-pill");
     expect(pill).toBeInTheDocument();
     expect(pill).toHaveAttribute("data-verdict", "clean");
+    expect(screen.getByTestId("ship-vanguard-pill"))
+      .toHaveAttribute("data-verdict", "clean");
 
     const row = screen.getByTestId("ship-pending-file-row");
     expect(row).toHaveAttribute("data-file-path", "AUDIT.md");
@@ -91,12 +96,28 @@ describe("wire → mapper → ShipPendingCard render (integration)", () => {
       REAL_SSE_AWAITING_SHIP, { message: "Ready to ship." });
     expect(pending.files_diff.length).toBe(1);
     expect(pending.integrity_verdict).toBe("clean");
+    expect(pending.vanguard_verdict).toEqual({ ran: true, critical: 0, high: 0, total: 0 });
     render(<ShipPendingCard pending={pending} busy={false} />);
 
     expect(screen.getByTestId("ship-integrity-pill"))
       .toHaveAttribute("data-verdict", "clean");
+    expect(screen.getByTestId("ship-vanguard-pill"))
+      .toHaveAttribute("data-verdict", "clean");
     expect(screen.getByTestId("ship-total-diff-chip"))
       .toHaveTextContent(/\+35.*−34/);
+  });
+
+  it("t_ship_card_shows_diff_and_verdict — full wire→render chain: diff + BOTH verdicts + an enabled Ship button, together, every time", () => {
+    const pending = mapShipPendingFromAwaitingShipEvent(
+      REAL_SSE_AWAITING_SHIP, { message: "Ready to ship." });
+    render(<ShipPendingCard pending={pending} busy={false} />);
+
+    expect(screen.getByTestId("ship-total-diff-chip")).toBeInTheDocument();
+    expect(screen.getByTestId("ship-integrity-pill")).toBeInTheDocument();
+    expect(screen.getByTestId("ship-vanguard-pill")).toBeInTheDocument();
+    const shipBtn = screen.getByTestId("ship-to-github-btn");
+    expect(shipBtn).toBeInTheDocument();
+    expect(shipBtn).not.toBeDisabled();
   });
 
   it("regression guard — if either mapper drops files_diff, pill is absent", () => {
@@ -109,9 +130,11 @@ describe("wire → mapper → ShipPendingCard render (integration)", () => {
     const stripped = mapShipPendingFromActive(REAL_LOOP_ACTIVE_SHIP_PENDING);
     delete stripped.files_diff;
     delete stripped.integrity_verdict;
+    delete stripped.vanguard_verdict;
     render(<ShipPendingCard pending={stripped} busy={false} />);
     // Pill absent (regression) — this is what founder saw.
     expect(screen.queryByTestId("ship-integrity-pill")).toBeNull();
+    expect(screen.queryByTestId("ship-vanguard-pill")).toBeNull();
     expect(screen.queryByTestId("ship-file-diff-chip")).toBeNull();
     // But the base card still renders (fail-open).
     expect(screen.getByTestId("ship-pending-card")).toBeInTheDocument();

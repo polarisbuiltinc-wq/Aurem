@@ -76,6 +76,23 @@ def created_project(session, token):
         "branch": "main",
         "tech_stack": "react-fastapi",
     }
+    # 2026 audit Risk #4 (baseline triage) — root-caused this fixture
+    # as non-idempotent: `github_url` is a FIXED slug shared by every
+    # run (only `name` is time-randomized). If `test_zzz_cleanup_
+    # delete_project` didn't run last time (earlier test in the file
+    # failed before it, suite got killed mid-run, etc.) the leftover
+    # project 409s every future run — and this has been silently
+    # accumulating: 11 stale rows for this exact slug were found live
+    # in the DB during this triage. Proactively sweep ALL leftovers
+    # for this slug before creating, instead of reactively deleting
+    # just the one 409 mentions (which only handles one leftover at
+    # a time and still 409s again on the next).
+    r = session.get(f"{AUREM}/cto/projects/list", headers=H(token), timeout=15)
+    if r.status_code == 200:
+        for p in r.json().get("projects", []):
+            if (p.get("github_url") or "").rstrip("/").endswith("owner/test-repo"):
+                session.delete(f"{AUREM}/cto/projects/{p['project_id']}",
+                              headers=H(token), timeout=15)
     r = session.post(f"{AUREM}/cto/projects/add",
                      headers=H(token), json=payload, timeout=15)
     assert r.status_code == 200, r.text

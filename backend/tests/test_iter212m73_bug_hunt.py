@@ -6,6 +6,19 @@ from services.bug_hunt_rules import (
     scan_bug_hunt, _vercmp,
 )
 
+# Fake, non-functional secrets built via string concatenation (2026
+# audit Risk #3 root-cause). Regexes (services/bug_hunt_rules.py):
+# AWS = \bAKIA[0-9A-Z]{16}\b, GCP = \bAIza[0-9A-Za-z\-_]{35}(?!...) —
+# both unchanged and correct. The PREVIOUS literal fixtures here were
+# full key-shaped tokens that GitHub push-protection (or an equivalent
+# scrubber) silently redacted to "***REDACTED_AWS_KEY***" /
+# "***REDACTED_GOOGLE_KEY***" once committed — those placeholders
+# never match either regex, which broke these tests. TEST-FIXTURE
+# ARTIFACT, not a live scanner regression. Built from fragments (none
+# individually pattern-length) to avoid being re-scrubbed the same way.
+_FAKE_AWS_KEY = "AKIA" + "FAKETESTKEY012" + "LE"
+_FAKE_GCP_KEY = "AIza" + "0" * 35
+
 
 def test_rule_counts():
     # Spec calls for: 15 secrets + 20 vuln code + 10 endpoint + 5+ CVEs
@@ -16,14 +29,14 @@ def test_rule_counts():
 
 
 def test_aws_key_detected():
-    findings = scan_bug_hunt({"app/c.py": 'X="***REDACTED_AWS_KEY***"'})
+    findings = scan_bug_hunt({"app/c.py": f'X="{_FAKE_AWS_KEY}"'})
     titles = {f["title"] for f in findings}
     assert "aws_access_key_id" in titles
 
 
 def test_gcp_key_detected():
     findings = scan_bug_hunt({
-        "app/c.py": 'K="***REDACTED_GOOGLE_KEY***"'
+        "app/c.py": f'K="{_FAKE_GCP_KEY}"'
     })
     assert any(f["title"] == "gcp_api_key" for f in findings)
 

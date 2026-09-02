@@ -1,29 +1,38 @@
 /**
  * ShipPendingCard.jsx — Iter 212m-111 (Manual Ship gate)
  * Iter 328 · Deploy 2 — enriched with per-file diff + integrity pill
+ * 2026 audit Risk #1 — enriched with Vanguard verdict pill (safety
+ * regression fix: legacy ShipConfirmModal showed a Vanguard preflight
+ * badge before Ship; Loop-mode had none until now)
  *
  * Renders when the LoopEngine pauses at PAUSED_FOR_USER/phase=ship
  * with `data.kind="awaiting_ship"`. The user MUST click the
  * "Ship to GitHub" button to push the commit — no auto-ship.
  *
- * Iter 328 additions (safety fix — pre-Loop-mode users had these
- * gates via ShipConfirmModal, which is now legacy):
+ * Safety-gate additions (no blind ships — diff + verdicts are always
+ * rendered together with the ship button, never behind it):
  *   1. Per-file +additions / −deletions chips inline with each file
  *      path (data source: `pending.files_diff`, computed backend-side
  *      via services/loop_ship_diff.compute_files_diff).
- *   2. Integrity guard verdict pill above the file list (data source:
+ *   2. Integrity guard verdict pill (data source:
  *      `pending.integrity_verdict` — "clean" when Iter 318's pre-ship
  *      guard cleared Rules 1/2/3, "unknown" if the guard didn't run).
+ *   3. Vanguard security-scan verdict pill (data source:
+ *      `pending.vanguard_verdict` — `{ran, critical, high, total}`,
+ *      reused from the loop's own Phase-4 Vanguard diff-scan; critical
+ *      findings already blocked shipping before this pause, so this
+ *      surfaces any remaining high/clean signal).
  *   No mocked data — if the backend omits these fields (e.g. an
- *   in-flight loop that paused BEFORE Iter 328 shipped), the pills
- *   simply don't render. Never fake a verdict.
+ *   in-flight loop that paused BEFORE these iters shipped), the pills
+ *   simply don't render for that field. Never fake a verdict.
  *
  * Props:
  *   pending  — {
  *     owner, repo, branch, files, file_count, commit_message,
  *     files_diff?:        [{ path, additions, deletions, is_new,
  *                            delta_bytes, diff_source }],
- *     integrity_verdict?: "clean" | "unknown",
+ *     integrity_verdict?:  "clean" | "unknown",
+ *     vanguard_verdict?:   { ran, critical, high, total },
  *   }
  *   busy     — bool; disables both buttons while the API call is in-flight
  *   onConfirm(approved: boolean) — callback for Ship / Cancel
@@ -73,6 +82,68 @@ function IntegrityPill({ verdict }) {
       title={clean
         ? "Pre-ship integrity guard (Iter 318) passed: no elision markers, no >70% size shrink, no byte-count violations."
         : "Pre-ship integrity guard verdict unknown for this ship (guard did not run or state was rehydrated). Review the diff before approving."}
+    >
+      <Icon size={12} />
+      {label}
+    </div>
+  );
+}
+
+// Iter — 2026 audit Risk #1 (safety regression fix). The legacy
+// ShipConfirmModal showed a Vanguard preflight badge (critical-finding
+// count) before its ship button; the Loop-mode ShipPendingCard had no
+// Vanguard signal at all, only the (different) integrity guard above.
+// Loop Phase 4 (`_do_scan`) already runs the Vanguard diff-scan and
+// blocks on critical findings before the loop ever reaches this ship
+// pause, so `pending.vanguard_verdict` is always populated by the
+// time this card renders — never invented client-side.
+function VanguardPill({ verdict }) {
+  if (!verdict) return null;
+  const { ran, critical = 0, high = 0, total = 0 } = verdict;
+  if (!ran) {
+    return (
+      <div
+        data-testid="ship-vanguard-pill"
+        data-verdict="unknown"
+        className="chip chip-sm"
+        style={{
+          gap: 6,
+          background: "rgba(250, 204, 21, 0.10)",
+          border: "1px solid rgba(250, 204, 21, 0.45)",
+          letterSpacing: 0.25, color: "#facc15", fontFamily: "inherit",
+        }}
+        title="Vanguard security scan did not report a verdict for this ship (state may have been rehydrated). Review the diff before approving."
+      >
+        <ShieldAlert size={12} />
+        Vanguard: unknown
+      </div>
+    );
+  }
+  const flagged = critical > 0 || high > 0;
+  const label = flagged
+    ? `Vanguard: ${critical} critical, ${high} high`
+    : "Vanguard: clean";
+  const Icon = flagged ? ShieldAlert : ShieldCheck;
+  return (
+    <div
+      data-testid="ship-vanguard-pill"
+      data-verdict={flagged ? "flagged" : "clean"}
+      className="chip chip-sm"
+      style={{
+        gap: 6,
+        background: flagged
+          ? "rgba(239, 68, 68, 0.10)"
+          : "rgba(52, 211, 153, 0.12)",
+        border: `1px solid ${flagged
+          ? "rgba(239, 68, 68, 0.45)"
+          : "rgba(52, 211, 153, 0.45)"}`,
+        letterSpacing: 0.25,
+        color: flagged ? "#f87171" : "#4ade80",
+        fontFamily: "inherit",
+      }}
+      title={flagged
+        ? `Vanguard security scan flagged ${total} finding(s) on the diff (${critical} critical, ${high} high). Critical findings already blocked shipping earlier — this reflects high/medium findings that don't block but should be reviewed.`
+        : "Vanguard security scan found no findings on this diff."}
     >
       <Icon size={12} />
       {label}
@@ -152,7 +223,7 @@ export default function ShipPendingCard({ pending, busy, onConfirm, expiresAt })
   if (!pending) return null;
   const {
     owner, repo, branch, files = [], file_count, commit_message,
-    files_diff, integrity_verdict,
+    files_diff, integrity_verdict, vanguard_verdict,
   } = pending;
   const totalFiles = file_count || files.length;
   const showFiles = expanded ? files : files.slice(0, 3);
@@ -223,10 +294,14 @@ export default function ShipPendingCard({ pending, busy, onConfirm, expiresAt })
         )}
       </div>
 
-      {/* Iter 328 · pre-approval safety pill. Only renders when the
-          backend actually shipped a verdict — never invent one. */}
-      {integrity_verdict && (
+      {/* Iter 328 · pre-approval safety pills. Only render when the
+          backend actually shipped a verdict — never invent one.
+          2026 audit Risk #1 — Vanguard pill added alongside the
+          integrity pill so no ship is approved without BOTH the diff
+          (below) and the Vanguard verdict (here) visible. */}
+      {(integrity_verdict || vanguard_verdict) && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <VanguardPill verdict={vanguard_verdict} />
           <IntegrityPill verdict={integrity_verdict} />
         </div>
       )}

@@ -3414,6 +3414,32 @@ class LoopEngine:
         _guard_ran = bool(self.context.get("original_bytes_by_path"))
         _integrity_verdict = "clean" if _guard_ran else "unknown"
 
+        # 2026 audit Risk #1 (safety regression) — the legacy
+        # ShipConfirmModal showed a Vanguard preflight badge
+        # (`vanguard.critical`) before the ship button; the Loop-mode
+        # ShipPendingCard didn't carry any Vanguard signal at all, only
+        # the (different) Iter-318 integrity guard. Phase 4 (`_do_scan`,
+        # above) ALREADY runs the Vanguard diff-scan and blocks on
+        # critical findings before we ever reach this ship pause — so
+        # the verdict is sitting in `self.context["scan_results"]` for
+        # free. Surface it here so no ship is approved without the user
+        # seeing it. Fail-open to "unknown" (never invent "clean").
+        _scan_summary = (self.context.get("scan_results") or {}).get(
+            "summary") or {}
+        _by_sev = _scan_summary.get("by_severity") or {}
+        if _scan_summary:
+            _vanguard_verdict = {
+                "ran":      True,
+                "critical": int(_by_sev.get("critical", 0) or 0),
+                "high":     int(_by_sev.get("high", 0) or 0),
+                "total":    int(sum(
+                    v for v in _by_sev.values() if isinstance(v, int)
+                )),
+            }
+        else:
+            _vanguard_verdict = {"ran": False, "critical": 0, "high": 0,
+                                  "total": 0}
+
         self.context["ship_pending"] = {
             "owner":             owner,
             "repo":              repo,
@@ -3423,6 +3449,7 @@ class LoopEngine:
             "commit_message":    commit_message,
             "files_diff":        _files_diff,
             "integrity_verdict": _integrity_verdict,
+            "vanguard_verdict":  _vanguard_verdict,
         }
         if self.context.get("trust_level") == "L3":
             logger.info("[loop %s] L3 auto-ship — skipping manual gate",
@@ -3432,9 +3459,10 @@ class LoopEngine:
         self.state = LoopState.PAUSED_FOR_USER
         await _persist_session(self.db, self._doc())
         logger.info("[loop %s] SHIP PAUSED for manual confirmation — "
-                    "%s/%s@%s with %d file(s) · integrity=%s · diff_rows=%d",
+                    "%s/%s@%s with %d file(s) · integrity=%s · "
+                    "vanguard=%s · diff_rows=%d",
                     self.loop_id, owner, repo, branch, len(files_dict),
-                    _integrity_verdict, len(_files_diff))
+                    _integrity_verdict, _vanguard_verdict, len(_files_diff))
         await self._emit(
             LoopState.PAUSED_FOR_USER, "ship",
             step=5, total_steps=5,
@@ -3451,6 +3479,7 @@ class LoopEngine:
                 "commit_message":    commit_message,
                 "files_diff":        _files_diff,
                 "integrity_verdict": _integrity_verdict,
+                "vanguard_verdict":  _vanguard_verdict,
             },
             requires_user_action=True,
         )

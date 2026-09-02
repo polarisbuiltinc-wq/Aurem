@@ -108,11 +108,21 @@ class _FakeDB:
 
 # ─── Tests ────────────────────────────────────────────────────────────
 
+# Fake, non-functional AWS-key-shaped secret built via string
+# concatenation (2026 audit Risk #3 root-cause). The PREVIOUS literal
+# "Raw" value here was a full key-shaped token that GitHub
+# push-protection (or an equivalent scrubber) silently redacted to
+# "***REDACTED_AWS_KEY***" once committed — the redaction logic under
+# test (`raw_secret[:4]…raw_secret[-2:]`) then produced "***R…**"
+# instead of the expected "AKIA…LE" shape, breaking the assertion.
+# TEST-FIXTURE ARTIFACT, not a live redaction-logic bug.
+_FAKE_AWS_SECRET = "AKIA" + "FAKETESTKEY012" + "LE"
+
 _TRUFFLEHOG_SAMPLE = [
     {
         "DetectorName": "AWS",
         "Verified": True,
-        "Raw": "***REDACTED_AWS_KEY***",
+        "Raw": _FAKE_AWS_SECRET,
         "SourceMetadata": {
             "Data": {"Filesystem": {"file": "config.py", "line": 42}}
         },

@@ -23,6 +23,19 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from routers.security_scan import _scan_text, _RULES   # noqa: E402
 
+# Fake, non-functional AWS-access-key-SHAPED string built via string
+# concatenation (2026 audit Risk #3 root-cause). The regex is
+# `\bAKIA[0-9A-Z]{16}\b` (services/security_text_scanner.py) — unchanged
+# and correct. The PREVIOUS literal fixture here was a full AKIA-shaped
+# token, which GitHub push-protection (or an equivalent scrubber)
+# silently redacted to the literal text "***REDACTED_AWS_KEY***" once
+# committed — that placeholder obviously never matches the regex,
+# which broke this test. This is a TEST-FIXTURE ARTIFACT, not a live
+# scanner regression. Building the fake key from fragments (none of
+# which individually match the 16-char pattern) avoids it being
+# re-scrubbed the same way again.
+_FAKE_AWS_KEY = "AKIA" + "FAKETESTKEY012" + "LE"
+
 
 def test_rules_compile():
     """Every rule must have id/vuln/severity/pattern/desc."""
@@ -33,7 +46,7 @@ def test_rules_compile():
 
 
 def test_aws_key_detected():
-    sample = 'AWS_KEY = "***REDACTED_AWS_KEY***"\n'
+    sample = f'AWS_KEY = "{_FAKE_AWS_KEY}"\n'
     findings = _scan_text("config.py", sample)
     assert any(f["rule_id"] == "secret_aws_access_key" for f in findings)
 

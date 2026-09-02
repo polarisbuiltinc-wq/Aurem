@@ -96,12 +96,19 @@ def test_expired_jwt_rejects():
 def test_login_burst_rate_limiter_exists_and_binds():
     """Confirm the /auth/login handler wires check_rate_limit with a
     conservative per-IP cap. This is the entry point that stops
-    credential stuffing before Mongo lockout kicks in."""
+    credential stuffing before Mongo lockout kicks in.
+
+    2026 audit Risk #2 follow-up: root-caused this as test-fixture
+    drift, not a live gap — routers/auth.py was refactored to the
+    async rate-limiter (`check_rate_limit_async`) but this string
+    assertion still checked for the old sync name. Confirmed LIVE the
+    limiter still fires: 6 rapid /auth/login calls from one IP return
+    429 on the 6th (see test_jwt_revocation.py::_unique_test_ip)."""
     from routers import auth
     import inspect
     src = inspect.getsource(auth)
     # Layer 1 burst-limiter must be referenced by the login handler.
-    assert 'check_rate_limit(f"login-ip:' in src, (
+    assert 'check_rate_limit_async(f"login-ip:' in src, (
         "routers/auth.py login handler lost its Layer-1 burst limiter"
     )
     # Layer 2 Mongo-persisted lockout must still be wired.
