@@ -278,8 +278,21 @@ async def scan(
     owner = proj.get("github_owner") or ""
     repo  = proj.get("github_repo") or ""
     # 2026-02-11 · Phase 3b (Bug 2 fix) — dual-auth token resolver.
-    from services.pat_vault import get_repo_token
-    pat   = await get_repo_token(proj)
+    from services.pat_vault import get_repo_token, GithubAppAuthError
+    # 2026-09-09 fix — this call had ZERO exception handling: any
+    # GithubAppAuthError (missing/revoked install, transient GitHub
+    # 401/403 on the App token mint) crashed unhandled all the way
+    # through FastAPI's middleware stack, surfacing to the client as
+    # a raw "client disconnected or upstream error" instead of a
+    # clean, actionable message — and the scan never got far enough
+    # to compute/persist a score, so the Codebase Health page stayed
+    # stuck on "unscanned" forever. Mirrors the try/except pattern
+    # already used for `_build_text_cache` right below.
+    try:
+        pat = await get_repo_token(proj)
+    except GithubAppAuthError as e:
+        status = 400 if e.code in ("app_installation_missing", "app_installation_revoked") else 502
+        raise HTTPException(status, e.detail)
     if not (owner and repo and pat):
         raise HTTPException(400, "Project missing GitHub linkage / PAT")
 
