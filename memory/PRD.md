@@ -1,3 +1,23 @@
+## 2026-09-09 (part 6) — CRITICAL FIX: cross-tenant identity leak / ungrounded live-content fabrication guard
+
+**Founder repro (fresh account):** Asked "what does my website say right now?" inside the ReRootsBeauty/ReRoots- project chat. ORA replied `*checks the live homepage* The current homepage shows: - A hero banner with "Welcome to Aurem" - CTA "Get Started" - Footer...` — **this is AUREM's OWN marketing site**, not the customer's connected project. Asked to clarify, ORA doubled down: "I'm checking the live homepage for Aurem's official site (aurem.dev), not a client's site." Zero real tool calls behind either claim — a severe fabrication that leaked ORA's own vendor identity into a customer's project.
+
+**Root cause:** two guard gaps, not one:
+1. Existing `apply_fabricated_content_guard` (from an earlier fix) only matches "line N shows 'X'" — structurally can't catch a general "the current homepage shows: [bulleted list]" claim with no line number.
+2. Existing asterisk self-narration strip (`output_guard.py`) only matched "the `<noun>`" directly — "*checks **the live** homepage*" broke it because the adjective "live" sits between "the" and "homepage".
+
+**Fix:**
+- New `contains_ungrounded_live_content_claim()` / `apply_live_content_claim_guard()` (`services/ora_chat/grounding_check.py`) — gates on the REAL per-turn `tool_calls_run` signal (already computed by `orchestrator.run_turn`), not more regex-guessing at exact wording. If the reply claims to have checked/verified a live/current site/homepage/page/HTML AND zero tools ran that turn → replace the ENTIRE reply with an honest fallback. No-op whenever a tool actually ran (trusts real results).
+- Widened the asterisk-narration regex (`output_guard.py`) to tolerate an adjective slot + added homepage/website/html nouns.
+- Both wired into the shared `apply_output_guards()` (`services/chat_helpers.py`, now takes `tool_calls_run`) used by BOTH `/chat/send` and `/chat/stream` — applies uniformly across every mode (Swift/Council/Pro/Maxx), not mode-specific.
+
+**Testing:** 8 new unit tests (`test_live_content_claim_guard_2026_09_09.py`, using founder's verbatim repro text) + 5 new integration tests (`testing_agent`) + ~140 existing guard-family tests re-run = **153/154 passing** (1 pre-existing unrelated stale-shape failure, confirmed via stash A/B). Live E2E against real preview: LLM answered honestly on 3 repro-family prompts (best case — nothing to intercept); guard mechanically verified via direct integration tests with the exact fabricated text. `/app/test_reports/iteration_live_content_claim_guard_2026_01_09.json`.
+
+**Founder's second finding (same message):** their own "Advisor → Diagnose failed run" tool showed zero `cto_tasks` runs ever created despite 3+ "go" confirms in Swift mode. Almost certainly the SAME already-fixed part-5 bug (`pending_action.py` fence-gate + insert-type), since `persist_turn()`'s `propose_from_turn()` call is mode-agnostic — but that fix is **not yet deployed to production**, so this production test predates it. Needs a fresh deploy + re-test to confirm, not a new fix. Noted: that pipeline commits directly (no `cto_tasks` row by design), so "Advisor: no task runs" will still show empty even after deploy for THIS specific edit type — a minor observability gap (backlog, not a blocker).
+
+**PROVENANCE:** preview-verified only (unit + testing_agent integration + live LLM smoke). **Not yet founder-confirmed in production** — needs deploy + re-run of the exact ReRootsBeauty repro (both the identity-leak question AND the "go" confirm) to close the loop.
+
+
 ## 2026-09-09 (part 5) — CRITICAL FIX: commit-boundary confirm-to-ship dead-end (root-caused) + NEW: Before/After live-preview feature
 
 **Founder regression test (fresh account, ReRootsBeauty/ReRoots-, reproduced TWICE):** Council-mode proposal to add a `tel:` link → confirmed with "go" → dead-end "I don't have a change waiting right now." Same bug founder had already seen on their own original account — proved systemic, not account-specific. Fabrication guard (part 4 work, prior session) confirmed WORKING in this same test — good progress, unrelated to this bug.

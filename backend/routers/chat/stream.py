@@ -717,6 +717,7 @@ async def chat_stream(
             body.prompt or "", content, state.prior_fix_signal,
             retrieved_context_for_grounding(extra_sys, result),
             skip=bool(result.get("_skip_output_guards")),
+            tool_calls_run=result.get("tool_calls_run", 0) if isinstance(result, dict) else 0,
         )
 
         # 2026-08-27 · Output Guard (Phase 1 net) — runs AFTER the

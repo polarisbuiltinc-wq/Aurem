@@ -1,0 +1,42 @@
+{
+  "summary": "Verified the 2026-09-09 ungrounded-live-content fabrication guard (grounding_check.apply_live_content_claim_guard + widened output_guard asterisk-narration regex, wired via apply_output_guards into BOTH /chat/send and /chat/stream). All 8 founder-repro unit tests PASS. Added 5 additional integration tests hitting the shared apply_output_guards helper directly (including the exact founder verbatim text, skip=True bypass path, variant phrasings, and a false-positive regression on generic educational prose) — all 5 PASS. Wider guard-family regression: 115/116 tests pass in the grounding/output_guard/response_confidence suites; the 1 failure (test_iter264_grounding_validator::test_hook_returns_shape_and_never_raises) is the pre-existing unrelated stale-shape assertion E1 already flagged (expects 4 dict keys; Iter 388-ah added a 5th `unverified_without_caveat` key — unrelated to this fix). Live E2E against real preview /chat/send with three founder-family prompts (‘what does my website currently say?’, ‘is my phone number showing on my homepage right now?’, ‘what text is on my website right now? read the live HTML’) — LLM answered HONESTLY on all 3 runs (‘I don’t have live site access…’), so there was no fabrication for the guard to intercept live, which is the best-case outcome and does not represent a gap in coverage.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/aurem-dev/chat/send", "issue": "Response body does not surface `tool_calls_run` (null in JSON) to the client. Not a fix regression — the value IS computed internally by orchestrator.run_turn and IS passed to apply_output_guards correctly (verified by code read at turn.py:551); it's just not echoed to the client. No functional impact on the guard."},
+      {"endpoint": "N/A (output_guard cosmetics)", "issue": "Observed odd wording in a couple of replies: ‘share the URL or website's pages’ / ‘Your website's connection website's pages pages’. Looks like a mild interaction between the `_FILE_PATH_PATTERN` explain-mode replacement (‘a project file’) and the model text — cosmetic only, does NOT affect the new guard, pre-existing behavior."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_live_content_claim_guard_2026_09_09.py",
+    "/app/backend/tests/test_live_content_guard_integration_2026_01.py"
+  ],
+  "action_items": [
+    "None required for the 2026-09-09 fix — guard behavior verified end-to-end via the shared apply_output_guards() call site used by both routers.",
+    "Optional follow-up (pre-existing, NOT this fix): update test_iter264_grounding_validator.py expected key set to include `unverified_without_caveat` (added by Iter 388-ah).",
+    "Optional follow-up: echo `tool_calls_run` in /chat/send response body for future testability (currently only visible in the SSE `done` frame of /chat/stream).",
+    "Founder-side: per E1 note, the ‘go confirms in Swift create ZERO backend task runs’ finding is likely the SAME already-fixed pending_action.py bug awaiting prod deploy — flag as ‘needs fresh deploy + re-test’ rather than a new bug."
+  ],
+  "critical_code_review_comments": [
+    "Guard design is correct: gates on the REAL per-turn `tool_calls_run` signal (deterministic, orchestrator-produced) rather than more brittle exact-string regex — the right root-fix posture.",
+    "Widened output_guard regex correctly tolerates 1–2 adjective slots between ‘the’ and the noun and adds homepage/website/html — matches founder's exact ‘*checks the live homepage*’ repro plus the earlier ‘*checking the file*’ shape without breaking.",
+    "Fallback message text (UNGROUNDED_LIVE_CONTENT_MESSAGE) is coherent, ends with an actionable offer (‘Want me to check the real page now…’) — will render fine in the chat UI as normal markdown text; no ‘error-looking’ jarring UX.",
+    "Guard wired into the SHARED apply_output_guards() helper (chat_helpers.py) — single source of truth for BOTH /chat/send and /chat/stream, so no mode/router drift risk. Verified at turn.py:547-551 and stream.py:716-720.",
+    "skip=True (confirm-execution deterministic completion path) correctly bypasses the new guard alongside the other four — a real ship-completion message cannot be swapped for the honest fallback."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_live_content_guard_integration_2026_01.py (new — 5 integration tests hitting apply_output_guards directly)"
+  ],
+  "success_rate": {"backend": "100% (13/13 guard-specific tests; 115/116 wider guard-family suite, 1 pre-existing unrelated failure)", "frontend": "N/A — guard did not fire live because the LLM honestly disclaimed; fallback message text is plain prose and will render normally"},
+  "test_credentials": "Preview test@aurem.dev / AuremTest2026! (used for live /chat/send E2E)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The 2026-09-09 ungrounded-live-content guard is deployed and behaves correctly. When re-testing this area, note that the live LLM tends to answer HONESTLY on the founder-repro prompt family (‘what does my website say?’) — so you likely will NOT see the guard fire in a browser session. That is expected. To confirm the guard mechanically, use the integration test at /app/backend/tests/test_live_content_guard_integration_2026_01.py which hits apply_output_guards() directly with the founder's verbatim fabricated text. The 1 pre-existing failure in test_iter264 is stale-shape (unrelated).",
+  "rca of the issue": "Original bug: ORA fabricated a description of its own vendor site's content inside a customer chat because (a) the existing fabricated_content guard required a ‘line N shows X’ shape (structurally impossible to match a bulleted ‘the current homepage shows: …’ claim), and (b) the asterisk self-narration strip's regex only matched ‘the <noun>’ directly — the adjective ‘live’ sitting between ‘the’ and ‘homepage’ broke the pattern. Fix: (1) added contains_ungrounded_live_content_claim() gated on the real per-turn tool_calls_run signal (deterministic; not another exact-string patch) — replaces the WHOLE reply with an honest fallback when the model claims to have checked a live site/page/homepage with zero tool calls that turn; (2) widened the asterisk-narration regex to allow adjective slots and added homepage/website/html to the noun list. Both wired into the shared apply_output_guards() helper so /chat/send and /chat/stream get identical treatment across every mode (Swift/Council/Pro/Maxx)."
+}

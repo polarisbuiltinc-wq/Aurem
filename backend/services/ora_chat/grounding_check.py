@@ -360,6 +360,67 @@ def apply_fabricated_content_guard(reply: str, retrieved_context: str) -> str:
     return FABRICATED_CONTENT_MESSAGE
 
 
+# ─── 2026-09-09 · founder repro (fresh account, ReRootsBeauty/ReRoots-):
+# "what does my website say right now?" -> ORA replied "*checks the
+# live homepage* The current homepage shows: - A hero banner with
+# 'Welcome to Aurem' - ..." then, asked to confirm which site, DOUBLED
+# DOWN with "I'm checking the live homepage for Aurem's official site
+# (aurem.dev), not a client's site." Zero tools ran either turn — this
+# is a sibling gap to `apply_fabricated_content_guard` above: that
+# guard only catches a claim shaped like "line N shows 'X'"; this one
+# catches the (arguably more dangerous, since it leaked ORA's OWN
+# vendor identity into a customer's project) shape of "I checked/the
+# current page shows ..." with NO line number at all. Root cause is
+# the same as the founder's earlier "I don't actually have that line
+# open" fix: the model narrates a check that never happened. Gated on
+# `tool_calls_run` (the real, deterministic signal already computed
+# per-turn by orchestrator.run_turn) rather than more regex-guessing
+# at every possible phrasing of "I checked" — this is the "make
+# promised-tools equal actual-callable-tools" root fix the founder
+# asked for, not another exact-string patch.
+_LIVE_CONTENT_CLAIM_RE = re.compile(
+    r"\b(?:checks?|checking|checked|verif(?:y|ies|ied|ying)|confirm(?:s|ed|ing)?)\b"
+    r"[^.!?\n]{0,60}\b"
+    r"(?:live\s+(?:home\s*page|homepage|site|website|page|html|url)"
+    r"|current(?:ly)?\s+(?:home\s*page|homepage|site|page)"
+    r"|the\s+live\s+html)"
+    r"|\b(?:current(?:ly)?|live|actual)\s+(?:home\s*page|homepage|site|page)\s+"
+    r"(?:shows?|displays?|says?|reads?|has)",
+    re.IGNORECASE,
+)
+
+UNGROUNDED_LIVE_CONTENT_MESSAGE = (
+    "I haven't actually fetched your live site content in this reply, so I "
+    "shouldn't describe what it currently shows. Want me to check the real "
+    "page now before we talk about what's on it?"
+)
+
+
+def contains_ungrounded_live_content_claim(reply: str, tool_calls_run: int) -> bool:
+    """True iff the reply claims to have checked/describes the LIVE
+    or current state of a site/page/homepage, but no real tool
+    actually ran this turn (`tool_calls_run == 0`) — a fabrication
+    regardless of exact wording (asterisk action, parenthetical, or
+    plain prose "I checked ..."). When a tool DID run this turn, we
+    trust it (its result is already what `retrieved_context_for_
+    grounding` folds into the OTHER guard above) and skip entirely."""
+    if tool_calls_run:
+        return False
+    return bool(_LIVE_CONTENT_CLAIM_RE.search(reply or ""))
+
+
+def apply_live_content_claim_guard(reply: str, tool_calls_run: int) -> str:
+    """Swaps the ENTIRE reply for an honest message when it claims to
+    have checked a live site/page/homepage but no tool actually ran
+    this turn. Same "replace the whole turn" posture as
+    `apply_fabricated_content_guard` — a partial redaction would still
+    leave the rest of the invented content (hero copy, CTA text,
+    footer, etc.) standing."""
+    if not contains_ungrounded_live_content_claim(reply, tool_calls_run):
+        return reply
+    return UNGROUNDED_LIVE_CONTENT_MESSAGE
+
+
 def extract_unknown_commands(reply: str) -> list[str]:
     """Slash-command tokens in the reply that are NOT real ORA
     commands (e.g. an invented `/deploy-production`).

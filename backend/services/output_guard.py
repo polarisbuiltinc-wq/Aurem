@@ -79,11 +79,18 @@ _UNIVERSAL_LEAK_PATTERNS = [
     # business-owner-facing reply. Scoped to parenthetical/asterisk-
     # wrapped clauses naming the AI's own silent action on a page/
     # file/code/repo, so normal prose about "the page" is untouched.
+    # 2026-09-09 — widened to allow an adjective between "the" and the
+    # noun ("the LIVE homepage", "the CURRENT site") and added
+    # homepage/html/website nouns — founder repro caught
+    # "*checks the live homepage*" sailing straight through the
+    # original pattern because "live" sat between "the" and
+    # "homepage", which the old alternation couldn't skip over.
     (re.compile(
         r"[\(\*]\s*(?:silently\s+|quietly\s+|first\s+)*"
         r"(?:checks?|checking|looks?|looking|glances?|glancing|"
         r"takes?\s+a\s+look|reads?|reading|reviewing|reviews?)\s+"
-        r"(?:at\s+)?(?:the\s+)?(?:page|file|code|repo|codebase|site)"
+        r"(?:at\s+)?(?:the\s+)?(?:live\s+|current\s+|actual\s+)?"
+        r"(?:page|file|code|repo|codebase|site|homepage|website|html)"
         r"[^)\*\n]*[\)\*]",
         re.IGNORECASE,
     ), ""),

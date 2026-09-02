@@ -71,7 +71,7 @@ def retrieved_context_for_grounding(extra_sys: str | None, result: dict | None) 
 # just execute for real.
 def apply_output_guards(
     user_message: str, content: str, prior_fix_signal: bool,
-    retrieved_context: str, *, skip: bool = False,
+    retrieved_context: str, *, skip: bool = False, tool_calls_run: int = 0,
 ) -> str:
     # 2026-09-05 · Commit-Boundary — runs even when the rest of the
     # chain is skipped (a deterministic completion message never
@@ -104,6 +104,11 @@ def apply_output_guards(
         content = apply_fabricated_content_guard(content, retrieved_context)
     except Exception as e:                                # noqa: BLE001
         logger.debug("fabricated_content guard skipped: %r", e)
+    try:
+        from services.ora_chat.grounding_check import apply_live_content_claim_guard
+        content = apply_live_content_claim_guard(content, tool_calls_run)
+    except Exception as e:                                # noqa: BLE001
+        logger.debug("live_content_claim guard skipped: %r", e)
     return content
 
 
