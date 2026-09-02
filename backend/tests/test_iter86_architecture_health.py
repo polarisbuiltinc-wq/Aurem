@@ -51,14 +51,16 @@ def test_run_health_report_returns_full_payload():
 
 
 def test_run_health_report_detects_known_bloated_file():
-    """We KNOW cto_projects.py is >1500 lines — the report must catch it.
-    If someone refactors it down below 300 lines we'll want this test
-    to fail loud so we can celebrate and refresh the baseline."""
+    """We KNOW routers/cto_projects/worker_api.py is >300 lines — the
+    report must catch it. 2026-09-08 — cto_projects.py was split into
+    a package; worker_api.py (the single-linear-pipeline worker,
+    founder-approved to stay ~1000-1250 lines) is its largest cohesive
+    submodule and the equivalent regression guard."""
     from services.architecture_health import run_health_report
     r = run_health_report()
     rels = {row["rel"] for row in r["bloated_files"]}
-    assert "routers/cto_projects.py" in rels, (
-        f"cto_projects.py not flagged as bloated; got {rels}"
+    assert "routers/cto_projects/worker_api.py" in rels, (
+        f"worker_api.py not flagged as bloated; got {rels}"
     )
 
 
@@ -159,10 +161,11 @@ async def test_architecture_health_endpoint_returns_report():
     assert body["ok"] is True
     rep = body["report"]
     assert rep["total_files"] > 50
-    # cto_projects.py must appear in the bloated set so we know the
-    # endpoint is actually running the analyser, not returning fixtures.
+    # worker_api.py (post-split, founder-approved cohesive ~1.2k line
+    # pipeline) must appear in the bloated set so we know the endpoint
+    # is actually running the analyser, not returning fixtures.
     rels = {row["rel"] for row in rep["bloated_files"]}
-    assert "routers/cto_projects.py" in rels
+    assert "routers/cto_projects/worker_api.py" in rels
 
 
 @pytest.mark.asyncio

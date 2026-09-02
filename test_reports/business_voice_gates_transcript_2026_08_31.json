@@ -4,7 +4,7 @@
     {
       "turn": 1,
       "prompt": "hi, what can you do for my website?",
-      "reply": "I can help fix issues or add features to your website's content—just point me to your website's pages and tell me what needs work.",
+      "reply": "I can help debug, optimize, or add features to your site’s content—just share the website's pages and what you need!",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -22,25 +22,7 @@
     {
       "turn": 2,
       "prompt": "please put our opening hours at the top of our main page",
-      "reply": "I'd love to make that change for you, but I can't see your website yet. Please select your project from the sidebar — once your website is connected, I can add your opening hours right at the top of your main page.\n\nOne thing I need from you: **what are your opening hours?** Give me the days and times (for example, \"Mon–Fri 9am–5pm, Sat 10am–2pm, Sun closed\"), and I'll put them front and center as soon as your project is connected.",
-      "checks": {
-        "no_jargon": true,
-        "jargon_hits": [],
-        "no_dead_end": true,
-        "dead_end_hits": [],
-        "ends_with_terminal_punct": true,
-        "no_dangling": true,
-        "has_handoff_fence": false
-      },
-      "provider": "glm-5.2",
-      "tier": "agentic",
-      "bail_reason": null,
-      "ship_suppressed": false
-    },
-    {
-      "turn": 3,
-      "prompt": "9am to 5pm every day",
-      "reply": "Got it! I'll add \"Open daily 9am–5pm\" right at the top of your homepage once your site is connected. Just select your project from the sidebar when you're ready.",
+      "reply": "Got it—I'll move the opening hours to the top of your main page. Just confirm the website's pages or share the site URL so I can make the update!",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -56,9 +38,27 @@
       "ship_suppressed": false
     },
     {
+      "turn": 3,
+      "prompt": "9am to 5pm every day",
+      "reply": "Perfect—I'll update the homepage with \"Open daily 9am to 5pm\" at the top. Just share the site URL when ready!",
+      "checks": {
+        "no_jargon": true,
+        "jargon_hits": [],
+        "no_dead_end": true,
+        "dead_end_hits": [],
+        "ends_with_terminal_punct": true,
+        "no_dangling": true,
+        "has_handoff_fence": false
+      },
+      "provider": "intent-gateway-casual",
+      "tier": "casual",
+      "bail_reason": null,
+      "ship_suppressed": false
+    },
+    {
       "turn": 4,
       "prompt": "add our phone number 1-800-555-0199 to the bottom of my main page",
-      "reply": "I'll add your phone number to the bottom of your main page as soon as your site is connected. Just select your project from the sidebar, and I'll place **1-800-555-0199** right at the bottom where visitors can easily find it.\n\nOnce connected, I'll also add those opening hours (9am–5pm daily) to the top like we discussed—both changes in one go.",
+      "reply": "I can't see your website yet — you'll need to connect it first so I can make the update.\n\n**But I can** help you add the phone number right now if you:\n- Share the website URL, or\n- Connect your website's project using the sidebar\n\nOnce connected, I'll add \"1-800-555-0199\" to the bottom of your main page along with the opening hours at the top.\n\nWhat's your website URL?",
       "checks": {
         "no_jargon": true,
         "jargon_hits": [],
@@ -137,7 +137,7 @@
   "regression": [
     {
       "prompt": "hello!",
-      "reply": "Hey! What's up? 😊",
+      "reply": "Hey there! How can I help you today? 😊",
       "provider": "intent-gateway-casual",
       "tier": "casual"
     }

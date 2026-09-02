@@ -15,6 +15,7 @@ import subprocess
 import time
 
 import pytest
+from tests._cto_projects_src import cto_projects_src
 
 
 def _read(rel: str) -> str:
@@ -62,7 +63,7 @@ def test_chat_panel_listens_for_prefill_event():
 # ── T2 — task_state SSE frames + tape rendering ───────────────────────
 
 def test_task_state_emit_wired_into_runner():
-    src = _read("backend/routers/cto_projects.py")
+    src = cto_projects_src()
     assert "kind=\"task_state\"" in src
     assert "files_done" in src and "files_total" in src
     # Loop walks every file in `edits` so a 5-file ship emits 5 frames

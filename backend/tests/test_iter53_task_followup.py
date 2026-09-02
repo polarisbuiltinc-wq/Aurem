@@ -20,6 +20,8 @@ from __future__ import annotations
 import os
 import inspect
 
+from tests._cto_projects_src import cto_projects_src
+
 # ─── Endpoint wiring ────────────────────────────────────────────────────
 
 def test_endpoint_registered():
@@ -120,11 +122,7 @@ def test_followup_sys_prompt_enforces_structure():
 def test_done_status_persists_files_changed():
     """Both worker paths (API + git) must include `files_changed=` in
     the final _set_status call so the wrap-up can list real filenames."""
-    src_path = os.path.join(
-        os.path.dirname(__file__), "..", "routers", "cto_projects.py"
-    )
-    with open(src_path, encoding="utf-8") as fh:
-        src = fh.read()
+    src = cto_projects_src()
     # Both successful-push blocks should record the file list.
     assert src.count("files_changed=list(edits.keys())") >= 2, (
         f"files_changed= present {src.count('files_changed=list(edits.keys())')} "

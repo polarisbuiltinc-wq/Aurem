@@ -47,7 +47,19 @@ from routers import cto_projects as router_mod
 from services import cto_pipeline_steps as pipeline_mod
 from cto_services import db as _dbmod
 
-CTO_ROUTER = Path("/app/backend/routers/cto_projects.py")
+_CTO_PKG_DIR = Path("/app/backend/routers/cto_projects")
+
+
+def _cto_worker_src() -> str:
+    """`_run_task_via_api` and `_run_task_with_git` now live in
+    separate submodules (2026-09-08 responsibility-based split) —
+    concatenate both so `_extract_fn` still finds whichever one a
+    test is looking for, unchanged from the pre-split behavior."""
+    return (
+        (_CTO_PKG_DIR / "worker_api.py").read_text()
+        + "\n"
+        + (_CTO_PKG_DIR / "worker_git.py").read_text()
+    )
 
 
 def _extract_fn(src: str, header: str) -> str:
@@ -144,7 +156,7 @@ class TestStep1BeforeSnapshotNowClosed:
     prior to this round's edit."""
 
     def test_api_worker_had_and_still_has_all_safety_stages(self):
-        src = CTO_ROUTER.read_text()
+        src = _cto_worker_src()
         fn = _extract_fn(src, "_run_task_via_api")
         assert "_run_hallucination_gate(" in fn
         assert "_run_syntax_gate(" in fn
@@ -162,7 +174,7 @@ class TestStep1BeforeSnapshotNowClosed:
         three now present, calling the SAME shared functions the API
         worker calls (not a re-implementation) — this is the safety
         hole closing."""
-        src = CTO_ROUTER.read_text()
+        src = _cto_worker_src()
         fn = _extract_fn(src, "_run_task_with_git")
         assert "_run_hallucination_gate(" in fn, (
             "safety hole NOT closed: git worker still missing the "
@@ -190,7 +202,7 @@ class TestStep1BeforeSnapshotNowClosed:
         and Vanguard verify on BOTH workers — a subtle reorder here
         (e.g. syntax-check after commit) would be the single highest-
         risk regression this round could introduce."""
-        src = CTO_ROUTER.read_text()
+        src = _cto_worker_src()
         for header in ("_run_task_via_api", "_run_task_with_git"):
             fn = _extract_fn(src, header)
             idx_sensitive = fn.find("find_sensitive_paths(")

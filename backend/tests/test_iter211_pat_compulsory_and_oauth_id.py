@@ -13,20 +13,21 @@ import sys
 from pathlib import Path
 
 import pytest
+from tests._cto_projects_src import cto_projects_src
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def test_projects_add_rejects_missing_pat():
     """Inspect the source to verify the hard rule lives in the codebase."""
-    src = (Path(__file__).resolve().parents[1] / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     # The 400 message must mention the PAT requirement
     assert "Personal Access Token is required" in src
     assert "github.com/settings/personal-access-tokens/new" in src
 
 
 def test_projects_add_validates_pat_prefix():
-    src = (Path(__file__).resolve().parents[1] / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     assert 'startswith("ghp_")' in src
     assert 'startswith("github_pat_")' in src
     assert "doesn't look like a GitHub PAT" in src
@@ -35,7 +36,7 @@ def test_projects_add_validates_pat_prefix():
 def test_projects_add_verifies_against_github_before_insert():
     """The verify-then-insert pattern is enforced atomically — the
     httpx call MUST happen before the insert_one() call."""
-    src = (Path(__file__).resolve().parents[1] / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     # Order check: the GitHub verify block must appear BEFORE the
     # cto_projects.insert_one call inside `add_project`.
     httpx_idx  = src.find("api.github.com/repos/")

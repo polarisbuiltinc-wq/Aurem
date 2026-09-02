@@ -7,6 +7,7 @@
   6. cto_projects.py → Brain V1 reads retired, V2 throughout
 """
 from pathlib import Path
+from tests._cto_projects_src import cto_projects_src
 
 ROOT = Path(__file__).parent.parent
 SKILLS = ROOT / "vanguard_skills"
@@ -100,7 +101,7 @@ def test_orchestrator_build_persona_injects_skills():
 # ── Fix 6 ───────────────────────────────────────────────────────────
 
 def test_cto_projects_uses_brain_v2_for_reads():
-    text = (ROUTERS / "cto_projects.py").read_text()
+    text = cto_projects_src()
     # V1 read function must be gone from this router.
     assert "get_brain_context" not in text, (
         "Brain V1 read path still imported in cto_projects.py"

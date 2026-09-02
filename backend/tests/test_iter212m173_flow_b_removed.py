@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from tests._cto_projects_src import cto_projects_src
 
 sys.path.insert(0, "/app/backend")
 
@@ -116,14 +117,14 @@ def test_no_frontend_calls_to_flow_b_endpoints():
 
 def test_flow_a_add_endpoint_still_exists():
     """The Flow A endpoint must still be present and untouched."""
-    src = (BACKEND_ROOT / "routers/cto_projects.py").read_text()
+    src = cto_projects_src()
     assert '@router.post("/projects/add")' in src
     assert "async def add_project" in src
 
 
 def test_flow_a_encrypts_pat_before_storing():
     """Regression: PAT is HKDF-Fernet encrypted at rest, never plain."""
-    src = (BACKEND_ROOT / "routers/cto_projects.py").read_text()
+    src = cto_projects_src()
     assert "_encrypt_pat" in src
     assert 'auth_method": "pat"' in src
 
@@ -131,7 +132,7 @@ def test_flow_a_encrypts_pat_before_storing():
 def test_flow_a_verifies_pat_against_github_before_insert():
     """PAT must be verified against GitHub /repos/{o}/{r} BEFORE the
     cto_projects row is inserted (never save a broken project)."""
-    src = (BACKEND_ROOT / "routers/cto_projects.py").read_text()
+    src = cto_projects_src()
     # The verify block hits GitHub before insert_one.
     assert "https://api.github.com/repos/{owner}/{repo}" in src
     # And the insert happens after the verify branch.

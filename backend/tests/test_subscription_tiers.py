@@ -92,12 +92,8 @@ def test_payments_loads_subscription_tiers():
 # ── cto_projects.py feature gates ─────────────────────────────────────
 
 def test_maxx_mode_gated_in_submit_task():
-    import os
-    src_path = os.path.join(
-        os.path.dirname(__file__), "..", "routers", "cto_projects.py",
-    )
-    with open(src_path, encoding="utf-8") as fh:
-        src = fh.read()
+    from tests._cto_projects_src import cto_projects_src
+    src = cto_projects_src()
     # Maxx-mode gate present
     assert "can_use_feature(me.get(\"tier\"), \"maxx_mode\")" in src
     assert "feature_locked" in src

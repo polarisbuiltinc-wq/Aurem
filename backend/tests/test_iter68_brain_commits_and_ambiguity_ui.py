@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import re
+from tests._cto_projects_src import cto_projects_src
 
 
 def _read(rel):
@@ -84,7 +85,7 @@ def test_brain_callers_pass_github_token():
     """The two main callers that hold a PAT must thread it through."""
     from tests._chat_pkg_src import chat_package_source
     chat_src = chat_package_source()
-    proj_src = _read("backend/routers/cto_projects.py")
+    proj_src = cto_projects_src()
     # chat.py best-effort decrypts the PAT and forwards it
     assert "github_token=_pat" in chat_src
     # cto_projects calls also forward the user_token they already have

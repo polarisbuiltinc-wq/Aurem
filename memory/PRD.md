@@ -1,3 +1,114 @@
+## 2026-09-08 — `routers/cto_projects.py` responsibility split — COMPLETE, agent-tested + testing_agent-verified
+
+**WHAT:** Split the 4,416-line monolith into a package at
+`backend/routers/cto_projects/` (10 files, 4,704 lines total incl.
+docstrings). Zero intended logic change — pure move + import fixes.
+
+| Module | Lines | Responsibility |
+|---|---:|---|
+| `__init__.py` | 161 | shared `router`, constants (`_GIT_AVAILABLE`, `WORKSPACE`, `PENDING_EDITS_TTL_S`), top-level service imports, compat re-exports |
+| `management.py` | 819 | project CRUD, PAT check, file-tree/file browse, detect-live-url |
+| `brain.py` | 383 | Brain V2 build/read, warm-start + its 5 parallel agents |
+| `graph.py` | 240 | codebase graph build/read/mermaid/tour/search/impact |
+| `preview.py` | 185 | preview session/pending-change/capture/receipt |
+| `what_changed.py` | 109 | S2 deterministic diff summary |
+| `tasks.py` | 543 | task submit/enqueue/get/scan/retry/stream |
+| `rollback.py` | 254 | rollback_task + `_run_rollback*` family |
+| `worker_api.py` | 1378 | API-only task worker (founder-approved cohesive ~1000-1250L target) |
+| `worker_git.py` | 604 | git-binary task worker |
+
+**Key technique — `_pkg.<name>` dynamic dispatch:** every submodule
+does `import routers.cto_projects as _pkg` and calls cross-cutting
+names (`current_dev`, `get_db`, `require_db`, `call_llm`,
+`gh_api_commit/fetch_file/revert`, `_sh`, `_log`, `_set_status`,
+`_GIT_AVAILABLE`, `WORKSPACE`, `_run_task(_via_api|_with_git)`,
+`_run_rollback(_via_api|_with_git)`, `_enqueue_cto_task`) via
+`_pkg.<name>(...)` instead of a plain `from X import name`. This
+makes the runtime binding those calls resolve against literally BE
+the `__init__.py`/package attribute, so every pre-existing
+`patch("routers.cto_projects.<name>", ...)` / `router_mod.<name> =`
+test call site keeps intercepting real calls with zero test changes
+— verified by first proving 3 sample patch targets resolve, then by
+the full pytest run. Ground-truthed which ~20 names actually need
+this (not the whole reconnaissance list) via live grep against
+`tests/*.py`, not assumption.
+
+**Compat layer:** `__init__.py` re-exports every moved name
+(`AddProject`, `get_repo_token`, `build_project_brain`, `_run_task`,
+`_run_rollback*`, etc.) so `from routers.cto_projects import X` keeps
+resolving package-wide. Router mount unchanged: 33 routes, prefix
+`/cto`, `main.py`'s `include_router(cto_projects_router,
+prefix="/api/aurem-dev")` untouched.
+
+**Test-suite migration:** ~50 test files reference cto_projects.py;
+fixed 15 genuine regressions this session:
+- Mock-repoint misses where a function newly calls a sibling via bare
+  name instead of `_pkg.` (e.g. `rollback_task`'s
+  `bg.add_task(_run_rollback, ...)` → `_pkg._run_rollback`).
+- Source-grep tests that did `open("routers/cto_projects.py")` /
+  `Path(...).read_text()` against the old single-file path — added
+  `backend/tests/_cto_projects_src.py` (concatenates all 10 submodules
+  in original order) as the shared fix so those tests need zero
+  per-file reasoning about which submodule now owns a pattern.
+  Updated ~20 test files to use it.
+- `test_iter86_architecture_health.py` — the bloat-scanner baseline
+  (`memory/arch_health_baseline.json`) was refreshed via
+  `python scripts/architecture_health.py --update-baseline`
+  (worker_api.py is now the flagged-bloated file instead of the old
+  monolith; this also baselined 9 new `router-imports-router`
+  boundary-linter notes from the `_pkg` self-import pattern — a false
+  positive for self-referential package imports, not a real
+  cross-router coupling; not worth changing the linter rule for this).
+- `test_iter78_code_surface.py` — dropped the `"cto_projects.py" in
+  routers` assertion; the `/admin/code-surface` scanner does a flat
+  `os.listdir(routers/)`, so package directories (this one, and
+  `chat/` before it) never surfaced a `.py` entry there — pre-existing
+  scanner limitation, out of scope to fix.
+
+**Full-suite result:** `cd backend && pytest tests/ -q
+--ignore=tests/test_ora_chat_deep_research.py` → 6,657 passed / 377
+failed / 16 errors / 76 skipped / 120 deselected (1558s). vs. the
+last recorded pre-split run (6,638 / 378 / 16 / 76 / 120) — net
+improvement (+19 passed, -1 failed), identical error/skip/deselect
+counts. A literal diff against `test-baseline.txt` shows ~200+ "new"
+entries, but that file was captured under a different preview-URL
+session; manually A/B'd (git-stash on the specific files only, never
+`-u` — see pitfall below) every test file that plausibly touches
+cto_projects code and confirmed every remaining failure is
+pre-existing (PAT-removal directive, live-env URL skip flakiness,
+shared-DB test-order pollution) or already in the known baseline.
+`testing_agent` independently ran a scoped 273-test subset: 263
+passed, 10 failed, all 10 matching the documented pre-existing
+baseline; `retest_needed: false`.
+
+**Disclosed caveat (NOT fixed, flagged for founder):**
+`worker_api.py::_run_task_via_api` is a single 1,196-line function;
+`worker_git.py::_run_task_with_git` is a single 572-line function.
+This matches the ORIGINAL monolith exactly (moving code to a new file
+doesn't shrink a function) but technically violates the "no function
+over 300 lines" completion-gate criterion agreed at kickoff. Founder
+believed this function was ~350 lines (conflating module-level and
+function-level line counts in earlier reconnaissance) — it is not.
+Decomposing it into ≤300-line steps is a real, separate, risky
+refactor of the app's most critical pipeline; explicitly NOT attempted
+this session pending founder direction.
+
+**Pitfall learned — do not `git stash -u` for A/B baseline testing on
+this repo:** `frontend/.env` has an uncommitted local change (current
+preview URL) sitting on top of an older committed value from a prior
+fork. `git stash -u` (or plain `git stash` if `.env` itself were
+tracked-modified) silently reverts it, breaking every test that reads
+`REACT_APP_BACKEND_URL` for live HTTP calls in a way that looks like
+mass "new" failures but is 100% environmental. Always `git stash pop`
+immediately and verify `frontend/.env` before trusting any stash-based
+comparison run.
+
+**STOPPED per founder's explicit instruction — review before
+`main.py` lifespan/bootstrap work begins.**
+
+---
+
+
 ## 2026-09-08 — `routers/chat/stream.py` StreamState refactor — COMPLETE, agent-tested, full-suite baseline-diffed clean
 
 **WHAT:** Finished the `stream.py` closure refactor the founder explicitly

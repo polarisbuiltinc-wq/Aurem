@@ -71,7 +71,11 @@ async def test_code_surface_returns_live_file_map():
     assert body["total_files"] == sum(len(v) for v in surface.values())
     # Specific files we know must exist
     routers = {row["file"] for row in surface["routers"]}
-    assert "cto_projects.py" in routers
+    # 2026-09-08 — cto_projects.py (like chat.py before it) is now a
+    # package; the scanner is a flat top-level `os.listdir` over
+    # routers/ by design, so package directories don't surface a
+    # `.py` entry here. `automations.py` (still a flat file) is the
+    # regression guard for "routers category is populated".
     assert "automations.py" in routers
     pages = {row["file"] for row in surface["pages"]}
     assert "Automations.jsx" in pages or "Dashboard.jsx" in pages

@@ -22,6 +22,7 @@ Locks in the following:
 """
 
 from __future__ import annotations
+from tests._cto_projects_src import cto_projects_src
 
 
 # ── Zero circular imports on the backend tree ────────────────────
@@ -57,7 +58,7 @@ def test_cto_projects_reexports_from_pat_vault():
     """The router-side get_repo_token still exists for backward-
     compatibility, but delegates DOWN to services/pat_vault, not the
     other way around (dependency direction is routers → services)."""
-    src = open("/app/backend/routers/cto_projects.py").read()
+    src = cto_projects_src()
     assert "from services.pat_vault import get_repo_token" in src, (
         "routers.cto_projects must import get_repo_token FROM pat_vault "
         "(dependency direction is routers → services)"

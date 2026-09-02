@@ -18,6 +18,7 @@ import pathlib
 import sys
 
 import pytest
+from tests._cto_projects_src import cto_projects_src
 
 BACKEND_DIR = pathlib.Path(__file__).resolve().parents[1]
 FRONTEND_SRC = BACKEND_DIR.parent / "frontend" / "src"
@@ -28,13 +29,13 @@ if str(BACKEND_DIR) not in sys.path:
 # ── Backend wiring ───────────────────────────────────────────────────
 
 def test_cto_projects_has_warm_start_endpoint():
-    src = (BACKEND_DIR / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     assert '"/projects/{project_id}/warm-start"' in src
     assert "async def warm_start_project" in src
 
 
 def test_cto_projects_has_warm_start_status_endpoint():
-    src = (BACKEND_DIR / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     assert '"/projects/warm-start/{job_id}/status"' in src
     assert "async def warm_start_status" in src
 
@@ -42,7 +43,7 @@ def test_cto_projects_has_warm_start_status_endpoint():
 def test_warm_agents_run_in_parallel():
     """`_run_warm_agents` MUST use asyncio.gather over the 4 agents so
     GitHub latency is paid in parallel, not serialised."""
-    src = (BACKEND_DIR / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     runner = src[src.find("async def _run_warm_agents"):]
     runner = runner[:runner.find("@router.")] if "@router." in runner else runner
     assert "asyncio.gather" in runner, "warm agents must run in parallel"
@@ -53,11 +54,12 @@ def test_warm_agents_run_in_parallel():
 def test_warm_start_endpoint_returns_job_id_without_blocking():
     """The endpoint MUST `create_task` and return immediately — never
     await the background runner."""
-    src = (BACKEND_DIR / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     endpoint = src[src.find("async def warm_start_project"):]
     endpoint = endpoint[:endpoint.find("async def _run_warm_agents")]
-    assert "asyncio.create_task(_run_warm_agents(" in endpoint
+    assert "asyncio.create_task(_pkg._run_warm_agents(" in endpoint
     # The endpoint MUST NOT directly await _run_warm_agents
+    assert "await _pkg._run_warm_agents(" not in endpoint
     assert "await _run_warm_agents(" not in endpoint
 
 
@@ -114,7 +116,16 @@ def test_main_creates_warm_start_jobs_ttl_index():
 # ── Compile sanity ───────────────────────────────────────────────────
 
 @pytest.mark.parametrize("relpath", [
-    "routers/cto_projects.py",
+    "routers/cto_projects/__init__.py",
+    "routers/cto_projects/management.py",
+    "routers/cto_projects/brain.py",
+    "routers/cto_projects/graph.py",
+    "routers/cto_projects/preview.py",
+    "routers/cto_projects/what_changed.py",
+    "routers/cto_projects/tasks.py",
+    "routers/cto_projects/rollback.py",
+    "routers/cto_projects/worker_api.py",
+    "routers/cto_projects/worker_git.py",
     "services/orchestrator.py",
     "main.py",
 ])

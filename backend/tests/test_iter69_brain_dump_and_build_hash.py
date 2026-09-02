@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import re
+from tests._cto_projects_src import cto_projects_src
 
 
 def _read(rel):
@@ -26,7 +27,7 @@ def test_run_task_auto_regenerates_before_failing():
     chance to regenerate with explicit guidance BEFORE failing the task.
     Without this the user has to click Retry by hand — and the retry
     used to do the same thing again (since-fixed in iter 67)."""
-    src = _read("backend/routers/cto_projects.py")
+    src = cto_projects_src()
     # The nudge text must be present + actionable
     assert "auto-regenerating with explicit guidance" in src
     assert "FILE: <path>" in src
@@ -41,7 +42,7 @@ def test_run_task_auto_regenerates_before_failing():
 def test_run_task_only_retries_once():
     """The auto-regenerate must NOT loop — only one extra call. Otherwise
     a stuck model could burn 10 LLM calls on a single task."""
-    src = _read("backend/routers/cto_projects.py")
+    src = cto_projects_src()
     # Count occurrences of "AI codegen auto-retry" — should be exactly 1
     assert src.count("AI codegen auto-retry") == 1, (
         "Auto-regenerate must fire exactly once, not loop"

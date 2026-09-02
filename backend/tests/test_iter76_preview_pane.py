@@ -1,6 +1,7 @@
 """Iter 76 — live preview pane (split-pane chat ↔ iframe blob)."""
 import os
 import re
+from tests._cto_projects_src import cto_projects_src
 
 
 def _read(rel: str) -> str:
@@ -43,7 +44,7 @@ def test_backend_persists_frontend_subset_on_done():
     """When a task ships, only render-safe files (HTML/CSS/JS/TS) are
     persisted to the cto_tasks doc so the preview pane can render them
     without a repo round-trip."""
-    src = _read("backend/routers/cto_projects.py")
+    src = cto_projects_src()
     assert "def _frontend_subset(" in src
     # Done-status writes pass the trimmed dict
     assert "edits=_frontend_subset(edits)" in src

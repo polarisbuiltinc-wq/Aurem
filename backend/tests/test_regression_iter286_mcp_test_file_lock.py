@@ -27,6 +27,7 @@ These tests lock:
 """
 from __future__ import annotations
 import asyncio
+from tests._cto_projects_src import cto_projects_src
 
 
 def test_regression_iter286_write_repo_file_blocks_test_files():
@@ -110,7 +111,7 @@ def test_regression_iter286_ship_code_has_test_file_gate_in_source():
     classification before invoking gh_api_commit. Source-level check
     so the gate can't be silently removed by a refactor.
     """
-    src = open("/app/backend/routers/cto_projects.py").read()
+    src = cto_projects_src()
 
     # The gate must sit between the "Committing to GitHub…" _emit
     # and the actual gh_api_commit call.
@@ -258,7 +259,7 @@ def test_regression_iter286_ship_code_override_not_llm_grantable():
     # ── (c) defensive source-level guard (HYBRID) ───────────────
     # Retained so a refactor that deletes the DB-read entirely is
     # caught even if the caller pattern above stops matching prod.
-    src = open("/app/backend/routers/cto_projects.py").read()
+    src = cto_projects_src()
     # 2026-08-25 — updated for the P0 hotfix: `edits` is a
     # {path: content} dict, so `_test_touched` now iterates path
     # strings directly (`for p in edits`) instead of the old,

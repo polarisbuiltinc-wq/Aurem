@@ -19,6 +19,7 @@ import pytest
 from services import loop_engine as eng
 from services.loop_engine import LoopEngine, LoopState
 from services.bin_context import BINContext
+from tests._cto_projects_src import cto_projects_src
 
 pytestmark = pytest.mark.asyncio
 
@@ -343,7 +344,7 @@ def test_p0_4_hallucination_gate_flags_invented_rewrite():
 
 
 def test_p0_4_task_text_paths_are_read_first():
-    src = (BACKEND / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     m = re.search(r"_mentioned = re\.findall\(\s*r\"(.+?)\"", src, re.S)
     assert m, "path-extraction regex missing from target file selection"
     pat = re.compile(m.group(1))
@@ -353,7 +354,7 @@ def test_p0_4_task_text_paths_are_read_first():
 
 
 def test_p0_4_no_done_status_without_edits():
-    src = (BACKEND / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     # The old bug: `if not edits:` immediately set status="done".
     for block in re.findall(r"if not edits:\n(?:.*\n){1,8}", src):
         assert 'status="done"' not in block, (

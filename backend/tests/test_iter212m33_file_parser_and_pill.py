@@ -11,6 +11,7 @@ Two concerns, one file (small surface area, two source contracts):
      and that `/projects` renders the slim founder offer pill.
 """
 from __future__ import annotations
+from tests._cto_projects_src import cto_projects_src
 
 
 # ── 1. Parser — fragility coverage ───────────────────────────────────
@@ -149,7 +150,7 @@ def test_parser_closing_fence_can_be_longer_than_opening():
 # ── 2. Source pins — cto_projects worker + Projects page ─────────────
 
 def test_cto_projects_uses_tolerant_parser():
-    src = open("/app/backend/routers/cto_projects.py").read()
+    src = cto_projects_src()
     # Both call sites must route through the new helper.
     assert src.count("from services.llm_file_parser import parse_file_blocks") >= 2
     assert "parse_file_blocks(reply)" in src

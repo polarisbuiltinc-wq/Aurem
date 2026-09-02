@@ -25,6 +25,7 @@ import asyncio
 import time
 
 import pytest
+from tests._cto_projects_src import cto_projects_src
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -278,7 +279,7 @@ def test_last_400_when_project_id_missing(monkeypatch):
 def test_graph_agent_has_longer_warm_start_timeout():
     """Read the constant out of cto_projects via the source file so
     the test doesn't need to spin up the whole _run_warm_agents."""
-    src = open("/app/backend/routers/cto_projects.py").read()
+    src = cto_projects_src()
     # Sanity: the dict literal contains both the brain (12.0) and
     # graph (25.0) timeout overrides.
     assert '"brain":     12.0' in src

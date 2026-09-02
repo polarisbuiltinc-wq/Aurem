@@ -24,17 +24,14 @@ import re
 import inspect
 
 from services import rate_limiter
+from tests._cto_projects_src import cto_projects_src
 
 
 # ─── BUG 1 — _scrub in git path ──────────────────────────────────────────
 
 def test_bug1_run_task_with_git_scrubs_pat():
     """The git-path worker must scrub the PAT before _log/_set_status."""
-    src_path = os.path.join(
-        os.path.dirname(__file__), "..", "routers", "cto_projects.py"
-    )
-    with open(src_path, encoding="utf-8") as fh:
-        src = fh.read()
+    src = cto_projects_src()
     # `_run_task_with_git` is the last function in the file so anchor on EOF.
     git_section = re.search(
         r"async def _run_task_with_git\(.*?(?=\nasync def |\Z)",
@@ -53,11 +50,7 @@ def test_bug1_run_task_with_git_scrubs_pat():
 # ─── BUG 2 — update_project encrypts PAT ─────────────────────────────────
 
 def test_bug2_update_project_encrypts_pat():
-    src_path = os.path.join(
-        os.path.dirname(__file__), "..", "routers", "cto_projects.py"
-    )
-    with open(src_path, encoding="utf-8") as fh:
-        src = fh.read()
+    src = cto_projects_src()
     upd_section = re.search(
         r"async def update_project\(.*?\n(?:async def |\Z)",
         src, re.DOTALL,
@@ -101,11 +94,7 @@ def test_bug3_free_tier_count_excludes_failed_tasks():
 # ─── BUG 4 — retry_task propagates maxx_mode ─────────────────────────────
 
 def test_bug4_retry_task_propagates_maxx_mode():
-    src_path = os.path.join(
-        os.path.dirname(__file__), "..", "routers", "cto_projects.py"
-    )
-    with open(src_path, encoding="utf-8") as fh:
-        src = fh.read()
+    src = cto_projects_src()
     sec = re.search(
         r"async def retry_task\(.*?return \{[^}]*\}",
         src, re.DOTALL,
@@ -215,11 +204,7 @@ def test_bug8_cors_reads_allowed_origins_env():
 def test_logic_fix_git_path_injects_brain_issues_skills():
     """When git is available, the worker must still get the same Project
     Brain + GitHub Issues + Vanguard skill injection the API path uses."""
-    src_path = os.path.join(
-        os.path.dirname(__file__), "..", "routers", "cto_projects.py"
-    )
-    with open(src_path, encoding="utf-8") as fh:
-        src = fh.read()
+    src = cto_projects_src()
     git_section = re.search(
         r"async def _run_task_with_git\(.*?\nasync def ",
         src, re.DOTALL,

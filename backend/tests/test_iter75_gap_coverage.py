@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shutil
+from tests._cto_projects_src import cto_projects_src
 
 
 def _read(rel: str) -> str:
@@ -44,7 +45,7 @@ def test_sandbox_runner_skips_without_api_key(monkeypatch):
 
 
 def test_sandbox_wired_into_worker_pipeline():
-    src = _read("backend/routers/cto_projects.py")
+    src = cto_projects_src()
     assert "from services.sandbox_runner import validate_generated_files" in src
     assert "Sandbox tests passed" in src
 
@@ -52,7 +53,7 @@ def test_sandbox_wired_into_worker_pipeline():
 # ── GAP 2 — DB-backed task plan + structural multi-file retry ─────────
 
 def test_task_plan_persisted_on_multi_file_tasks():
-    src = _read("backend/routers/cto_projects.py")
+    src = cto_projects_src()
     assert "_promised_files" in src
     # Plan written to MongoDB with file/status shape
     assert "task_plan" in src
@@ -62,7 +63,7 @@ def test_task_plan_persisted_on_multi_file_tasks():
 
 
 def test_structural_multi_file_retry_in_runner():
-    src = _read("backend/routers/cto_projects.py")
+    src = cto_projects_src()
     # Tight match: the dedicated retry section + nudge phrasing
     assert "multi-file contract retry" in src
     assert "Your previous response was missing these files" in src

@@ -19,6 +19,7 @@ plain_english_contract_active allowlist) and has new deny patterns.
 import re
 
 from services.output_guard import strip_machinery_leak, _MACHINERY_LEAK_PATTERNS
+from tests._cto_projects_src import cto_projects_src
 
 
 def test_iter_counter_stripped():
@@ -98,12 +99,12 @@ def test_council_field_is_a_real_label_not_a_boolean():
 
 
 def test_injected_vanguard_skills_phrasing_fixed():
-    src = open("/app/backend/routers/cto_projects.py").read()
+    src = cto_projects_src()
     assert "injected Vanguard security skills" not in src
 
 
 def test_truncation_check_pluralization_fixed():
-    src = open("/app/backend/routers/cto_projects.py").read()
+    src = cto_projects_src()
     assert "files passed truncation check" not in src
 
 
@@ -113,7 +114,7 @@ def test_hardcoded_pattern_count_removed_from_live_task_popup():
 
 
 def test_test_file_lock_blocked_message_is_plain_english():
-    src = open("/app/backend/routers/cto_projects.py").read()
+    src = cto_projects_src()
     assert "Loop-pipeline test-file lock is enforced on this path (Iter 286)" not in src
     assert "Can't apply this change" in src
 

@@ -147,7 +147,7 @@ def test_t1_original_crash_site_still_fixed():
     """Regression guard on the ORIGINAL site (belt-and-suspenders on
     top of tests/test_regression_iter286_mcp_test_file_lock.py) — the
     dict-iteration bug must not silently come back."""
-    src = open(os.path.join(BACKEND, "routers", "cto_projects.py")).read()
+    src = open(os.path.join(BACKEND, "routers", "cto_projects", "worker_api.py")).read()
     idx = src.find("_test_touched = [p for p in edits")
     assert idx > -1, "original fix site must still exist"
     region = src[idx: idx + 200]
@@ -390,7 +390,7 @@ def test_t4_cto_projects_wires_push_failed_flag_on_persist():
     delegate to `_persist_push_failed`, which persists commit_sha +
     push_failed=True — not fall into the generic except that would
     silently drop the SHA."""
-    src = open(os.path.join(BACKEND, "routers", "cto_projects.py")).read()
+    src = open(os.path.join(BACKEND, "routers", "cto_projects", "worker_api.py")).read()
     idx = src.find("except PushFailedError as e:")
     assert idx > -1
     region = src[idx: idx + 450]
@@ -428,7 +428,7 @@ async def test_t4_persist_push_failed_helper_real_call():
 
 
 def test_t4_cto_projects_wires_verify_failed_flag_on_persist():
-    src = open(os.path.join(BACKEND, "routers", "cto_projects.py")).read()
+    src = open(os.path.join(BACKEND, "routers", "cto_projects", "worker_api.py")).read()
     assert "verify_failed=True" in src
 
 

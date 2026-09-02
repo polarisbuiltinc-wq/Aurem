@@ -12,6 +12,7 @@ import os
 import re
 
 import pytest
+from tests._cto_projects_src import cto_projects_src
 
 
 def _read(rel: str) -> str:
@@ -86,7 +87,7 @@ def test_pre_push_syntax_gate_present():
 # ── GAP 3 — Multi-file task instruction ───────────────────────────────
 
 def test_multi_file_instruction_in_runner():
-    src = _read("backend/routers/cto_projects.py")
+    src = cto_projects_src()
     assert "MULTI-FILE TASK DETECTED" in src
     assert "_multi_file_keywords" in src
     assert "_multi_file_instruction" in src

@@ -10,6 +10,7 @@ Iter 212m-113 — Tests for the production-ready Codebase Graph:
 from __future__ import annotations
 
 import pytest
+from tests._cto_projects_src import cto_projects_src
 
 
 # ─── 1. Per-project gating ────────────────────────────────────────────
@@ -44,7 +45,7 @@ async def test_get_graph_returns_empty_for_wrong_user():
 
 def test_graph_routes_decode_jwt_before_reading():
     """All 4 graph endpoints must call current_dev() before any DB read."""
-    src = open("/app/backend/routers/cto_projects.py").read()
+    src = cto_projects_src()
     # Each endpoint must derive user_id from JWT — never from path/body.
     snippets = [
         '@router.get("/projects/{project_id}/graph")',
@@ -58,7 +59,7 @@ def test_graph_routes_decode_jwt_before_reading():
     # graph read.
     for s in snippets:
         block = src.split(s, 1)[1].split("@router.", 1)[0]
-        assert "await current_dev(authorization)" in block, \
+        assert "await _pkg.current_dev(authorization)" in block, \
             f"{s} must authenticate via current_dev"
         assert 'user_id = me["user_id"]' in block, \
             f"{s} must derive user_id from JWT, not request body"

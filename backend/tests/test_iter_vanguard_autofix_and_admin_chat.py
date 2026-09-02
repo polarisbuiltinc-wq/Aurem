@@ -28,7 +28,19 @@ BACKEND_PUBLIC = (os.environ.get("REACT_APP_BACKEND_URL")
                   or "https://bin-context-pat.preview.emergentagent.com"
                   ).rstrip("/") + "/api/aurem-dev"
 
-CTO_ROUTER = Path("/app/backend/routers/cto_projects.py")
+from tests._cto_projects_src import cto_projects_src
+
+
+class _CtoRouterCompat:
+    """Compat shim — `_run_task_via_api`/`_run_task_with_git`/etc. now
+    live in separate submodules (2026-09-08 split); `.read_text()`
+    keeps returning the same combined search surface as before."""
+    @staticmethod
+    def read_text() -> str:
+        return cto_projects_src()
+
+
+CTO_ROUTER = _CtoRouterCompat()
 # 2026-09-08 StreamState refactor — Mode D/E dispatch moved from
 # stream.py's inline _worker() into worker.py's `_mode_d_e()`
 # (mechanical move, same source lines).

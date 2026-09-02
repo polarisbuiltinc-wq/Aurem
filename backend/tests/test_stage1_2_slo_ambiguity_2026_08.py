@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 
 import pytest
 import requests
+from tests._cto_projects_src import cto_projects_src
 
 
 def _load_env():
@@ -56,7 +57,7 @@ def test_ambiguity_gate_concrete_phrases():
 def test_cto_projects_reuses_shared_module_not_a_copy():
     """Guards against the exact drift bug this refactor closes — the
     legacy path must import the shared helper, not keep its own copy."""
-    src = open("/app/backend/routers/cto_projects.py", encoding="utf-8").read()
+    src = cto_projects_src()
     assert "from services.ambiguity_gate import is_ambiguous_task" in src
     # The old duplicated regex list must be gone from this file.
     assert "_VAGUE_TASK_PATTERNS" not in src

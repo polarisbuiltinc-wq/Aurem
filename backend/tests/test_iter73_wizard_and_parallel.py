@@ -20,6 +20,7 @@ import os
 import time
 
 import pytest
+from tests._cto_projects_src import cto_projects_src
 
 
 def _read(rel: str) -> str:
@@ -114,7 +115,7 @@ async def test_emit_extra_cannot_overwrite_canonical_fields():
 
 
 def test_parallel_emit_wired_in_run_task_via_api():
-    src = _read("backend/routers/cto_projects.py")
+    src = cto_projects_src()
     # Pre-decompose so we can ship the roster BEFORE the LLM runs
     assert "from services.parallel_agents import (" in src
     assert "decompose_task" in src

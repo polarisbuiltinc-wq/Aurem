@@ -17,6 +17,8 @@ import pytest
 import requests
 from pymongo import MongoClient
 
+from tests._cto_projects_src import cto_projects_src
+
 _BASE = os.environ.get("REACT_APP_BACKEND_URL")
 if not _BASE:
     # Fallback: read from frontend/.env
@@ -343,8 +345,7 @@ class TestTaskSubmittedFunnel:
         """Grep-verify the Guard 22 wiring is in the submit_task path
         AFTER task_id creation + insert, so ambiguity-gate rejections
         can't accidentally fire it."""
-        with open("/app/backend/routers/cto_projects.py") as f:
-            src = f.read()
+        src = cto_projects_src()
         # The stamping must appear AFTER the cto_tasks.insert_one call.
         insert_idx = src.find('await db.cto_tasks.insert_one({')
         guard_idx  = src.find("Guard 22 — funnel event: task_submitted")

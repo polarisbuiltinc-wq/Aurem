@@ -20,6 +20,7 @@ import pathlib
 import sys
 
 import pytest
+from tests._cto_projects_src import cto_projects_src
 
 BACKEND_DIR = pathlib.Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
@@ -138,13 +139,13 @@ def test_orchestrator_brain_injection_has_2s_timeout():
 # ── cto_projects wiring ──────────────────────────────────────────────
 
 def test_cto_projects_has_build_brain_endpoint():
-    src = (BACKEND_DIR / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     assert '"/projects/{project_id}/build-brain"' in src
     assert "build_project_brain" in src
 
 
 def test_cto_projects_has_get_brain_endpoint():
-    src = (BACKEND_DIR / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     assert '"/projects/{project_id}/brain"' in src
     assert "get_project_brain" in src
 
@@ -152,7 +153,7 @@ def test_cto_projects_has_get_brain_endpoint():
 def test_cto_projects_auto_triggers_brain_build_on_connect():
     """`POST /projects/add` must fire a build_brain_v2 background task
     so the first chat turn already has structural map injected."""
-    src = (BACKEND_DIR / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     add_section = src[src.find("async def add_project"):]
     add_section = add_section[:add_section.find("@router.")]
     assert "build_brain_v2" in add_section
@@ -162,7 +163,7 @@ def test_cto_projects_auto_triggers_brain_build_on_connect():
 def test_cto_projects_updates_brain_v2_on_api_task_completion():
     """The API-path worker must fire `update_brain_after_task` once
     the commit is verified."""
-    src = (BACKEND_DIR / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     # Both task workers (API + git) must call it — count must be ≥ 2
     assert src.count("update_brain_after_task") >= 2, (
         "Brain V2 auto-update missing from one of the task worker paths"
@@ -216,7 +217,7 @@ def test_brain_v2_update_uses_correct_user_id_source(def_line):
     exact class of bug (wrong source, not just "no exception") that a
     plain `pyflakes`/string-presence check would miss once the name
     coincidentally exists in some other scope."""
-    src = (BACKEND_DIR / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     func_src = _extract_function_source(src, def_line)
     calls = _brain_update_call_nodes(func_src)
     assert calls, f"no update_brain_after_task(...) call found in {def_line}"
@@ -274,7 +275,16 @@ async def test_brain_v2_update_actually_proceeds_with_the_real_project_user_id()
 @pytest.mark.parametrize("relpath", [
     "services/project_brain.py",
     "services/orchestrator.py",
-    "routers/cto_projects.py",
+    "routers/cto_projects/__init__.py",
+    "routers/cto_projects/management.py",
+    "routers/cto_projects/brain.py",
+    "routers/cto_projects/graph.py",
+    "routers/cto_projects/preview.py",
+    "routers/cto_projects/what_changed.py",
+    "routers/cto_projects/tasks.py",
+    "routers/cto_projects/rollback.py",
+    "routers/cto_projects/worker_api.py",
+    "routers/cto_projects/worker_git.py",
 ])
 def test_files_parse_clean(relpath: str):
     import ast

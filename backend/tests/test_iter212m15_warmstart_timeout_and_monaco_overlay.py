@@ -14,6 +14,7 @@ testing-agent run (test_reports/iteration_10.json):
      always wins against any inline code-block overlay.
 """
 from pathlib import Path
+from tests._cto_projects_src import cto_projects_src
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -22,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_warmstart_uses_addtoset_not_push():
-    src = (ROOT / "routers" / "cto_projects.py").read_text(encoding="utf-8")
+    src = cto_projects_src()
     # The mark-done helper inside _run_warm_agents must be idempotent.
     assert '"$addToSet": {"agents_done"' in src, (
         "warm-start _mark_done must $addToSet so a re-mark after timeout "
@@ -35,7 +36,7 @@ def test_warmstart_uses_addtoset_not_push():
 
 
 def test_warmstart_bounds_each_agent_with_wait_for():
-    src = (ROOT / "routers" / "cto_projects.py").read_text(encoding="utf-8")
+    src = cto_projects_src()
     # The `_bounded` wrapper must exist inside _run_warm_agents.
     assert "async def _bounded(" in src
     assert "asyncio.wait_for(coro, timeout=12.0)" in src
@@ -48,7 +49,7 @@ def test_warmstart_bounds_each_agent_with_wait_for():
 
 
 def test_warmstart_timeout_marks_done():
-    src = (ROOT / "routers" / "cto_projects.py").read_text(encoding="utf-8")
+    src = cto_projects_src()
     # On TimeoutError the bounded wrapper must still mark the agent
     # done so progress reaches 100%.
     # Find the _bounded helper body and check its except TimeoutError branch.

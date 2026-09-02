@@ -1,0 +1,33 @@
+{
+  "summary": "Backend-only refactor verification: cto_projects.py was split into a package under backend/routers/cto_projects/ (10 submodules). Verified (1) backend imports/starts cleanly and /api/health returns 200 with db:true, (2) `from routers.cto_projects import router` resolves and mounts all 33 expected routes under /api/aurem-dev/cto/*, (3) targeted pytest suite of 9 listed test files: 263 passed / 10 failed - every failure matches the documented pre-existing baseline (PAT-removal directive), zero new regressions introduced by the split, (4) live smoke checks against public REACT_APP_BACKEND_URL show auth-gated routes return 401 and body-validated routes return 422 (routing intact), (5) homepage loads normally - no frontend regression.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "routers/cto_projects/worker_api.py::_run_task_via_api", "issue": "Single function is 1196 lines (worker_git.py::_run_task_with_git is 572 lines). Founder-approved as cohesive pipeline and unchanged from pre-split monolith - flagged per main-agent instructions, NOT to be fixed here."},
+      {"endpoint": "warm-start / worker paths", "issue": "Multiple 'coroutine was never awaited' RuntimeWarnings surfaced in tests (e.g. agent_recent/agent_structure/agent_stack/agent_graph/agent_brain in _run_warm_agents, _gh_list_files in worker_git path guard). These are test-mock artifacts (mocks returning coroutines that helper never awaits) not new to this split, but noting for future cleanup."},
+      {"endpoint": "worker_git.py:595", "issue": "sentry_sdk.push_scope() DeprecationWarning - pre-existing, unrelated to split."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/test_reports/pytest/cto_split_results.xml",
+    "/app/backend/tests/_cto_projects_src.py"
+  ],
+  "action_items": [
+    "None required for this refactor - split is clean and behavior-preserving.",
+    "(Flagged, not to fix now) worker_api._run_task_via_api is 1196 LOC as a single function; founder approved."
+  ],
+  "critical_code_review_comments": [
+    "Package __init__.py correctly re-exports the shared router + ~25 helper names so both `from routers.cto_projects import X` imports and `patch('routers.cto_projects.X', ...)` targets keep resolving - verified by 263 passing tests, many of which use those patch targets.",
+    "All 33 originally-mounted routes still resolve under /cto (mounted at /api/aurem-dev), including brain (build-brain, brain, warm-start, warm-start status), graph (build-graph, graph, graph/mermaid, graph/tour, graph/search, graph/impact), preview (session, pending-change, capture, receipt), tasks (submit, get, stream, retry, scan, project list), rollback, what-changed and management (add, list, delete, patch, tree, file, check-pat, verify-pat, test-pat, detect-live-url, indexing-status).",
+    "worker_api.py (1378 LOC) and worker_git.py (604 LOC) exceed the ideal 700-line module cap due to single monolithic function bodies (_run_task_via_api 1196 LOC, _run_task_with_git 572 LOC). Acceptable per founder approval and this task's scope."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "96.3% (263/273 in scoped run; 10 failures all match documented pre-existing baseline)", "frontend": "n/a - smoke only, homepage renders"},
+  "test_credentials": "N/A (auth-gated routes verified via 401 response only)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Package split at /app/backend/routers/cto_projects/ is stable. 33 routes mount correctly. The 10 pytest failures in the scoped run are the exact pre-existing baseline (1 rate_limited + 9 iter212b PAT-endpoint tests; iter212b has 13 tests total, 4 of which pass). Do NOT re-run the full ~26 min suite unless asked. Use tests/_cto_projects_src.py helper for any source-grep-style regression assertions since original monolith is gone.",
+  "rca of the issue": "N/A - no new issue found; scope was verification of a lossless file split."
+}

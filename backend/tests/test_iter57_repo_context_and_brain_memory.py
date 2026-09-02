@@ -21,6 +21,7 @@ Three source-level pins:
 """
 from __future__ import annotations
 import os
+from tests._cto_projects_src import cto_projects_src
 
 
 def _read(rel: str) -> str:
@@ -132,7 +133,7 @@ def test_chat_router_injects_brain_context():
 def test_git_path_worker_updates_brain():
     """`_run_task_with_git` MUST fire `update_brain_after_commit` on
     success — API + git workers must keep parity."""
-    src = _read("routers/cto_projects.py")
+    src = cto_projects_src()
     # Two call sites total: one in API path (Iter 41), one in git path
     # (Iter 57). If only one exists, the git worker silently loses brain
     # updates whenever it's the active code path.

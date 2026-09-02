@@ -17,6 +17,7 @@ import pathlib
 import sys
 
 import pytest
+from tests._cto_projects_src import cto_projects_src
 
 BACKEND_DIR = pathlib.Path(__file__).resolve().parents[1]
 FRONTEND_SRC = BACKEND_DIR.parent / "frontend" / "src"
@@ -136,19 +137,19 @@ def test_extract_imports_python():
 # ── Endpoints ────────────────────────────────────────────────────────
 
 def test_cto_projects_has_build_graph_endpoint():
-    src = (BACKEND_DIR / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     assert '"/projects/{project_id}/build-graph"' in src
     assert "async def build_project_graph" in src
 
 
 def test_cto_projects_has_get_graph_endpoint():
-    src = (BACKEND_DIR / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     assert '"/projects/{project_id}/graph"' in src
     assert "async def get_project_graph" in src
 
 
 def test_build_graph_endpoint_is_non_blocking():
-    src = (BACKEND_DIR / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     fn = src[src.find("async def build_project_graph"):]
     fn = fn[:fn.find("@router.")] if "@router." in fn else fn
     assert "asyncio.create_task(build_graph(" in fn
@@ -158,7 +159,7 @@ def test_build_graph_endpoint_is_non_blocking():
 # ── Warm-start wiring ────────────────────────────────────────────────
 
 def test_warm_start_includes_graph_agent():
-    src = (BACKEND_DIR / "routers" / "cto_projects.py").read_text()
+    src = cto_projects_src()
     # agents_total list must include "graph"
     assert '"agents_total":  ["brain", "recent", "structure", "stack", "graph"]' in src \
         or '"agents_total":  ["brain", "recent", "structure", "stack", "graph"]'.replace("  ", " ") in src
@@ -213,7 +214,7 @@ def test_graph_builder_parses_clean():
 
 
 def test_cto_projects_parses_clean():
-    ast.parse((BACKEND_DIR / "routers" / "cto_projects.py").read_text())
+    ast.parse(cto_projects_src())
 
 
 def test_orchestrator_parses_clean():
