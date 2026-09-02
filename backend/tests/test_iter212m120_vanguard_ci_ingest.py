@@ -115,7 +115,11 @@ class _FakeDB:
 # "***REDACTED_AWS_KEY***" once committed — the redaction logic under
 # test (`raw_secret[:4]…raw_secret[-2:]`) then produced "***R…**"
 # instead of the expected "AKIA…LE" shape, breaking the assertion.
-# TEST-FIXTURE ARTIFACT, not a live redaction-logic bug.
+# TEST-FIXTURE ARTIFACT, not a live redaction-logic bug — this test
+# exercises the REDACT/STORE step downstream of an assumed TruffleHog
+# finding, not our own regex detection (see test_iter212m55/73's
+# in-session live-repro evidence for that side; ROADMAP.md P0.5 has
+# the full transcript).
 _FAKE_AWS_SECRET = "AKIA" + "FAKETESTKEY012" + "LE"
 
 _TRUFFLEHOG_SAMPLE = [
@@ -165,6 +169,7 @@ def test_ingest_rejects_wrong_token(client):
     assert r.status_code == 401, r.text
 
 
+@pytest.mark.known_fixture_scrubbed
 def test_ingest_persists_and_redacts(client):
     r = client.post(
         "/api/aurem-dev/vanguard/ci-findings",

@@ -1,6 +1,8 @@
 """
 Iter 212m-73 — Bug Hunt category rule count + smoke test.
 """
+import pytest
+
 from services.bug_hunt_rules import (
     _SECRET_RULES, _VULN_RULES, _ENDPOINT_RULES, _DEP_CVES,
     scan_bug_hunt, _vercmp,
@@ -16,6 +18,17 @@ from services.bug_hunt_rules import (
 # never match either regex, which broke these tests. TEST-FIXTURE
 # ARTIFACT, not a live scanner regression. Built from fragments (none
 # individually pattern-length) to avoid being re-scrubbed the same way.
+#
+# EVIDENCE this is the fixture, not the scanner (2026-09-08, live
+# repro this session — full transcript in ROADMAP.md P0.5): fed a
+# FRESH realistic AKIA/AIza-shaped string built purely in-memory
+# (never touched disk/git) through the unmodified `scan_bug_hunt` —
+# both DETECTED (aws_access_key_id / gcp_api_key, severity=critical).
+# Fed the OLD placeholder text through the same unmodified function —
+# correctly NOT detected, because it genuinely isn't key-shaped text.
+# `scan_bug_hunt` is also confirmed wired into the LIVE, user-repo-
+# facing scan path (services/codebase_health_core.py,
+# services/full_scan_orchestrator.py) — not orphaned/test-only code.
 _FAKE_AWS_KEY = "AKIA" + "FAKETESTKEY012" + "LE"
 _FAKE_GCP_KEY = "AIza" + "0" * 35
 
@@ -28,12 +41,14 @@ def test_rule_counts():
     assert len(_DEP_CVES) >= 5, f"cves={len(_DEP_CVES)}"
 
 
+@pytest.mark.known_fixture_scrubbed
 def test_aws_key_detected():
     findings = scan_bug_hunt({"app/c.py": f'X="{_FAKE_AWS_KEY}"'})
     titles = {f["title"] for f in findings}
     assert "aws_access_key_id" in titles
 
 
+@pytest.mark.known_fixture_scrubbed
 def test_gcp_key_detected():
     findings = scan_bug_hunt({
         "app/c.py": f'K="{_FAKE_GCP_KEY}"'

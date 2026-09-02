@@ -69,28 +69,49 @@ def H(t):
 # ─────────────────────────────────────────────────────────────
 @pytest.fixture(scope="session")
 def created_project(session, token):
+    # 2026-09-08 (founder-directed test update, NOT a PAT re-enable):
+    # this fixture used to connect via `github_token` (a PAT). PATs
+    # were removed entirely per a June 2026 founder directive
+    # (routers/cto_projects/management.py — `elif pat: await _fail(
+    # 400, "pat_not_supported", ...)`), so the PAT-based payload this
+    # fixture used to send now 400s. Rewritten to use the CURRENT
+    # (and only) supported connect method — a real installed GitHub
+    # App `installation_id` — matching the pattern already used by
+    # tests/test_github_app_project_add.py and every other live-http
+    # CTO test file. This is a TEST-ONLY update to match the current
+    # architecture; it does not reintroduce PAT support anywhere.
+    #
+    # `installation_id=152797252` is a REAL, active installation
+    # already owned by this exact test account (test@aurem.dev /
+    # test_admin_001) with access to a real small repo
+    # (polarisbuiltinc-wq/ora-grounding) — the same installation +
+    # repo several other live-http test files already reuse for this
+    # purpose. This fixture does NOT sweep/delete existing rows for
+    # that slug (unlike the old fake "owner/test-repo" slug, this repo
+    # is legitimately shared across multiple test files' fixtures —
+    # deleting their rows would break them). The `/add` endpoint does
+    # not 409 on a repeat (installation_id, repo) connection for the
+    # App-based path (unlike the old PAT-based `already_connected`
+    # check), so no dedup handling is needed here.
     payload = {
-        "name": f"TEST_Proj_{int(time.time())}",
-        "github_url": "https://github.com/owner/test-repo",
-        "github_token": "github_pat_TEST_VALUE_BUG1",
-        "branch": "main",
-        "tech_stack": "react-fastapi",
+        "name":            f"TEST_Proj_{int(time.time())}",
+        "github_url":      "https://github.com/polarisbuiltinc-wq/ora-grounding",
+        "installation_id": 152797252,
+        "branch":          "main",
+        "tech_stack":      "react-fastapi",
     }
-    # 2026 audit Risk #4 (baseline triage) — root-caused this fixture
-    # as non-idempotent: `github_url` is a FIXED slug shared by every
-    # run (only `name` is time-randomized). If `test_zzz_cleanup_
-    # delete_project` didn't run last time (earlier test in the file
-    # failed before it, suite got killed mid-run, etc.) the leftover
-    # project 409s every future run — and this has been silently
-    # accumulating: 11 stale rows for this exact slug were found live
-    # in the DB during this triage. Proactively sweep ALL leftovers
-    # for this slug before creating, instead of reactively deleting
-    # just the one 409 mentions (which only handles one leftover at
-    # a time and still 409s again on the next).
+    # This repo slug is reused by several other live-http CTO test
+    # files' own (similarly non-idempotent) fixtures — confirmed live:
+    # hit a REAL 409 `already_connected` here pointing at a stale row
+    # named "TEST_phaseA_skipped_...". Same proactive-sweep fix as the
+    # old PAT-based fixture used (dedup DOES still apply on the
+    # App-based /add path) — safe because pytest runs this file
+    # sequentially, not concurrently with whatever left the stale row.
     r = session.get(f"{AUREM}/cto/projects/list", headers=H(token), timeout=15)
     if r.status_code == 200:
         for p in r.json().get("projects", []):
-            if (p.get("github_url") or "").rstrip("/").endswith("owner/test-repo"):
+            if (p.get("github_url") or "").rstrip("/").endswith(
+                    "polarisbuiltinc-wq/ora-grounding"):
                 session.delete(f"{AUREM}/cto/projects/{p['project_id']}",
                               headers=H(token), timeout=15)
     r = session.post(f"{AUREM}/cto/projects/add",
@@ -99,8 +120,9 @@ def created_project(session, token):
     body = r.json()
     assert body["ok"] is True
     assert "project_id" in body
-    assert body["owner"] == "owner"
-    assert body["repo"] == "test-repo"
+    assert body["owner"] == "polarisbuiltinc-wq"
+    assert body["repo"] == "ora-grounding"
+    assert body["auth_method"] == "github_app"
     return {"id": body["project_id"], "payload": payload}
 
 
@@ -128,15 +150,18 @@ def test_bug1_list_excludes_github_token(session, token, created_project):
 # ─────────────────────────────────────────────────────────────
 def test_bug2_patch_updates_branch_and_tech(session, token, created_project):
     pid = created_project["id"]
+    # 2026-06 PAT-removal: PATCH also rejects github_token now (see
+    # routers/cto_projects/management.py::update_project) — this test
+    # used to also send a github_token update; now tests only the
+    # fields the App-based flow still supports.
     r = session.patch(f"{AUREM}/cto/projects/{pid}",
                       headers=H(token),
-                      json={"branch": "develop", "tech_stack": "vite-fastapi",
-                            "github_token": "github_pat_UPDATED_BUG2"},
+                      json={"branch": "develop", "tech_stack": "vite-fastapi"},
                       timeout=15)
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ok"] is True
-    assert set(body["updated_fields"]) == {"branch", "tech_stack", "github_token"}
+    assert set(body["updated_fields"]) == {"branch", "tech_stack"}
 
     # Verify via list that update is persisted
     lr = session.get(f"{AUREM}/cto/projects/list", headers=H(token), timeout=15)
@@ -144,6 +169,17 @@ def test_bug2_patch_updates_branch_and_tech(session, token, created_project):
     assert me["branch"] == "develop"
     assert me["tech_stack"] == "vite-fastapi"
     assert "github_token" not in me  # still hidden
+
+
+def test_bug2_patch_pat_update_rejected(session, token, created_project):
+    """2026-06 PAT-removal: a github_token PATCH is honestly rejected,
+    not silently accepted — matches the /add gate's own ruling."""
+    pid = created_project["id"]
+    r = session.patch(f"{AUREM}/cto/projects/{pid}",
+                      headers=H(token),
+                      json={"github_token": "github_pat_SHOULD_BE_REJECTED"},
+                      timeout=15)
+    assert r.status_code == 400, r.text
 
 
 def test_bug2_patch_filters_empty_fields(session, token, created_project):

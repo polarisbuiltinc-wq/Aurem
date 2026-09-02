@@ -87,6 +87,23 @@ _UNIVERSAL_LEAK_PATTERNS = [
         r"[^)\*\n]*[\)\*]",
         re.IGNORECASE,
     ), ""),
+    # 2026-09-09 — fabricated tool-call/tool-result narration (founder
+    # live-caught in production: the model wrote a bracketed
+    # "[Tool note: Checking ... via <invented tool>()...]" followed by
+    # a "[Tool result: ... update ID: a1b2c3d ...]" block — the SAME
+    # generic fake hex ID repeated across unrelated requests, i.e. an
+    # invented tool call AND an invented result, never actually run.
+    # This is a best-effort mechanical net (system-prompt guard in
+    # `services/ora_context.py`'s ORA ABSOLUTE BOUNDARY rule 7/5/6 is
+    # the PRIMARY fix) — narrow bracket pattern only, so it can't eat
+    # legitimate prose that merely mentions "tool" or "result". The
+    # note+result combo is matched FIRST (single replacement, not two)
+    # so a paired fabrication doesn't leave a duplicated disclaimer.
+    (re.compile(
+        r"\[\s*Tool\s+note\s*:.*?\]\s*\[\s*Tool\s+result\s*:.*?\]"
+        r"|\[\s*Tool\s+(?:note|result)\s*:.*?\]",
+        re.IGNORECASE | re.DOTALL,
+    ), "(I have not actually run that check yet — I can check now if you'd like.)"),
 ]
 
 # M3 fix (2026-08-30, founder-directed) — the bare-file-path pattern

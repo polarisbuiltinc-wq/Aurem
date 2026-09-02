@@ -23,6 +23,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from routers.security_scan import _scan_text, _RULES   # noqa: E402
 
+import pytest
+
 # Fake, non-functional AWS-access-key-SHAPED string built via string
 # concatenation (2026 audit Risk #3 root-cause). The regex is
 # `\bAKIA[0-9A-Z]{16}\b` (services/security_text_scanner.py) — unchanged
@@ -34,6 +36,25 @@ from routers.security_scan import _scan_text, _RULES   # noqa: E402
 # scanner regression. Building the fake key from fragments (none of
 # which individually match the 16-char pattern) avoids it being
 # re-scrubbed the same way again.
+#
+# EVIDENCE this is the fixture, not the scanner (2026-09-08, live
+# repro in this exact session — see ROADMAP.md P0.5 for the full
+# transcript): fed a FRESH, realistic AKIA-shaped string built purely
+# in-memory (never touched disk/git, so it can't have been scrubbed)
+# straight into the unmodified `_scan_text`:
+#     >>> _scan_text("x.py", 'AWS_KEY = "AKIAIOSFODNN7EXAMPLE"')
+#     [{'rule_id': 'secret_aws_access_key', 'severity': 'critical', ...}]
+#     DETECTED: True
+# ...and fed the OLD placeholder text through the SAME unmodified
+# scanner, to confirm it (correctly) does NOT match — because it
+# genuinely isn't AKIA-shaped text, not because the regex is broken:
+#     >>> _scan_text("x.py", 'AWS_KEY = "***REDACTED_AWS_KEY***"')
+#     []
+# Also confirmed `_scan_text`/`_RULES` are wired into the LIVE,
+# user-repo-facing scan path (routers/security_scan.py:357 and the
+# Loop's own Vanguard pre-ship scan via
+# services/loop_engine_helpers.py) — this is not orphaned/test-only
+# code; real user repos ARE scanned with this same regex today.
 _FAKE_AWS_KEY = "AKIA" + "FAKETESTKEY012" + "LE"
 
 
@@ -45,6 +66,7 @@ def test_rules_compile():
         assert r["severity"] in {"critical", "high", "medium", "low"}
 
 
+@pytest.mark.known_fixture_scrubbed
 def test_aws_key_detected():
     sample = f'AWS_KEY = "{_FAKE_AWS_KEY}"\n'
     findings = _scan_text("config.py", sample)
