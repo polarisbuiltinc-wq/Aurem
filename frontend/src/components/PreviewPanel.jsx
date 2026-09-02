@@ -293,6 +293,7 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
   const [pendingChange, setPendingChange] = useState(null); // {state, routes, files}
   const [pendingChangeLoading, setPendingChangeLoading] = useState(false);
   const [captures, setCaptures] = useState({}); // route -> {status:'idle'|'loading'|'ok'|'error', key, reason}
+  const [beforeAfterView, setBeforeAfterView] = useState({}); // route -> "before" | "after"
 
   useEffect(() => {
     if (!activeProject?.project_id) return;
@@ -846,6 +847,8 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
                 </div>
                 {(pendingChange.routes || []).map((route) => {
                   const cap = captures[route] || { status: "idle" };
+                  const beforeKey = (pendingChange.before_receipts || {})[route];
+                  const side = beforeAfterView[route] || "after";
                   return (
                     <div key={route} data-testid={`preview-afterfix-route-${route}`} style={{
                       border: "1px solid var(--border)", borderRadius: 8,
@@ -866,13 +869,52 @@ export default function PreviewPanel({ blocks, onClose, activeProject, initialVi
                             : <><Camera size={11} /> See today&apos;s page</>}
                         </button>
                       </div>
-                      {cap.status === "ok" && cap.key && (
+                      {/* 2026-09 — real Before/After of the actual live
+                          site (same screenshot mechanism, real colors)
+                          — only shown when a "before" shot exists for
+                          this route (captured automatically the moment
+                          the task was submitted). */}
+                      {beforeKey && (
+                        <div data-testid={`preview-afterfix-toggle-${route}`} style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+                          {["before", "after"].map((s) => (
+                            <button
+                              key={s}
+                              type="button"
+                              data-testid={`preview-afterfix-toggle-${s}-${route}`}
+                              onClick={() => setBeforeAfterView((v) => ({ ...v, [route]: s }))}
+                              className="btn-ghost"
+                              style={{
+                                fontSize: 11, padding: "3px 12px", textTransform: "capitalize",
+                                background: side === s ? "var(--accent-2)" : "transparent",
+                                color: side === s ? "var(--bg)" : "var(--text-dim)",
+                                border: `1px solid ${side === s ? "var(--accent-2)" : "var(--border)"}`,
+                              }}
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {beforeKey && side === "before" && (
+                        <img
+                          data-testid={`preview-afterfix-before-image-${route}`}
+                          src={`${api.defaults.baseURL}/cto/projects/${activeProject.project_id}/preview/receipt/${beforeKey}`}
+                          alt={`Live page at ${route} before this change`}
+                          style={{ maxWidth: "100%", borderRadius: 6, border: "1px solid var(--border)" }}
+                        />
+                      )}
+                      {(!beforeKey || side === "after") && cap.status === "ok" && cap.key && (
                         <img
                           data-testid={`preview-afterfix-image-${route}`}
                           src={`${api.defaults.baseURL}/cto/projects/${activeProject.project_id}/preview/receipt/${cap.key}`}
                           alt={`Live page at ${route}`}
                           style={{ maxWidth: "100%", borderRadius: 6, border: "1px solid var(--border)" }}
                         />
+                      )}
+                      {(!beforeKey || side === "after") && cap.status === "idle" && (
+                        <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
+                          Click &quot;See today&apos;s page&quot; to capture the current after state.
+                        </div>
                       )}
                       {cap.status === "error" && (
                         <div data-testid={`preview-afterfix-error-${route}`} style={{ fontSize: 11, color: "var(--danger, #ef4444)" }}>

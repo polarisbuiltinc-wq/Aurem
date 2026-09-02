@@ -92,6 +92,14 @@ async def _enqueue_cto_task(
         "source": "chat_handoff",
         "created_at": time.time(),
     })
+    if proj.get("preview_url"):
+        from services.preview_capture import capture_before_snapshot_for_task
+        if bg is not None:
+            bg.add_task(capture_before_snapshot_for_task, db, proj["project_id"], user_id, task_id, proj.get("preview_url"))
+        else:
+            _asyncio.create_task(capture_before_snapshot_for_task(
+                db, proj["project_id"], user_id, task_id, proj.get("preview_url"),
+            ))
     from services.pat_vault import get_repo_token_or_error
     user_token, _auth_err, _auth_detail = await get_repo_token_or_error(proj)
     if not user_token:
@@ -228,6 +236,9 @@ async def submit_task(
         "maxx_mode": bool(body.maxx_mode),
         "created_at": time.time(),
     })
+    if proj.get("preview_url"):
+        from services.preview_capture import capture_before_snapshot_for_task
+        bg.add_task(capture_before_snapshot_for_task, db, body.project_id, me["user_id"], task_id, proj.get("preview_url"))
     # 2026-08-24 · Guard 22 — funnel event: task_submitted (idempotent
     # via one-shot flag). Closes the "connected but Recent Tasks: no
     # data yet" blind spot — cto_tasks already tracks every individual

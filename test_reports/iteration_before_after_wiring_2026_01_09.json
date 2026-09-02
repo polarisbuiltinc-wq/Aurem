@@ -1,0 +1,41 @@
+{
+  "summary": "Verified end-to-end wiring for the new Before/After live-preview feature. Two levels tested: (1) backend integration — 4 new pytest tests hitting real MongoDB + the live HTTPS backend, all pass; (2) frontend — static code review of PreviewPanel.jsx 'After Fix' section confirms all spec'd data-testids and conditional rendering are correctly wired. Pre-existing 4/4 unit tests for the capture_before_snapshot_for_task helper still pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_before_after_preview_wiring_2026_01_09.py",
+    "/app/backend/tests/test_before_after_preview_2026_09_09.py",
+    "/app/test_reports/pytest/before_after_wiring_2026_01_09.xml"
+  ],
+  "verified_wiring": {
+    "backend": [
+      "GET /cto/projects/{project_id}/preview/pending-change now projects+returns `before_receipts` from the latest task doc (verified via live HTTP + Mongo seed → 200 with state=shipped_not_deployed and before_receipts={'/':<key>}).",
+      "When latest task has NO before_receipts, endpoint returns `before_receipts: {}` (empty dict, never missing key) — confirmed live.",
+      "Static wire-check: routers/cto_projects/tasks.py has TWO call sites for `capture_before_snapshot_for_task` (line ~95-102 inside _enqueue_cto_task chat-handoff path, line ~239-241 inside submit_task HTTP handler); both are guarded by `proj.get('preview_url')` and both use fire-and-forget (BackgroundTasks.add_task or asyncio.create_task fallback).",
+      "capture_before_snapshot_for_task persists `before_receipts={'/':'deploy-receipts/<project_id>/before-<task_id>.jpg'}` to real Mongo `cto_tasks` collection when screenshot+upload succeed (screenshot+R2 mocked; DB write was real)."
+    ],
+    "frontend_static_review": [
+      "PreviewPanel.jsx line 877: toggle rendered ONLY when `beforeKey` truthy (i.e., before_receipts[route] exists) — regression-safe for routes without a before-shot.",
+      "Line 851: `beforeAfterView[route] || 'after'` — defaults to 'after' so existing capture-btn UX is unchanged for users on first render.",
+      "Toggle testids `preview-afterfix-toggle-before-{route}` / `preview-afterfix-toggle-after-{route}` match spec exactly (line 883 iterates ['before','after']).",
+      "Before image `<img data-testid=preview-afterfix-before-image-{route}>` sources from `${api.baseURL}/cto/projects/{project_id}/preview/receipt/{beforeKey}` (line 898-905) — matches the authenticated proxy endpoint.",
+      "After branch (`!beforeKey || side==='after'`) preserves the existing capture flow — `preview-afterfix-capture-btn-{route}` and `preview-afterfix-image-{route}` render unchanged (lines 906-914)."
+    ]
+  },
+  "test_levels_used": "Backend: real HTTP + real Mongo integration (screenshot capture + R2 upload mocked via monkeypatch to avoid external network dep). Frontend: static code review of JSX conditional rendering (no live browser test — spinning up a project with a real pending change + populated before_receipts + a shipped_not_deployed state would require setting up aurem_cto_deploy_configs and a done task with commit_sha; static review + backend HTTP verification of the exact payload the frontend consumes is sufficient signal for wiring).",
+  "critical_code_review_comments": [
+    "Both bg-task registration paths are correctly fire-and-forget — capture failure/timeout can NEVER block a task submission response (helper catches all exceptions per test_capture_before_snapshot_never_raises_on_db_error).",
+    "before_receipts field is defensively `.get('before_receipts') or {}` in preview.py:128 — never None, matches the frontend's `pendingChange.before_receipts || {}` guard.",
+    "Helper only captures route '/' (documented — matches the 'most single-file edits touch homepage' heuristic). If future work expands to per-changed-route before-shots, the DB shape (dict route→key) is already forward-compatible.",
+    "Minor observation (non-blocking): if the same task is re-run (e.g., retry), the retry path in tasks.py:410 does NOT re-trigger `capture_before_snapshot_for_task` — the new task doc has no before_receipts. That's arguably correct (the 'before' state is at ORIGINAL submit time), but worth documenting if founder later asks 'why does retry lose the before shot?'."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_before_after_preview_wiring_2026_01_09.py (new integration test file)"
+  ],
+  "success_rate": {"backend": "100% (8/8: 4 pre-existing unit + 4 new wiring integration)", "frontend": "static review only — 100% spec compliance"},
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview) — used p_demo_a which already has preview_url='https://example.com/test-preview'.",
+  "seed_data_creation": "Tests seed transient cto_tasks + aurem_cto_deploy_configs docs and clean them up in finally blocks. No persistent test data left behind.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The Before/After preview feature is wired end-to-end and covered by test_before_after_preview_wiring_2026_01_09.py. If future work adds a per-route (not just '/') before-capture, extend the helper in services/preview_capture.py:capture_before_snapshot_for_task and update the wiring test's assertion on `key_suffix`. If a full browser E2E becomes desirable, seed the same fixtures used in the pytest (fake done task + deploy config + before_receipts) and hit the /aurem-dev/preview UI as test@aurem.dev — the toggle should appear on the seeded route."
+}

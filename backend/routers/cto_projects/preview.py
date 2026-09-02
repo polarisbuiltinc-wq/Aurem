@@ -76,7 +76,7 @@ async def get_pending_change(
     latest = await db.cto_tasks.find(
         {"project_id": project_id, "user_id": me["user_id"]},
         {"_id": 0, "task_id": 1, "status": 1, "files_changed_simple": 1,
-         "commit_sha": 1, "completed_at": 1, "created_at": 1},
+         "commit_sha": 1, "completed_at": 1, "created_at": 1, "before_receipts": 1},
     ).sort("created_at", -1).limit(1).to_list(1)
     if not latest:
         return {"ok": True, "state": "clean", "routes": [], "files": []}
@@ -125,6 +125,7 @@ async def get_pending_change(
         "ok": True, "state": "shipped_not_deployed",
         "task_id": task.get("task_id"), "commit_sha": task.get("commit_sha"),
         "routes": routes, "files": files,
+        "before_receipts": task.get("before_receipts") or {},
     }
 
 

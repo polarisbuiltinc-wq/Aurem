@@ -70,6 +70,35 @@ async def capture_screenshot(url: str, device: str = "phone") -> Optional[bytes]
         return None
 
 
+async def capture_before_snapshot_for_task(
+    db, project_id: str, user_id: str, task_id: str, preview_url: str,
+) -> None:
+    """2026-09 — "Before/After" live-preview feature. Fired
+    fire-and-forget the moment a task is SUBMITTED (before any code
+    change lands), so the "After Fix" tab can show a real Before vs.
+    After of the actual live site (same screenshot mechanism as
+    `capture_preview_route` — real colors/styling, and works even
+    when the host sets X-Frame-Options/CSP blocking a raw iframe).
+    Only ever captures route "/" (the common case — most single-file
+    edits touch the homepage); honest no-op on any failure, never
+    blocks or fails the task submission itself."""
+    base = (preview_url or "").strip().rstrip("/")
+    if not base:
+        return
+    try:
+        image = await capture_screenshot(base + "/", "phone")
+        if not image:
+            return
+        key = await upload_receipt(image, f"{project_id}/before-{task_id}.jpg")
+        if not key:
+            return
+        await db.cto_tasks.update_one(
+            {"task_id": task_id}, {"$set": {"before_receipts": {"/": key}}},
+        )
+    except Exception as e:                                 # noqa: BLE001
+        logger.warning("capture_before_snapshot_for_task failed for %s: %r", task_id, e)
+
+
 def _r2_client():
     # Reuse — not reimplement — db_backup.py's credentialed R2 client.
     from services.db_backup import _r2_client as _base_client

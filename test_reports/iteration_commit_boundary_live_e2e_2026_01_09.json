@@ -1,0 +1,30 @@
+{
+  "summary": "Verified commit-boundary fix (fence-gate removed + new insert-type) end-to-end via the LIVE preview HTTP surface. Backend regression: 58/58 unit tests green (test_insert_edit_type_and_nonfenced_council_2026_09_09.py + test_commit_boundary_2026_09_05.py + test_confirm_execution_2026_09_04.py). NEW live HTTP E2E: 4/4 green — logged in against real preview as test@aurem.dev, seeded AWAITING_CONFIRM pending_actions of type=upgrade / insert / edit for a fresh session, POSTed 'go' to /api/aurem-dev/chat/send, verified reply is NOT the founder's dead-end NO_PENDING_ACTIONABLE_MESSAGE and provider is 'commit-boundary-executor' (i.e., resolve_confirm reached execute_action). Founder's exact repro scenario is fixed at both the deterministic unit-test level AND the real HTTP wiring level.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_live_commit_boundary_e2e_2026_01.py",
+    "/app/backend/tests/test_insert_edit_type_and_nonfenced_council_2026_09_09.py",
+    "/app/backend/tests/test_commit_boundary_2026_09_05.py",
+    "/app/backend/tests/test_confirm_execution_2026_09_04.py",
+    "/app/test_reports/pytest/live_commit_boundary_e2e.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "pending_action.py is 763 lines — near the 700-line threshold; splitting extractors, validators, executors into sub-modules would improve maintainability (non-blocking).",
+    "extract_deterministic_insert regex requires the ANCHOR and CONTENT to be quoted with backtick/double/single quotes. Real Council-mode LLM prose (e.g. \"add a clickable tel: link at line 6 of index.html\") may not always emit those quote wrappers — some clean addition proposals in the wild will still miss extraction and fall through to the 'no clean triple' branch. Acceptable per the ticket ('best-effort regex, misses are ok as long as not the founder's dead-end'), but worth widening later.",
+    "resolve_confirm short-circuits BEFORE any LLM call — this is correct and matches the founder's CBR-2/3 spec. Wiring verified live via /chat/send."
+  ],
+  "updated_files": ["/app/backend/tests/test_live_commit_boundary_e2e_2026_01.py"],
+  "success_rate": { "backend": "100% (58/58 unit + 4/4 new live HTTP E2E)", "frontend": "not tested (browser E2E skipped — HTTP-level surface exercises the same resolve_confirm path the UI's chat send hits, and the fix is UI-agnostic per the ticket)" },
+  "test_credentials": "test@aurem.dev / AuremTest2026! (preview) — verified working",
+  "seed_data_creation": "Live tests seed pending_actions docs into local Mongo (session_id=test_e2e_*) then clean up in the finally block. No production data touched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The founder's fix is fully verified at both unit-test and live-HTTP levels. The only remaining gap (not blocking) is driving Council-mode LLM to produce an addition-style proposal in a real chat UI against a real GitHub-connected repo — that requires a live-repo fixture that is fragile across pod forks. If a future round wants that full LLM-in-the-loop proof, use test@aurem.dev with a freshly reconnected project (see /app/memory/test_credentials.md 'Preview — Ship-flow test project (2026-08-24)' caveats about GitHub App install drift across pods).",
+  "rca of the issue": "ROOT CAUSE (already fixed pre-testing): services/actions/pending_action.py propose_from_turn() previously ran the extract_deterministic_edit path ONLY when the assistant reply contained a literal ```aurem-handoff fence. Council mode (mode_b_council.py line 191) explicitly instructs the model 'pure Markdown, no fenced code blocks', so Council replies could never carry that fence — meaning a concrete addition proposal in Council mode could never become AWAITING_CONFIRM, so 'go' hit the empty-pending branch and returned NO_PENDING_ACTIONABLE_MESSAGE. Additionally, extract_deterministic_edit only recognized replacement-shaped edits ('from X to Y'), never additions ('add X after Y'). MITIGATION (already implemented): (a) new extract_deterministic_insert + _validate_insert_payload + _execute_insert for addition edits; (b) fence-gate removed from propose_from_turn so both extractors run on every final reply. CBR-1 is preserved: both extractors still require the value to be uniquely present in the live file before AWAITING_CONFIRM is reached. VERIFICATION (this round): 58/58 unit tests green + 4/4 new live HTTP E2E green, including a seeded insert-type action that resolves via 'go' to provider=commit-boundary-executor at the real /api/aurem-dev/chat/send endpoint — NOT the founder's dead-end."
+}

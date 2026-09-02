@@ -1,3 +1,34 @@
+## 2026-09-09 (part 5) — CRITICAL FIX: commit-boundary confirm-to-ship dead-end (root-caused) + NEW: Before/After live-preview feature
+
+**Founder regression test (fresh account, ReRootsBeauty/ReRoots-, reproduced TWICE):** Council-mode proposal to add a `tel:` link → confirmed with "go" → dead-end "I don't have a change waiting right now." Same bug founder had already seen on their own original account — proved systemic, not account-specific. Fabrication guard (part 4 work, prior session) confirmed WORKING in this same test — good progress, unrelated to this bug.
+
+**Root cause (via direct code read, `services/actions/pending_action.py`):**
+1. `extract_deterministic_edit()` only recognized REPLACEMENT edits (`from "X" to "Y"` regex) — the founder's request was an ADDITION ("add a tel: link after Y"), which could never match.
+2. Deeper finding made mid-investigation: `propose_from_turn()` only even ATTEMPTED extraction when the reply contained a literal ` ```aurem-handoff ` fence — but Council mode (`services/mode_b_council.py` line 191) explicitly emits "pure Markdown, no fenced code blocks", so Council-mode proposals could NEVER become actionable at all, replacement or addition, fence gate or not. This is the real reason the exact repro happened in Council mode specifically.
+
+**Fix (`backend/services/actions/pending_action.py`):**
+- Added a new deterministic `type_="insert"` edit class — `extract_deterministic_insert()` (two phrasings: "add X after Y" / "after Y, add X", using same-quote-char backreference matching so HTML content with nested `"` inside backtick-delimited spans parses correctly), `_validate_insert_payload()` (anchor must exist exactly once in the REAL live file — same CBR-1 safety contract as replace), `_execute_insert()` (insert-after-anchor, write, read-back verify).
+- Removed the ` ```aurem-handoff ` fence gate in `propose_from_turn()` — both extractors now run on EVERY final assistant reply regardless of mode/fence. CBR-1 is unweakened (both extractors still independently re-validate against the live file). Side-effect (intentional, documented): a new unrelated/unextractable turn now also cancels a stale dangling pending action from an earlier turn, instead of leaving it forgotten.
+- Founder-approved scope: insertions only this round (not deletions).
+
+**Testing:** 9 new tests (`test_insert_edit_type_and_nonfenced_council_2026_09_09.py`) + 19 existing (`test_commit_boundary_2026_09_05.py`) + 30 old-fallback-system (`test_confirm_execution_2026_09_04.py`) = **58/58 passing**, zero regressions (stash A/B verified). Plus `testing_agent` live HTTP E2E against the real preview backend confirmed the exact founder scenario now works (`/app/test_reports/iteration_commit_boundary_live_e2e_2026_01_09.json`) — real file write via commit-boundary confirm, not the dead-end.
+
+**PROVENANCE:** backend logic fully verified (unit + live HTTP E2E on preview). **NOT yet founder-confirmed in production** — founder must redeploy and re-run the exact ReRootsBeauty repro to close the loop.
+
+---
+
+**NEW feature — "show me the real edited page, before vs after, real colors":** Founder wanted a live preview of a proposed page. Found significant PRE-EXISTING infra already covers most of this ("After Fix" tab, `services/preview_capture.py`, server-side Playwright screenshot + R2 receipt system). Flagged to founder that a raw iframe (their initial pick) breaks on real hosts due to `X-Frame-Options`/CSP anti-clickjacking headers (Vercel/Netlify etc.) — founder approved extending the EXISTING screenshot system instead.
+
+**Built:**
+- `capture_before_snapshot_for_task()` (`services/preview_capture.py`) — fires automatically (fire-and-forget, `BackgroundTasks`) the moment ANY task is submitted (`tasks.py`: both `/tasks/submit` and the chat-handoff `_enqueue_cto_task()` path), captures a screenshot of the live site's `/` route BEFORE the change lands, stores as `cto_tasks.before_receipts = {"/": receipt_key}`.
+- `GET /preview/pending-change` now also returns `before_receipts` per route.
+- `PreviewPanel.jsx` "After Fix" tab — new Before/After toggle per route (only rendered when a before-shot exists for that route; graceful no-op otherwise, zero regression to existing after-only UX).
+
+**Testing:** 4 new unit tests (`test_before_after_preview_2026_09_09.py`) + 4 new `testing_agent` live integration tests (real Mongo + HTTP) = **8/8 passing** (`/app/test_reports/iteration_before_after_wiring_2026_01_09.json`). Frontend verified via static spec-compliance review (data-testids, conditional rendering match spec exactly) — not a full live browser E2E (would need a fully seeded shipped-not-deployed fixture; noted as acceptable substitute by testing_agent).
+
+**Known limitation (documented, not a bug):** only captures route `/` (homepage) — most single-file edits touch it; per-changed-route before-shots would need the affected routes to be known at submit time (they aren't, until the task completes), noted as a possible future extension. Retrying a task does not re-trigger a before-shot (correct — "before" means at ORIGINAL submit time).
+
+
 ## 2026-09-09 (part 4) — Mobile PageSpeed round 2: demo-audio muted-by-default + 3rd-party analytics interaction-defer — testing_agent verified 7/7
 
 **Founder:** "performance still too low" + fresh mobile PageSpeed URL (`pagespeed.web.dev/.../1e3dl966nr?form_factor=mobile`). Crawled it: mobile score 88/100, Core Web Vitals already good (LCP 1.4s, TBT 200ms, CLS 0.024) — report's internal timestamp (2026-09-02) predates the part-3 desktop fixes below, flagged to founder as possibly-stale. Diagnostics either way: unused JS 259 KiB, main-thread work 1.7s, Facebook Pixel+fbevents.js+GTM ≈650 KiB combined (biggest lever), 2 demo-audio MP3s eager-loading, cache-lifetime 424 KiB (hosting/CDN header config — not fixable from code, no nginx/_headers config exists in repo). Founder said "proceed with best judgment" (skipped clarifying Q&A).

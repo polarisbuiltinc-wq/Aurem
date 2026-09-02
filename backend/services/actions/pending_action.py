@@ -45,6 +45,17 @@ Invariants enforced here (CBR-1..8 from the founder's spec):
   CBR-7 — more than one AWAITING_CONFIRM action in a session
           disambiguates (numbered list + numeric-reply selection)
           rather than silently picking one or stacking forever.
+
+2026-09 addendum — `type_="insert"` (addition-style edits, e.g. "add
+X after Y") added alongside `type_="edit"` (replacement-style, "change
+X to Y"). Both extraction paths now run on EVERY final assistant reply
+(previously gated behind a literal ```aurem-handoff fence, which
+non-fenced conversational modes like Council/Mode B never emit — that
+gate meant an addition proposed conversationally could never become
+actionable at all, root-caused via a founder repro on 2 separate
+accounts). CBR-1 is unweakened: both extractors still require the
+extracted value to be uniquely present in the REAL live file before
+anything reaches AWAITING_CONFIRM.
 """
 from __future__ import annotations
 
@@ -156,6 +167,23 @@ _FROM_TO_RE = re.compile(
     r"from\s+[\"'`]([^\"'`]{1,200})[\"'`]\s+to\s+[\"'`]([^\"'`]{1,200})[\"'`]",
     re.IGNORECASE,
 )
+# 2026-09 · founder repro (fresh account, ReRootsBeauty/ReRoots-):
+# "add a clickable tel: link at line 6" is an ADDITION, not a
+# replacement — `_FROM_TO_RE` can never match it, so it silently got
+# CANCELLED at propose-time and "go" hit the dead NO_PENDING_ACTIONABLE
+# branch below. These two patterns extract an {anchor, content} pair
+# for that class of request (either phrasing order), mirroring how
+# `_FROM_TO_RE` extracts {old_value, new_value} for replacements.
+_INSERT_CONTENT_AFTER_RE = re.compile(
+    r"(?:add|insert)\s+(?P<cq>[`\"'])(?P<ins_content>.{1,400}?)(?P=cq)\s+"
+    r"(?:right\s+)?(?:after|below|following)\s+(?P<aq>[`\"'])(?P<ins_anchor>.{1,200}?)(?P=aq)",
+    re.IGNORECASE,
+)
+_INSERT_AFTER_CONTENT_RE = re.compile(
+    r"(?:right\s+)?(?:after|below|following)\s+(?P<aq2>[`\"'])(?P<ins_anchor2>.{1,200}?)(?P=aq2)"
+    r"[\s,]*(?:i(?:'ll| will)?\s*)?(?:add|insert)\s+(?P<cq2>[`\"'])(?P<ins_content2>.{1,400}?)(?P=cq2)",
+    re.IGNORECASE,
+)
 
 
 def extract_deterministic_edit(proposal_text: str) -> Optional[dict]:
@@ -177,6 +205,28 @@ def extract_deterministic_edit(proposal_text: str) -> Optional[dict]:
         "old_value": from_to.group(1),
         "new_value": from_to.group(2),
     }
+
+
+def extract_deterministic_insert(proposal_text: str) -> Optional[dict]:
+    """Best-effort extraction of a concrete {path, anchor, content}
+    triple for an ADDITION-style proposal ("add X after/below Y").
+    Same CBR-1 contract as `extract_deterministic_edit`: returns None
+    when it can't find a clean match, and the caller creates no
+    pending action at all in that case."""
+    if not proposal_text:
+        return None
+    path_m = _FILE_PATH_RE.search(proposal_text)
+    if not path_m:
+        return None
+    m = _INSERT_CONTENT_AFTER_RE.search(proposal_text)
+    if m:
+        content, anchor = m.group("ins_content"), m.group("ins_anchor")
+    else:
+        m2 = _INSERT_AFTER_CONTENT_RE.search(proposal_text)
+        if not m2:
+            return None
+        anchor, content = m2.group("ins_anchor2"), m2.group("ins_content2")
+    return {"path": path_m.group(1), "anchor": anchor, "content": content}
 
 
 # ── payload validation (the CBR-1 enforcement point) ────────────────
@@ -209,10 +259,41 @@ async def _validate_edit_payload(payload: dict, *, ctx: Optional[dict]):
     }, None
 
 
+async def _validate_insert_payload(payload: dict, *, ctx: Optional[dict]):
+    path = (payload or {}).get("path")
+    anchor = (payload or {}).get("anchor")
+    content = (payload or {}).get("content")
+    if not path or not anchor or content is None:
+        return False, None, "incomplete_payload"
+    if not ctx or not ctx.get("bin_ctx"):
+        return False, None, "no_repo_context"
+    from services.local_tools import read_repo_file
+    read_ctx = {
+        "user_id": ctx.get("user_id"), "project_id": ctx.get("project_id"),
+        "bin_ctx": ctx.get("bin_ctx"),
+    }
+    try:
+        res = await read_repo_file(read_ctx, {"path": path})
+    except Exception as e:                                # noqa: BLE001
+        return False, None, f"read_failed:{e}"
+    if not res or not res.get("ok"):
+        return False, None, "file_unreadable"
+    file_content = res.get("content") or ""
+    if file_content.count(anchor) != 1:
+        return False, None, "anchor_not_unique"
+    return True, {
+        "path": path, "anchor": anchor, "content": content,
+        "commit_message": (payload or {}).get("commit_message")
+        or f"chore: update {path} (via chat approval)",
+    }, None
+
+
 async def validate_payload(type_: str, payload: dict, *, ctx: Optional[dict] = None):
     """Returns (ok, concretized_payload_or_None, reason_or_None)."""
     if type_ == "edit":
         return await _validate_edit_payload(payload, ctx=ctx)
+    if type_ == "insert":
+        return await _validate_insert_payload(payload, ctx=ctx)
     if type_ == "upgrade":
         plan = (payload or {}).get("plan")
         if plan not in ("starter", "pro", "team"):
@@ -305,28 +386,50 @@ async def propose_from_turn(
     """Called exactly once per real chat turn (persist-time). This is
     the ONLY place a PendingAction can be created — never from a raw
     model turn, always from this deterministic, server-side check
-    against the FINAL assistant reply. See module docstring, CBR-1."""
+    against the FINAL assistant reply. See module docstring, CBR-1.
+
+    2026-09 — extraction used to only run when a literal
+    ```aurem-handoff fence was present in the reply. Conversational
+    modes (e.g. Council/Mode B) never emit that fence at all (by
+    design — "pure Markdown, no fenced code blocks"), so a concrete,
+    single-file edit or addition proposed there could NEVER become
+    actionable, no matter how cleanly it was phrased — confirmed via
+    a founder repro ("add a tel: link at line 6" -> "go" -> dead end,
+    reproduced on 2 separate accounts). Extraction now runs on every
+    final reply regardless of fence presence; `_validate_edit_payload`/
+    `_validate_insert_payload` still independently re-check the
+    extracted value against the REAL live file before anything
+    becomes AWAITING_CONFIRM, so this doesn't weaken CBR-1."""
     if db is None or not session_id:
         return
     try:
-        if "```aurem-handoff" in (assistant_reply or ""):
-            edit = extract_deterministic_edit(assistant_reply)
-            if edit:
-                await propose_action(
-                    db, session_id=session_id, user_id=user_id, project_id=project_id,
-                    type_="edit", raw_payload=edit,
-                    ctx={"user_id": user_id, "project_id": project_id, "bin_ctx": bin_ctx},
-                )
-            # else: no clean (path, old, new) triple could be
-            # extracted from the prose — CBR-1, no action created at
-            # all. The multi-file/complex case stays button-only
-            # (the existing, separately-tested task-queue pipeline).
+        edit = extract_deterministic_edit(assistant_reply)
+        insert = None if edit else extract_deterministic_insert(assistant_reply)
+        if edit:
+            await propose_action(
+                db, session_id=session_id, user_id=user_id, project_id=project_id,
+                type_="edit", raw_payload=edit,
+                ctx={"user_id": user_id, "project_id": project_id, "bin_ctx": bin_ctx},
+            )
+        elif insert:
+            await propose_action(
+                db, session_id=session_id, user_id=user_id, project_id=project_id,
+                type_="insert", raw_payload=insert,
+                ctx={"user_id": user_id, "project_id": project_id, "bin_ctx": bin_ctx},
+            )
         elif provider == "edit-tier-upgrade-offer":
             await propose_action(
                 db, session_id=session_id, user_id=user_id, project_id=project_id,
                 type_="upgrade", raw_payload={"plan": "pro"},
             )
         elif provider not in (PROVIDER_EXECUTOR, PROVIDER_EXECUTING):
+            # No clean (path, old, new) triple or (path, anchor,
+            # content) pair could be extracted from the prose — CBR-1,
+            # no action created at all. The multi-file/complex case
+            # stays button-only (the existing, separately-tested
+            # task-queue pipeline). Cancel any stale pending action
+            # from an earlier, now-superseded turn instead of leaving
+            # it dangling.
             active = await get_active_actions(db, session_id=session_id, user_id=user_id)
             if active:
                 await _cancel_actions(db, active, reason="new_unrelated_turn")
@@ -362,6 +465,8 @@ def _describe_action(action: dict) -> str:
     p = action.get("payload") or {}
     if t == "edit":
         return f"update `{p.get('path')}`: \"{p.get('old_value')}\" -> \"{p.get('new_value')}\""
+    if t == "insert":
+        return f"add new content to `{p.get('path')}` right after \"{p.get('anchor')}\""
     if t == "upgrade":
         return f"upgrade to the {str(p.get('plan', 'pro')).title()} plan"
     return f"a {t} action"
@@ -441,6 +546,62 @@ async def _execute_edit(action: dict, *, user: dict, project_id: Optional[str], 
     )
 
 
+async def _execute_insert(action: dict, *, user: dict, project_id: Optional[str], bin_ctx) -> _Outcome:
+    from services.local_tools import read_repo_file, write_repo_file
+
+    p = action.get("payload") or {}
+    ctx = {"user_id": user.get("user_id"), "project_id": project_id, "bin_ctx": bin_ctx}
+
+    read_res = await read_repo_file(ctx, {"path": p.get("path")})
+    if not read_res.get("ok"):
+        return _Outcome(False, (
+            f"I had the addition ready but couldn't reload `{p.get('path')}` to "
+            f"apply it: {read_res.get('error', 'unknown error')}. Ask me to try again."
+        ))
+    current = read_res.get("content") or ""
+    anchor = p.get("anchor")
+    if current.count(anchor) != 1:
+        return _Outcome(False, (
+            "The file changed since I proposed this addition, so I can't safely "
+            "auto-apply it anymore. Ask me again and I'll re-check the current content."
+        ))
+    new_content = current.replace(anchor, f"{anchor}\n{p.get('content')}", 1)
+    write_res = await write_repo_file(ctx, {
+        "path": p["path"], "content": new_content,
+        "commit_message": p.get("commit_message") or f"chore: update {p['path']} (via chat approval)",
+    })
+    if not write_res.get("ok"):
+        return _Outcome(False, (
+            f"I had the addition ready but the write failed: "
+            f"{write_res.get('error', 'unknown error')}. Ask me to try again."
+        ))
+
+    # Read-back verification — CBR-5/8: never claim "Done" without
+    # independently re-reading the file, not just trusting the write call.
+    verify_res = await read_repo_file(ctx, {"path": p["path"]})
+    verified = bool(verify_res.get("ok")) and p["content"] in (verify_res.get("content") or "")
+    if not verified:
+        return _Outcome(
+            False,
+            (
+                f"I committed the change (commit {write_res.get('sha', '?')}) but "
+                f"couldn't confirm it landed when I read the file back — please "
+                f"check `{p['path']}` manually or ask me to look again."
+            ),
+            verification_result={"verified": False, "path": p["path"]},
+            extra={"commit_sha": write_res.get("sha")},
+        )
+    return _Outcome(
+        True,
+        (
+            f"Done — added the new content to `{p['path']}` right after "
+            f"\"{p['anchor']}\". Commit: {write_res.get('html_url', write_res.get('sha', ''))}"
+        ),
+        verification_result={"verified": True, "path": p["path"]},
+        extra={"commit_sha": write_res.get("sha"), "html_url": write_res.get("html_url")},
+    )
+
+
 async def _execute_upgrade(db, action: dict, *, user: dict) -> _Outcome:
     from routers.payments import create_checkout_session
 
@@ -512,6 +673,8 @@ async def execute_action(db, action: dict, *, user: dict, project_id: Optional[s
         t = claimed.get("type")
         if t == "edit":
             outcome = await _execute_edit(claimed, user=user, project_id=project_id, bin_ctx=bin_ctx)
+        elif t == "insert":
+            outcome = await _execute_insert(claimed, user=user, project_id=project_id, bin_ctx=bin_ctx)
         elif t == "upgrade":
             outcome = await _execute_upgrade(db, claimed, user=user)
         else:
