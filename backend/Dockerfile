@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-WORKDIR /app
+WORKDIR /app/backend
 
 # Iter 212m-166 — add nodejs + eslint alongside ruff so the LoopEngine's
 # Verify phase (`services/loop_verify.py`) can actually lint the files
@@ -33,7 +33,8 @@ RUN npm install -g eslint@8 \
     && eslint --version
 
 # Install Python deps (emergentintegrations needs Emergent's extra index)
-COPY requirements.txt .
+COPY backend/requirements.txt .
+COPY _extract /app/_extract
 RUN pip install --no-cache-dir -r requirements.txt \
     --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
 
@@ -55,7 +56,7 @@ RUN python -m playwright install --with-deps chromium \
     && chmod -R o+rX /opt/ms-playwright
 
 # Copy application code
-COPY . .
+COPY backend/ .
 
 # Iter 212m-227 — CIS Docker Benchmark 4.1: run as non-root.
 # Creates an unprivileged system user, chowns /app, and drops
