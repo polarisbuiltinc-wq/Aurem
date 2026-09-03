@@ -18,10 +18,12 @@
  *     to reach the Swift/Pro/Maxx row again.
  *   • Collapsed pill shows ONLY the mode name (no "· Loop" suffix).
  */
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Zap, Gauge, Crown, ChevronDown, ChevronLeft, RefreshCw, Lock } from "lucide-react";
 import { EXEC_MODES } from "./LoopModeToggle";
-import { isLoopUnlockedSync } from "../utils/chatTextUtils";
+import { isLoopUnlockedSync, getUnlockedModesSync } from "../utils/chatTextUtils";
+import { UpgradePopup } from "./ModeSelector";
+import { api } from "../lib/api";
 
 const MODES = [
   { id: "swift", label: "Swift", icon: Zap },
@@ -29,14 +31,36 @@ const MODES = [
   { id: "maxx",  label: "Maxx",  icon: Crown },
 ];
 const LOOP_ELIGIBLE = new Set(["pro", "maxx"]);
+// Fallback copy while /chat/modes/available hasn't resolved yet — kept
+// in sync with routers/chat/misc.py::available_modes()'s catalog.
+const MODE_FALLBACK_DATA = {
+  pro:  { label: "Pro",  min_tier: "pro",  price: "$19", desc: "DeepSeek + Claude review every answer. Higher quality." },
+  maxx: { label: "Maxx", min_tier: "team", price: "$49", desc: "Claude writes your code directly. Best for critical work." },
+};
 
 export default function ModeLoopPill({ mode, onModeChange, execMode, onExecModeChange }) {
   const [modesOpen, setModesOpen] = useState(false);
   const [step, setStep] = useState("mode");
   const [pendingMode, setPendingMode] = useState(null);
+  const [upsellMode, setUpsellMode] = useState(null);
+  const [modesCatalog, setModesCatalog] = useState(null);
   const activeMode = MODES.find((m) => m.id === mode) || MODES[0];
   const ActiveModeIcon = activeMode.icon;
   const loopUnlocked = isLoopUnlockedSync();
+  // D2 (2026-09) — free/starter users can only actually RUN Swift
+  // (backend silently clamps any other req_mode down to swift — see
+  // services/mode_routing.py). Gate the pill itself so a locked user
+  // gets an honest "Unlock Pro" upsell instead of the pill visually
+  // "selecting" a mode the backend then silently downgrades.
+  const unlockedModes = getUnlockedModesSync();
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get("/chat/modes/available")
+      .then((r) => { if (!cancelled) setModesCatalog(r.data?.modes || null); })
+      .catch(() => { /* silent — falls back to MODE_FALLBACK_DATA */ });
+    return () => { cancelled = true; };
+  }, []);
 
   function openPill() {
     if (LOOP_ELIGIBLE.has(mode)) {
@@ -54,6 +78,11 @@ export default function ModeLoopPill({ mode, onModeChange, execMode, onExecModeC
       onModeChange(id);
       onExecModeChange?.(EXEC_MODES.PROMPT);
       setModesOpen(false);
+      return;
+    }
+    if (!unlockedModes.includes(id)) {
+      setModesOpen(false);
+      setUpsellMode(id);
       return;
     }
     setPendingMode(id);
@@ -86,22 +115,27 @@ export default function ModeLoopPill({ mode, onModeChange, execMode, onExecModeC
       }}
     >
       {modesOpen && step === "mode" && (
-        MODES.map(({ id, label, icon: Icon }) => (
+        MODES.map(({ id, label, icon: Icon }) => {
+          const locked = id !== "swift" && !unlockedModes.includes(id);
+          return (
           <button key={id} type="button"
             onClick={() => pickMode(id)}
             data-testid={`ds2-mode-${id}`}
+            data-locked={locked ? "1" : "0"}
+            title={locked ? `${label} unlocks on a paid plan` : ""}
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
               borderRadius: 999, padding: "5px 12px",
               fontSize: 11, fontWeight: 600, fontFamily: "'JetBrains Mono', monospace",
               border: "none", cursor: "pointer",
               background: mode === id ? "var(--accent, #FF6608)" : "transparent",
-              color: mode === id ? "#0A0A0A" : "rgba(255,255,255,0.6)",
+              color: locked ? "rgba(255,255,255,0.3)" : mode === id ? "#0A0A0A" : "rgba(255,255,255,0.6)",
             }}>
-            <Icon size={11} strokeWidth={2.5} />
+            {locked ? <Lock size={10} strokeWidth={2.5} /> : <Icon size={11} strokeWidth={2.5} />}
             {label}
           </button>
-        ))
+          );
+        })
       )}
       {modesOpen && step === "exec" && (
         <>
@@ -167,6 +201,13 @@ export default function ModeLoopPill({ mode, onModeChange, execMode, onExecModeC
           {activeMode.label}
           <ChevronDown size={10} strokeWidth={2.5} style={{ opacity: 0.8 }} />
         </button>
+      )}
+      {upsellMode && (
+        <UpgradePopup
+          mode={upsellMode}
+          data={(modesCatalog && modesCatalog[upsellMode]) || MODE_FALLBACK_DATA[upsellMode]}
+          onClose={() => setUpsellMode(null)}
+        />
       )}
     </div>
   );

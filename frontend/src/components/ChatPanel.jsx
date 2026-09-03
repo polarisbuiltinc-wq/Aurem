@@ -2682,6 +2682,10 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
               llmProvenance: d.llm_provenance && typeof d.llm_provenance === "object"
                 ? d.llm_provenance
                 : null,
+              // 2026-09 · D2/D3 — carries checkout_url / upgrade_url /
+              // quota_exceeded so MessageBubble can render the
+              // "Unlock Pro →" CTA.
+              meta: d.meta && typeof d.meta === "object" ? d.meta : {},
               // 2026-08-27 — P3a "ORA remembers this" (D5). Rides the
               // SAME explain_plain_english_v1 flag as the plain-
               // English contract (documented choice — no sibling
@@ -5310,7 +5314,10 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       {/* Onboarding Step 4 · S-B (2026-08-26) — the first-scan aha.
           Shows above FounderOfferCard's promo so the loud "I found
           something in your site" moment isn't buried under it. */}
-      <FirstScanCard projectId={activeProject?.project_id} />
+      <FirstScanCard
+        projectId={activeProject?.project_id}
+        dismissOnFirstMessage={messages.some((m) => m.role === "user")}
+      />
 
       {/* 2026-08-21 — Stream health pill moved to render inline right
           below the streaming assistant bubble (see the messages.map

@@ -137,9 +137,13 @@ async def chat_send(
     #   the LLM call — wallet floored at zero but chat kept working,
     #   silently burning tokens with no server-side stop. The banner
     #   at 100% was purely cosmetic. This is the fix.
-    from services.usage import assert_has_budget, assert_has_task_budget
+    # 2026-09 · D3 freemium fix — the task/fix-ship monthly cap is now
+    # gated INSIDE resolve_pre_llm (only fires for an actual agentic
+    # fix/ship attempt, never plain chat). Only the token budget is
+    # checked unconditionally here — "chat is unlimited, token-capped
+    # only" per founder decision.
+    from services.usage import assert_has_budget
     await assert_has_budget(user["user_id"])
-    await assert_has_task_budget(user["user_id"])
     jwt_token = authorization.split(" ", 1)[1] if authorization else ""
     # Iter 212m-15 — parallelise the two pre-flight context fetches AND
     # log the cumulative timing for each stage so the next time a
@@ -753,6 +757,10 @@ async def chat_send(
         # Item 2 (2026-08-31) — palette nudges made this turn (before/after
         # swatches rendered by PaletteNudgeBubble.jsx, no jargon).
         "palette_nudges": result.get("palette_nudges") or [],
+        # 2026-09 · D2/D3 — surfaces checkout_url / upgrade_url /
+        # quota_exceeded so the frontend can render a working
+        # "Unlock Pro" CTA instead of a dead-end text mention.
+        "meta": result.get("meta") or {},
     }
 
 

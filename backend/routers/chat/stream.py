@@ -105,9 +105,13 @@ async def chat_stream(
     # Iter 364 · Phase 3 · Token hard-stop enforcement (streaming path).
     # Same as /chat/send — refuse the request before spending any LLM
     # tokens when the wallet is empty or the monthly task cap is blown.
-    from services.usage import assert_has_budget, assert_has_task_budget
+    # 2026-09 · D3 freemium fix — the task/fix-ship monthly cap is now
+    # gated INSIDE resolve_pre_llm (only fires for an actual agentic
+    # fix/ship attempt, never plain chat). Only the token budget is
+    # checked unconditionally here — "chat is unlimited, token-capped
+    # only" per founder decision.
+    from services.usage import assert_has_budget
     await assert_has_budget(user["user_id"])
-    await assert_has_task_budget(user["user_id"])
     # Iter 212m-49 — clear stale LLM provenance from a previous turn
     # in the same worker so the SSE `done` frame for THIS turn only
     # reflects what we actually hit this request.
@@ -1070,6 +1074,11 @@ async def chat_stream(
             # "via Council true". Pass the real value (letter/label
             # or None) through unchanged.
             "council": result.get("council"),
+            # 2026-09 · D2/D3 — surfaces checkout_url / upgrade_url /
+            # quota_exceeded so ChatPanel/MessageBubble can render a
+            # working "Unlock Pro" CTA instead of a dead-end text
+            # mention buried in the reply.
+            "meta": result.get("meta") or {},
             "low_confidence": state.low_confidence,
             "ship_suppressed": state.ship_suppressed,
             # Iter 212m-171 — Scope Badge echo (see /chat/send).

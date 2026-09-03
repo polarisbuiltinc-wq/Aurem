@@ -32,6 +32,7 @@ import CollapsibleReply from "./CollapsibleReply"; // Iter 339d/339m
 import MermaidBlock from "./MermaidBlock";       // Iter 212m-61 /diagram
 import PatRequiredCTA from "./PatRequiredCTA";
 import SystemSignalBanner from "./SystemSignalBanner";
+import UnlockProCTA, { shouldShowUnlockProCTA } from "./UnlockProCTA";
 import StepCards from "./StepCards";   // Iter 212m-19 — live step cards
 import RollbackConfirmModal from "./RollbackConfirmModal";
 import { brandProvider } from "../lib/providerLabel";
@@ -1347,6 +1348,13 @@ export default function MessageBubble({
               );
             })}
           </div>
+        )}
+
+        {/* 2026-09 · D2 — "Unlock Pro →" CTA on upgrade-offer /
+            fix-quota-exceeded bubbles, or any reply carrying a real
+            checkout_url. */}
+        {shouldShowUnlockProCTA(m) && !m.streaming && (
+          <UnlockProCTA m={m} idx={idx} />
         )}
 
         {/* Watchdog pending */}

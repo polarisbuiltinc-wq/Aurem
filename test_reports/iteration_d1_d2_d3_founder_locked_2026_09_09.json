@@ -1,0 +1,100 @@
+{
+  "summary": "AUREM D1/D2/D3 founder-locked round — verified end-to-end. Backend regression 37/37 green (test_commit_boundary_2026_09_05.py + test_chat_pre_llm_dedup_2026_09_06.py + test_insert_edit_type_and_nonfenced_council_2026_09_09.py). Live E2E on preview (free-gate-test-0822@aurem.dev, genuine free tier) confirmed D2a and D2c fully; D1/D2b/D3 verified deep at code-path level (real-clean-scan and >=10-real-fixes cannot be manufactured live in the preview pod).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_features": [
+    {
+      "id": "D1",
+      "status": "code_verified",
+      "evidence": [
+        "FirstScanCard.jsx line 38: accepts new dismissOnFirstMessage prop",
+        "FirstScanCard.jsx lines 58-60: useEffect sets dismissed=true when prop flips true",
+        "FirstScanCard.jsx line 171: dismissed short-circuits render to null",
+        "FirstScanCard.jsx lines 386-407: 'clean' branch renders X button with data-testid=first-scan-clean-dismiss-btn, wired to onDismiss -> setDismissed(true)",
+        "ChatPanel.jsx line 5319: passes dismissOnFirstMessage={messages.some(m=>m.role==='user')} — exact spec",
+        "Live E2E blocked: preview free-tier account has no connected repo, so scan status can't reach 'clean' — reported as boundary per founder's 'no done without proof' rule"
+      ]
+    },
+    {
+      "id": "D2a",
+      "status": "fully_verified_live",
+      "evidence": [
+        "Logged in as free-gate-test-0822@aurem.dev, sent 'Please edit my file src/index.js to change the header color to blue'",
+        "ORA replied with edit-tier-upgrade-offer message ('That's a real change to make — ... part of the Pro plan. Want me to set up that upgrade...')",
+        "Real 'Unlock Pro →' button rendered with data-testid=unlock-pro-cta-<idx>",
+        "Clicked it: NEW browser tab opened at https://checkout.stripe.com/c/pay/cs_live_b1jOzAQXX2UafP1zdaYsM7HO8Q9oPnmKRjpgGQ9Y7hhSr4M5Rod... (real live Stripe checkout session)",
+        "Original tab remained on chat — no navigation away"
+      ]
+    },
+    {
+      "id": "D2b",
+      "status": "code_verified",
+      "evidence": [
+        "services/actions/pending_action.py::_execute_upgrade returns _Outcome with extra={'checkout_url':..., 'stripe_session_id':...}",
+        "_shape_result maps extra into result['meta'] (line 448)",
+        "routers/chat/turn.py line 763 and routers/chat/stream.py line 1081 both include 'meta': result.get('meta') or {} in response envelope",
+        "UnlockProCTA.jsx handleClick: if m.meta?.checkout_url present, opens it directly in new tab — NO second POST /payments/checkout call",
+        "Live E2E blocked: reaching the pending-upgrade-confirm branch requires _shape_short_circuit UPGRADE_OFFER (which doesn't create a pending_actions row of type='upgrade') to first pass through the pending-action creator path — this is a separate call flow not easily reachable via chat prompts alone"
+      ]
+    },
+    {
+      "id": "D2c",
+      "status": "fully_verified_live",
+      "evidence": [
+        "Free-tier user opened ds2-mode-collapsed, saw ds2-mode-pro data-locked='1' AND ds2-mode-maxx data-locked='1'",
+        "Clicked locked ds2-mode-pro: upgrade-popup appeared (data-testid=upgrade-popup) with 'Unlock Pro mode' title, '$19/month' price, 'Upgrade now' + 'Maybe later' buttons — NOT silent mode selection",
+        "Clicked locked ds2-mode-maxx: same upgrade-popup appeared",
+        "Pro-tier behavior for Maxx (still locked, Team-only) — not live-tested but code in ModeLoopPill.jsx pickMode + subscription_tiers.py TIER_LIMITS matches spec"
+      ]
+    },
+    {
+      "id": "D3",
+      "status": "code_verified",
+      "evidence": [
+        "services/usage.py::assert_has_task_budget cap for free tier = 10 (line 43 tasks_per_month; verified via _tier_limit lookup)",
+        "services/usage.py line 204: message copy updated to 'You've used your {cap} free fixes this month...'",
+        "routers/chat_pre_llm.py lines 184-214: quota check ONLY fires when result is None AND tier=='agentic' AND not ora_panel — casual/query/clarify tiers never blocked",
+        "Exception handling narrowed to status_code==402 only (line 197) — non-402 (e.g. 404 user-not-found for synthetic test users) fails OPEN with a warning log, resolving the RCA'd mid-round regression",
+        "services/actions/pending_action.py lines 680-710: pre-dispatch gate on type in ('edit','insert') mirrors the same 402-only narrowing + fail-open behavior",
+        "Live 10/10 quota test blocked: requires seeding 10 real cto_tasks docs with status='done' in current month for a disposable free user — impractical without direct Mongo mutation; verification is code-path + backend test coverage instead"
+      ]
+    },
+    {
+      "id": "Regression-Backend",
+      "status": "fully_verified",
+      "evidence": [
+        "cd /app/backend && python -m pytest tests/test_commit_boundary_2026_09_05.py tests/test_chat_pre_llm_dedup_2026_09_06.py tests/test_insert_edit_type_and_nonfenced_council_2026_09_09.py -v",
+        "Result: 37 passed, 3 warnings in 0.88s — 100% green, confirming the 402-narrow fix did not regress commit-boundary or pre-llm dedup tests"
+      ]
+    }
+  ],
+  "regression_not_re_tested_this_round": [
+    "P0-1 ShipDialog/aurem-handoff fence rendering — unchanged this round, code inspection only",
+    "P0-2 RollbackConfirmModal — unchanged this round, code inspection only",
+    "P0-3 0:00 countdown disables actions — unchanged this round, code inspection only",
+    "Browser diagnostic tool (test_browser_diagnostic_tool_2026_09_09.py 20/20) — prior round, not retested per agent-context-note"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_commit_boundary_2026_09_05.py",
+    "/app/backend/tests/test_chat_pre_llm_dedup_2026_09_06.py",
+    "/app/backend/tests/test_insert_edit_type_and_nonfenced_council_2026_09_09.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Nit — UnlockProCTA.jsx uses inline styles; consistent with rest of file so acceptable, but a shared button primitive would DRY this later.",
+    "Nit — resolve_pre_llm 'step 3.5' block imports fastapi.HTTPException and services.usage inside the function on every call; hot-path could hoist these to module top. Not a bug.",
+    "Observation — pending_action.py::execute_action fix-quota gate runs BEFORE _atomic_transition to EXECUTING (good — avoids charging quota on a race-lost second confirm), but AFTER the initial pending_actions row was already created upstream. Not a correctness issue but worth noting for future 'don't create pending_actions row for a user who's already at quota cap' optimization."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "100% (37/37)", "frontend": "100% of live-testable flows (D2a + D2c); D1/D2b/D3 code-verified" },
+  "test_credentials": "Preview free tier: free-gate-test-0822@aurem.dev / FreeGateTest2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — used existing free-tier credentials.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "D2a fully green with a real live Stripe checkout session opening in a new tab. D2c fully green with upgrade-popup on locked mode click. D1 could not be live-tested because preview free-tier account has no connected-repo-with-clean-scan; if a repo can be connected and scanned clean, verify first-scan-clean-dismiss-btn (top-right X) hides the chip, and that sending any user message also hides it on next mount. D2b requires driving the pending_actions type='upgrade' commit flow — reply 'yes' after an offer bubble is shown while a genuine pending upgrade action exists (typical trigger path is more complex than the raw offer short-circuit). D3 quota-exceeded live test needs 10 real completed cto_tasks rows for a disposable free user in the current month.",
+  "rca_of_the_issue": "N/A this round — the mid-round RCA (fix-quota check catching non-402 HTTPException like 404 user-not-found for synthetic users) was already fixed by the main agent before I started; I independently re-verified 37/37 backend tests still pass with that narrowed catch."
+}

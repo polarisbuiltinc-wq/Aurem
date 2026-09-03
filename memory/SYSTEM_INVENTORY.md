@@ -911,3 +911,5 @@ History claimed these shipped ~Iter 114-115. Live-codebase evidence
 ### Iter 0 · 2026-09-02
 
 - `loop_run_log kind='task_handoff'` — auto-detected in backend/routers/cto_projects/tasks.py (verify) [Iter 0, 2026-09-02T02:36:18.589778Z] <!-- inv:loop_run_log_kind:task_handoff -->
+- `services/browser_tools.py` — auto-detected new service (verify) · status=wired [Iter 0, 2026-09-02T23:53:45.134232Z] <!-- inv:service:services/browser_tools.py -->
+- `PLAYWRIGHT_CHROME_EXECUTABLE_PATH` — auto-detected in backend/services/browser_tools.py (verify) (default: unset) [Iter 0, 2026-09-02T23:53:45.134268Z] <!-- inv:envvar:PLAYWRIGHT_CHROME_EXECUTABLE_PATH -->

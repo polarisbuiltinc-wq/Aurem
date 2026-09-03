@@ -169,6 +169,50 @@ async def resolve_pre_llm(
             fallback_chain=["edit_tier_upgrade_offer"],
         )
 
+    # 3.5) D3 (2026-09) freemium fix-ship quota. "Chat is unlimited,
+    # token-capped only" — the monthly task cap must ONLY gate an
+    # actual agentic fix/ship ATTEMPT (about to reach chat_with_tools),
+    # never plain chat. Previously `assert_has_task_budget` ran
+    # unconditionally at the very top of BOTH /chat/send and
+    # /chat/stream, before intent classification even existed here —
+    # so it blocked ordinary casual/query messages too once a free
+    # user's monthly counter hit cap. Non-raising here (both endpoints,
+    # including the SSE one, need a friendly short-circuit reply, not
+    # an exception mid-stream) — the deterministic single-file
+    # confirm/edit path is gated separately in
+    # services/actions/pending_action.py::execute_action.
+    if result is None and tier == "agentic" and not ora_panel:
+        from fastapi import HTTPException
+        from services.usage import assert_has_task_budget
+        try:
+            await assert_has_task_budget(user["user_id"])
+        except HTTPException as _quota_exc:
+            # Only the specific 402 quota-exceeded case short-circuits
+            # the turn. Anything else (e.g. a 404 "user not found" —
+            # seen for synthetic/test user_ids with no dev_users doc,
+            # which can't happen for a real authenticated caller) fails
+            # OPEN: this is a defensive quota check, not the feature
+            # itself, so an unrelated lookup error must never block a
+            # real fix/ship attempt.
+            if _quota_exc.status_code == 402:
+                _detail = _quota_exc.detail if isinstance(_quota_exc.detail, dict) else {}
+                result = _shape_short_circuit(
+                    _detail.get("message") or
+                    "You've used your free fixes for this month — upgrade to Pro for unlimited.",
+                    "fix-quota-exceeded",
+                    intent_result=intent_result, tier=tier,
+                    fallback_chain=["fix_quota_exceeded"],
+                )
+                result["meta"] = {
+                    "quota_exceeded": True,
+                    "upgrade_url": _detail.get("upgrade_url") or "/settings",
+                }
+        except Exception as _quota_infra_err:                # noqa: BLE001
+            # Fail OPEN on any infra hiccup (DB hiccup, closed loop in
+            # test harnesses, etc) — never let a defensive quota check
+            # crash or block the actual turn it's guarding.
+            logger.warning("fix-quota check skipped (non-402 error): %r", _quota_infra_err)
+
     # 4) P7-D self-bug short-circuit — the user reporting ORA's OWN
     # UI/reply/panel as broken short-circuits before tier routing,
     # deterministic + zero LLM spend.

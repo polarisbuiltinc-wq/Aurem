@@ -671,10 +671,49 @@ async def execute_action(db, action: dict, *, user: dict, project_id: Optional[s
 
     try:
         t = claimed.get("type")
-        if t == "edit":
-            outcome = await _execute_edit(claimed, user=user, project_id=project_id, bin_ctx=bin_ctx)
-        elif t == "insert":
-            outcome = await _execute_insert(claimed, user=user, project_id=project_id, bin_ctx=bin_ctx)
+        if t in ("edit", "insert"):
+            # 2026-09 · D3 freemium fix-ship quota — this is the ONE
+            # other place (besides resolve_pre_llm's new-agentic-
+            # request gate) where a free user's chat turn can produce
+            # a real repo write: the deterministic single-file
+            # confirm/execute path. Same underlying cap
+            # (services/usage.py assert_has_task_budget), just a
+            # non-raising catch since this returns an _Outcome, not
+            # an HTTP response.
+            from fastapi import HTTPException
+            from services.usage import assert_has_task_budget
+            quota_outcome = None
+            try:
+                await assert_has_task_budget(user["user_id"])
+            except HTTPException as _quota_exc:
+                # Only the specific 402 quota-exceeded case denies the
+                # execute. Anything else (e.g. 404 "user not found" for
+                # a synthetic/test user_id — can't happen for a real
+                # authenticated caller) fails OPEN — a defensive quota
+                # check must never block the actual write it's guarding.
+                if _quota_exc.status_code == 402:
+                    _detail = _quota_exc.detail if isinstance(_quota_exc.detail, dict) else {}
+                    quota_outcome = _Outcome(
+                        False,
+                        _detail.get("message") or (
+                            "You've used your free fixes for this month — "
+                            "upgrade to Pro for unlimited fixes."
+                        ),
+                        extra={
+                            "quota_exceeded": True,
+                            "upgrade_url": _detail.get("upgrade_url") or "/settings",
+                        },
+                    )
+            except Exception as _quota_infra_err:             # noqa: BLE001
+                # Fail OPEN on any infra hiccup — never let a
+                # defensive quota check block the real write.
+                logger.warning("fix-quota check skipped (non-402 error): %r", _quota_infra_err)
+            if quota_outcome is not None:
+                outcome = quota_outcome
+            elif t == "edit":
+                outcome = await _execute_edit(claimed, user=user, project_id=project_id, bin_ctx=bin_ctx)
+            else:
+                outcome = await _execute_insert(claimed, user=user, project_id=project_id, bin_ctx=bin_ctx)
         elif t == "upgrade":
             outcome = await _execute_upgrade(db, claimed, user=user)
         else:

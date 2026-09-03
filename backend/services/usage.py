@@ -201,8 +201,9 @@ async def assert_has_task_budget(user_id: str) -> None:
             "monthly_task_cap": cap,
             "upgrade_url": "/settings#pricing",
             "message": (
-                f"You've used all {cap} tasks on the {u['tier'].title()} "
-                "plan this month. Upgrade to Pro for unlimited tasks."
+                f"You've used your {cap} free fixes this month on the "
+                f"{u['tier'].title()} plan. Upgrade to Pro for unlimited "
+                "fixes."
             ),
         })
 

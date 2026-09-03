@@ -106,7 +106,7 @@ export default function ModeSelector({ value, onChange, excludeKeys = [] }) {
   );
 }
 
-function UpgradePopup({ mode, data, onClose }) {
+export function UpgradePopup({ mode, data, onClose }) {
   const [paying, setPaying] = useState(false);
   const pay = async () => {
     setPaying(true);

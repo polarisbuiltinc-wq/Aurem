@@ -35,7 +35,7 @@ function promptChat(message) {
   } catch { /* ignore */ }
 }
 
-export default function FirstScanCard({ projectId }) {
+export default function FirstScanCard({ projectId, dismissOnFirstMessage }) {
   const [state, setState] = useState(null);   // full /status response
   const [applying, setApplying] = useState(false);
   const [applyResult, setApplyResult] = useState(null); // {commit_sha, commit_url, files_fixed}
@@ -49,6 +49,15 @@ export default function FirstScanCard({ projectId }) {
   const statusRef = useRef(null);
   const applyingRef = useRef(false); // synchronous double-click guard (ahead of React's async setState)
   const ackSentRef = useRef(false);
+
+  // D1 (2026-09) — the "your site looks in good shape" chip (and any
+  // other still-open state of this card) must never linger forever.
+  // Auto-dismiss the instant the user sends their first chat message
+  // — the manual X (LegacyFirstScanCard's onDismiss) covers the
+  // "whichever comes first" other half of the founder's spec.
+  useEffect(() => {
+    if (dismissOnFirstMessage) setDismissed(true);
+  }, [dismissOnFirstMessage]);
 
   // Read-back fix (fixed) computed early so the ack hooks below can use it —
   // must stay unconditional (before any early `return null`) per rules-of-hooks.
@@ -376,8 +385,21 @@ function LegacyFirstScanCard({ state, applying, applyResult, handleFix, onDismis
 
   if (state.status === "clean") {
     return (
-      <div data-testid="first-scan-card" style={cardStyle}>
-        <div data-testid="first-scan-clean" style={{ fontSize: 13, color: "#7dd3fc" }}>
+      <div data-testid="first-scan-card" style={{ ...cardStyle, position: "relative" }}>
+        <button
+          type="button"
+          data-testid="first-scan-clean-dismiss-btn"
+          onClick={onDismiss}
+          aria-label="Dismiss"
+          title="Dismiss"
+          style={{
+            position: "absolute", top: 6, right: 8,
+            background: "transparent", border: "none",
+            color: "rgba(125,211,252,0.6)", cursor: "pointer",
+            fontSize: 15, lineHeight: 1, padding: 4,
+          }}
+        >×</button>
+        <div data-testid="first-scan-clean" style={{ fontSize: 13, color: "#7dd3fc", paddingRight: 16 }}>
           Your site looks in good shape. What would you like to build or improve?
         </div>
       </div>

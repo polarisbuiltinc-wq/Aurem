@@ -31,7 +31,30 @@ export function isLoopUnlockedSync() {
   }
 }
 
-// ── Natural-language Loop opt-in detector ────────────────────────────
+// ── Mode-pill entitlement check (D2, 2026-09) ────────────────────────
+// Mirrors backend `services/subscription_tiers.py::TIER_LIMITS[…]["modes"]`
+// exactly (free/starter=swift only, pro=swift+pro, team/founder=all 3).
+// Used by ModeLoopPill so a free/starter user sees an honest "Unlock
+// Pro" upsell the INSTANT they click Pro/Maxx, instead of the pill
+// silently letting them "select" it while the backend silently clamps
+// the actual request back down to swift (the reported bug — no
+// payment window ever showed because the client never knew it was
+// locked).
+export function getUnlockedModesSync() {
+  try {
+    const u = (typeof getUser === "function" && getUser()) || null;
+    if (!u) return ["swift"];
+    if (u.is_admin || u.is_unlimited || u.tier === "founder" || u.tier === "team") {
+      return ["swift", "pro", "maxx"];
+    }
+    if (u.tier === "pro") return ["swift", "pro"];
+    return ["swift"];
+  } catch {
+    return ["swift"];
+  }
+}
+
+
 // 2026-08-22 — founder bug report: typing "run this as a loop" in a
 // normal chat message did NOT trigger the actual Loop pipeline (no
 // PLAN/EXECUTE/VERIFY/SCAN/SHIP bar) — it silently fell through to a
