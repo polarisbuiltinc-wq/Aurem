@@ -34,7 +34,6 @@ RUN npm install -g eslint@8 \
 
 # Install Python deps (emergentintegrations needs Emergent's extra index)
 COPY backend/requirements.txt .
-COPY _extract /app/_extract
 RUN pip install --no-cache-dir -r requirements.txt \
     --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
 
