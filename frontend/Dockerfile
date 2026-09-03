@@ -11,6 +11,12 @@ FROM nginx:alpine
 
 RUN printf 'server {\n\
   listen 3001;\n\
+    location /api/ {\n\
+        proxy_pass https://aurem.onrender.com;\n\
+            proxy_set_header Host aurem.onrender.com;\n\
+                proxy_set_header X-Real-IP $remote_addr;\n\
+                    proxy_ssl_server_name on;\n\
+                      }\n\
   root /usr/share/nginx/html;\n\
   index index.html;\n\
   # Iter 386 · Session 2 · Layer 7 — Deploy-lag mitigation.\n\
