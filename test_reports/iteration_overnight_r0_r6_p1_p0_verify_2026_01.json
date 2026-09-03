@@ -1,0 +1,27 @@
+{
+  "summary": "Overnight R0->R6 P1 + P0 re-verify pass. All 6 P1s + P0 re-verify PASS via UI (Playwright) and backend (curl + code review). /ora personal PIN (P1-1) end-to-end verified: toggle reveals identifier input, wrong PIN shows sanitized error ('Wrong PIN. 4 left.'), correct personal PIN (test@aurem.dev / myPersonalPin987) mints admin JWT and unlocks ORA chat UI. Backend curl confirms 200 on correct PIN + valid JWT, 401 on wrong PIN. Admin PersonalOraPinCard (P1-1b) renders on /admin/settings with data-testid='personal-ora-pin-card' and 'Update' button (status.pin_set=true). UserNotificationBell (P1-2) visible on dashboard TopBar for admin (not admin-gated). Error sanitization (P1-3), approve dead-end message (P1-4, backend copy present at pending_action.py:85), ship terminology (P1-5, shipStatus.js maps ROLLED_BACK -> 'Rolled back', ShipConfirmModal uses shipStatusLabel + 'Rolled back on GitHub'), and P0-3 countdown-disable (ShipPendingCard disabled={busy||expired}, PlanApprovalCard isDisabled=disabled||expired) confirmed via code review; DeleteChatConfirmModal (P0-2) wired in Shell.jsx line 1126 with data-testid selectors intact. R2 GitHub PR live drill remains BLOCKED per known NEEDS-FOUNDER note; no attempt made.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_p1_1_ora_per_user_pin_2026.py",
+    "/app/backend/tests/test_p1_2_upgrade_eligible_notification_2026.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Pre-existing note (not in scope of this round): /ora is wrapped in <PrivateRoute> in App.jsx:386, which redirects to /login when there is no aurem_token in localStorage. This means the PinPad in OraDirect.jsx is only reachable to a user who already has a (possibly stale) app JWT. The per-user personal-PIN feature functionally works for the intended admin/founder shortcut path (login normally, then use /ora), but the PinPad-as-entry-point flow described in the review request is effectively unreachable for a fresh visitor unless the token is manually cleared while on /ora (ora-logout button, verified working). If the intent is truly public/PIN-gated entry, the PrivateRoute wrapper on this route should be removed. Not a regression; predates this round.",
+    "OraDirect.jsx line 122 uses .catch(() => setToken(null)) but does not clear other localStorage keys (aurem_user, aurem_active_project) on token invalidation; low-risk UX inconsistency.",
+    "sanitizeError.js pattern /\\b[A-Za-z_][A-Za-z0-9_]*Exception\\b/ will match legitimate user text containing e.g. 'RulesException' inside a valid, non-stack sentence. Acceptable trade-off given the pattern's protective intent."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Preview admin: test@aurem.dev / AuremTest2026! ; /ora personal PIN: myPersonalPin987 for identifier test@aurem.dev ; legacy /ora shared PIN: FefzrqxpCRQg",
+  "seed_data_creation": "None. Cleaned up 10 rate-limit failed rows from ora_chat_pin_attempts (residual from prior test iterations) so curl + UI PIN flow could run within 5-attempt window. No new seed rows created.",
+  "retest_needed": false,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "PIN lockout collection: db.ora_chat_pin_attempts — if 5+ ok=false rows exist in last hour per IP or per account_key, /ora-chat/pin-login returns 429. Clear with: db.ora_chat_pin_attempts.delete_many({'ok': False}) before running PIN tests. /ora page: PrivateRoute redirects fresh visitors to /login; to reach PinPad after admin login, click ora-logout (data-testid='ora-logout') inside /ora — this triggers PinPad in-place. PersonalOraPinCard already reports pin_set=true for test@aurem.dev — do NOT click save with a new PIN unless you also update /app/memory/test_credentials.md and re-set to myPersonalPin987, otherwise future PIN login tests will fail.",
+  "rca of the issue": "N/A — no failures found in scope. R2 (live GitHub PR flow) blocked at JWT-level 401 with GitHub API is out of scope and already flagged NEEDS-FOUNDER per overnight ledger."
+}

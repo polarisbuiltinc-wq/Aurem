@@ -38,6 +38,7 @@ import RollbackConfirmModal from "./RollbackConfirmModal";
 import { brandProvider } from "../lib/providerLabel";
 import { useFriendlyStatusPhrase } from "../hooks/useFriendlyStatusPhrase";
 import { trackShipRenderFailed } from "../lib/analytics";
+import { sanitizeErrorMessage } from "../lib/sanitizeError";
 
 // ---- Round-2 PR (P0-1, K1 ship-button fallback) ---------------------------
 // Detects the case extractHandoffBrief() rejects a fence (or finds none)
@@ -553,7 +554,7 @@ export default function MessageBubble({
       toast({ message: "Rollback queued", kind: "info" });
     } catch (e) {
       toast({
-        message: e?.response?.data?.detail || "Rollback failed to start",
+        message: sanitizeErrorMessage(e, "Rollback failed to start"),
         kind: "error",
       });
     }

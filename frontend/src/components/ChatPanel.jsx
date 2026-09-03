@@ -100,6 +100,7 @@ import ScanStatusStrip, { markScanJustCompleted } from "./ScanStatusStrip";     
 import FindingsTeaserStrip from "./FindingsTeaserStrip";                            // 2026-08-23 · Findings-to-fix bridge
 import SlashCommandMenu, { matchSlashCommands } from "./SlashCommandMenu";         // Iter 212m-190 · Session 3
 import CharCounter from "./CharCounter";                                             // Iter 388f — live char counter for 20k cap
+import { sanitizeErrorMessage } from "../lib/sanitizeError";                          // R3 P1-3 — no raw backend error ever reaches a toast
 import {
   isLoopUnlockedSync,
   extractSuggestions,
@@ -4127,7 +4128,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
           setLoopPhase("idle");
         }
       } catch (e) {
-        toast(e?.response?.data?.detail || e?.message || "Ship action failed");
+        toast(sanitizeErrorMessage(e, "Ship action failed"));
       } finally {
         setUserActionBusy(false);
       }
@@ -4145,7 +4146,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         setBusy(true);
       }
     } catch (e) {
-      toast(e?.response?.data?.detail || e?.message || "Pause-response failed");
+      toast(sanitizeErrorMessage(e, "Pause-response failed"));
     } finally {
       setUserActionBusy(false);
     }
@@ -4206,7 +4207,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         } catch { /* poll failure is silent — SSE may still deliver */ }
       }, 3000);
     } catch (e) {
-      toast(e?.response?.data?.detail || e?.message || "Ship failed to start");
+      toast(sanitizeErrorMessage(e, "Ship failed to start"));
     } finally {
       setShipBusy(false);
     }
@@ -4219,7 +4220,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       setShipPending(null);
       setLoopPhase("idle");
     } catch (e) {
-      toast(e?.response?.data?.detail || e?.message || "Cancel failed");
+      toast(sanitizeErrorMessage(e, "Cancel failed"));
     } finally {
       setShipBusy(false);
     }
@@ -4237,7 +4238,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       await confirmLoop(loopId, true, "");
       openLoopStream(loopId);
     } catch (e) {
-      toast(e?.response?.data?.detail || e?.message || "Loop confirm failed");
+      toast(sanitizeErrorMessage(e, "Loop confirm failed"));
       setLoopPhase("error");
       setBusy(false);
     }
@@ -4302,8 +4303,7 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       await confirmLoop(targetLoopId, true, "");
       openLoopStream(targetLoopId);
     } catch (e) {
-      toast(e?.response?.data?.detail || e?.message
-        || "Couldn't restart that plan — start a new task instead.");
+      toast(sanitizeErrorMessage(e, "Couldn't restart that plan — start a new task instead."));
       setLoopPhase(null);
       setLoopId(null);
       setLoopPlan(null);

@@ -104,6 +104,22 @@ async def assert_can_fix(user: dict, tool: str, count: int = 1) -> dict:
         })
     remaining = q["tasks_remaining"]
     if remaining is not None and count > remaining:
+        # R3 P1-2 (overnight round) — nudge the bell once per user per
+        # month when they actually HIT the wall (not on every retry
+        # after), so it's a real signal, not spam.
+        try:
+            db = require_db()
+            from services.notifications import emit_notification
+            dedupe_key = f"upgrade_eligible:{user['user_id']}:{month_bucket()}"
+            existing = await db.notif_dedupe.find_one({"_id": dedupe_key})
+            if not existing:
+                await db.notif_dedupe.insert_one({"_id": dedupe_key, "ts": datetime.now(timezone.utc)})
+                await emit_notification(
+                    db, user_id=user["user_id"], type="upgrade_eligible",
+                    text="You've used all your free fixes this month — upgrade to keep shipping.",
+                )
+        except Exception:                                       # noqa: BLE001
+            pass  # never let a notification bug block the real 402
         raise HTTPException(402, {
             "error": "insufficient_tasks",
             "remaining": remaining, "needed": count,

@@ -16,6 +16,7 @@ import { toast } from "../components/Toast";
 import AuremAdminPanel from "../components/AuremAdminPanel";
 import AdminThinkingHints from "../components/AdminThinkingHints";
 import TwoFactorCard from "../components/TwoFactorCard";
+import { sanitizeErrorMessage } from "../lib/sanitizeError";
 import { Card, Badge } from "./Admin";
 
 export default function AdminSettingsPage() {
@@ -169,6 +170,12 @@ export default function AdminSettingsPage() {
           the Stripe card so a brand-new admin is nudged toward the
           security best practice first. */}
       <TwoFactorCard />
+
+      {/* R3 P1-1 (overnight round) — personal /ora quick-access PIN,
+          additive to the shared ORA_QUICK_PIN env secret. Lets a
+          second admin/founder log in at /ora with their OWN PIN
+          instead of a secret they all share. */}
+      <PersonalOraPinCard />
 
       {/* Iter 191 — Stripe API key card with edit/save + live ping
           (green/red status light, account info, error reason). */}
@@ -1298,6 +1305,76 @@ function GitHubAppConfigCard() {
 
 
 
+// R3 P1-1 (overnight round) — self-service personal /ora PIN.
+function PersonalOraPinCard() {
+  const [status, setStatus] = useState(null);
+  const [pin, setPin] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get("/ora-chat/pin/status")
+      .then((r) => setStatus(r.data))
+      .catch(() => setStatus({ pin_set: false }));
+  }, []);
+
+  async function save() {
+    if (pin.trim().length < 8) {
+      toast({ message: "PIN must be at least 8 characters", kind: "error" });
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.post("/ora-chat/pin/set", { pin: pin.trim() });
+      toast({ message: "Personal /ora PIN saved", kind: "success" });
+      setPin("");
+      setStatus({ pin_set: true });
+    } catch (e) {
+      toast({ message: sanitizeErrorMessage(e, "Save failed"), kind: "error" });
+    } finally { setSaving(false); }
+  }
+
+  if (!status) return null;
+
+  return (
+    <div
+      data-testid="personal-ora-pin-card"
+      style={{
+        marginTop: 28, padding: 14, borderRadius: 10,
+        background: "rgba(255,255,255,0.02)",
+        border: "1px solid var(--border)",
+      }}
+    >
+      <h3 style={{ fontSize: 13, margin: "0 0 6px" }}>
+        Personal /ora Quick-Access PIN
+      </h3>
+      <p style={{ fontSize: 11, color: "var(--text-faint)", margin: "0 0 14px" }}>
+        {status.pin_set
+          ? "A personal PIN is set. Use it at /ora with your email to log in without the shared PIN."
+          : "Set your own PIN for /ora so you don't have to share one PIN with the whole team."}
+      </p>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          data-testid="personal-ora-pin-input"
+          type="password"
+          value={pin}
+          onChange={(e) => setPin(e.target.value)}
+          placeholder={status.pin_set ? "New PIN (8+ chars)" : "Choose a PIN (8+ chars)"}
+          style={{ flex: 1, padding: "8px 10px", borderRadius: 8,
+                    border: "1px solid var(--border)", fontSize: 12,
+                    background: "rgba(255,255,255,0.03)", color: "inherit" }}
+        />
+        <button
+          data-testid="personal-ora-pin-save"
+          onClick={save} disabled={saving} className="btn-primary"
+          style={{ fontSize: 11 }}
+        >
+          {saving ? "Saving…" : status.pin_set ? "Update" : "Set PIN"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ThinkingHintsConfigCard() {
   const [cfg, setCfg] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -1320,7 +1397,7 @@ function ThinkingHintsConfigCard() {
       toast({ message: "Hint config saved", kind: "success" });
     } catch (e) {
       toast({
-        message: e?.response?.data?.detail || "Save failed",
+        message: sanitizeErrorMessage(e, "Save failed"),
         kind: "error",
       });
     } finally { setSaving(false); }

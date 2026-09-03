@@ -132,6 +132,8 @@ export default function OraDirect() {
 // ────────────────────────────────────────────────────────────────────
 function PinPad({ onSuccess }) {
   const [pin, setPin]   = useState("");
+  const [identifier, setIdentifier] = useState("");
+  const [showIdentifier, setShowIdentifier] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState(null);
   const inputRef = useRef(null);
@@ -141,7 +143,10 @@ function PinPad({ onSuccess }) {
     if (!pin || busy) return;
     setBusy(true); setErr(null);
     try {
-      const r = await api.post("/ora-chat/pin-login", { pin });
+      const r = await api.post("/ora-chat/pin-login", {
+        pin,
+        ...(identifier.trim() ? { identifier: identifier.trim() } : {}),
+      });
       setToken(r.data.token);
       onSuccess();
     } catch (e) {
@@ -204,6 +209,33 @@ function PinPad({ onSuccess }) {
           {err && (
             <div data-testid="pin-error" style={{ fontSize: 12, color: "#c94a37",
                                                      minHeight: 16 }}>{err}</div>
+          )}
+          {showIdentifier ? (
+            <input
+              data-testid="pin-identifier-input"
+              type="email"
+              autoComplete="off"
+              value={identifier}
+              disabled={busy}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="your@email.com (your own PIN)"
+              style={{ width: "100%", boxSizing: "border-box", padding: "10px 14px",
+                        fontSize: 13, textAlign: "center",
+                        borderRadius: 10, border: `1px solid ${PAL.border}`,
+                        background: PAL.accentBg, color: PAL.text, outline: "none",
+                        fontFamily: "inherit" }}
+            />
+          ) : (
+            <button
+              type="button"
+              data-testid="pin-use-personal-pin-toggle"
+              onClick={() => setShowIdentifier(true)}
+              style={{ background: "none", border: "none", color: PAL.muted,
+                        fontSize: 11, cursor: "pointer", textDecoration: "underline",
+                        fontFamily: "inherit", padding: 0 }}
+            >
+              Have your own personal PIN?
+            </button>
           )}
           <button
             type="submit"

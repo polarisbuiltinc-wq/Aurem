@@ -215,9 +215,7 @@ export function ShippedRow({ loopId, ship, onDone, onRollbackStarted }) {
       console.warn("[rollback] POST failed:", e?.response?.data?.detail || e?.message);
       _rollbackInFlight.delete(loopId);
       setPhase("failed");
-      setError(
-        e?.response?.data?.detail || e?.message || "Rollback failed",
-      );
+      setError(sanitizeErrorMessage(e, "Rollback failed"));
     }
   }, [loopId, onRollbackStarted]);
 
@@ -446,6 +444,7 @@ import { rollbackLoop, getLoopStatus } from "../lib/loopApi";
 import OperationHistory from "./OperationHistory";
 import RollbackConfirmModal from "./RollbackConfirmModal";
 import { PreferredSourceButton } from "./PreferredSourceButton";
+import { sanitizeErrorMessage } from "../lib/sanitizeError";
 
 // ── Tone → icon + colour ────────────────────────────────────────────
 const TONE_STYLES = {

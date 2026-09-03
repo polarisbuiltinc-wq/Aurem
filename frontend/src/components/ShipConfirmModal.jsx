@@ -30,6 +30,8 @@ import {
 import { api } from "../lib/api";
 import useModalA11y from "../hooks/useModalA11y";
 import RollbackConfirmModal from "./RollbackConfirmModal";
+import { sanitizeErrorMessage } from "../lib/sanitizeError";
+import { shipStatusLabel, SHIP_STATUS } from "../lib/shipStatus";
 
 const POLL_MS = 1500;
 const TERMINAL = new Set(["done", "failed"]);
@@ -174,8 +176,7 @@ export default function ShipConfirmModal() {
       }
       setTaskId(tid);
     } catch (e) {
-      const msg = e?.response?.data?.detail || e?.message || "Ship failed";
-      setErr(msg); setPhase("error");
+      setErr(sanitizeErrorMessage(e, "Ship failed")); setPhase("error");
     }
   }
 
@@ -202,7 +203,7 @@ export default function ShipConfirmModal() {
         await new Promise((res) => setTimeout(res, 1500));
       }
     } catch (e) {
-      setErr(e?.response?.data?.detail || "Rollback failed");
+      setErr(sanitizeErrorMessage(e, "Rollback failed"));
     } finally { setRbBusy(false); }
   }
 
@@ -272,10 +273,10 @@ export default function ShipConfirmModal() {
                 style={{ color: "#FF6608", animation: "spin 1s linear infinite" }} />
             )}
             {phase === "confirm"  && "Approve this fix"}
-            {phase === "shipping" && "Shipping…"}
-            {phase === "shipped"  && "Shipped"}
-            {phase === "reverted" && "Reverted"}
-            {phase === "error"    && "Ship failed"}
+            {phase === "shipping" && shipStatusLabel(SHIP_STATUS.SHIPPING)}
+            {phase === "shipped"  && shipStatusLabel(SHIP_STATUS.LIVE)}
+            {phase === "reverted" && shipStatusLabel(SHIP_STATUS.ROLLED_BACK)}
+            {phase === "error"    && shipStatusLabel(SHIP_STATUS.FAILED)}
           </h2>
           {phase !== "shipping" && (
             <button data-testid="ship-modal-close" onClick={closeAll}
@@ -395,7 +396,7 @@ export default function ShipConfirmModal() {
               fontWeight: 600, marginBottom: 10,
             }}>
               <CheckCircle2 size={14} />
-              {phase === "reverted" ? "Reverted on GitHub" : "Pushed to GitHub"}
+              {phase === "reverted" ? "Rolled back on GitHub" : "Pushed to GitHub"}
               {sha && (
                 <span
                   data-testid="ship-modal-sha-chip"

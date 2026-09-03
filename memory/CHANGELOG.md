@@ -1566,3 +1566,49 @@ after the gated upgrade offer, "yes please" hits the generic
 tracked in ROADMAP.md. **Deferred by founder's own explicit
 ordering**: fabrication-pattern audit of past transcripts to widen
 Root 2's guard beyond line/content claims.
+
+
+## 2026-09 — OVERNIGHT R0→R6 ROUND: R2/R5 diagnosis + R3 P1 wave (5 P1s + 3-P0 re-verify)
+
+Founder-mandated unattended sequential run. Full detail:
+`/app/memory/REPORT-overnight.md` (new section appended, "R0 → R6, this
+fork, new round"), `/app/memory/OVERNIGHT-LOG.md`.
+
+**R0** — baseline/P0/ledger checks all clean/confirmed, no new work needed.
+
+**R2** — ship-via-PR build re-confirmed (27/27 existing tests, flag ON
+in preview). Live GitHub PR drill BLOCKED: this preview pod's GitHub
+App private key (`app_id 4541725`/`aurem-devops`) is rejected by
+GitHub at the JWT level (401 on `GET /app`) — worse than the founder's
+assumed "webhook secret mismatch", and NOT the same as production's
+webhook (confirmed CLEAN per the 2026-08-30 LOOP-STATE entry). Exact
+founder remediation steps in REPORT-overnight.md §2.
+
+**R3 — 6 P1s, all done+tested:**
+- P1-1: `/ora` per-user hashed PIN (`ora_pin_hash` + optional
+  `identifier` on `pin-login`, self-serve `POST /pin/set`) on top of
+  the existing shared PIN — per-user lockout proven live (2 new tests,
+  real HTTP+Mongo).
+- P1-2: notification bell confirmed already user-facing (founder's
+  premise was stale); added missing `upgrade_eligible` type + emitter.
+- P1-3: new `lib/sanitizeError.js`, applied to 11 named ship/rollback
+  toast sites.
+- P1-4: approve dead-end re-confirmed closed (pending_action.py,
+  23/23 tests, no new code needed).
+- P1-5: canonical `lib/shipStatus.js` status labels; fixed the one
+  real "Reverted" vs "Rolled back" terminology mismatch. Full 3-UI
+  physical merge deferred (regression-risk judgment, same as the
+  original F17 gate).
+- P1-6: 3 P0s (ship button, delete-confirm, 0:00 disable) re-verified
+  live via `testing_agent` — all pass, no fixes needed.
+
+**testing_agent**: `/app/test_reports/iteration_overnight_r0_r6_p1_p0_verify_2026_01.json`
+— 100%/100%, 0 action items. Pre-existing (not this round's) note:
+`/ora` sits behind `<PrivateRoute>` in App.jsx, so the PinPad is only
+reachable to a visitor with an existing app JWT — flagged for founder
+decision, unchanged this round.
+
+**Ledger updates**: F18 marked DONE (per-user PIN). F17 marked
+PARTIAL. New F30 (`kit_live` has no emitter) and F31 (full
+error-sanitization sweep remaining) added to ROADMAP.md.
+

@@ -21,6 +21,7 @@ const TYPE_LABEL = {
   payment_failed: "Payment failed",
   repo_revoked:   "Repo access",
   kit_live:       "Kit",
+  upgrade_eligible: "Upgrade",
 };
 
 function timeAgo(ts) {

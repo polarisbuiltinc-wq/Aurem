@@ -503,17 +503,33 @@ async def reset_house_rules(authorization: Optional[str] = Header(None)):
 #      guess/set it, that would lock the founder out.
 #   2. Rate-limited by IP AND by account — 5 attempts / hour, then
 #      hard 429 (unchanged).
-#   3. PIN compared to `ORA_QUICK_PIN` env (constant-time hmac.compare_digest).
-#      Rotated 2026-09-08 from a 4-digit PIN to a 12-char PIN — see
-#      /app/memory/test_credentials.md for the new value.
+#   3. R3 P1-1 (overnight round) — PER-USER hashed PIN, additive to
+#      the legacy shared `ORA_QUICK_PIN` env secret. An optional
+#      `identifier` (email) in the request resolves a SPECIFIC
+#      admin/founder account; that account's own bcrypt-hashed PIN
+#      (`dev_users.ora_pin_hash`, set via POST /pin/set below) is
+#      checked, and lockout is tracked by THAT account's real
+#      user_id — a second team member's wrong guesses can never lock
+#      out the founder's own account, and vice versa. If `identifier`
+#      is omitted (legacy muscle-memory flow, unchanged default), or
+#      the resolved account has no personal PIN set yet, falls back
+#      to the original shared `ORA_QUICK_PIN` env compare bound to
+#      the founder identity — zero behavior change for existing users
+#      who never opt in.
 #   4. On success, a real admin JWT is minted (7-day expiry, same as
-#      login flow) bound to the founder account resolved from Mongo,
-#      and the mint is logged (ip + timestamp + identity) to
-#      `ora_pin_mint_log` — attributable, not a nameless "PIN was right".
-#   5. If no founder row is found (fresh install) we refuse — never
-#      auto-privilege escalate.
+#      login flow) bound to the RESOLVED account (not hardcoded to
+#      "the founder" once per-user PINs are in use), and the mint is
+#      logged (ip + timestamp + identity) to `ora_pin_mint_log` —
+#      attributable, not a nameless "PIN was right".
+#   5. If no target row is found (fresh install / unknown identifier)
+#      we refuse — never auto-privilege escalate.
 class PinLoginBody(BaseModel):
     pin: str = Field(..., min_length=1, max_length=32)
+    identifier: Optional[str] = Field(None, max_length=200)
+
+
+class SetOraPinBody(BaseModel):
+    pin: str = Field(..., min_length=8, max_length=32)
 
 
 def _ora_ip_allowed(ip: str) -> bool:
@@ -524,6 +540,28 @@ def _ora_ip_allowed(ip: str) -> bool:
         return True
     allowed = {x.strip() for x in raw.split(",") if x.strip()}
     return ip in allowed
+
+
+async def _resolve_ora_founder(db) -> Optional[dict]:
+    """Legacy default identity — trusted-email-first, is_founder-flag
+    fallback (Iter 212m-248). Unchanged behavior for the no-`identifier`
+    request path."""
+    from services.usage import founder_emails as _founder_emails_set
+    trusted = list(_founder_emails_set())
+    founder = None
+    if trusted:
+        founder = await db.dev_users.find_one(
+            {"email": {"$in": trusted}},
+            {"user_id": 1, "email": 1, "is_admin": 1, "is_founder": 1,
+             "ora_pin_hash": 1, "_id": 0},
+        )
+    if not founder:
+        founder = await db.dev_users.find_one(
+            {"is_founder": True},
+            {"user_id": 1, "email": 1, "is_admin": 1, "is_founder": 1,
+             "ora_pin_hash": 1, "_id": 0},
+        )
+    return founder
 
 
 @router.post("/pin-login")
@@ -537,35 +575,32 @@ async def pin_login(body: PinLoginBody,
         })
     # Coarse hourly counter over `ora_chat_pin_attempts` — one aggregate.
     from cto_services.db import get_db
-    import hmac, time as _time
+    import bcrypt, hmac, time as _time
     db = get_db()
     if db is None:
         raise HTTPException(503, "Database unavailable")
 
-    # Overnight T6/P1a (2026-08-28) — per-ACCOUNT lockout, additive to
-    # the existing per-IP one. The old counter was keyed by `ip` only,
-    # so an attacker rotating IPs could brute-force the single shared
-    # PIN against the one fixed founder account with zero backoff.
-    # Resolve the target account key BEFORE checking the PIN (so the
-    # lockout key exists regardless of guess correctness) and reuse
-    # that lookup for the real mint below on success — no duplicate
-    # Mongo round-trip, no schema/migration needed (same collection,
-    # one extra field on each attempt row).
-    from services.usage import founder_emails as _founder_emails_set
-    trusted = list(_founder_emails_set())
-    founder = None
-    if trusted:
-        founder = await db.dev_users.find_one(
-            {"email": {"$in": trusted}},
-            {"user_id": 1, "email": 1, "is_admin": 1, "is_founder": 1, "_id": 0},
+    # R3 P1-1 (overnight round) — resolve the SPECIFIC target account
+    # when an `identifier` (email) is supplied, restricted to
+    # admin/founder rows only (never a customer account — this is a
+    # privileged shortcut, not a general login). No identifier =
+    # exact legacy behavior (always resolves to the one founder row).
+    target = None
+    if body.identifier:
+        target = await db.dev_users.find_one(
+            {"email": body.identifier.strip().lower(),
+             "$or": [{"is_admin": True}, {"is_founder": True}]},
+            {"user_id": 1, "email": 1, "is_admin": 1, "is_founder": 1,
+             "ora_pin_hash": 1, "_id": 0},
         )
-    if not founder:
-        founder = await db.dev_users.find_one(
-            {"is_founder": True},
-            {"user_id": 1, "email": 1, "is_admin": 1, "is_founder": 1, "_id": 0},
-        )
-    account_key = (founder or {}).get("user_id") or "unresolved"
+    else:
+        target = await _resolve_ora_founder(db)
+    account_key = (target or {}).get("user_id") or "unresolved"
 
+    # Overnight T6/P1a (2026-08-28) — per-ACCOUNT lockout, additive to
+    # the existing per-IP one, now correctly scoped to the REAL
+    # resolved target's user_id (per-user PINs mean two different
+    # accounts' failures never cross-contaminate each other's lockout).
     cutoff = _time.time() - 3600
     n_fail = await db.ora_chat_pin_attempts.count_documents({
         "ip": ip, "ok": False, "ts": {"$gte": cutoff},
@@ -579,10 +614,27 @@ async def pin_login(body: PinLoginBody,
             "message": "Too many wrong PIN attempts. Try again in an hour.",
         })
 
-    expected = os.getenv("ORA_QUICK_PIN", "").strip()
-    if not expected:
-        raise HTTPException(503, "PIN login not configured")
-    ok = hmac.compare_digest(body.pin.strip(), expected)
+    # PIN check — per-user hashed PIN first (P1-1), legacy shared
+    # env secret as the fallback ONLY when the target has not set a
+    # personal PIN yet (zero behavior change for existing users).
+    ok = False
+    if target:
+        personal_hash = target.get("ora_pin_hash")
+        if personal_hash:
+            try:
+                ok = bcrypt.checkpw(body.pin.strip().encode("utf-8"),
+                                     personal_hash.encode("utf-8"))
+            except Exception:                                  # noqa: BLE001
+                ok = False
+        elif not body.identifier:
+            # Legacy path: no personal PIN set, no identifier given —
+            # fall back to the shared ORA_QUICK_PIN env secret. Same
+            # 503 as the original single-secret implementation when
+            # unset — this is a config gap, not a wrong-guess.
+            expected = os.getenv("ORA_QUICK_PIN", "").strip()
+            if not expected:
+                raise HTTPException(503, "PIN login not configured")
+            ok = hmac.compare_digest(body.pin.strip(), expected)
 
     await db.ora_chat_pin_attempts.insert_one({
         "ip": ip, "account_key": account_key, "ok": ok, "ts": _time.time(),
@@ -594,31 +646,30 @@ async def pin_login(body: PinLoginBody,
             "attempts_remaining": remaining,
         })
 
-    # Mint a real admin JWT tied to that identity. Never falls back to
-    # a random admin (privilege-escalation risk). `founder` was
-    # already resolved above (for the account-lockout key) using the
-    # same trusted-email-first, is_founder-flag-fallback lookup
-    # (Iter 212m-248) — reused here, no duplicate Mongo round-trip.
-    if not founder:
-        # Fresh install / seed missing — refuse rather than issue a
-        # token that could bind to whoever we pick.
+    # Mint a real admin JWT tied to the RESOLVED target — never falls
+    # back to a random admin (privilege-escalation risk).
+    if not target:
+        # Fresh install / unknown identifier — refuse rather than issue
+        # a token that could bind to whoever we pick.
         raise HTTPException(503, "Founder identity not configured")
 
     # Idempotent backfill: keep the `is_founder` DB flag in sync with
     # the env-declared founder identity. Safe because we only reach
-    # here after a valid PIN + trusted-email lookup.
-    if not founder.get("is_founder"):
+    # here after a valid PIN + trusted lookup. Only applies to the
+    # legacy no-identifier path (per-user identified accounts already
+    # carry their own real admin/founder flags).
+    if not body.identifier and not target.get("is_founder"):
         try:
             await db.dev_users.update_one(
-                {"user_id": founder["user_id"]},
+                {"user_id": target["user_id"]},
                 {"$set": {"is_founder": True, "is_admin": True}},
             )
         except Exception as e:                                # noqa: BLE001
             logger.warning("founder flag backfill failed: %r", e)
 
     token = create_token(
-        user_id=founder["user_id"],
-        email=founder["email"],
+        user_id=target["user_id"],
+        email=target["email"],
         is_admin=True,
     )
     # 2026 audit Decision 2 — attributable mint log (ip + timestamp +
@@ -626,8 +677,8 @@ async def pin_login(body: PinLoginBody,
     # successful admin-token mint is queryable on its own.
     try:
         await db.ora_pin_mint_log.insert_one({
-            "ip": ip, "user_id": founder["user_id"],
-            "email": founder["email"], "ts": _time.time(),
+            "ip": ip, "user_id": target["user_id"],
+            "email": target["email"], "ts": _time.time(),
         })
     except Exception as e:                                    # noqa: BLE001
         logger.warning("[ora pin-login] mint log write failed: %r", e)
@@ -635,8 +686,43 @@ async def pin_login(body: PinLoginBody,
         "ok":         True,
         "token":      token,
         "expires_in": 86400 * 7,
-        "user":       {"email": founder["email"], "is_admin": True},
+        "user":       {"email": target["email"], "is_admin": True},
     }
+
+
+@router.post("/pin/set")
+async def set_ora_pin(body: SetOraPinBody,
+                       authorization: Optional[str] = Header(None)):
+    """R3 P1-1 — self-service personal /ora PIN. Requires a REAL
+    authenticated admin/founder session (normal login), not the /ora
+    PIN itself — you must already be logged in the normal way once to
+    opt into a personal quick-access PIN. Stored as a bcrypt hash,
+    never plaintext, on the caller's own `dev_users` row."""
+    user = await require_admin(authorization)
+    from cto_services.db import get_db
+    import bcrypt
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "Database unavailable")
+    pin_hash = bcrypt.hashpw(body.pin.strip().encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    await db.dev_users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"ora_pin_hash": pin_hash}},
+    )
+    return {"ok": True}
+
+
+@router.get("/pin/status")
+async def get_ora_pin_status(authorization: Optional[str] = Header(None)):
+    """Whether the caller already has a personal /ora PIN set."""
+    user = await require_admin(authorization)
+    from cto_services.db import get_db
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "Database unavailable")
+    row = await db.dev_users.find_one(
+        {"user_id": user["user_id"]}, {"ora_pin_hash": 1, "_id": 0})
+    return {"pin_set": bool((row or {}).get("ora_pin_hash")), "email": user.get("email")}
 
 
 # ── Iter 212m-255/256 · Hallucination self-improvement loop ────────
