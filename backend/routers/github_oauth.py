@@ -367,7 +367,7 @@ async def callback(
     gh_name   = (info or {}).get("name") or ""
 
     # ── Signup / sign-in flow ─────────────────────────────────────────
-    if flow == "signup":
+        if flow in ("signup", "login"):
         # Pull a verified email if GitHub hid it on the public profile.
         if not gh_email:
             gh_email = await _gh_primary_email(token)
