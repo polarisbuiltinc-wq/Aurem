@@ -4207,7 +4207,14 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
         } catch { /* poll failure is silent — SSE may still deliver */ }
       }, 3000);
     } catch (e) {
-      toast(sanitizeErrorMessage(e, "Ship failed to start"));
+      // R6 (overnight round) — one-click Retry so a flaky push doesn't
+      // need a full re-ask. Named test: test_r6_ship_retry_toast.
+      toast({
+        message: sanitizeErrorMessage(e, "Ship failed to start"),
+        kind: "error",
+        actions: [{ label: "Retry", primary: true, dismiss: true,
+                     onClick: () => handleShipConfirm() }],
+      });
     } finally {
       setShipBusy(false);
     }
@@ -4220,7 +4227,12 @@ export default function ChatPanel({ sessionId, onTurnSaved, activeProject }) {
       setShipPending(null);
       setLoopPhase("idle");
     } catch (e) {
-      toast(sanitizeErrorMessage(e, "Cancel failed"));
+      toast({
+        message: sanitizeErrorMessage(e, "Cancel failed"),
+        kind: "error",
+        actions: [{ label: "Retry", primary: true, dismiss: true,
+                     onClick: () => handleShipCancel() }],
+      });
     } finally {
       setShipBusy(false);
     }

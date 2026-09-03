@@ -24,18 +24,25 @@ import React, { useEffect, useState } from "react";
 
 let _id = 0;
 
-export function toast({
-  message,
-  kind = "info",
-  duration = 3500,
-  onClick = null,
-  id = null,
-  persistent = false,
-  countdown = null,
-  onExpire = null,
-  actions = null,
-  position = "top-right",   // "top-right" | "bottom-right" — iter 212m-221
-}) {
+export function toast(arg) {
+  // R6 (overnight round) — accept a bare string as shorthand for
+  // `{ message: arg }`. MANY existing call sites across the app do
+  // `toast(someString)`; without this, destructuring a string as an
+  // object silently produces `message: undefined` (a blank toast) —
+  // a real pre-existing bug, fixed here once for every call site.
+  const opts = typeof arg === "string" ? { message: arg } : (arg || {});
+  const {
+    message,
+    kind = "info",
+    duration = 3500,
+    onClick = null,
+    id = null,
+    persistent = false,
+    countdown = null,
+    onExpire = null,
+    actions = null,
+    position = "top-right",
+  } = opts;
   const toastId = id ?? ++_id;
   window.dispatchEvent(
     new CustomEvent("aurem:toast", {

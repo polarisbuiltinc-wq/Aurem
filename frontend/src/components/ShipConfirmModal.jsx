@@ -162,7 +162,9 @@ export default function ShipConfirmModal() {
   }
 
   async function handleShip() {
-    if (phase !== "confirm") return;
+    // R6 (overnight round) — allow re-entry from "error" so the modal's
+    // own Retry button can call this directly (not just "confirm").
+    if (phase !== "confirm" && phase !== "error") return;
     setPhase("shipping");
     setErr("");
     try {
@@ -559,12 +561,22 @@ export default function ShipConfirmModal() {
             </>
           )}
           {(phase === "reverted" || phase === "error") && (
-            <button data-testid="ship-modal-close-final" onClick={closeAll}
-              style={{
-                padding: "9px 18px", fontSize: 13, fontWeight: 700,
-                background: "#FF6608", color: "#0A0A0A",
-                border: 0, borderRadius: 6, cursor: "pointer",
-              }}>Close</button>
+            <>
+              {phase === "error" && (
+                <button data-testid="ship-modal-retry" onClick={handleShip}
+                  style={{
+                    padding: "9px 16px", fontSize: 13, fontWeight: 600,
+                    background: "transparent", color: "#F5F5F5",
+                    border: "1px solid #333", borderRadius: 6, cursor: "pointer",
+                  }}>Retry</button>
+              )}
+              <button data-testid="ship-modal-close-final" onClick={closeAll}
+                style={{
+                  padding: "9px 18px", fontSize: 13, fontWeight: 700,
+                  background: "#FF6608", color: "#0A0A0A",
+                  border: 0, borderRadius: 6, cursor: "pointer",
+                }}>Close</button>
+            </>
           )}
         </div>
       </div>
